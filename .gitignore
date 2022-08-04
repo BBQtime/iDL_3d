@@ -1,0 +1,9 @@
+py_code/__pycache__/
+py_code/surface_distance/__pycache__/
+backup/
+baseline_results/
+baseline_tensorboard/
+idl_results/
+idl_tensorboard/
+idl_figs/
+py_code/debug.py

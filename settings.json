@@ -1,0 +1,23 @@
+{
+    "baseline.hyper.json": "baseline_hyper.json",
+    "baseline.results.folder": "baseline_results",
+    "baseline.tensorboard.folder": "baseline_tensorboard",
+    "cnn.state.dict.only": false,
+    "cuda.visible.devices": "0,1",
+    "dataset.folder": "F:/Alan/dataset_2d/gtvs/3mm_all_slices/",
+    "dataset.split.json": "dataset_split.json",
+    "dataset.split.seed": 65536,
+    "dataset.test.pct": 0.15,
+    "dataset.train.pct": 0.7,
+    "dataset.valid.pct": 0.15,
+    "idl.hyper.json": "idl_hyper.json",
+    "idl.results.folder": "idl_results",
+    "idl.tensorboard.folder": "idl_tensorboard",
+    "img.size": 256,
+    "max.batch.size.linux": 50,
+    "max.batch.size.win": 50,
+    "nii.spacing": "1.171875,1.171875,3.0",
+    "num.workers.linux": 8,
+    "num.workers.win": 0,
+    "use.gpu": true
+}

@@ -1,0 +1,17 @@
+{
+    "python.formatting.provider": "black",
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Args": [
+        "--max-line-length=248",
+        "--ignore=E203,E302,F401,W503"
+    ],
+    "python.languageServer": "Pylance",
+    "python.autoComplete.extraPaths": [
+        "./py_code"
+    ],
+    "python.analysis.extraPaths": [
+        "./py_code"
+    ],
+    "qtForPython.designer.path": "c:\\Users\\alan\\.conda\\envs\\pt\\Lib\\site-packages\\PySide6\\designer.exe",
+}
