@@ -8,8 +8,7 @@ from collections import OrderedDict
 from torch import optim
 from idl_dataset import IDLDataSet
 from typing import Tuple, Union
-from unet_2d import UNet2D
-from unet_pp_2d import UNetPP2D
+from unet_pp import UNetPP
 from tqdm import tqdm
 from datetime import datetime
 from nested_dict import NestedDict
@@ -29,21 +28,22 @@ class SharedTraining:
 
         self._score_funcs = NestedDict()
         for score_type in ["dsc", "msd", "hd95"]:
-            for dim in ["2d", "3d"]:
-                self._score_funcs[score_type][dim] = crit.ScoreFunction(
-                    score_type=score_type, dim=dim
-                ).to(g.DEVICE)
+            self._score_funcs[score_type] = crit.ScoreFunction(
+                score_type=score_type, dim="3d"
+            ).to(g.DEVICE)
 
     # can be shared with baseline_visualize
     def _load_batch_size(self, hyper_dict: dict) -> tuple[int, int]:
         batch_size = int(hyper_dict["batch.size"])
         batch_size = g.check_limit(batch_size, 1, None)
 
-        used_gpu_count = g.used_gpu_count()
-        if used_gpu_count > 1:
-            batch_size_actual = batch_size * used_gpu_count
-        else:
-            batch_size_actual = batch_size
+        # used_gpu_count = g.used_gpu_count()
+        # if used_gpu_count > 1:
+        #     batch_size_actual = batch_size * used_gpu_count
+        # else:
+        #     batch_size_actual = batch_size
+
+        batch_size_actual = batch_size
 
         self._batch_size_actual = g.check_limit(
             batch_size_actual, None, g.MAX_BATCH_SIZE
@@ -104,7 +104,7 @@ class SharedTraining:
 
         # self._loss_func = crit.Avg2dDiceLoss().to(g.DEVICE)
         self._loss_func = crit.HybridFocalLoss(
-            dim="2d",
+            dim="3d",
             hybrid_weight=hybrid_weight,
             tversky_fore_weight=tversky_fore_weight,
             tversky_fore_power=tversky_fore_power,
@@ -139,19 +139,19 @@ class SharedTraining:
     def _load_cnn(self, cnn_name: str, exist_cnn_path: str = None):
         # new model
         if exist_cnn_path is None:
-            if cnn_name == "unet":
-                cnn = UNet2D(dropout=self._dropout).to(g.DEVICE)
-            elif cnn_name == "unet++":
-                cnn = UNetPP2D(dropout=self._dropout).to(g.DEVICE)
+            if cnn_name == "unet++":
+                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+            else:
+                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
 
         # exist cnn
         else:
             # load state dict only
             if g.CNN_STATE_DICT_ONLY:
-                if cnn_name == "unet":
-                    cnn = UNet2D(dropout=self._dropout).to(g.DEVICE)
-                elif cnn_name == "unet++":
-                    cnn = UNetPP2D(dropout=self._dropout).to(g.DEVICE)
+                if cnn_name == "unet++":
+                    cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+                else:
+                    cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
                 cnn.load_state_dict(torch.load(exist_cnn_path))
 
             # load entire cnn
@@ -168,9 +168,7 @@ class SharedTraining:
             cnn = self._cnn.module
         else:
             cnn = self._cnn
-        if isinstance(cnn, UNet2D):
-            return "unet"
-        elif isinstance(cnn, UNetPP2D):
+        if isinstance(cnn, UNetPP):
             return "unet++"
         else:
             return None
@@ -262,7 +260,10 @@ class SharedTraining:
 
         # dataset_split_seed keeps train/valid/test unchanged everytime
         patient_list = g.get_sub_folders(
-            g.DATASET_FOLDER, shuffle=True, seed=dataset_split_seed
+            folder_path=g.DATASET_FOLDER,
+            key_word="GTVt",
+            shuffle=True,
+            seed=dataset_split_seed,
         )
 
         train_num = int(len(patient_list) * train_pct)
@@ -341,196 +342,69 @@ class SharedTraining:
             batch_size = dataset_len  # self._batch_size_actual
         return batch_size
 
-    def _test_patients(
+    def _inference(
         self,
-        patient_list: list,
-        cnn: Union[UNet2D, UNetPP2D],
+        patient: str,
         imgs_save_folder: str = None,
         save_pred_only: bool = False,
-        show_tqdm_bar: bool = False,
     ):
-        cnn.eval()  # disable dropout / batch nomalize
+        score_dict = NestedDict()
+
+        self._cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
 
-            all_patient_results = NestedDict()
+            inputs, labels = BaselineDataSet(patient_list=[patient]).__getitem__(0)
+            inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
+            labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+            outputs = self._cnn.forward(inputs)
 
-            # tqdm bar
-            if show_tqdm_bar:
-                tqdm_patient_list = tqdm(patient_list)
-            else:
-                tqdm_patient_list = patient_list
+        inputs = torch.squeeze(inputs, dim=0)
+        labels = torch.squeeze(labels, dim=0)
+        outputs = torch.squeeze(outputs, dim=0)
 
-            # patient loop
-            for cur_patient in tqdm_patient_list:
-                cur_patient_set = BaselineDataSet(patient_list=[cur_patient])
-                batch_size = self._optimize_batch_size(cur_patient_set)
+        for score_type in ["dsc", "msd", "hd95"]:
+            score_dict["gtvt"][score_type] = self._score_funcs[score_type](
+                outputs[0], labels[0]
+            )
+            score_dict["gtvn"][score_type] = self._score_funcs[score_type](
+                outputs[1], labels[1]
+            )
 
-                # dataloader (only current patient)
-                cur_patient_loader = DataLoader(
-                    dataset=cur_patient_set,
-                    batch_size=batch_size,
-                    shuffle=False,
-                    num_workers=g.NUM_WORKERS,
+        # save images
+        if imgs_save_folder is not None:
+            g.create_folder(imgs_save_folder)
+
+            # get pred
+            pred = NestedDict()
+            pred["gtvt"] = outputs[0].cpu().numpy()
+            pred["gtvn"] = outputs[1].cpu().numpy()
+
+            # save pred
+            for i in ["gtvt", "gtvn"]:
+                g.save_nii(
+                    np_data=pred[i],
+                    save_path=os.path.join(imgs_save_folder, "pred_{}.nii".format(i)),
+                    spacing=g.NII_SPACING,
                 )
 
-                # return img type
-                if imgs_save_folder is None:
-                    return_img_type = None
-                elif save_pred_only:
-                    return_img_type = "pred"
-                else:
-                    return_img_type = "all"
+            if not save_pred_only:
+                imgs = NestedDict()
+                imgs["ct"] = inputs[0].cpu().numpy()
+                imgs["pt"] = inputs[1].cpu().numpy()
+                imgs["mrt1"] = inputs[2].cpu().numpy()
+                imgs["mrt2"] = inputs[3].cpu().numpy()
+                imgs["label_gtvt"] = labels[0].cpu().numpy()
+                imgs["label_gtvn"] = labels[1].cpu().numpy()
 
-                # calculate result
-                # test_results["score"]["patient"]["dsc/msd/hd95"]["2d/3d"]
-                # test_results# test_results["ct/pet/mrt1/mrt2"]
-                cur_patient_results = self.__test_single_patient(
-                    data_loader=cur_patient_loader,
-                    cnn=cnn,
-                    return_img_type=return_img_type,
-                )
-
-                # save cur patient imgs
-                if imgs_save_folder is not None:
-                    if len(patient_list) > 1:
-                        cur_patient_folder = os.path.join(
-                            imgs_save_folder, "patient=" + cur_patient
-                        )
-                    else:
-                        cur_patient_folder = imgs_save_folder
-                    g.create_folder(cur_patient_folder)
-
-                    # save ct/pet/mr1/mr2/label
-                    if not save_pred_only:
-                        for i in ["ct", "pet", "mrt1", "mrt2", "label"]:
-                            g.save_nii(
-                                np_data=cur_patient_results[i],
-                                save_path=os.path.join(cur_patient_folder, i + ".nii"),
-                                spacing=g.NII_SPACING,
-                            )
-                    # save pred
+                # save imgs and labels
+                for i in ["ct", "pt", "mrt1", "mrt2", "label_gtvt", "label_gtvn"]:
                     g.save_nii(
-                        np_data=cur_patient_results["pred"],
-                        save_path=os.path.join(cur_patient_folder, "pred.nii"),
+                        np_data=imgs[i],
+                        save_path=os.path.join(imgs_save_folder, "{}.nii".format(i)),
                         spacing=g.NII_SPACING,
                     )
-                all_patient_results[cur_patient] = cur_patient_results["score"]
 
-            return all_patient_results
-
-    def __test_single_patient(
-        self,
-        data_loader: DataLoader,
-        cnn: Union[UNet2D, UNetPP2D],
-        return_img_type: str = None,  # all/pred/None
-    ):
-        cnn.eval()
-        with torch.no_grad():
-
-            # init test_results dict
-            test_results = NestedDict()
-            if return_img_type is not None:
-                test_results["pred"] = None
-                if return_img_type == "all":
-                    for i in ["ct", "pet", "mrt1", "mrt2", "label"]:
-                        test_results[i] = None
-
-            patient_slice_mapping = data_loader.dataset.patient_slice_mapping
-
-            inputs = None
-            labels = None
-            outputs = None
-            # go through data loader
-            for cur_inputs, cur_labels in data_loader:
-                # this step is time consuming
-                cur_outputs = cnn(cur_inputs.to(g.DEVICE))
-
-                # concat inputs
-                if inputs is None:
-                    inputs = cur_inputs
-                else:
-                    inputs = torch.cat([inputs, cur_inputs], dim=0)
-
-                # concat labels
-                if labels is None:
-                    labels = cur_labels
-                else:
-                    labels = torch.cat([labels, cur_labels], dim=0)
-
-                # concat outputs
-                if outputs is None:
-                    outputs = cur_outputs.cpu()
-                else:
-                    outputs = torch.cat([outputs, cur_outputs.cpu()], dim=0)
-
-            inputs = inputs.to(g.DEVICE)
-            labels = labels.to(g.DEVICE)
-            outputs = outputs.to(g.DEVICE)
-
-            for score_type in ["dsc", "msd", "hd95"]:
-                for dim in ["2d", "3d"]:
-
-                    # 2d score is a list
-                    if dim == "2d":
-                        score_list = self._score_funcs[score_type][dim](outputs, labels)
-
-                        mapping_idx = 0  # index of "patient_slice_mapping"
-                        # calculate sum score to get avg.2d.score
-                        sum_score = 0
-                        score_count = 0
-
-                        for cur_score in score_list:
-                            # "patient_slice_mapping" format:
-                            # [[patient_id, slice_id], [patient_id, slice_id]]
-                            cur_slice = patient_slice_mapping[mapping_idx][1]
-                            test_results["score"][score_type][dim][
-                                cur_slice
-                            ] = cur_score
-                            mapping_idx += 1
-
-                            # calculate sum score to get avg.2d.score
-                            if g.is_number(cur_score):
-                                sum_score += cur_score
-                                score_count += 1
-                            elif cur_score == "no.pred" or cur_score == "no.label":
-                                if score_type == "dsc":
-                                    sum_score += 0
-                                elif score_type == "msd":
-                                    sum_score += g.IMG_SIZE
-                                elif score_type == "hd95":
-                                    sum_score += g.IMG_SIZE
-                                score_count += 1
-                            else:  # cur_score == "empty"
-                                pass
-
-                        if score_count == 0:
-                            test_results["score"][score_type]["2d.avg"] = "empty"
-                        else:
-                            test_results["score"][score_type]["2d.avg"] = (
-                                sum_score / score_count
-                            )
-
-                    # 3d score is a single value
-                    else:
-                        score = self._score_funcs[score_type][dim](outputs, labels)
-                        test_results["score"][score_type][dim] = score
-
-            #  record images
-            if return_img_type is not None:
-                # prediction
-                test_results["pred"] = outputs[:, 0, :, :].cpu().numpy()
-
-                if return_img_type == "all":
-                    # ct/pet/mrt1/mrt2
-                    channel = 0
-                    for i in ["ct", "pet", "mrt1", "mrt2"]:
-                        test_results[i] = inputs[:, channel, :, :].cpu().numpy()
-                        channel += 1
-
-                    # label
-                    test_results["label"] = labels[:, 0, :, :].cpu().numpy()
-
-            return test_results
+        return score_dict
 
     # protected function
     def _init_start_time(self) -> str:

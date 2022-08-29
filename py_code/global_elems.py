@@ -1,5 +1,4 @@
 import os
-import cc3d
 import warnings
 import shutil
 import torch
@@ -9,9 +8,11 @@ import platform
 import imageio
 import hashlib
 import unicodedata
+import cc3d
 import imgaug as ia
 import numpy as np
 import SimpleITK as sitk
+import matplotlib.pyplot as plt
 from numpy import ndarray
 from torch import Tensor
 from PyQt5 import QtWidgets
@@ -77,21 +78,22 @@ def dict_to_list(input_dict: dict):
     return output_list
 
 
-def show_img(input_img: Union[ndarray, Tensor], print_info: bool = False):
-    if isinstance(input_img, Tensor):
-        # detach: return a tensor share the same memory but without grad
-        input_img = input_img.detach().cpu().numpy()
-    if len(input_img.shape) == 2:
-        ia.imshow(input_img)
-    elif len(input_img.shape) == 3:
-        ia.imshow(input_img[0])
-    elif len(input_img.shape) == 4:
-        ia.imshow(input_img[0][0])
+def show_img(img: Union[ndarray, Tensor], print_info: bool = False):
     if print_info:
-        print("image data type:", type(input_img))
-        print("image shape:", input_img.shape)
-        print("image max value:", input_img.max())
-        print("image min value:", input_img.min())
+        print("image data type:", type(img))
+        print("image shape:", img.shape)
+        print("image max value:", img.max())
+        print("image min value:", img.min())
+
+    if isinstance(img, Tensor):
+        # detach: return a tensor share the same memory but without grad
+        img = img.detach().cpu().numpy()
+    if len(img.shape) == 2:
+        ia.imshow(img)
+    elif len(img.shape) == 3:
+        ia.imshow(img[img.shape[0] // 2])
+    elif len(img.shape) == 4:
+        ia.imshow(img[img.shape[0] // 2][img.shape[1] // 2])
 
 
 def rename_file(base_path: str, old_name: str, new_name: str):
@@ -420,8 +422,18 @@ def is_number(i) -> bool:
     return False
 
 
+def change_char_in_str(input_str: str, idx: int, new_val: str):
+    input_str = list(input_str)
+    input_str[idx] = new_val
+    return "".join(input_str)
+
+
 def sort_dict_by_value(input_dict: dict):
     return {k: v for k, v in sorted(input_dict.items(), key=lambda item: item[1])}
+
+
+def get_list_avg(input_list: list):
+    return sum(input_list) / len(input_list)
 
 
 PROJ_PATH = None
@@ -505,9 +517,14 @@ def __general_init():
     if used_gpu_count() > 1:
         MAX_BATCH_SIZE *= 2
 
-    IMG_SIZE = __json_data["img.size"]
+    IMG_SIZE = []
+    for i in str_to_list(__json_data["img.size"]):
+        IMG_SIZE.append(int(i))
+    IMG_SIZE = tuple(IMG_SIZE)
+
+    # make sure all elements in NII_SPACING are numbers
     NII_SPACING = []
-    for i in str_to_list(__json_data["nii.spacing"]).copy():
+    for i in str_to_list(__json_data["nii.spacing"]):
         NII_SPACING.append(float(i))
     NII_SPACING = tuple(NII_SPACING)
 

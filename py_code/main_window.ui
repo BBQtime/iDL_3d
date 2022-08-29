@@ -27,7 +27,7 @@
      <string>ct_img</string>
     </property>
    </widget>
-   <widget class="QLabel" name="_img_frame_pet">
+   <widget class="QLabel" name="_img_frame_pt">
     <property name="geometry">
      <rect>
       <x>170</x>
@@ -37,7 +37,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>pet_img</string>
+     <string>pt_img</string>
     </property>
    </widget>
    <widget class="QLabel" name="_img_frame_mrt1">

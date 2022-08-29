@@ -1,4 +1,3 @@
-from email.mime import base
 import global_elems as g
 import chart_maker
 from tqdm import tqdm
@@ -9,15 +8,15 @@ baseline = BaselineTraining()
 idl = IDLTraining()
 
 # baseline start new trainings
-if 0:
+if 1:
     baseline_id_list = baseline.train(
         # train_remark="test",
-        debug_mode=1,
+        # debug_mode=1,
     )
 
 # baseline test exist cnns' scores
 if 0:
-    baseline.test("2022.03.19.23.16.31_2022.03.19.23.16.31_unet++_dropout=0.3_optimal")
+    baseline.inference("2022.08.28.23.34.56_2022.08.28.23.34.56_debug.mode.delete.this")
 
 
 # simulated iDL

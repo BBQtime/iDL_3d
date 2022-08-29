@@ -3,6 +3,7 @@ import os
 import random
 import torch
 import numpy as np
+from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
 from torchvision import transforms as T
@@ -26,7 +27,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             augment_up_limit=augment_up_limit,
         )
         # patient_slice_mapping is a list of: ["patient", "slice"]
-        self._init_patient_slice_mapping(self.patient_list)
+        # self._init_patient_slice_mapping(self.patient_list)
 
     def _init_augment(
         self,
@@ -45,85 +46,87 @@ class BaselineDataSet(torch.utils.data.Dataset):
         else:
             self._data_augment = None
 
-    def _init_patient_slice_mapping(self, patient_list: list):
-        self.patient_slice_mapping = []
-        for cur_patient in patient_list:
-            cur_patient_folder = os.path.join(g.DATASET_FOLDER, cur_patient)
-
-            # DO NOT shuffle here, shuffle when creating dataloader
-            cur_patient_slices = g.get_sub_folders(cur_patient_folder, shuffle=False)
-
-            for cur_slice in cur_patient_slices:
-                self.patient_slice_mapping.append([cur_patient, cur_slice])
-
     # must be overrided
     def __len__(self):
-        return len(self.patient_slice_mapping)
+        return len(self.patient_list)
 
-    def __pad_and_crop(
-        self, input_img: ndarray, output_width: int, output_height: int
-    ) -> ndarray:
+    # max size: 89 283 280
+    def __pad_and_crop(self, img: ndarray) -> ndarray:
         # step 1: padding
-        input_height, input_width = input_img.shape
-        pad_left = 0
-        pad_right = 0
-        pad_up = 0
-        pad_down = 0
-        if output_width > input_width:
-            pad = output_width - input_width
-            if pad % 2 == 0:
-                pad_left = int(pad / 2)
-                pad_right = pad_left
-            else:
-                pad_left = int(pad // 2)
-                pad_right = pad_left + 1
-        if output_height > input_height:
-            pad = output_height - input_height
-            if pad % 2 == 0:
-                pad_up = int(pad / 2)
-                pad_down = pad_up
-            else:
-                pad_up = int(pad // 2)
-                pad_down = pad_up + 1
-        if output_width > input_width or output_height > input_height:
-            input_img = np.pad(
-                input_img,
-                ((pad_up, pad_down), (pad_left, pad_right)),
-                "constant",
-                constant_values=0,  # constant_values=0 means black padding
-            )
+        in_size = NestedDict()
+        in_size["d"], in_size["h"], in_size["w"] = img.shape
+
+        out_size = NestedDict()
+        out_size["d"] = g.IMG_SIZE[2]
+        out_size["h"] = g.IMG_SIZE[1]
+        out_size["w"] = g.IMG_SIZE[0]
+
+        pad = NestedDict()
+        for i in ["w", "h", "d"]:
+            pad[i][0] = pad[i][1] = 0
+
+        for i in ["w", "h", "d"]:
+            if out_size[i] > in_size[i]:
+                cur_pad = out_size[i] - in_size[i]
+                if cur_pad % 2 == 0:
+                    pad[i][0] = pad[i][1] = int(cur_pad / 2)
+                else:
+                    pad[i][0] = int(cur_pad / 2)
+                    pad[i][1] = pad[i][0] + 1
+
+        img = np.pad(
+            img,
+            (
+                (pad["d"][0], pad["d"][1]),
+                (pad["h"][0], pad["h"][1]),
+                (pad["w"][0], pad["w"][1]),
+            ),
+            "constant",
+            constant_values=0,  # constant_values=0 means black padding
+        )
 
         # step 2: cropping
-        input_height, input_width = input_img.shape
-        start_width = (input_width // 2) - (output_width // 2)
-        start_height = (input_height // 2) - (output_height // 2)
-        output_img = input_img[
-            start_height : start_height + output_height,
-            start_width : start_width + output_width,
-        ]
-        return output_img
+        in_size["d"], in_size["h"], in_size["w"] = img.shape
+
+        if (
+            in_size["d"] > out_size["d"]
+            or in_size["h"] > out_size["h"]
+            or in_size["w"] > out_size["w"]
+        ):
+            start_point = NestedDict()
+
+            for i in ["w", "h", "d"]:
+                start_point[i] = (in_size[i] // 2) - (out_size[i] // 2)
+
+            img = img[
+                start_point["d"] : start_point["d"] + out_size["d"],
+                start_point["h"] : start_point["h"] + out_size["h"],
+                start_point["w"] : start_point["w"] + out_size["w"],
+            ]
+        return img
 
     def __load_img(self, img_path: str, augment_seed: int):
-        origin_img = np.load(img_path).astype(np.float32)
+        img = g.load_nii(img_path).astype(np.float32)
 
-        origin_img = self.__pad_and_crop(
-            input_img=origin_img,
-            output_width=g.IMG_SIZE,
-            output_height=g.IMG_SIZE,
-        )
+        # make sure img.shape is 3
+        for i in range(len(img.shape) - 3):
+            img = np.squeeze(img, axis=0)
+
+        img = self.__pad_and_crop(img)
+
         if self._data_augment is not None:
-            augment_img = self._data_augment.run(
-                input_data=origin_img, seed=augment_seed
-            )
-        else:
-            augment_img = origin_img
+            img = self._data_augment.run(input_data=img, seed=augment_seed)
+
+        # unsqueeze img to 4 dim
+        img = np.expand_dims(img, axis=0)
 
         # numpy to tensor
-        to_tensor = T.ToTensor()
-        return to_tensor(augment_img)
+        # do NOT use "T.ToTensor()" in 3D, it will make (d,h,w) to (h,d,w)
+        img = torch.from_numpy(img)
+        return img
 
     def _get_item(
-        self, cur_slice_folder: str, label_path: str
+        self, cur_patient: str, gtvt_path: str, gtvn_path: str
     ) -> tuple[Tensor, Tensor]:
 
         # make sure same group use the same augment seed
@@ -131,44 +134,69 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # np.random + dataloader will cause multi-processing problem
         augment_seed = random.randint(0, 2 ** 16)
 
-        multi_model_img = None
+        multi_model_imgs = None
 
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
-            img_path = os.path.join(cur_slice_folder, i + ".npy")
+        for i in ["CT", "PT", "T1dr", "T2dr"]:
+            img_path = os.path.join(
+                g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(cur_patient, i)
+            )
             img = self.__load_img(img_path=img_path, augment_seed=augment_seed)
             # g.show_img(img)
-            # print(img.max(), img.min())
 
             # concat multi-model img
-            if multi_model_img is None:
-                multi_model_img = img
+            if multi_model_imgs is None:
+                multi_model_imgs = img
             else:
-                multi_model_img = torch.cat([multi_model_img, img], dim=0)
+                multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
 
-        # load label
-        label_img = self.__load_img(img_path=label_path, augment_seed=augment_seed)
-        # g.show_img(label_img, print_info=True)
-        # print(label_img.max(), label_img.min())
+        # load gtvt
+        gtvt_img = self.__load_img(img_path=gtvt_path, augment_seed=augment_seed)
+        # g.show_img(gtvt_img)
 
-        return multi_model_img, label_img
+        # load gtvn
+        if os.path.exists(gtvn_path):
+            gtvn_img = self.__load_img(img_path=gtvn_path, augment_seed=augment_seed)
+        else:
+            gtvs_path = g.change_char_in_str(gtvn_path, -5, "s")
+            gtvs_img = self.__load_img(img_path=gtvs_path, augment_seed=augment_seed)
+            gtvn_img = gtvs_img - gtvt_img
+            # g.show_img(gtvs_img)
+            # g.show_img(gtvt_img)
+            # g.show_img(gtvn_img)
+
+        bg_img = 1 - gtvt_img - gtvn_img
+        # g.show_img(bg_img)
+        label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+
+        return multi_model_imgs, label_imgs
 
     # must be overrided
     def __getitem__(self, idx: int):
-        cur_patient = self.patient_slice_mapping[idx][0]
-        cur_slice = self.patient_slice_mapping[idx][1]
-        cur_slice_folder = os.path.join(g.DATASET_FOLDER, cur_patient, cur_slice)
-        label_path = os.path.join(cur_slice_folder, "label.npy")
-        return self._get_item(cur_slice_folder=cur_slice_folder, label_path=label_path)
+        cur_patient = self.patient_list[idx]
+        # cur_slice = self.patient_slice_mapping[idx][1]
+        # cur_slice_folder = os.path.join(g.DATASET_FOLDER, cur_patient, cur_slice)
+        gtvt_path = os.path.join(
+            g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(cur_patient)
+        )
+        gtvn_path = os.path.join(
+            g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(cur_patient)
+        )
+        return self._get_item(
+            cur_patient=cur_patient, gtvt_path=gtvt_path, gtvn_path=gtvn_path
+        )
 
 
 # for testing
 # augment_method= translate / elastic / rotate / scale / combine
-# if 0:
-#     tmp_dataset = BaselineDataSet(
-#         patient_list=["336"],
-#         augment_method="combine",
-#         augment_pct=1.0,
-#         augment_low_limit=2,
-#         augment_up_limit=2,
-#     )
-#     tmp_dataset.__getitem__(35)
+# no gtvn patients: ['138', '152', '168', '174', '175', '192', '194', '204',
+# '220', '229', '239', '247', '257', '261', '276', '309', '311', '315',
+# '323', '327', '333']
+if 1:
+    tmp_dataset = BaselineDataSet(
+        patient_list=["175"],
+        augment_method="combine",
+        augment_pct=1.0,
+        augment_low_limit=2,
+        augment_up_limit=2,
+    )
+    tmp_dataset.__getitem__(0)

@@ -2,7 +2,6 @@ import global_elems as g
 import os
 import torch
 from tqdm import tqdm
-from collections import OrderedDict
 from datetime import datetime
 from itertools import product
 from nested_dict import NestedDict
@@ -289,7 +288,7 @@ class BaselineTraining(SharedTraining):
 
             self._save_hyper(hyper_save_path)
 
-            self.test(
+            self.inference(
                 baseline_id=self._baseline_id,
                 print_hyper=False,
                 debug_mode=debug_mode,
@@ -297,8 +296,8 @@ class BaselineTraining(SharedTraining):
 
         return baseline_id_list
 
-    # test dsc/msd/hd95
-    def test(
+    # get dsc/msd/hd95 scores
+    def inference(
         self,
         baseline_id: str,
         print_hyper: bool = True,
@@ -310,23 +309,14 @@ class BaselineTraining(SharedTraining):
         hyper_path = os.path.join(cur_train_folder, "hyper.json")
         cur_hyper_dict = g.load_json(hyper_path)
 
-        # init results
-        best_cnn_path = None
-        cur_scores = NestedDict()
-        best_scores = NestedDict()
-        for dim in ["2d", "3d"]:
-            best_scores["dsc"][dim] = 0.0
-            best_scores["msd"][dim] = g.IMG_SIZE
-            best_scores["hd95"][dim] = g.IMG_SIZE
-
         # test each cnn
-        file_list = g.get_sub_files(cur_train_folder)
-        for file_name in file_list:
-            if not file_name.endswith(".pt"):
-                continue
-            cur_cnn_path = os.path.join(cur_train_folder, file_name)
+        cnn_file_list = g.get_sub_files(cur_train_folder, key_word=".pt")
+        for cnn_file_name in cnn_file_list:
+            cur_cnn_path = os.path.join(cur_train_folder, cnn_file_name)
             g.print_line()
             print(cur_cnn_path)
+
+            scores = NestedDict()
 
             # load and print hyper
             self._load_cur_hyper(
@@ -337,88 +327,24 @@ class BaselineTraining(SharedTraining):
             if print_hyper:
                 self._print_hyper()
 
-            # get score of each patient, also save imgs
-            all_patient_results = self._test_patients(
-                patient_list=self._test_loader.dataset.patient_list,
-                cnn=self._cnn,
-                imgs_save_folder=None,
-                show_tqdm_bar=True,
-            )
+            for patient in tqdm(self._test_loader.dataset.patient_list):
+                imgs_save_folder = os.path.join(cur_train_folder, "baseline", patient)
+                scores["patient={}".format(patient)] = self._inference(
+                    patient=patient,
+                    imgs_save_folder=imgs_save_folder,
+                    save_pred_only=False,  # this is for iDL, round>0
+                )
 
-            # clear cur results before calculate score
-            for score_type in ["dsc", "msd", "hd95"]:
-                for dim in ["2d", "3d"]:
-                    cur_scores[score_type][dim] = []
-
-            # calculate average (2d.avg and 3d) score of all patients
-            for score_type in ["dsc", "msd", "hd95"]:
-                for patient in all_patient_results:
-                    cur_scores[score_type]["2d"].append(
-                        all_patient_results[patient][score_type]["2d.avg"]
-                    )
-                    cur_scores[score_type]["3d"].append(
-                        all_patient_results[patient][score_type]["3d"]
-                    )
-
-                for dim in ["2d", "3d"]:
-                    sum_score = 0
-                    score_count = 0
-                    for cur_score in cur_scores[score_type][dim]:
-                        if g.is_number(cur_score):
-                            sum_score += cur_score
-                            score_count += 1
-                        else:
-                            score_count += 1
-
-                    if score_count == 0:
-                        cur_scores[score_type][dim] = "empty"
-                    else:
-                        cur_scores[score_type][dim] = sum_score / score_count
-
-                    if g.is_number(cur_scores[score_type][dim]):
-                        if score_type == "dsc":
-                            print(
-                                "{} {}: {:.2f}".format(
-                                    dim, score_type, cur_scores[score_type][dim]
-                                )
-                            )
-                        else:
-                            print(
-                                "{} {}: {:.1f}".format(
-                                    dim, score_type, cur_scores[score_type][dim]
-                                )
-                            )
-                    else:
-                        print("{} {}: empty".format(dim, score_type))
+            # # calculate average (2d.avg and 3d) score of all patients
+            # for score_type in ["dsc", "msd", "hd95"]:
+            #     scores["avg"][score_type] = []
+            #     for patient in scores:
+            #         scores["avg"][score_type].append(scores[patient][score_type])
+            #     # scores["avg"][score_type] = g.get_list_avg(scores["avg"][score_type])
 
             # record best scores
-            if (
-                best_cnn_path is None
-                or cur_scores["dsc"]["3d"] > best_scores["dsc"]["3d"]
-                or (
-                    cur_scores["dsc"]["3d"] == best_scores["dsc"]["3d"]
-                    and cur_scores["dsc"]["2d"] > best_scores["dsc"]["2d"]
-                )
-            ):
-                # remove the second best cnn
-                if best_cnn_path is not None:
-                    os.remove(best_cnn_path)
 
-                # update the best cnn path and scores
-                best_cnn_path = cur_cnn_path
-                for score_type in ["dsc", "msd", "hd95"]:
-                    for dim in ["2d", "3d"]:
-                        best_scores[score_type][dim] = cur_scores[score_type][dim]
-
-            # not the best cnn, remove
-            else:
-                os.remove(cur_cnn_path)
-
-        best_epoch = best_cnn_path[
-            best_cnn_path.find("epoch=") + len("epoch=") : -len(".pt")
-        ]
-        best_scores["best.epoch"] = best_epoch
-
-        g.save_json(
-            data=best_scores, path=os.path.join(cur_train_folder, "test_score.json")
-        )
+            g.save_json(
+                data=scores,
+                path=os.path.join(cur_train_folder, cnn_file_name[:-3] + "_score.json"),
+            )

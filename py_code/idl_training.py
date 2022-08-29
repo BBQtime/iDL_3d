@@ -716,7 +716,7 @@ class IDLTraining(SharedTraining):
 
             # freeze layers before iDL
             if self._layer_freezing:
-                # here, self._cnn is DataParalel, not network itself
+                # here, self._cnn is DataParallel, not network itself
                 if g.used_gpu_count() > 1:
                     self._cnn.module.freeze_top()
                 else:
@@ -824,7 +824,7 @@ class IDLTraining(SharedTraining):
         else:
             save_pred_only = True
 
-        result_dict = self._test_patients(
+        result_dict = self._inference(
             patient_list=[cur_patient],
             cnn=self._cnn,
             imgs_save_folder=imgs_save_folder,

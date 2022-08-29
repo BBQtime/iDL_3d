@@ -62,7 +62,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().mousePressEvent(event)
 
         # loop 4 img frames
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
             left = self.__img_frames[i].x()
             top = self.__img_frames[i].y()
             width = self.__img_frames[i].width()
@@ -320,7 +320,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init_ui_names(self):
         self.__img_frames = NestedDict()
         self.__img_frames["ct"] = self._img_frame_ct
-        self.__img_frames["pet"] = self._img_frame_pet
+        self.__img_frames["pt"] = self._img_frame_pt
         self.__img_frames["mrt1"] = self._img_frame_mrt1
         self.__img_frames["mrt2"] = self._img_frame_mrt2
 
@@ -348,7 +348,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # set label background black
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
             self.__img_frames[i].setObjectName("")
             self.__img_frames[i].setAutoFillBackground(True)
             self.__img_frames[i].setPalette(pal)
@@ -377,11 +377,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__score["msd"] = None
         self.__score["hd95"] = None
 
-        for i in ["ct", "pet", "mrt1", "mrt2", "label", "pred"]:
+        for i in ["ct", "pt", "mrt1", "mrt2", "label", "pred"]:
             self.__img_data[i] = None
 
-        # resize position of ct/pet/mr1/mr2
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
+        # resize position of ct/pt/mr1/mr2
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
             self.__resize_pos[i] = None
 
         # transverse/coronal/sagittal
@@ -458,7 +458,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__refresh_title()
 
     def __clear_img_frames(self):
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
             width = self.__img_frames[i].width()
             height = self.__img_frames[i].height()
             black_img = np.zeros([width, height, 3])
@@ -514,7 +514,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             cur_patient_folder,
             "baseline",  # "round=00",
         )
-        for i in ["ct", "pet", "mrt1", "mrt2", "label"]:
+        for i in ["ct", "pt", "mrt1", "mrt2", "label"]:
             cur_img_path = os.path.join(baseline_folder, i + ".nii")
             self.__img_data[i] = self.__load_img(cur_img_path)
 
@@ -639,7 +639,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             color["pred"] = self.__color["pred"]
 
-        for i in ["ct", "pet", "mrt1", "mrt2"]:
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
             if self.__img_plane == "sagittal":
                 rgb_img = self.__img_data[i][:, :, self.__slice_id]
@@ -976,7 +976,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__img_frames["ct"].setGeometry(
             QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
         )
-        self.__img_frames["pet"].setGeometry(
+        self.__img_frames["pt"].setGeometry(
             QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
         )
         self.__img_frames["mrt1"].setGeometry(
