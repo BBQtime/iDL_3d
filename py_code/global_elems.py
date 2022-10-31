@@ -447,8 +447,7 @@ DATASET_FOLDER = None
 DATASET_SPLITTING_JSON = None
 BASELINE_HYPER_JSON = None
 IDL_HYPER_JSON = None
-BASELINE_RESULTS_FOLDER = None
-IDL_RESULTS_FOLDER = None
+TRAIN_RESULTS_FOLDER = None
 BASELINE_TENSORBOARD_FOLDER = None
 IDL_TENSORBOARD_FOLDER = None
 
@@ -465,8 +464,7 @@ def __general_init():
     global DATASET_SPLITTING_JSON
     global BASELINE_HYPER_JSON
     global IDL_HYPER_JSON
-    global BASELINE_RESULTS_FOLDER
-    global IDL_RESULTS_FOLDER
+    global TRAIN_RESULTS_FOLDER
     global BASELINE_TENSORBOARD_FOLDER
     global IDL_TENSORBOARD_FOLDER
 
@@ -535,10 +533,7 @@ def __general_init():
     DATASET_SPLITTING_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
     BASELINE_HYPER_JSON = os.path.join(PROJ_PATH, __json_data["baseline.hyper.json"])
     IDL_HYPER_JSON = os.path.join(PROJ_PATH, __json_data["idl.hyper.json"])
-    BASELINE_RESULTS_FOLDER = os.path.join(
-        PROJ_PATH, __json_data["baseline.results.folder"]
-    )
-    IDL_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["idl.results.folder"])
+    TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
     BASELINE_TENSORBOARD_FOLDER = os.path.join(
         PROJ_PATH, __json_data["baseline.tensorboard.folder"]
     )

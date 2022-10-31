@@ -402,7 +402,7 @@ class IDLTraining(SharedTraining):
 
     def __get_baseline_paths(self, baseline_id: str):
         # get baseline cnn and hyper path
-        baseline_folder = os.path.join(g.BASELINE_RESULTS_FOLDER, baseline_id)
+        baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
         file_list = g.get_sub_files(baseline_folder)
         for file_name in file_list:
             if file_name.endswith(".pt"):
@@ -824,7 +824,7 @@ class IDLTraining(SharedTraining):
         else:
             save_pred_only = True
 
-        result_dict = self._inference(
+        result_dict = self._inference_single_patient(
             patient_list=[cur_patient],
             cnn=self._cnn,
             imgs_save_folder=imgs_save_folder,

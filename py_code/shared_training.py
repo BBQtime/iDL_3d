@@ -342,7 +342,7 @@ class SharedTraining:
             batch_size = dataset_len  # self._batch_size_actual
         return batch_size
 
-    def _inference(
+    def _inference_single_patient(
         self,
         patient: str,
         imgs_save_folder: str = None,

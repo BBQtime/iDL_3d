@@ -141,8 +141,13 @@ class BaselineTraining(SharedTraining):
         super()._save_hyper(json_path, hyper_dict)
 
     def __create_result_folder(self, baseline_id: str):
-        result_path = os.path.join(g.BASELINE_RESULTS_FOLDER, baseline_id)
+        # folder of baseline id
+        result_path = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
         g.create_folder(result_path)
+        # sub folder named "baseline"
+        result_path = os.path.join(result_path, "baseline")
+        g.create_folder(result_path)
+
         cnn_save_path = os.path.join(result_path, "epoch=")
         hyper_save_path = os.path.join(result_path, "hyper.json")
         loss_save_path = os.path.join(result_path, "train_loss.json")
@@ -238,7 +243,7 @@ class BaselineTraining(SharedTraining):
         self._time_used = datetime.now() - self._time_used
         g.clear_gpu_cache()
 
-    def train(
+    def training(
         self,
         train_remark: str = None,
         debug_mode: bool = False,
@@ -304,7 +309,9 @@ class BaselineTraining(SharedTraining):
         debug_mode: bool = False,
     ):
         self._baseline_id = baseline_id
-        cur_train_folder = os.path.join(g.BASELINE_RESULTS_FOLDER, self._baseline_id)
+        cur_train_folder = os.path.join(
+            g.TRAIN_RESULTS_FOLDER, self._baseline_id, "baseline"
+        )
 
         hyper_path = os.path.join(cur_train_folder, "hyper.json")
         cur_hyper_dict = g.load_json(hyper_path)
@@ -328,8 +335,8 @@ class BaselineTraining(SharedTraining):
                 self._print_hyper()
 
             for patient in tqdm(self._test_loader.dataset.patient_list):
-                imgs_save_folder = os.path.join(cur_train_folder, "baseline", patient)
-                scores["patient={}".format(patient)] = self._inference(
+                imgs_save_folder = os.path.join(cur_train_folder, patient)
+                scores["patient={}".format(patient)] = self._inference_single_patient(
                     patient=patient,
                     imgs_save_folder=imgs_save_folder,
                     save_pred_only=False,  # this is for iDL, round>0

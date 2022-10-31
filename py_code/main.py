@@ -9,14 +9,14 @@ idl = IDLTraining()
 
 # baseline start new trainings
 if 1:
-    baseline_id_list = baseline.train(
+    baseline_id_list = baseline.training(
         # train_remark="test",
-        # debug_mode=1,
+        debug_mode=1,
     )
 
 # baseline test exist cnns' scores
 if 0:
-    baseline.inference("2022.08.28.23.34.56_2022.08.28.23.34.56_debug.mode.delete.this")
+    baseline.inference("2022.09.02.13.31.41_2022.09.02.13.31.42_debug.mode.delete.this")
 
 
 # simulated iDL
