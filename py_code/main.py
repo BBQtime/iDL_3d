@@ -8,15 +8,17 @@ baseline = BaselineTraining()
 idl = IDLTraining()
 
 # baseline start new trainings
-if 1:
+if 0:
     baseline_id_list = baseline.training(
-        # train_remark="test",
+        train_remark="patches.8.128.128",
         debug_mode=1,
     )
 
 # baseline test exist cnns' scores
-if 0:
-    baseline.inference("2022.09.02.13.31.41_2022.09.02.13.31.42_debug.mode.delete.this")
+if 1:
+    baseline.inference(
+        "2022.11.05.02.42.00_2022.11.05.02.42.00_patches_epochs=50",
+    )
 
 
 # simulated iDL

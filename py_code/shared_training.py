@@ -2,17 +2,17 @@ import global_elems as g
 import os
 import torch
 import math
+import numpy as np
 import criterion as crit
 import torch.nn as nn
+from itertools import product
 from collections import OrderedDict
 from torch import optim
 from idl_dataset import IDLDataSet
-from typing import Tuple, Union
+from typing import Union
 from unet_pp import UNetPP
-from tqdm import tqdm
 from datetime import datetime
 from nested_dict import NestedDict
-from torch.utils.data import DataLoader
 from baseline_dataset import BaselineDataSet
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -32,45 +32,32 @@ class SharedTraining:
                 score_type=score_type, dim="3d"
             ).to(g.DEVICE)
 
-    # can be shared with baseline_visualize
-    def _load_batch_size(self, hyper_dict: dict) -> tuple[int, int]:
-        batch_size = int(hyper_dict["batch.size"])
-        batch_size = g.check_limit(batch_size, 1, None)
-
-        # used_gpu_count = g.used_gpu_count()
-        # if used_gpu_count > 1:
-        #     batch_size_actual = batch_size * used_gpu_count
-        # else:
-        #     batch_size_actual = batch_size
-
-        batch_size_actual = batch_size
-
-        self._batch_size_actual = g.check_limit(
-            batch_size_actual, None, g.MAX_BATCH_SIZE
-        )
-
-        return batch_size, batch_size_actual
-
     # new hyper are loaded from group of new json files
     # baseline hyper are loaded from exist json file together with exist cnn
     # baseline hyper (cnn/dataset_pct/dataset_seed) only used for iDL
-    def _load_cur_hyper(self, cur_hyper_dict: dict, exist_cnn_path: str = None):
+    def _load_hyper(self, hyper: dict, exist_cnn_path: str = None):
         # DROPOUT
-        self._dropout = float(cur_hyper_dict["dropout"])
+        self._dropout = float(hyper["dropout"])
         self._dropout = g.check_limit(self._dropout, 0.0, 0.9)
 
         # batch size
-        self._batch_size, self._batch_size_actual = self._load_batch_size(
-            cur_hyper_dict
-        )
+        self._batch_size = int(hyper["batch.size"])
+        self._batch_size = g.check_limit(self._batch_size, 1, None)
+
+        # actual batch size
+        used_gpu_count = g.used_gpu_count()
+        if used_gpu_count > 1:
+            self._batch_size_actual = self._batch_size * used_gpu_count
+        else:
+            self._batch_size_actual = self._batch_size
 
         # lr decay factor
-        self._lr_decay_factor = float(cur_hyper_dict["lr.decay.factor"])
+        self._lr_decay_factor = float(hyper["lr.decay.factor"])
         # lr_decay_factor=1.0 will cause error
         self._lr_decay_factor = g.check_limit(self._lr_decay_factor, 0.01, 0.9999999999)
 
         # augment method
-        self._augment_method = str(cur_hyper_dict["augment.method"]).lower()
+        self._augment_method = str(hyper["augment.method"]).lower()
         if (
             self._augment_method != "combine"
             and self._augment_method != "scale"
@@ -81,25 +68,25 @@ class SharedTraining:
             self._augment_method = None
 
         # augment lower/upper limit
-        self._augment_low_limit = int(cur_hyper_dict["augment.low.limit"])
+        self._augment_low_limit = int(hyper["augment.low.limit"])
         self._augment_low_limit = g.check_limit(self._augment_low_limit, 1, 4)
 
-        self._augment_up_limit = int(cur_hyper_dict["augment.up.limit"])
+        self._augment_up_limit = int(hyper["augment.up.limit"])
         self._augment_up_limit = g.check_limit(
             self._augment_up_limit, self._augment_low_limit, 4
         )
 
         # loss function parameters
-        hybrid_weight = float(cur_hyper_dict["loss.hybrid.weight"])
+        hybrid_weight = float(hyper["loss.hybrid.weight"])
         hybrid_weight = g.check_limit(hybrid_weight, 0.0, 1.0)
 
-        tversky_fp_weight = float(cur_hyper_dict["loss.tversky.fp.weight"])
+        tversky_fp_weight = float(hyper["loss.tversky.fp.weight"])
         tversky_fp_weight = g.check_limit(tversky_fp_weight, 0.0, 1.0)
-        tversky_fore_power = float(cur_hyper_dict["loss.tversky.fore.power"])
-        tversky_fore_weight = float(cur_hyper_dict["loss.tversky.fore.weight"])
+        tversky_fore_power = float(hyper["loss.tversky.fore.power"])
+        tversky_fore_weight = float(hyper["loss.tversky.fore.weight"])
 
-        bce_back_power = float(cur_hyper_dict["loss.bce.back.power"])
-        bce_fore_weight = float(cur_hyper_dict["loss.bce.fore.weight"])
+        bce_back_power = float(hyper["loss.bce.back.power"])
+        bce_fore_weight = float(hyper["loss.bce.fore.weight"])
         bce_fore_weight = g.check_limit(bce_fore_weight, 0.0, 1.0)
 
         # self._loss_func = crit.Avg2dDiceLoss().to(g.DEVICE)
@@ -115,7 +102,7 @@ class SharedTraining:
 
         # load cnn
         self._cnn = self._load_cnn(
-            cnn_name=str(cur_hyper_dict["cnn.name"]),  # unet or unet++
+            cnn_name=str(hyper["cnn.name"]),  # unet or unet++
             exist_cnn_path=exist_cnn_path,
         )
 
@@ -174,7 +161,10 @@ class SharedTraining:
             return None
 
     def _print_hyper(self, print_dict: NestedDict):
-        print_dict["device:"] = g.DEVICE
+        if torch.cuda.device_count() < 1:
+            print_dict["device:"] = "cpu"
+        else:
+            print_dict["device:"] = "gpu: " + os.environ["CUDA_VISIBLE_DEVICES"]
         print_dict["cnn name:"] = self.__get_cnn_name()
         print_dict["lr:"] = self._lr
         print_dict["lr actual:"] = self._lr_actual
@@ -199,8 +189,11 @@ class SharedTraining:
             print(key, value)
 
     def _save_hyper(self, json_path: str, hyper_dict: NestedDict):
-        hyper_dict["time.used"] = str(self._time_used)
-        hyper_dict["device"] = str(g.DEVICE)
+        if torch.cuda.device_count() < 1:
+            hyper_dict["device:"] = "cpu"
+        else:
+            hyper_dict["device:"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
+        hyper_dict["time.used"] = self._time_used
         hyper_dict["lr.actual"] = self._lr_actual
         hyper_dict["lr.decay.factor"] = self._lr_decay_factor
         hyper_dict["lr.decay.patience"] = self._lr_decay_patience
@@ -307,11 +300,11 @@ class SharedTraining:
         group_start_time: str,
         train_remark: str,
         debug_mode: bool,
-        full_hyper_dict: dict,
-        cur_hyper_dict: dict,
+        hyper_json_path: str,
+        hyper: dict,
     ):
         train_id = group_start_time
-        cur_start_time = self._init_start_time()
+        cur_start_time = self._get_cur_time_str()
         train_id += "_" + cur_start_time
 
         if debug_mode:
@@ -325,11 +318,18 @@ class SharedTraining:
             train_id += "_" + train_remark
 
         # add important hyper param (that need to be compared) to train_id
-        for key in full_hyper_dict:
-            if len(full_hyper_dict[key]) > 1:
+        origin_hyper_dict = g.load_json(hyper_json_path)
+        # make sure all values of hyper dict are "list" type
+        for i in origin_hyper_dict:
+            if not isinstance(origin_hyper_dict[i], list):
+                origin_hyper_dict[i] = [origin_hyper_dict[i]]
+
+        for key in origin_hyper_dict:
+            if len(origin_hyper_dict[key]) > 1:
                 # replace "_" with "." in key name
                 train_id += "_" + key.replace("_", ".")
-                train_id += "=" + str(cur_hyper_dict[key]).replace("_", ".")
+                train_id += "=" + str(hyper[key]).replace("_", ".")
+
         return train_id
 
     def _optimize_batch_size(self, dataset: Union[BaselineDataSet, IDLDataSet]):
@@ -342,85 +342,103 @@ class SharedTraining:
             batch_size = dataset_len  # self._batch_size_actual
         return batch_size
 
-    def _inference_single_patient(
-        self,
-        patient: str,
-        imgs_save_folder: str = None,
-        save_pred_only: bool = False,
-    ):
-        score_dict = NestedDict()
+    def _inference_single_patient(self, patient: str):
+        scores = NestedDict()
+        preds = NestedDict()
+
+        dataset = BaselineDataSet(patient_list=[patient])
+
+        origin_size = g.load_nii(
+            nii_path=os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
+        ).shape
+
+        # label_gtvs=
+
+        preds["gtvs"] = np.zeros(
+            (
+                g.PATCH_SIZE[0] * math.ceil(origin_size[0] / g.PATCH_SIZE[0]),
+                g.PATCH_SIZE[1] * math.ceil(origin_size[1] / g.PATCH_SIZE[1]),
+                g.PATCH_SIZE[2] * math.ceil(origin_size[2] / g.PATCH_SIZE[2]),
+            ),
+            dtype=np.float32,
+        )
+
+        patch_pos = [[], [], []]
+        for i in range(3):
+            step = math.ceil(origin_size[i] / g.PATCH_SIZE[i])
+            for j in range(step):
+                patch_pos[i].append(g.PATCH_SIZE[i] * j)
 
         self._cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
+            for i in patch_pos[0]:
+                for j in patch_pos[1]:
+                    for k in patch_pos[2]:
+                        inputs, labels = dataset.get_item(
+                            cur_patient=patient,
+                            patch_pos=[
+                                i / preds["gtvs"].shape[0],
+                                j / preds["gtvs"].shape[1],
+                                k / preds["gtvs"].shape[2],
+                            ],
+                        )
+                        inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
+                        labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+                        outputs = self._cnn.forward(inputs)
+                        outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
+                        preds["gtvs"][
+                            i : i + g.PATCH_SIZE[0],
+                            j : j + g.PATCH_SIZE[1],
+                            k : k + g.PATCH_SIZE[2],
+                        ] = outputs[0]
+                        g.save_nii(
+                            preds["gtvs"],
+                            os.path.join(
+                                g.PROJ_PATH,
+                                "debug",
+                                "pred_{}_{}_{}.nii".format(i, j, k),
+                            ),
+                        )
 
-            inputs, labels = BaselineDataSet(patient_list=[patient]).__getitem__(0)
-            inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
-            labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            outputs = self._cnn.forward(inputs)
-
-        inputs = torch.squeeze(inputs, dim=0)
-        labels = torch.squeeze(labels, dim=0)
-        outputs = torch.squeeze(outputs, dim=0)
+        preds["gtvs"] = g.crop_img(img=preds["gtvs"], crop_size=origin_size)
+        preds["gtvs"] = torch.from_numpy(preds["gtvs"])
+        preds["gtvs"] = torch.unsqueeze(preds["gtvs"].to(g.DEVICE), dim=0)
 
         for score_type in ["dsc", "msd", "hd95"]:
-            score_dict["gtvt"][score_type] = self._score_funcs[score_type](
-                outputs[0], labels[0]
-            )
-            score_dict["gtvn"][score_type] = self._score_funcs[score_type](
-                outputs[1], labels[1]
-            )
+            # score_dict["gtvt"][score_type] = self._score_funcs[score_type](
+            #     outputs[0], labels[0]
+            # )
+            # score_dict["gtvn"][score_type] = self._score_funcs[score_type](
+            #     outputs[1], labels[1]
+            # )
+            scores[score_type] = self._score_funcs[score_type](outputs, labels)
 
-        # save images
-        if imgs_save_folder is not None:
-            g.create_folder(imgs_save_folder)
-
-            # get pred
-            pred = NestedDict()
-            pred["gtvt"] = outputs[0].cpu().numpy()
-            pred["gtvn"] = outputs[1].cpu().numpy()
-
-            # save pred
-            for i in ["gtvt", "gtvn"]:
-                g.save_nii(
-                    np_data=pred[i],
-                    save_path=os.path.join(imgs_save_folder, "pred_{}.nii".format(i)),
-                    spacing=g.NII_SPACING,
-                )
-
-            if not save_pred_only:
-                imgs = NestedDict()
-                imgs["ct"] = inputs[0].cpu().numpy()
-                imgs["pt"] = inputs[1].cpu().numpy()
-                imgs["mrt1"] = inputs[2].cpu().numpy()
-                imgs["mrt2"] = inputs[3].cpu().numpy()
-                imgs["label_gtvt"] = labels[0].cpu().numpy()
-                imgs["label_gtvn"] = labels[1].cpu().numpy()
-
-                # save imgs and labels
-                for i in ["ct", "pt", "mrt1", "mrt2", "label_gtvt", "label_gtvn"]:
-                    g.save_nii(
-                        np_data=imgs[i],
-                        save_path=os.path.join(imgs_save_folder, "{}.nii".format(i)),
-                        spacing=g.NII_SPACING,
-                    )
-
-        return score_dict
+        return scores, preds
 
     # protected function
-    def _init_start_time(self) -> str:
+    def _get_cur_time_str(self) -> str:
         start_time = str(datetime.now().replace(microsecond=0))
         start_time = start_time.replace(":", ".")
         start_time = start_time.replace("-", ".")
         start_time = start_time.replace(" ", ".")
         return start_time
 
-    def _load_full_hyper(self, hyper_json_path: str) -> dict:
-        # load hyper param
-        full_hyper_dict = g.load_json(hyper_json_path)
+    def _load_group_hyper(self, json_path: str) -> dict:
+        group_hyper = []
+        origin_hyper_dict = g.load_json(json_path)
+        hyper_keys = g.get_dict_keys(origin_hyper_dict)
 
         # make sure all values of hyper dict are "list" type
-        for i in full_hyper_dict:
-            if not isinstance(full_hyper_dict[i], list):
-                full_hyper_dict[i] = [full_hyper_dict[i]]
+        for i in origin_hyper_dict:
+            if not isinstance(origin_hyper_dict[i], list):
+                origin_hyper_dict[i] = [origin_hyper_dict[i]]
 
-        return full_hyper_dict
+        # get all cartesian products of hyper dict values
+        for cur_values in product(*origin_hyper_dict.values()):
+            # create current hyper param combination
+            cur_hyper = NestedDict()
+            for i in range(len(cur_values)):
+                cur_hyper[hyper_keys[i]] = cur_values[i]
+            group_hyper.append(cur_hyper)
+
+        return group_hyper

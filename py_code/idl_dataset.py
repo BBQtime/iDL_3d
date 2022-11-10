@@ -3,6 +3,7 @@ import os
 import math
 from baseline_dataset import BaselineDataSet
 from torch import Tensor
+from typing import Tuple
 
 
 class IDLDataSet(BaselineDataSet):
@@ -46,7 +47,7 @@ class IDLDataSet(BaselineDataSet):
             augment_times = math.ceil(augment_times)
 
     # must be overrided
-    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
         cur_patient = self.patient_slice_mapping[idx][0]
         cur_slice = self.patient_slice_mapping[idx][1]
         cur_slice_folder = os.path.join(g.DATASET_FOLDER, cur_patient, cur_slice)

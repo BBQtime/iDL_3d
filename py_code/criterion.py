@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import surface_distance as sd
 from torch import Tensor
 from numpy import ndarray
-from typing import Union
+from typing import Union, Tuple
 
 
 SMOOTH = 0.000001
@@ -16,7 +16,7 @@ SMOOTH = 0.000001
 
 def __2d_tversky(
     preds: Tensor, labels: Tensor, fp_weight: float
-) -> tuple[Tensor, Tensor]:
+) -> Tuple[Tensor, Tensor]:
     # fp_weight=0.5, this function becomes dsc
     fn_weight = 1 - fp_weight
     depth = labels.size(0)
@@ -34,7 +34,7 @@ def __2d_tversky(
 
 def __3d_tversky(
     preds: Tensor, labels: Tensor, fp_weight: float
-) -> tuple[Tensor, Tensor]:
+) -> Tuple[Tensor, Tensor]:
     # fp_weight=0.5, this function becomes dsc
     fn_weight = 1 - fp_weight
     tp = (preds * labels).sum()
@@ -70,7 +70,7 @@ def __asymmetric_focal_tversky_loss(
     return fore_weight * fore_loss + (1 - fore_weight) * back_loss
 
 
-def __2d_bce(preds: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
+def __2d_bce(preds: Tensor, labels: Tensor) -> Tuple[Tensor, Tensor]:
     depth = labels.size(0)
     fore_bce = 0
     back_bce = 0
@@ -84,7 +84,7 @@ def __2d_bce(preds: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
     return fore_bce / depth, back_bce / depth
 
 
-def __3d_bce(preds: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
+def __3d_bce(preds: Tensor, labels: Tensor) -> Tuple[Tensor, Tensor]:
     fore_bce = F.binary_cross_entropy(input=preds, target=labels, reduction="mean")
     back_bce = F.binary_cross_entropy(
         input=(1 - preds), target=(1 - labels), reduction="mean"

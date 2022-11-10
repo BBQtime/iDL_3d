@@ -19,22 +19,21 @@ class BaselineTraining(SharedTraining):
         self._epochs_actual = 0
         self.__tensorboard_writer = TensorBoardWriter(g.BASELINE_TENSORBOARD_FOLDER)
 
-    def _load_cur_hyper(
+    def _load_hyper(
         self,
-        cur_hyper_dict: dict,
+        hyper: dict,
         exist_cnn_path: str = None,
         debug_mode: bool = False,
     ):
-
         # epochs
         if debug_mode:
             self._epochs = 2  # run 2 epochs to compare difference in loss
         else:
-            self._epochs = int(cur_hyper_dict["epochs"])
+            self._epochs = int(hyper["epochs"])
             self._epochs = g.check_limit(self._epochs, 1, None)
 
         # lr
-        self._lr = float(cur_hyper_dict["lr"])
+        self._lr = float(hyper["lr"])
         self._lr = g.check_limit(self._lr, 1e-10, None)
         used_gpu_count = g.used_gpu_count()
         if used_gpu_count > 1:
@@ -43,28 +42,28 @@ class BaselineTraining(SharedTraining):
             self._lr_actual = self._lr
 
         # min lr
-        self._lr_min = float(cur_hyper_dict["lr.min"])
+        self._lr_min = float(hyper["lr.min"])
         self._lr_min = g.check_limit(self._lr_min, 0.0, self._lr)
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        self._lr_decay_patience = int(cur_hyper_dict["lr.decay.patience"])
+        self._lr_decay_patience = int(hyper["lr.decay.patience"])
         self._lr_decay_patience = g.check_limit(
             self._lr_decay_patience, 1, self._epochs
         )
 
         # early stop, based on epoch
-        self._early_stop_patience = int(cur_hyper_dict["early.stop.patience"])
+        self._early_stop_patience = int(hyper["early.stop.patience"])
         self._early_stop_patience = g.check_limit(
             self._early_stop_patience, 1, self._epochs
         )
 
         # augmentation percent
-        self._augment_pct = float(cur_hyper_dict["augment.pct"])
+        self._augment_pct = float(hyper["augment.pct"])
         self._augment_pct = g.check_limit(self._augment_pct, 0.0, 1.0)
 
         # load shared hyper parameters
-        super()._load_cur_hyper(
-            cur_hyper_dict=cur_hyper_dict,
+        super()._load_hyper(
+            hyper=hyper,
             exist_cnn_path=exist_cnn_path,
         )
 
@@ -109,7 +108,6 @@ class BaselineTraining(SharedTraining):
 
     def _print_hyper(self):
         print_dict = NestedDict()
-        print_dict["baseline id:"] = self._baseline_id
         print_dict["dropout:"] = self._dropout
         print_dict["epochs:"] = self._epochs
         print_dict["early stopping patience:"] = self._early_stop_patience
@@ -140,24 +138,7 @@ class BaselineTraining(SharedTraining):
         hyper_dict["dropout"] = self._dropout
         super()._save_hyper(json_path, hyper_dict)
 
-    def __create_result_folder(self, baseline_id: str):
-        # folder of baseline id
-        result_path = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
-        g.create_folder(result_path)
-        # sub folder named "baseline"
-        result_path = os.path.join(result_path, "baseline")
-        g.create_folder(result_path)
-
-        cnn_save_path = os.path.join(result_path, "epoch=")
-        hyper_save_path = os.path.join(result_path, "hyper.json")
-        loss_save_path = os.path.join(result_path, "train_loss.json")
-        # create json file
-        train_loss_dict = NestedDict()
-        train_loss_dict["epoch"] = NestedDict()
-        g.save_json(train_loss_dict, loss_save_path)
-        return cnn_save_path, hyper_save_path, loss_save_path
-
-    def __train_process(self, cnn_save_path: str, loss_save_path: str):
+    def __training(self, cnn_save_path: str, loss_save_path: str):
         g.clear_gpu_cache()
         g.print_line()
 
@@ -204,23 +185,13 @@ class BaselineTraining(SharedTraining):
             # current epoch finished
             self._epochs_actual = cur_epoch
 
-            # write tensorboard (loss/epoch map)
-            self.__tensorboard_writer.write_loss_per_epoch(
-                baseline_id=self._baseline_id,
-                train_loss=train_loss,
-                valid_loss=valid_loss,
-                epoch=self._epochs_actual,
-            )
-
             # save loss data in json file
-            train_loss_dict = g.load_json(loss_save_path)
-            cur_loss_dict = NestedDict()
-            cur_loss_dict["train.loss"] = train_loss
-            cur_loss_dict["valid.loss"] = valid_loss
-            train_loss_dict["epoch"][
-                "{:03d}".format(self._epochs_actual)
-            ] = cur_loss_dict
-            g.save_json(train_loss_dict, loss_save_path)
+            loss_dict = g.load_json(loss_save_path)
+            cur_epoch_loss = NestedDict()
+            cur_epoch_loss["train"] = train_loss
+            cur_epoch_loss["valid"] = valid_loss
+            loss_dict["epoch={:03d}".format(self._epochs_actual)] = cur_epoch_loss
+            g.save_json(loss_dict, loss_save_path)
 
             # save cnn
             if best_loss is None:
@@ -241,6 +212,7 @@ class BaselineTraining(SharedTraining):
 
         # training over
         self._time_used = datetime.now() - self._time_used
+        self._time_used = str(self._time_used).split(".", 2)[0]
         g.clear_gpu_cache()
 
     def training(
@@ -249,55 +221,51 @@ class BaselineTraining(SharedTraining):
         debug_mode: bool = False,
     ):
         baseline_id_list = []
-        group_start_time = self._init_start_time()
-
-        # load hyper dict
-        full_hyper_dict = self._load_full_hyper(g.BASELINE_HYPER_JSON)
-        # get hyper_keys to combine with hyper_values to create "cur_hyper_combination" later
-        hyper_keys = g.get_dict_keys(full_hyper_dict)
+        group_start_time = self._get_cur_time_str()
 
         # get all cartesian products of hyper dict values
-        for cur_hyper_values in product(*full_hyper_dict.values()):
+        for hyper in self._load_group_hyper(g.BASELINE_HYPER_JSON):
 
-            # create current hyper param combination
-            cur_hyper_dict = NestedDict()
-            for i in range(len(cur_hyper_values)):
-                cur_hyper_dict[hyper_keys[i]] = cur_hyper_values[i]
-
-            # baseline_id must be generated before "_print_hyper()"
-            self._baseline_id = self._init_train_id(
-                group_start_time=group_start_time,
-                train_remark=train_remark,
-                debug_mode=debug_mode,
-                full_hyper_dict=full_hyper_dict,
-                cur_hyper_dict=cur_hyper_dict,
-            )
-            baseline_id_list.append(self._baseline_id)
-
-            self._load_cur_hyper(
-                cur_hyper_dict=cur_hyper_dict,
+            self._load_hyper(
+                hyper=hyper,
                 debug_mode=debug_mode,
             )
             g.print_line()
             self._print_hyper()
 
-            # create result folder, generate cnn and hyper save path
-            (
-                cnn_save_path,
-                hyper_save_path,
-                loss_save_path,
-            ) = self.__create_result_folder(self._baseline_id)
+            baseline_id = self._init_train_id(
+                group_start_time=group_start_time,
+                train_remark=train_remark,
+                hyper_json_path=g.BASELINE_HYPER_JSON,
+                hyper=hyper,
+                debug_mode=debug_mode,
+            )
+            baseline_id_list.append(baseline_id)
 
-            # start current training
-            self.__train_process(cnn_save_path, loss_save_path)
+            # create result folder, generate cnn and hyper save path
+            baseline_folder = os.path.join(
+                g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"
+            )
+            # g.create_folder(baseline_folder)
+            # baseline_folder = os.path.join(baseline_folder)
+            g.create_folder(baseline_folder)
+
+            cnn_save_path = os.path.join(baseline_folder, "epoch=")
+            hyper_save_path = os.path.join(baseline_folder, "hyper.json")
+            loss_save_path = os.path.join(baseline_folder, "loss.json")
+            # save an empty loss.json
+            g.save_json(NestedDict(), loss_save_path)
+
+            # start training
+            self.__training(cnn_save_path, loss_save_path)
 
             self._save_hyper(hyper_save_path)
 
-            self.inference(
-                baseline_id=self._baseline_id,
-                print_hyper=False,
-                debug_mode=debug_mode,
-            )
+            # self.inference(
+            #     baseline_id=baseline_id,
+            #     print_hyper=False,
+            #     debug_mode=debug_mode,
+            # )
 
         return baseline_id_list
 
@@ -308,50 +276,46 @@ class BaselineTraining(SharedTraining):
         print_hyper: bool = True,
         debug_mode: bool = False,
     ):
-        self._baseline_id = baseline_id
-        cur_train_folder = os.path.join(
-            g.TRAIN_RESULTS_FOLDER, self._baseline_id, "baseline"
+        g.print_line()
+        print(baseline_id)
+
+        baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline")
+
+        hyper_dict = g.load_json(os.path.join(baseline_folder, "hyper.json"))
+
+        cnn_path = g.get_sub_files(baseline_folder, key_word=".pt")[0]
+        cnn_path = os.path.join(baseline_folder, cnn_path)
+
+        all_patients_scores = NestedDict()
+
+        # load and print hyper
+        self._load_hyper(
+            hyper=hyper_dict,
+            exist_cnn_path=cnn_path,
+            debug_mode=debug_mode,
         )
+        if print_hyper:
+            self._print_hyper()
 
-        hyper_path = os.path.join(cur_train_folder, "hyper.json")
-        cur_hyper_dict = g.load_json(hyper_path)
-
-        # test each cnn
-        cnn_file_list = g.get_sub_files(cur_train_folder, key_word=".pt")
-        for cnn_file_name in cnn_file_list:
-            cur_cnn_path = os.path.join(cur_train_folder, cnn_file_name)
-            g.print_line()
-            print(cur_cnn_path)
-
-            scores = NestedDict()
-
-            # load and print hyper
-            self._load_cur_hyper(
-                cur_hyper_dict=cur_hyper_dict,
-                exist_cnn_path=cur_cnn_path,
-                debug_mode=debug_mode,
+        for cur_patient in tqdm(self._test_loader.dataset.patient_list):
+            cur_patient_scores, cur_patient_preds = self._inference_single_patient(
+                patient=cur_patient,
             )
-            if print_hyper:
-                self._print_hyper()
+            all_patients_scores["patient={}".format(cur_patient)] = cur_patient_scores
 
-            for patient in tqdm(self._test_loader.dataset.patient_list):
-                imgs_save_folder = os.path.join(cur_train_folder, patient)
-                scores["patient={}".format(patient)] = self._inference_single_patient(
-                    patient=patient,
-                    imgs_save_folder=imgs_save_folder,
-                    save_pred_only=False,  # this is for iDL, round>0
+            cur_patient_folder = os.path.join(baseline_folder, cur_patient)
+            g.create_folder(cur_patient_folder)
+
+            # save cur patient pred
+            for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
+                g.save_nii(
+                    np_data=cur_patient_preds[i],
+                    save_path=os.path.join(cur_patient_folder, "pred_{}.nii".format(i)),
+                    spacing=g.NII_SPACING,
                 )
 
-            # # calculate average (2d.avg and 3d) score of all patients
-            # for score_type in ["dsc", "msd", "hd95"]:
-            #     scores["avg"][score_type] = []
-            #     for patient in scores:
-            #         scores["avg"][score_type].append(scores[patient][score_type])
-            #     # scores["avg"][score_type] = g.get_list_avg(scores["avg"][score_type])
-
-            # record best scores
-
-            g.save_json(
-                data=scores,
-                path=os.path.join(cur_train_folder, cnn_file_name[:-3] + "_score.json"),
-            )
+        # save scores of all patients
+        g.save_json(
+            data=all_patients_scores,
+            path=os.path.join(baseline_folder, "inference.json"),
+        )

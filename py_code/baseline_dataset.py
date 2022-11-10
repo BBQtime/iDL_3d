@@ -2,22 +2,24 @@ import global_elems as g
 import os
 import random
 import torch
+import math
 import numpy as np
 from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
 from torchvision import transforms as T
 from data_augment import DataAugment
+from typing import Tuple
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
     def __init__(
         self,
         patient_list: list,
-        augment_pct: float = 0.0,
+        augment_pct: float = None,
         augment_method: str = None,
-        augment_low_limit: int = 1,
-        augment_up_limit: int = 1,
+        augment_low_limit: int = None,
+        augment_up_limit: int = None,
     ):
         self.patient_list = patient_list
         self._init_augment(
@@ -31,12 +33,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
     def _init_augment(
         self,
-        augment_pct: float = 0.0,
-        augment_method: str = None,
-        augment_low_limit: int = 1,
-        augment_up_limit: int = 1,
+        augment_pct: float,
+        augment_method: str,
+        augment_low_limit: int,
+        augment_up_limit: int,
     ):
-        if augment_pct > 0.0 and augment_method is not None:
+        if augment_method is not None:
             self._data_augment = DataAugment(
                 pct=augment_pct,
                 method=augment_method,
@@ -51,73 +53,40 @@ class BaselineDataSet(torch.utils.data.Dataset):
         return len(self.patient_list)
 
     # max size: 89 283 280
-    def __pad_and_crop(self, img: ndarray) -> ndarray:
-        # step 1: padding
-        in_size = NestedDict()
-        in_size["d"], in_size["h"], in_size["w"] = img.shape
+    def __crop_to_patch(self, img: ndarray, patch_pos: list):
+        pad_size = []
+        for i in range(3):
+            pad_size.append(g.PATCH_SIZE[i] * math.ceil(img.shape[i] / g.PATCH_SIZE[i]))
+        img = g.pad_img(img, pad_size=tuple(pad_size))
 
-        out_size = NestedDict()
-        out_size["d"] = g.IMG_SIZE[2]
-        out_size["h"] = g.IMG_SIZE[1]
-        out_size["w"] = g.IMG_SIZE[0]
-
-        pad = NestedDict()
-        for i in ["w", "h", "d"]:
-            pad[i][0] = pad[i][1] = 0
-
-        for i in ["w", "h", "d"]:
-            if out_size[i] > in_size[i]:
-                cur_pad = out_size[i] - in_size[i]
-                if cur_pad % 2 == 0:
-                    pad[i][0] = pad[i][1] = int(cur_pad / 2)
-                else:
-                    pad[i][0] = int(cur_pad / 2)
-                    pad[i][1] = pad[i][0] + 1
-
-        img = np.pad(
-            img,
-            (
-                (pad["d"][0], pad["d"][1]),
-                (pad["h"][0], pad["h"][1]),
-                (pad["w"][0], pad["w"][1]),
-            ),
-            "constant",
-            constant_values=0,  # constant_values=0 means black padding
-        )
-
-        # step 2: cropping
-        in_size["d"], in_size["h"], in_size["w"] = img.shape
-
-        if (
-            in_size["d"] > out_size["d"]
-            or in_size["h"] > out_size["h"]
-            or in_size["w"] > out_size["w"]
-        ):
-            start_point = NestedDict()
-
-            for i in ["w", "h", "d"]:
-                start_point[i] = (in_size[i] // 2) - (out_size[i] // 2)
-
-            img = img[
-                start_point["d"] : start_point["d"] + out_size["d"],
-                start_point["h"] : start_point["h"] + out_size["h"],
-                start_point["w"] : start_point["w"] + out_size["w"],
-            ]
+        for i in range(3):
+            patch_pos[i] = (img.shape[i] - g.PATCH_SIZE[i]) * patch_pos[i]
+            patch_pos[i] = round(patch_pos[i])
+        img = img[
+            patch_pos[0] : patch_pos[0] + g.PATCH_SIZE[0],
+            patch_pos[1] : patch_pos[1] + g.PATCH_SIZE[1],
+            patch_pos[2] : patch_pos[2] + g.PATCH_SIZE[2],
+        ]
         return img
 
-    def __load_img(self, img_path: str, augment_seed: int):
-        img = g.load_nii(img_path).astype(np.float32)
+    def __load_img(self, img_path: str, augment_seed: int, patch_pos: list):
+        img = g.load_nii(img_path)
 
         # make sure img.shape is 3
         for i in range(len(img.shape) - 3):
             img = np.squeeze(img, axis=0)
 
-        img = self.__pad_and_crop(img)
-
+        # data augmentation
         if self._data_augment is not None:
             img = self._data_augment.run(input_data=img, seed=augment_seed)
 
-        # unsqueeze img to 4 dim
+        # (after augmentation)
+        img = g.normalize_img(img)
+
+        # (after augmentation, normalization)
+        img = self.__crop_to_patch(img, patch_pos=patch_pos)
+
+        # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
 
         # numpy to tensor
@@ -125,65 +94,89 @@ class BaselineDataSet(torch.utils.data.Dataset):
         img = torch.from_numpy(img)
         return img
 
-    def _get_item(
-        self, cur_patient: str, gtvt_path: str, gtvn_path: str
-    ) -> tuple[Tensor, Tensor]:
+    def get_item(self, cur_patient: str, patch_pos: list) -> Tuple[Tensor, Tensor]:
 
-        # make sure same group use the same augment seed
-        # !!! use python random, do not use np.random !!!
-        # np.random + dataloader will cause multi-processing problem
-        augment_seed = random.randint(0, 2 ** 16)
+        for load_times in range(10):
 
-        multi_model_imgs = None
+            # make sure same group use the same augment_seed / patch_pos
+            # !!! use python random, do not use np.random !!!
+            # np.random + dataloader will cause multi-processing problem
+            augment_seed = random.randint(0, 2**16)
 
-        for i in ["CT", "PT", "T1dr", "T2dr"]:
-            img_path = os.path.join(
-                g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(cur_patient, i)
+            if len(patch_pos) == 0:
+                for i in range(3):
+                    patch_pos.append(random.uniform(0, 1))
+
+            # load label
+            # gtvt_path = os.path.join(
+            #     g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(cur_patient)
+            # )
+            # gtvt_img = self.__load_img(img_path=gtvt_path, augment_seed=augment_seed)
+
+            # gtvn_path = os.path.join(
+            #     g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(cur_patient)
+            # )
+            # if os.path.exists(gtvn_path):
+            #     gtvn_img = self.__load_img(img_path=gtvn_path, augment_seed=augment_seed)
+            # else:
+            #     gtvs_path = os.path.join(
+            #         g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(cur_patient)
+            #     )
+            #     gtvs_img = self.__load_img(img_path=gtvs_path, augment_seed=augment_seed)
+            #     gtvn_img = gtvs_img - gtvt_img
+
+            gtvs_path = os.path.join(
+                g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(cur_patient)
             )
-            img = self.__load_img(img_path=img_path, augment_seed=augment_seed)
-            # g.show_img(img)
+            gtvs_img = self.__load_img(
+                img_path=gtvs_path,
+                augment_seed=augment_seed,
+                patch_pos=patch_pos.copy(),
+            )
 
-            # concat multi-model img
-            if multi_model_imgs is None:
-                multi_model_imgs = img
-            else:
-                multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
-
-        # load gtvt
-        gtvt_img = self.__load_img(img_path=gtvt_path, augment_seed=augment_seed)
-        # g.show_img(gtvt_img)
-
-        # load gtvn
-        if os.path.exists(gtvn_path):
-            gtvn_img = self.__load_img(img_path=gtvn_path, augment_seed=augment_seed)
-        else:
-            gtvs_path = g.change_char_in_str(gtvn_path, -5, "s")
-            gtvs_img = self.__load_img(img_path=gtvs_path, augment_seed=augment_seed)
-            gtvn_img = gtvs_img - gtvt_img
             # g.show_img(gtvs_img)
-            # g.show_img(gtvt_img)
-            # g.show_img(gtvn_img)
 
-        bg_img = 1 - gtvt_img - gtvn_img
-        # g.show_img(bg_img)
-        label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+            # target volume is not big enough
+            if gtvs_img.sum() * 20 < (
+                gtvs_img.shape[0]
+                * gtvs_img.shape[1]
+                * gtvs_img.shape[2]
+                * gtvs_img.shape[3]
+            ):
+                if load_times < 9:
+                    patch_pos = []
+                    continue
 
-        return multi_model_imgs, label_imgs
+            # bg_img = 1 - gtvt_img - gtvn_img
+            # g.show_img(bg_img)
+            # label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+
+            multi_model_imgs = None
+            for i in ["CT", "PT", "T1dr", "T2dr"]:
+                img_path = os.path.join(
+                    g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(cur_patient, i)
+                )
+                img = self.__load_img(
+                    img_path=img_path,
+                    augment_seed=augment_seed,
+                    patch_pos=patch_pos.copy(),
+                )
+
+                # concat multi-model img
+                if multi_model_imgs is None:
+                    multi_model_imgs = img
+                else:
+                    multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
+
+            # target volume is big enough, break
+            break
+
+        return multi_model_imgs, gtvs_img  # label_imgs
 
     # must be overrided
     def __getitem__(self, idx: int):
         cur_patient = self.patient_list[idx]
-        # cur_slice = self.patient_slice_mapping[idx][1]
-        # cur_slice_folder = os.path.join(g.DATASET_FOLDER, cur_patient, cur_slice)
-        gtvt_path = os.path.join(
-            g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(cur_patient)
-        )
-        gtvn_path = os.path.join(
-            g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(cur_patient)
-        )
-        return self._get_item(
-            cur_patient=cur_patient, gtvt_path=gtvt_path, gtvn_path=gtvn_path
-        )
+        return self.get_item(cur_patient=cur_patient, patch_pos=[])
 
 
 # for testing

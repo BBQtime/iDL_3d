@@ -44,10 +44,10 @@ class IDLTraining(SharedTraining):
             min_lr=self._lr_min,
         )
 
-    def _reset_cnn(self, cur_hyper_dict: dict, baseline_cnn_path: str):
+    def _reset_cnn(self, hyper: dict, baseline_cnn_path: str):
         # RELOAD CNN
         self._cnn = super()._load_cnn(
-            cnn_name=str(cur_hyper_dict["cnn.name"]),  # unet or unet++
+            cnn_name=str(hyper["cnn.name"]),  # unet or unet++
             exist_cnn_path=baseline_cnn_path,
         )
 
@@ -73,26 +73,26 @@ class IDLTraining(SharedTraining):
             min_lr=self._lr_min,
         )
 
-    def _load_cur_hyper(
+    def _load_hyper(
         self,
-        cur_hyper_dict: dict,
+        hyper: dict,
         baseline_cnn_path: str,
         debug_mode: bool = False,
     ):
         if debug_mode:
             self._iter = 2  # 2 to compare difference
         else:
-            self._iter = int(cur_hyper_dict["iter"])
+            self._iter = int(hyper["iter"])
             g.check_limit(self._iter, 1, None)
 
         # min lr
-        self._lr_min = float(cur_hyper_dict["lr.min"])
+        self._lr_min = float(hyper["lr.min"])
 
         # reset lr before next round or not
-        self._lr_reset = bool(cur_hyper_dict["lr.reset"])
+        self._lr_reset = bool(hyper["lr.reset"])
 
         # lr list
-        self._lr = cur_hyper_dict["lr"]
+        self._lr = hyper["lr"]
         # lr list is saved in json file as a string, not a list, because:
         # (1) string IS easier to read the json file (only one line)
         # (2) a "list" will be recognized as multiple hyper parameters
@@ -110,30 +110,30 @@ class IDLTraining(SharedTraining):
             self._lr_actual = self._lr[0]
 
         # lr decay patience (before shared hyper)
-        self._lr_decay_patience = int(cur_hyper_dict["lr.decay.patience"])
+        self._lr_decay_patience = int(hyper["lr.decay.patience"])
         g.check_limit(self._lr_decay_patience, 1, self._iter)
 
         # augmentation times (based on after shared hyper)
         if debug_mode:
             self._augment_times = 2
         else:
-            self._augment_times = int(cur_hyper_dict["augment.times"])
+            self._augment_times = int(hyper["augment.times"])
             self._augment_times = g.check_limit(self._augment_times, 1, None)
 
         # augmentation percent (based on augment_times)
         self._augment_pct = self._augment_times / (self._augment_times + 1)
 
         # freeze layers
-        self._layer_freezing = bool(cur_hyper_dict["layer.freezing"])
+        self._layer_freezing = bool(hyper["layer.freezing"])
 
         # post processing
-        self._post_process = bool(cur_hyper_dict["post.process"])
+        self._post_process = bool(hyper["post.process"])
 
         # select step
         if debug_mode:
             self._select_step = [2, 1]
         else:
-            self._select_step = cur_hyper_dict["select.step"]
+            self._select_step = hyper["select.step"]
             # select.step is saved in json file as a string, not a list, because:
             # (1) it's easier to read the json file (only one line)
             # (2) a "list" will be recognized as multiple hyper parameters,
@@ -144,7 +144,7 @@ class IDLTraining(SharedTraining):
                 self._select_step[i] = g.check_limit(self._select_step[i], 1, None)
 
         # select scenario
-        self._select_scenario = str(cur_hyper_dict["select.scenario"]).lower()
+        self._select_scenario = str(hyper["select.scenario"]).lower()
         if (
             self._select_scenario != "largest"
             and self._select_scenario != "equal.divide"
@@ -152,8 +152,8 @@ class IDLTraining(SharedTraining):
             self._select_scenario = "random"
 
         # load shared hyper
-        super()._load_cur_hyper(
-            cur_hyper_dict=cur_hyper_dict,
+        super()._load_hyper(
+            hyper=hyper,
             exist_cnn_path=baseline_cnn_path,
         )
 
@@ -253,16 +253,16 @@ class IDLTraining(SharedTraining):
             idl_hyper_dict[i] = baseline_hyper_dict[i]
 
         # make sure all hypers are unique, no arrangement
-        cur_hyper_dict = NestedDict()
+        hyper = NestedDict()
         for i in idl_hyper_dict:
             if isinstance(idl_hyper_dict[i], list):
-                cur_hyper_dict[i] = idl_hyper_dict[i][0]
+                hyper[i] = idl_hyper_dict[i][0]
             else:
-                cur_hyper_dict[i] = idl_hyper_dict[i]
+                hyper[i] = idl_hyper_dict[i]
 
         # load and print hyper
-        self._load_cur_hyper(
-            cur_hyper_dict=cur_hyper_dict,
+        self._load_hyper(
+            hyper=hyper,
             baseline_cnn_path=baseline_cnn_path,
             debug_mode=debug_mode,
         )
@@ -316,10 +316,10 @@ class IDLTraining(SharedTraining):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        group_start_time = self._init_start_time()
+        group_start_time = self._get_cur_time_str()
 
         # load iDL hyper
-        idl_full_hyper_dict = self._load_full_hyper(g.IDL_HYPER_JSON)
+        idl_full_hyper_dict = self._load_group_hyper(g.IDL_HYPER_JSON)
 
         # get hyper_keys to combine with hyper_values to create "cur_hyper_combination" later
         idl_hyper_keys = g.get_dict_keys(idl_full_hyper_dict)
@@ -344,7 +344,7 @@ class IDLTraining(SharedTraining):
             baseline_hyper_dict = g.load_json(baseline_hyper_path)
 
             # add important baseline hypers to cur iDL hypers
-            cur_hyper_dict["cnn.name"] = baseline_hyper_dict["cnn.name"]
+            hyper["cnn.name"] = baseline_hyper_dict["cnn.name"]
 
             # record baseline dropout rate
             self._dropout_baseline = baseline_hyper_dict["dropout"]
@@ -355,12 +355,12 @@ class IDLTraining(SharedTraining):
                 train_remark=train_remark,
                 debug_mode=debug_mode,
                 full_hyper_dict=idl_full_hyper_dict,
-                cur_hyper_dict=cur_hyper_dict,
+                hyper=hyper,
             )
 
             # load and print hyper
-            self._load_cur_hyper(
-                cur_hyper_dict=cur_hyper_dict,
+            self._load_hyper(
+                hyper=hyper,
                 baseline_cnn_path=baseline_cnn_path,
                 debug_mode=debug_mode,
             )
@@ -386,7 +386,7 @@ class IDLTraining(SharedTraining):
                 idx = self._patient_list.index(cur_patient)
                 if (idx + 1) < len(self._patient_list):
                     self._reset_cnn(
-                        cur_hyper_dict=cur_hyper_dict,
+                        hyper=cur_hyper_dict,
                         baseline_cnn_path=baseline_cnn_path,
                     )
 

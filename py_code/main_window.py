@@ -4,6 +4,7 @@ import os
 import sys
 import cv2
 import numpy as np
+from typing import Tuple
 from nested_dict import NestedDict
 from datetime import datetime
 from tkinter import Tk
@@ -20,7 +21,7 @@ from PyQt5.QtWidgets import (
     QAction,
     QRubberBand,
 )
-from Ui_main_window import Ui_MainWindow
+from ui_main_window import Ui_MainWindow
 
 # opencv.shape（height, width，channel）
 
@@ -901,8 +902,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self,
         img,
         text: str,
-        pos: tuple[int, int],
-        color: tuple[int, int, int],
+        pos: Tuple[int, int],
+        color: Tuple[int, int, int],
         line_gap: int = 20,
     ):
         for i, line in enumerate(text.split("\n")):

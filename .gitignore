@@ -1,6 +1,6 @@
 py_code/__pycache__/
 py_code/surface_distance/__pycache__/
-backup/
+debug/
 train_results/
 baseline_tensorboard/
 idl_tensorboard/

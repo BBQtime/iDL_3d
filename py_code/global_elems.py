@@ -8,16 +8,41 @@ import platform
 import imageio
 import hashlib
 import unicodedata
+import cv2
 import cc3d
-import imgaug as ia
 import numpy as np
 import SimpleITK as sitk
-import matplotlib.pyplot as plt
+import imgaug as ia
+from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
 from PyQt5 import QtWidgets
 from typing import Union
 from natsort import natsorted
+import matplotlib
+from matplotlib import pyplot as plt
+
+
+def show_img(
+    img: Union[ndarray, Tensor], win_tital: str = "", print_info: bool = False
+):
+    if print_info:
+        print("image data type:", type(img))
+        print("image shape:", img.shape)
+        print("image max value:", img.max())
+        print("image min value:", img.min())
+
+    if isinstance(img, Tensor):
+        # detach: return a tensor share the same memory but without grad
+        img = img.detach().cpu().numpy()
+
+    if len(img.shape) == 3:
+        img = img[img.shape[0] // 2]
+    elif len(img.shape) == 4:
+        img = img[img.shape[0] // 2][img.shape[1] // 2]
+
+    cv2.imshow(win_tital, img)
+    cv2.waitKey(0)
 
 
 def exit_app(msg: str = ""):
@@ -76,24 +101,6 @@ def dict_to_list(input_dict: dict):
         for cur_value in input_dict[cur_key]:
             output_list.append(cur_value)
     return output_list
-
-
-def show_img(img: Union[ndarray, Tensor], print_info: bool = False):
-    if print_info:
-        print("image data type:", type(img))
-        print("image shape:", img.shape)
-        print("image max value:", img.max())
-        print("image min value:", img.min())
-
-    if isinstance(img, Tensor):
-        # detach: return a tensor share the same memory but without grad
-        img = img.detach().cpu().numpy()
-    if len(img.shape) == 2:
-        ia.imshow(img)
-    elif len(img.shape) == 3:
-        ia.imshow(img[img.shape[0] // 2])
-    elif len(img.shape) == 4:
-        ia.imshow(img[img.shape[0] // 2][img.shape[1] // 2])
 
 
 def rename_file(base_path: str, old_name: str, new_name: str):
@@ -290,17 +297,17 @@ def clear_gpu_cache():
 
 
 def check_limit(
-    in_value: Union[float, int],
+    input_value: Union[float, int],
     low_limit: Union[float, int] = None,
     up_limit: Union[float, int] = None,
 ):
     if low_limit is not None:
-        if in_value < low_limit:
-            in_value = low_limit
+        if input_value < low_limit:
+            input_value = low_limit
     if up_limit is not None:
-        if in_value > up_limit:
-            in_value = up_limit
-    return in_value
+        if input_value > up_limit:
+            input_value = up_limit
+    return input_value
 
 
 def get_avg_value(input_data: Union[list, dict]) -> float:
@@ -312,18 +319,6 @@ def get_avg_value(input_data: Union[list, dict]) -> float:
         return input_data
 
 
-# def cross_join_lists(list1, list2):
-#     newlist = []
-#     len1 = len(list1)
-#     len2 = len(list2)
-#     for i in range(max(len1, len2)):
-#         if i < len1:
-#             newlist.append(list1[i])
-#         if i < len2:
-#             newlist.append(list2[i])
-#     return newlist
-
-
 def print_line(len: int = 50):
     print("=" * len)
 
@@ -331,6 +326,7 @@ def print_line(len: int = 50):
 def load_nii(nii_path: str):
     img = sitk.ReadImage(nii_path)
     img = sitk.GetArrayFromImage(img)
+    img = img.astype(np.float32)
     return img
 
 
@@ -351,18 +347,74 @@ def save_img(save_path: str, np_data: ndarray, extension_name: str = ".png"):
     return save_path
 
 
-# def tensor_save_img(tensor_data, save_path):
-#     vutils.save_image(
-#         tensor_data,
-#         save_path,
-#         normalize=True,
-#     )
+# max size: 89 283 280
+def crop_img(img: ndarray, crop_size: tuple) -> ndarray:
+    in_size = NestedDict()
+    in_size["d"], in_size["h"], in_size["w"] = img.shape
+
+    out_size = NestedDict()
+    out_size["d"] = crop_size[0]
+    out_size["h"] = crop_size[1]
+    out_size["w"] = crop_size[0]
+
+    if (
+        in_size["d"] > out_size["d"]
+        or in_size["h"] > out_size["h"]
+        or in_size["w"] > out_size["w"]
+    ):
+        start_point = NestedDict()
+
+        for i in ["w", "h", "d"]:
+            start_point[i] = (in_size[i] // 2) - (out_size[i] // 2)
+
+        img = img[
+            start_point["d"] : start_point["d"] + out_size["d"],
+            start_point["h"] : start_point["h"] + out_size["h"],
+            start_point["w"] : start_point["w"] + out_size["w"],
+        ]
+    return img
 
 
-# def clear_linux_trash():
-#     if platform.system().lower() == "linux":
-#         clear_folder("/home/alan/.local/share/Trash/files/")
-#         clear_folder("/home/alan/.local/share/Trash/info/")
+def pad_img(img: ndarray, pad_size: tuple) -> ndarray:
+    in_size = NestedDict()
+    in_size["d"], in_size["h"], in_size["w"] = img.shape
+
+    out_size = NestedDict()
+    out_size["d"] = pad_size[0]
+    out_size["h"] = pad_size[1]
+    out_size["w"] = pad_size[2]
+
+    pad = NestedDict()
+    for i in ["w", "h", "d"]:
+        pad[i][0] = pad[i][1] = 0
+
+    for i in ["w", "h", "d"]:
+        if out_size[i] > in_size[i]:
+            cur_pad = out_size[i] - in_size[i]
+            if cur_pad % 2 == 0:
+                pad[i][0] = pad[i][1] = int(cur_pad / 2)
+            else:
+                pad[i][0] = int(cur_pad / 2)
+                # pad one more line on direction "1"
+                pad[i][1] = pad[i][0] + 1
+
+    img = np.pad(
+        img,
+        (
+            (pad["d"][0], pad["d"][1]),
+            (pad["h"][0], pad["h"][1]),
+            (pad["w"][0], pad["w"][1]),
+        ),
+        "constant",
+        constant_values=0,  # constant_values=0 means black padding
+    )
+    return img
+
+
+def clear_linux_trash():
+    if platform.system().lower() == "linux":
+        clear_folder("/home/alan/.local/share/Trash/files/")
+        clear_folder("/home/alan/.local/share/Trash/info/")
 
 
 def get_combox_content(combox: QtWidgets.QComboBox):
@@ -370,6 +422,14 @@ def get_combox_content(combox: QtWidgets.QComboBox):
     for i in range(combox.count()):
         content_list.append(combox.itemText(i))
     return content_list
+
+
+def normalize_img(img: ndarray) -> ndarray:
+    # make min value=0
+    img = img - img.min()
+    # make range between [0-1]
+    img /= img.max()
+    return img
 
 
 def binarize_img(
@@ -438,9 +498,8 @@ def get_list_avg(input_list: list):
 
 PROJ_PATH = None
 DEVICE = None
-MAX_BATCH_SIZE = None
 NUM_WORKERS = None
-IMG_SIZE = None
+PATCH_SIZE = None
 NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
 DATASET_FOLDER = None
@@ -452,12 +511,11 @@ BASELINE_TENSORBOARD_FOLDER = None
 IDL_TENSORBOARD_FOLDER = None
 
 
-def __general_init():
+def __global_init():
     global PROJ_PATH
     global DEVICE
-    global MAX_BATCH_SIZE
     global NUM_WORKERS
-    global IMG_SIZE
+    global PATCH_SIZE
     global NII_SPACING
     global CNN_STATE_DICT_ONLY
     global DATASET_FOLDER
@@ -497,28 +555,15 @@ def __general_init():
 
     # Windows or Linux
     if platform.system().lower() == "windows":
-        MAX_BATCH_SIZE = __json_data["max.batch.size.win"]  # g.IMG_SIZE 256
-        NUM_WORKERS = __json_data["num.workers.win"]
+        NUM_WORKERS = 0
 
     elif platform.system().lower() == "linux":
-        MAX_BATCH_SIZE = __json_data["max.batch.size.linux"]  # g.IMG_SIZE 256
-        NUM_WORKERS = __json_data["num.workers.linux"]
+        NUM_WORKERS = __json_data["num.workers"]
 
-    # # Google Colab
-    # if os.getcwd() == "/content":
-    #     from google.colab import drive
-    #     drive.mount("/content/drive")
-    #     PROJ_PATH = "/content/drive/My Drive/alan/iDL/"
-    #     MAX_BATCH_SIZE =  32  # IMG_SIZE 256
-
-    # const values
-    if used_gpu_count() > 1:
-        MAX_BATCH_SIZE *= 2
-
-    IMG_SIZE = []
-    for i in str_to_list(__json_data["img.size"]):
-        IMG_SIZE.append(int(i))
-    IMG_SIZE = tuple(IMG_SIZE)
+    PATCH_SIZE = []
+    for i in str_to_list(__json_data["patch.size"]):
+        PATCH_SIZE.append(int(i))
+    PATCH_SIZE = tuple(PATCH_SIZE)
 
     # make sure all elements in NII_SPACING are numbers
     NII_SPACING = []
@@ -542,5 +587,4 @@ def __general_init():
     )
 
 
-# general initialization
-__general_init()
+__global_init()
