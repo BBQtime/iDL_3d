@@ -7,10 +7,7 @@
     "cnn.name": "unet++",
     "dropout": 0.3,
     "early.stop.patience": 30,
-    "epochs": [
-        10,
-        100
-    ],
+    "epochs": 100,
     "loss.bce.back.power": 2.0,
     "loss.bce.fore.weight": 0.5,
     "loss.hybrid.weight": 0.5,
