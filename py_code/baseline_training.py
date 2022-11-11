@@ -7,7 +7,8 @@ from itertools import product
 from nested_dict import NestedDict
 from torch.utils.data import DataLoader
 from shared_training import SharedTraining
-from tensorboard_writer import TensorBoardWriter
+
+# from tensorboard_writer import TensorBoardWriter
 from baseline_dataset import BaselineDataSet
 
 
@@ -17,7 +18,7 @@ class BaselineTraining(SharedTraining):
 
         # record self._epochs_actual because of "early.stop.patience"
         self._epochs_actual = 0
-        self.__tensorboard_writer = TensorBoardWriter(g.BASELINE_TENSORBOARD_FOLDER)
+        # self.__tensorboard_writer = TensorBoardWriter(g.BASELINE_TENSORBOARD_FOLDER)
 
     def _load_hyper(
         self,
@@ -242,12 +243,9 @@ class BaselineTraining(SharedTraining):
             )
             baseline_id_list.append(baseline_id)
 
-            # create result folder, generate cnn and hyper save path
             baseline_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"
             )
-            # g.create_folder(baseline_folder)
-            # baseline_folder = os.path.join(baseline_folder)
             g.create_folder(baseline_folder)
 
             cnn_save_path = os.path.join(baseline_folder, "epoch=")
@@ -261,11 +259,11 @@ class BaselineTraining(SharedTraining):
 
             self._save_hyper(hyper_save_path)
 
-            # self.inference(
-            #     baseline_id=baseline_id,
-            #     print_hyper=False,
-            #     debug_mode=debug_mode,
-            # )
+            self.inference(
+                baseline_id=baseline_id,
+                print_hyper=False,
+                debug_mode=debug_mode,
+            )
 
         return baseline_id_list
 
@@ -281,36 +279,38 @@ class BaselineTraining(SharedTraining):
 
         baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline")
 
-        hyper_dict = g.load_json(os.path.join(baseline_folder, "hyper.json"))
+        hyper = g.load_json(os.path.join(baseline_folder, "hyper.json"))
 
-        cnn_path = g.get_sub_files(baseline_folder, key_word=".pt")[0]
-        cnn_path = os.path.join(baseline_folder, cnn_path)
+        cnn_path = g.get_sub_files(
+            baseline_folder, return_full_path=True, key_word=".pt"
+        )[0]
 
         all_patients_scores = NestedDict()
 
         # load and print hyper
         self._load_hyper(
-            hyper=hyper_dict,
+            hyper=hyper,
             exist_cnn_path=cnn_path,
             debug_mode=debug_mode,
         )
         if print_hyper:
             self._print_hyper()
 
-        for cur_patient in tqdm(self._test_loader.dataset.patient_list):
-            cur_patient_scores, cur_patient_preds = self._inference_single_patient(
-                patient=cur_patient,
-            )
-            all_patients_scores["patient={}".format(cur_patient)] = cur_patient_scores
+        for patient in tqdm(self._test_loader.dataset.patient_list):
+            patient_results = self._inference_single_patient(patient)
 
-            cur_patient_folder = os.path.join(baseline_folder, cur_patient)
-            g.create_folder(cur_patient_folder)
+            all_patients_scores["patient={}".format(patient)] = patient_results[
+                "scores"
+            ]
+
+            patient_folder = os.path.join(baseline_folder, patient)
+            g.create_folder(patient_folder)
 
             # save cur patient pred
             for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
                 g.save_nii(
-                    np_data=cur_patient_preds[i],
-                    save_path=os.path.join(cur_patient_folder, "pred_{}.nii".format(i)),
+                    np_data=patient_results[i],
+                    save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
                     spacing=g.NII_SPACING,
                 )
 

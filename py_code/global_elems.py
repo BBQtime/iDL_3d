@@ -24,7 +24,7 @@ from matplotlib import pyplot as plt
 
 
 def show_img(
-    img: Union[ndarray, Tensor], win_tital: str = "", print_info: bool = False
+    img: Union[ndarray, Tensor], win_title: str = "", print_info: bool = False
 ):
     if print_info:
         print("image data type:", type(img))
@@ -41,7 +41,7 @@ def show_img(
     elif len(img.shape) == 4:
         img = img[img.shape[0] // 2][img.shape[1] // 2]
 
-    cv2.imshow(win_tital, img)
+    cv2.imshow(win_title, img)
     cv2.waitKey(0)
 
 
@@ -207,32 +207,25 @@ def shuffle_list(input_list: list, seed: int):
 
 def __get_sub_items(
     folder_path: str,
-    key_word: str = None,
-    shuffle: bool = False,
-    seed: int = None,
-    select: str = "both",
+    return_full_path: bool,
+    key_word: str,
+    shuffle: bool,
+    seed: int,
+    select: str,
 ):
     if not os.path.exists(folder_path):
-        exit_app(
-            'general:__get_sub_elems(): Input folder path "{}" does not exist'.format(
-                folder_path
-            )
-        )
+        exit_app('input folder path "{}" does not exist'.format(folder_path))
+
     sub_list = os.listdir(folder_path)
-    # create del_list because it's not safe to
-    # remove an element from current activated list in for loop
+
     if select != "both":
-        sub_list_copy = sub_list.copy()
-        for sub_name in sub_list:
+        for sub_name in sub_list.copy():
             if select == "files":
                 if not os.path.isfile(os.path.join(folder_path, sub_name)):
-                    sub_list_copy.remove(sub_name)
+                    sub_list.remove(sub_name)
             elif select == "folders":
                 if os.path.isfile(os.path.join(folder_path, sub_name)):
-                    sub_list_copy.remove(sub_name)
-                if sub_name == ".ipynb_checkpoints":
-                    sub_list_copy.remove(sub_name)
-        sub_list = sub_list_copy.copy()
+                    sub_list.remove(sub_name)
 
     if shuffle:
         # shuffle_list() includes natsorted()
@@ -240,20 +233,28 @@ def __get_sub_items(
     else:
         sub_list = natsorted(sub_list)
 
-    # key word
-    if key_word is not None:
+    if key_word != "":
         for i in sub_list.copy():
             if key_word not in i:
                 sub_list.remove(i)
+
+    if return_full_path:
+        for i in range(len(sub_list)):
+            sub_list[i] = os.path.join(folder_path, sub_list[i])
 
     return sub_list
 
 
 def get_sub_items(
-    folder_path: str, key_word: str = None, shuffle: bool = False, seed: int = None
+    folder_path: str,
+    return_full_path: bool = False,
+    key_word: str = "",
+    shuffle: bool = False,
+    seed: int = None,
 ):
     sub_list = __get_sub_items(
         folder_path=folder_path,
+        return_full_path=return_full_path,
         key_word=key_word,
         shuffle=shuffle,
         seed=seed,
@@ -263,10 +264,15 @@ def get_sub_items(
 
 
 def get_sub_files(
-    folder_path: str, key_word: str = None, shuffle: bool = False, seed: int = None
+    folder_path: str,
+    return_full_path: bool = False,
+    key_word: str = "",
+    shuffle: bool = False,
+    seed: int = None,
 ):
     sub_list = __get_sub_items(
         folder_path=folder_path,
+        return_full_path=return_full_path,
         key_word=key_word,
         shuffle=shuffle,
         seed=seed,
@@ -276,10 +282,15 @@ def get_sub_files(
 
 
 def get_sub_folders(
-    folder_path: str, key_word: str = None, shuffle: bool = False, seed: int = None
+    folder_path: str,
+    return_full_path: bool = False,
+    key_word: str = "",
+    shuffle: bool = False,
+    seed: int = None,
 ):
     sub_list = __get_sub_items(
         folder_path=folder_path,
+        return_full_path=return_full_path,
         key_word=key_word,
         shuffle=shuffle,
         seed=seed,

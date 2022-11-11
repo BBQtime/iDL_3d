@@ -13,7 +13,7 @@ import global_elems as g
 from idl_dataset import IDLDataSet
 from shared_training import SharedTraining
 from nested_dict import NestedDict
-from tensorboard_writer import TensorBoardWriter
+# from tensorboard_writer import TensorBoardWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
@@ -325,7 +325,7 @@ class IDLTraining(SharedTraining):
         idl_hyper_keys = g.get_dict_keys(idl_full_hyper_dict)
 
         # get all Cartesian Product of hyper dict values
-        for cur_hyper_values in product(*idl_full_hyper_dict.values()):
+        for hyper in product(*idl_full_hyper_dict.values()):
 
             # create current hyper param dict
             cur_hyper_dict = NestedDict()
@@ -1223,74 +1223,74 @@ class IDLTraining(SharedTraining):
                     # cur round finished, accumulate iters
                     former_iter_sum += cur_round_iter
 
-    def __tensorboard_record_cur_iter(
-        self,
-        idl_id: str,
-        cur_patient: str,
-        tensorboard_writer: TensorBoardWriter,
-        cur_round: int,
-        former_iter_sum: int,
-        cur_round_iter: int,
-        cur_iter: int,
-        json_data: dict,
-        avg_score_dict: dict,
-    ):
-        for score_type in ["dsc", "msd", "hd95"]:
+    # def __tensorboard_record_cur_iter(
+    #     self,
+    #     idl_id: str,
+    #     cur_patient: str,
+    #     tensorboard_writer: TensorBoardWriter,
+    #     cur_round: int,
+    #     former_iter_sum: int,
+    #     cur_round_iter: int,
+    #     cur_iter: int,
+    #     json_data: dict,
+    #     avg_score_dict: dict,
+    # ):
+    #     for score_type in ["dsc", "msd", "hd95"]:
 
-            for i in ["2d.avg", "3d"]:
-                if (
-                    json_data[score_type][i] == "no.pred"
-                    or json_data[score_type][i] == "no.label"
-                ):
-                    if score_type == "dsc":
-                        json_data[score_type][i] = 0.0
-                    else:
-                        json_data[score_type][i] = g.IMG_SIZE
-                elif json_data[score_type][i] == "empty":
-                    if score_type == "dsc":
-                        json_data[score_type][i] = 1.0
-                    else:
-                        json_data[score_type][i] = 0.0
+    #         for i in ["2d.avg", "3d"]:
+    #             if (
+    #                 json_data[score_type][i] == "no.pred"
+    #                 or json_data[score_type][i] == "no.label"
+    #             ):
+    #                 if score_type == "dsc":
+    #                     json_data[score_type][i] = 0.0
+    #                 else:
+    #                     json_data[score_type][i] = g.IMG_SIZE
+    #             elif json_data[score_type][i] == "empty":
+    #                 if score_type == "dsc":
+    #                     json_data[score_type][i] = 1.0
+    #                 else:
+    #                     json_data[score_type][i] = 0.0
 
-            # record result for avg average calculation
-            avg_score_dict["3d"][score_type][cur_round][cur_iter][
-                cur_patient
-            ] = json_data[score_type]["3d"]
-            avg_score_dict["2d"][score_type][cur_round][cur_iter][
-                cur_patient
-            ] = json_data[score_type]["2d.avg"]
+    #         # record result for avg average calculation
+    #         avg_score_dict["3d"][score_type][cur_round][cur_iter][
+    #             cur_patient
+    #         ] = json_data[score_type]["3d"]
+    #         avg_score_dict["2d"][score_type][cur_round][cur_iter][
+    #             cur_patient
+    #         ] = json_data[score_type]["2d.avg"]
 
-            # (cur_round == 0) means: baseline
-            # (cur_iter == total_iter) means: cur round finished
-            if cur_round == 0 or cur_iter == cur_round_iter:
-                # 3d score round mapping
-                tensorboard_writer["3d"].write_score_per_round(
-                    idl_id=idl_id,
-                    score_type=score_type,
-                    value=json_data[score_type]["3d"],
-                    round=cur_round,
-                )
-                # 2d score round mapping
-                tensorboard_writer["2d"].write_score_per_round(
-                    idl_id=idl_id,
-                    score_type=score_type,
-                    value=json_data[score_type]["2d.avg"],
-                    round=cur_round,
-                )
+    #         # (cur_round == 0) means: baseline
+    #         # (cur_iter == total_iter) means: cur round finished
+    #         if cur_round == 0 or cur_iter == cur_round_iter:
+    #             # 3d score round mapping
+    #             tensorboard_writer["3d"].write_score_per_round(
+    #                 idl_id=idl_id,
+    #                 score_type=score_type,
+    #                 value=json_data[score_type]["3d"],
+    #                 round=cur_round,
+    #             )
+    #             # 2d score round mapping
+    #             tensorboard_writer["2d"].write_score_per_round(
+    #                 idl_id=idl_id,
+    #                 score_type=score_type,
+    #                 value=json_data[score_type]["2d.avg"],
+    #                 round=cur_round,
+    #             )
 
-            # 3d score iter mapping
-            tensorboard_writer["3d"].write_score_per_iter(
-                idl_id=idl_id,
-                score_type=score_type,
-                value=json_data[score_type]["3d"],
-                former_iter_sum=former_iter_sum,
-                cur_iter=cur_iter,
-            )
-            # 2d score iter mapping
-            tensorboard_writer["2d"].write_score_per_iter(
-                idl_id=idl_id,
-                score_type=score_type,
-                value=json_data[score_type]["2d.avg"],
-                former_iter_sum=former_iter_sum,
-                cur_iter=cur_iter,
-            )
+    #         # 3d score iter mapping
+    #         tensorboard_writer["3d"].write_score_per_iter(
+    #             idl_id=idl_id,
+    #             score_type=score_type,
+    #             value=json_data[score_type]["3d"],
+    #             former_iter_sum=former_iter_sum,
+    #             cur_iter=cur_iter,
+    #         )
+    #         # 2d score iter mapping
+    #         tensorboard_writer["2d"].write_score_per_iter(
+    #             idl_id=idl_id,
+    #             score_type=score_type,
+    #             value=json_data[score_type]["2d.avg"],
+    #             former_iter_sum=former_iter_sum,
+    #             cur_iter=cur_iter,
+    #         )

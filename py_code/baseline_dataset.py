@@ -52,60 +52,62 @@ class BaselineDataSet(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.patient_list)
 
-    # max size: 89 283 280
-    def __crop_to_patch(self, img: ndarray, patch_pos: list):
-        pad_size = []
-        for i in range(3):
-            pad_size.append(g.PATCH_SIZE[i] * math.ceil(img.shape[i] / g.PATCH_SIZE[i]))
-        img = g.pad_img(img, pad_size=tuple(pad_size))
-
-        for i in range(3):
-            patch_pos[i] = (img.shape[i] - g.PATCH_SIZE[i]) * patch_pos[i]
-            patch_pos[i] = round(patch_pos[i])
-        img = img[
-            patch_pos[0] : patch_pos[0] + g.PATCH_SIZE[0],
-            patch_pos[1] : patch_pos[1] + g.PATCH_SIZE[1],
-            patch_pos[2] : patch_pos[2] + g.PATCH_SIZE[2],
-        ]
-        return img
-
-    def __load_img(self, img_path: str, augment_seed: int, patch_pos: list):
+    def __load_img(self, img_path: str, augment_seed: int, patch_pos: tuple):
         img = g.load_nii(img_path)
 
         # make sure img.shape is 3
         for i in range(len(img.shape) - 3):
             img = np.squeeze(img, axis=0)
 
+        # (before augmentation)
+        img = g.normalize_img(img)
+        # g.show_img(img, "before augment")
+
         # data augmentation
         if self._data_augment is not None:
             img = self._data_augment.run(input_data=img, seed=augment_seed)
+        # g.show_img(img, "after augment")
 
-        # (after augmentation)
-        img = g.normalize_img(img)
+        # (no normalize after augmentation)
 
-        # (after augmentation, normalization)
-        img = self.__crop_to_patch(img, patch_pos=patch_pos)
+        # patch crop after augmentation, max size: 89 283 280
+        # a:b -> [a,b)
+        img = img[
+            patch_pos[0] : patch_pos[0] + g.PATCH_SIZE[0],
+            patch_pos[1] : patch_pos[1] + g.PATCH_SIZE[1],
+            patch_pos[2] : patch_pos[2] + g.PATCH_SIZE[2],
+        ]
+        # g.show_img(img[20], "patch cropped")
 
         # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
-
-        # numpy to tensor
         # do NOT use "T.ToTensor()" in 3D, it will make (d,h,w) to (h,d,w)
         img = torch.from_numpy(img)
         return img
 
-    def get_item(self, cur_patient: str, patch_pos: list) -> Tuple[Tensor, Tensor]:
+    def get_item(self, patient: str, patch_pos: tuple = ()) -> Tuple[Tensor, Tensor]:
+
+        origin_gtvs_img = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
+        )
+        origin_gtvs_img = g.binarize_img(origin_gtvs_img)
+        # g.show_img(origin_gtvs_img[20])
+        origin_shape = origin_gtvs_img.shape
 
         for load_times in range(10):
 
-            # make sure same group use the same augment_seed / patch_pos
+            # make sure same group use the same augment_seed
             # !!! use python random, do not use np.random !!!
             # np.random + dataloader will cause multi-processing problem
             augment_seed = random.randint(0, 2**16)
 
             if len(patch_pos) == 0:
+                patch_pos = []
                 for i in range(3):
-                    patch_pos.append(random.uniform(0, 1))
+                    patch_pos.append(
+                        random.randint(0, origin_shape[i] - g.PATCH_SIZE[i])
+                    )
+                patch_pos = tuple(patch_pos)
 
             # load label
             # gtvt_path = os.path.join(
@@ -126,25 +128,36 @@ class BaselineDataSet(torch.utils.data.Dataset):
             #     gtvn_img = gtvs_img - gtvt_img
 
             gtvs_path = os.path.join(
-                g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(cur_patient)
+                g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)
             )
             gtvs_img = self.__load_img(
                 img_path=gtvs_path,
                 augment_seed=augment_seed,
-                patch_pos=patch_pos.copy(),
+                patch_pos=patch_pos,
             )
 
             # g.show_img(gtvs_img)
 
             # target volume is not big enough
-            if gtvs_img.sum() * 20 < (
-                gtvs_img.shape[0]
-                * gtvs_img.shape[1]
-                * gtvs_img.shape[2]
-                * gtvs_img.shape[3]
-            ):
+            g.save_nii(
+                torch.squeeze(gtvs_img, dim=0).cpu().numpy(),
+                os.path.join(
+                    g.PROJ_PATH,
+                    "debug",
+                    "gtvs_img.nii",
+                ),
+            )
+            g.save_nii(
+                origin_gtvs_img,
+                os.path.join(
+                    g.PROJ_PATH,
+                    "debug",
+                    "origin_gtvs_img.nii",
+                ),
+            )
+            if gtvs_img.sum() * 2 < (origin_gtvs_img.sum()):
                 if load_times < 9:
-                    patch_pos = []
+                    patch_pos = ()
                     continue
 
             # bg_img = 1 - gtvt_img - gtvn_img
@@ -154,12 +167,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
             multi_model_imgs = None
             for i in ["CT", "PT", "T1dr", "T2dr"]:
                 img_path = os.path.join(
-                    g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(cur_patient, i)
+                    g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
                 )
                 img = self.__load_img(
                     img_path=img_path,
                     augment_seed=augment_seed,
-                    patch_pos=patch_pos.copy(),
+                    patch_pos=patch_pos,
                 )
 
                 # concat multi-model img
@@ -175,21 +188,21 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
     # must be overrided
     def __getitem__(self, idx: int):
-        cur_patient = self.patient_list[idx]
-        return self.get_item(cur_patient=cur_patient, patch_pos=[])
+        patient = self.patient_list[idx]
+        return self.get_item(patient=patient)
 
 
-# for testing
-# augment_method= translate / elastic / rotate / scale / combine
-# no gtvn patients: ['138', '152', '168', '174', '175', '192', '194', '204',
-# '220', '229', '239', '247', '257', '261', '276', '309', '311', '315',
-# '323', '327', '333']
-if 1:
-    tmp_dataset = BaselineDataSet(
-        patient_list=["175"],
-        augment_method="combine",
-        augment_pct=1.0,
-        augment_low_limit=2,
-        augment_up_limit=2,
-    )
-    tmp_dataset.__getitem__(0)
+# # for testing
+# # augment_method= translate / elastic / rotate / scale / combine
+# # no gtvn patients: ['138', '152', '168', '174', '175', '192', '194', '204',
+# # '220', '229', '239', '247', '257', '261', '276', '309', '311', '315',
+# # '323', '327', '333']
+# if 1:
+#     tmp_dataset = BaselineDataSet(
+#         patient_list=["175"],
+#         augment_method="combine",
+#         augment_pct=1.0,
+#         augment_low_limit=2,
+#         augment_up_limit=2,
+#     )
+#     tmp_dataset.__getitem__(0)

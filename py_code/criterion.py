@@ -223,7 +223,7 @@ def __test_msd(preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]) ->
     msd = sd.compute_average_surface_distance(surface_distances)
     msd = (msd[0] + msd[1]) / 2
     if math.isnan(msd) or math.isinf(msd):
-        return g.IMG_SIZE
+        return None
     else:
         return msd
 
@@ -232,7 +232,7 @@ def __test_hd95(preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]) -
     surface_distances = __get_surface_distances(preds, labels)
     hd95 = sd.compute_robust_hausdorff(surface_distances, 95)
     if math.isnan(hd95) or math.isinf(hd95):
-        return g.IMG_SIZE
+        return None
     else:
         return hd95
 
@@ -306,7 +306,7 @@ class ScoreFunction(nn.Module):
         self.__score_type = score_type
         self.dim = dim
 
-    def forward(self, preds: Tensor, labels: Tensor):
+    def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
         if preds.shape != labels.shape:
             g.exit_app("ScoreFunction(): preds.shape != labels.shape")
 
