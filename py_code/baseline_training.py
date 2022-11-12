@@ -267,7 +267,6 @@ class BaselineTraining(SharedTraining):
 
         return baseline_id_list
 
-    # get dsc/msd/hd95 scores
     def inference(
         self,
         baseline_id: str,
@@ -285,7 +284,9 @@ class BaselineTraining(SharedTraining):
             baseline_folder, return_full_path=True, key_word=".pt"
         )[0]
 
-        all_patients_scores = NestedDict()
+        avg_score = NestedDict()
+        for i in ["dsc", "msd", "hd95"]:
+            avg_score[i] = []
 
         # load and print hyper
         self._load_hyper(
@@ -297,25 +298,43 @@ class BaselineTraining(SharedTraining):
             self._print_hyper()
 
         for patient in tqdm(self._test_loader.dataset.patient_list):
-            patient_results = self._inference_single_patient(patient)
-
-            all_patients_scores["patient={}".format(patient)] = patient_results[
-                "scores"
-            ]
-
             patient_folder = os.path.join(baseline_folder, patient)
             g.create_folder(patient_folder)
+
+            patient_result = self._inference_single_patient(patient)
+
+            # save score of cur patient
+            patient_score = NestedDict()
+            for i in ["dsc", "msd", "hd95"]:
+                patient_score[i] = patient_result[i]
+            g.save_json(
+                data=patient_score,
+                path=os.path.join(patient_folder, "score.json"),
+            )
+
+            # record average score
+            for i in ["dsc", "msd", "hd95"]:
+                avg_score[i].append(patient_result[i])
 
             # save cur patient pred
             for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
                 g.save_nii(
-                    np_data=patient_results[i],
+                    np_data=patient_result[i],
                     save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
                     spacing=g.NII_SPACING,
                 )
+                g.save_nii(
+                    np_data=g.binarize_img(patient_result[i]),
+                    save_path=os.path.join(
+                        patient_folder, "pred_{}_binary.nii".format(i)
+                    ),
+                    spacing=g.NII_SPACING,
+                )
 
-        # save scores of all patients
+        # save avg score of all patients
+        for i in ["dsc", "msd", "hd95"]:
+            avg_score[i] = sum(avg_score[i]) / len(avg_score[i])
         g.save_json(
-            data=all_patients_scores,
-            path=os.path.join(baseline_folder, "inference.json"),
+            data=avg_score,
+            path=os.path.join(baseline_folder, "score.json"),
         )

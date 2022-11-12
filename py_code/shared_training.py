@@ -342,17 +342,17 @@ class SharedTraining:
             batch_size = dataset_len  # self._batch_size_actual
         return batch_size
 
-    def _inference_single_patient(self, patient: str):
-        results = NestedDict()
+    def _inference_single_patient(self, patient: str) -> dict:
+        result = NestedDict()
         dataset = BaselineDataSet(patient_list=[patient])
 
         origin_labels = g.load_nii(
-            nii_path=os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
         )
         origin_shape = origin_labels.shape
 
         overlap_weight = np.zeros(origin_shape)
-        results["gtvs"] = np.zeros(origin_shape)
+        result["gtvs"] = np.zeros(origin_shape)
 
         # generate patch position
         patch_pos = []
@@ -373,10 +373,9 @@ class SharedTraining:
                 for h in patch_pos[1]:
                     for w in patch_pos[2]:
                         inputs, labels = dataset.get_item(
-                            patient=patient, patch_pos=(d, h, w)
+                            patient=patient, patch_pos=(d, h, w), target_vol_pct=0
                         )
-                        # g.show_img(inputs[0])
-                        # g.show_img(labels)
+
                         # unsqueeze to add batch dim
                         inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
                         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
@@ -384,12 +383,12 @@ class SharedTraining:
                         outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
                         # add current output patch
-                        results["gtvs"][
+                        result["gtvs"][
                             d : d + g.PATCH_SIZE[0],
                             h : h + g.PATCH_SIZE[1],
                             w : w + g.PATCH_SIZE[2],
                         ] += outputs[0]
-                        # [0]-gtvt [1]-gtvn
+                        # [0]-gtvt, [1]-gtvn
 
                         # add current output weight to overlap weight tensor
                         overlap_weight[
@@ -398,25 +397,7 @@ class SharedTraining:
                             w : w + g.PATCH_SIZE[2],
                         ] += np.ones_like(outputs[0])
 
-                        # g.save_nii(
-                        #     results["gtvs"],
-                        #     os.path.join(
-                        #         g.PROJ_PATH,
-                        #         "debug",
-                        #         "pred_{}_{}_{}.nii".format(d, h, w),
-                        #     ),
-                        # )
-
-        results["gtvs"] /= overlap_weight
-
-        # g.save_nii(
-        #     results["gtvs"],
-        #     os.path.join(g.PROJ_PATH, "debug", "pred_fiinal.nii"),
-        # )
-        # g.save_nii(
-        #     overlap_weight,
-        #     os.path.join(g.PROJ_PATH, "debug", "overlap_weight.nii"),
-        # )
+        result["gtvs"] /= overlap_weight
 
         for score_type in ["dsc", "msd", "hd95"]:
             # score_dict["gtvt"][score_type] = self._score_funcs[score_type](
@@ -425,11 +406,11 @@ class SharedTraining:
             # score_dict["gtvn"][score_type] = self._score_funcs[score_type](
             #     outputs[1], labels[1]
             # )
-            results["scores"][score_type] = self._score_funcs[score_type](
-                results["gtvs"], origin_labels
+            result[score_type] = self._score_funcs[score_type](
+                result["gtvs"], origin_labels
             )
 
-        return results
+        return result
 
     # protected function
     def _get_cur_time_str(self) -> str:

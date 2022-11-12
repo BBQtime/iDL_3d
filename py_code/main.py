@@ -8,16 +8,16 @@ baseline = BaselineTraining()
 idl = IDLTraining()
 
 # baseline start new trainings
-if 1:
+if 0:
     baseline_id_list = baseline.training(
         train_remark="sliding.win.32.128.128",
         debug_mode=0,
     )
 
 # baseline test exist cnns' scores
-if 0:
+if 1:
     baseline.inference(
-        "2022.11.11.05.52.35_2022.11.11.05.59.06_sliding.win.32.128.128_epochs=10",
+        "2022.11.11.06.25.38_2022.11.11.08.30.58_sliding.win.32.128.128_epochs=100",
     )
 
 

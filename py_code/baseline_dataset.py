@@ -28,8 +28,6 @@ class BaselineDataSet(torch.utils.data.Dataset):
             augment_low_limit=augment_low_limit,
             augment_up_limit=augment_up_limit,
         )
-        # patient_slice_mapping is a list of: ["patient", "slice"]
-        # self._init_patient_slice_mapping(self.patient_list)
 
     def _init_augment(
         self,
@@ -61,12 +59,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # (before augmentation)
         img = g.normalize_img(img)
-        # g.show_img(img, "before augment")
+        g.show_img(img, "before augment")
 
         # data augmentation
         if self._data_augment is not None:
             img = self._data_augment.run(input_data=img, seed=augment_seed)
-        # g.show_img(img, "after augment")
+        g.show_img(img, "after augment")
 
         # (no normalize after augmentation)
 
@@ -77,7 +75,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             patch_pos[1] : patch_pos[1] + g.PATCH_SIZE[1],
             patch_pos[2] : patch_pos[2] + g.PATCH_SIZE[2],
         ]
-        # g.show_img(img[20], "patch cropped")
+        # g.show_img(img, "patch cropped")
 
         # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
@@ -85,7 +83,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
         img = torch.from_numpy(img)
         return img
 
-    def get_item(self, patient: str, patch_pos: tuple = ()) -> Tuple[Tensor, Tensor]:
+    def get_item(
+        self,
+        patient: str,
+        patch_pos: tuple = (),  # make this empty for training
+        target_vol_pct: float = 0,  # make this 0 for inference
+    ) -> Tuple[Tensor, Tensor]:
 
         origin_gtvs_img = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
@@ -94,13 +97,13 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # g.show_img(origin_gtvs_img[20])
         origin_shape = origin_gtvs_img.shape
 
-        for load_times in range(10):
-
+        while 1:
             # make sure same group use the same augment_seed
-            # !!! use python random, do not use np.random !!!
+            # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
             augment_seed = random.randint(0, 2**16)
 
+            # random patch position
             if len(patch_pos) == 0:
                 patch_pos = []
                 for i in range(3):
@@ -109,7 +112,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
                     )
                 patch_pos = tuple(patch_pos)
 
-            # load label
+            # load gtvt
             # gtvt_path = os.path.join(
             #     g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(cur_patient)
             # )
@@ -127,38 +130,19 @@ class BaselineDataSet(torch.utils.data.Dataset):
             #     gtvs_img = self.__load_img(img_path=gtvs_path, augment_seed=augment_seed)
             #     gtvn_img = gtvs_img - gtvt_img
 
-            gtvs_path = os.path.join(
-                g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)
-            )
+            # load gtvs
             gtvs_img = self.__load_img(
-                img_path=gtvs_path,
+                img_path=os.path.join(
+                    g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)
+                ),
                 augment_seed=augment_seed,
                 patch_pos=patch_pos,
             )
 
-            # g.show_img(gtvs_img)
-
             # target volume is not big enough
-            g.save_nii(
-                torch.squeeze(gtvs_img, dim=0).cpu().numpy(),
-                os.path.join(
-                    g.PROJ_PATH,
-                    "debug",
-                    "gtvs_img.nii",
-                ),
-            )
-            g.save_nii(
-                origin_gtvs_img,
-                os.path.join(
-                    g.PROJ_PATH,
-                    "debug",
-                    "origin_gtvs_img.nii",
-                ),
-            )
-            if gtvs_img.sum() * 2 < (origin_gtvs_img.sum()):
-                if load_times < 9:
-                    patch_pos = ()
-                    continue
+            if gtvs_img.sum() < (origin_gtvs_img.sum() * target_vol_pct):
+                patch_pos = ()
+                continue
 
             # bg_img = 1 - gtvt_img - gtvn_img
             # g.show_img(bg_img)
@@ -181,15 +165,15 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 else:
                     multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
 
-            # target volume is big enough, break
-            break
+            break  # target volume is large enough, break
 
         return multi_model_imgs, gtvs_img  # label_imgs
 
     # must be overrided
+    # this function is only for training, not for inference
     def __getitem__(self, idx: int):
         patient = self.patient_list[idx]
-        return self.get_item(patient=patient)
+        return self.get_item(patient=patient, patch_pos=(), target_vol_pct=0.5)
 
 
 # # for testing

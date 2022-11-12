@@ -375,7 +375,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__clear_img_data()
 
     def __clear_img_data(self):
-        self.__idl_id = None
+        self.__train_id = None
         self.__score["dsc"] = None
         self.__score["msd"] = None
         self.__score["hd95"] = None
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             }
             """
         )
-        self.__comboxes["train.id"].activated.connect(self.__choose_idl_id)
+        self.__comboxes["train.id"].activated.connect(self.__choose_train_id)
         self._btn_prev_round.clicked.connect(self.__choose_prev_round)
         self._btn_next_round.clicked.connect(self.__choose_next_round)
         for i in ["bright", "contrast"]:
@@ -492,7 +492,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             self.__img_frames[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __choose_idl_id(self):
+    def __choose_train_id(self):
         self.__reset_zoomin()
         self.__comboxes["patient"].clear()
         self.__comboxes["round"].setEnabled(False)
@@ -500,9 +500,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._btn_next_round.setEnabled(False)
         self.__comboxes["round"].clear()
         self.__clear_img_data()
-        self.__idl_id = self.__comboxes["train.id"].currentText()
+        self.__train_id = self.__comboxes["train.id"].currentText()
         patient_list = g.get_sub_folders(
-            os.path.join(g.TRAIN_RESULTS_FOLDER, self.__idl_id, "baseline")
+            os.path.join(g.TRAIN_RESULTS_FOLDER, self.__train_id, "baseline")
         )
         self.__comboxes["patient"].addItems(patient_list)
         self.__comboxes["patient"].activated.connect(self.__choose_patient)
@@ -527,7 +527,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__patient = self.__comboxes["patient"].currentText()
 
         cur_patient_folder = os.path.join(
-            g.TRAIN_RESULTS_FOLDER, self.__idl_id, "baseline", self.__patient
+            g.TRAIN_RESULTS_FOLDER, self.__train_id, "baseline", self.__patient
         )
 
         # load baseline img
@@ -540,8 +540,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "pt",
             "mrt1",
             "mrt2",
-            "label.gtvt",
-            "label.gtvn",
+            "label.gtvs",
+            # "label.gtvt",
+            # "label.gtvn",
         ]:
             # replace(".", "_"): file name is label_gtvt.nii
             cur_img_path = os.path.join(
@@ -556,7 +557,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if os.path.exists(os.path.join(cur_patient_folder, i)):
                 round_list.append(i)
         round_list += g.get_sub_folders(
-            # os.path.join(g.TRAIN_RESULTS_FOLDER, self.__idl_id, self.__patient),
+            # os.path.join(g.TRAIN_RESULTS_FOLDER, self.__train_id, self.__patient),
             cur_patient_folder,
             key_word="round=",
         )
@@ -593,16 +594,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load pred img
         cur_round_folder = os.path.join(
             g.TRAIN_RESULTS_FOLDER,
-            self.__idl_id,
+            self.__train_id,
             "baseline",
             self.__patient,
             # self.__round,
         )
         pred_path = NestedDict()
-        pred_path["pred.gtvt"] = os.path.join(cur_round_folder, "pred_gtvt.nii")
-        pred_path["pred.gtvn"] = os.path.join(cur_round_folder, "pred_gtvn.nii")
+        pred_path["pred.gtvs"] = os.path.join(cur_round_folder, "pred_gtvs.nii")
+        # pred_path["pred.gtvt"] = os.path.join(cur_round_folder, "pred_gtvt.nii")
+        # pred_path["pred.gtvn"] = os.path.join(cur_round_folder, "pred_gtvn.nii")
 
-        for i in ["pred.gtvt", "pred.gtvn"]:
+        for i in ["pred.gtvs"]:  # ["pred.gtvt", "pred.gtvn"]:
             self.__img_data[i] = self.__load_img(pred_path[i])
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
@@ -863,7 +865,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load annotated slices
         json_path = os.path.join(
             g.TRAIN_RESULTS_FOLDER,
-            self.__idl_id,
+            self.__train_id,
             self.__patient,
             "annotated_slices.json",
         )
@@ -944,8 +946,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __refresh_title(self):
         win_tital = "iDL.Tool "
-        if self.__idl_id is not None:
-            win_tital += "   Training.ID=" + self.__idl_id
+        if self.__train_id is not None:
+            win_tital += "   Training.ID=" + self.__train_id
         if self.__patient is not None:
             win_tital += "   Patient=" + self.__patient[len("patient=") :]
         if self.__round is not None:
