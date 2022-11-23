@@ -3,8 +3,12 @@ import os
 import torch
 import math
 import numpy as np
-import criterion as crit
 import torch.nn as nn
+from loss_func import UnifiedFocalLoss
+from loss_func import DiceLoss
+from criterion import HybridFocalLoss
+from segment_metrics import SegmentationMetrics
+from tqdm import tqdm
 from itertools import product
 from collections import OrderedDict
 from torch import optim
@@ -26,11 +30,11 @@ class SharedTraining:
         self._lr_decay_patience = None
         self._lr_min = None
 
-        self._score_funcs = NestedDict()
-        for score_type in ["dsc", "msd", "hd95"]:
-            self._score_funcs[score_type] = crit.ScoreFunction(
-                score_type=score_type, dim="3d"
-            ).to(g.DEVICE)
+        self._seg_metrics = NestedDict()
+        for metric_type in g.METRICS_LIST:
+            self._seg_metrics[metric_type] = SegmentationMetrics(metric_type).to(
+                g.DEVICE
+            )
 
     # new hyper are loaded from group of new json files
     # baseline hyper are loaded from exist json file together with exist cnn
@@ -77,28 +81,24 @@ class SharedTraining:
         )
 
         # loss function parameters
-        hybrid_weight = float(hyper["loss.hybrid.weight"])
-        hybrid_weight = g.check_limit(hybrid_weight, 0.0, 1.0)
+        try:
+            weight = float(hyper["loss.weight"])
+            weight = g.check_limit(weight, 0.0, 1.0)
+            delta = float(hyper["loss.delta"])
+            delta = g.check_limit(delta, 0.0, 1.0)
+            gamma = float(hyper["loss.gamma"])
+        except TypeError:
+            weight = None
+            delta = None
+            gamma = None
 
-        tversky_fp_weight = float(hyper["loss.tversky.fp.weight"])
-        tversky_fp_weight = g.check_limit(tversky_fp_weight, 0.0, 1.0)
-        tversky_fore_power = float(hyper["loss.tversky.fore.power"])
-        tversky_fore_weight = float(hyper["loss.tversky.fore.weight"])
-
-        bce_back_power = float(hyper["loss.bce.back.power"])
-        bce_fore_weight = float(hyper["loss.bce.fore.weight"])
-        bce_fore_weight = g.check_limit(bce_fore_weight, 0.0, 1.0)
-
-        # self._loss_func = crit.Avg2dDiceLoss().to(g.DEVICE)
-        self._loss_func = crit.HybridFocalLoss(
-            dim="3d",
-            hybrid_weight=hybrid_weight,
-            tversky_fore_weight=tversky_fore_weight,
-            tversky_fore_power=tversky_fore_power,
-            tversky_fp_weight=tversky_fp_weight,
-            bce_fore_weight=bce_fore_weight,
-            bce_back_power=bce_back_power,
-        ).to(g.DEVICE)
+        # self._loss_func = DiceLoss().to(g.DEVICE)
+        self._loss_func = HybridFocalLoss().to(g.DEVICE)
+        # self._loss_func = UnifiedFocalLoss(
+        #     weight=weight,
+        #     delta=delta,
+        #     gamma=gamma,
+        # ).to(g.DEVICE)
 
         # load cnn
         self._cnn = self._load_cnn(
@@ -177,12 +177,14 @@ class SharedTraining:
         print_dict["augment method:"] = self._augment_method
         print_dict["augment lower limit:"] = self._augment_low_limit
         print_dict["augment upper limit:"] = self._augment_up_limit
-        print_dict["loss hybrid weight:"] = self._loss_func.hybrid_weight
-        print_dict["loss tversky fore weight:"] = self._loss_func.tversky_fore_weight
-        print_dict["loss tversky fore power:"] = self._loss_func.tversky_fore_power
-        print_dict["loss tversky fp weight:"] = self._loss_func.tversky_fp_weight
-        print_dict["loss bce fore weight:"] = self._loss_func.bce_fore_weight
-        print_dict["loss bce back power:"] = self._loss_func.bce_back_power
+        try:
+            print_dict["loss weight:"] = self._loss_func.weight
+            print_dict["loss delta:"] = self._loss_func.delta
+            print_dict["loss gamma:"] = self._loss_func.gamma
+        except AttributeError:
+            print_dict["loss weight:"] = None
+            print_dict["loss delta:"] = None
+            print_dict["loss gamma:"] = None
 
         print_dict = OrderedDict(sorted(print_dict.items()))
         for key, value in print_dict.items():
@@ -204,13 +206,15 @@ class SharedTraining:
         hyper_dict["augment.method"] = self._augment_method
         hyper_dict["augment.low.limit"] = self._augment_low_limit
         hyper_dict["augment.up.limit"] = self._augment_up_limit
-        hyper_dict["loss.hybrid.weight"] = self._loss_func.hybrid_weight
-        hyper_dict["loss.tversky.fore.weight"] = self._loss_func.tversky_fore_weight
-        hyper_dict["loss.tversky.fore.power"] = self._loss_func.tversky_fore_power
-        hyper_dict["loss.tversky.fp.weight"] = self._loss_func.tversky_fp_weight
-        hyper_dict["loss.bce.fore.weight"] = self._loss_func.bce_fore_weight
-        hyper_dict["loss.bce.back.power"] = self._loss_func.bce_back_power
-        hyper_dict["loss.func"] = "hybrid.focal.loss"
+        try:
+            hyper_dict["loss.weight"] = self._loss_func.weight
+            hyper_dict["loss.delta"] = self._loss_func.delta
+            hyper_dict["loss.gamma"] = self._loss_func.gamma
+        except AttributeError:
+            hyper_dict["loss.weight"] = None
+            hyper_dict["loss.delta"] = None
+            hyper_dict["loss.gamma"] = None
+        hyper_dict["loss.func"] = "unified.focal.loss"
         hyper_dict["optim"] = "adam"
         hyper_dict["scheduler"] = "reduce.lr.on.plateau"
         hyper_dict["cnn.name"] = self.__get_cnn_name()
@@ -247,9 +251,7 @@ class SharedTraining:
         test_pct = g.check_limit(test_pct, 0.05, 0.2)
         total_pct = train_pct + valid_pct + test_pct
         if total_pct > 1:
-            g.exit_app(
-                "SharedTraining.__split_dataset(): dataset total percent must <= 1"
-            )
+            raise ValueError("percentage of train/valid/test set must <= 1")
 
         # dataset_split_seed keeps train/valid/test unchanged everytime
         patient_list = g.get_sub_folders(
@@ -399,14 +401,14 @@ class SharedTraining:
 
         result["gtvs"] /= overlap_weight
 
-        for score_type in ["dsc", "msd", "hd95"]:
-            # score_dict["gtvt"][score_type] = self._score_funcs[score_type](
+        for metric_type in g.METRICS_LIST:
+            # score_dict["gtvt"][metric_type] = self._seg_metrics[metric_type](
             #     outputs[0], labels[0]
             # )
-            # score_dict["gtvn"][score_type] = self._score_funcs[score_type](
+            # score_dict["gtvn"][metric_type] = self._seg_metrics[metric_type](
             #     outputs[1], labels[1]
             # )
-            result[score_type] = self._score_funcs[score_type](
+            result[metric_type] = self._seg_metrics[metric_type](
                 result["gtvs"], origin_labels
             )
 
@@ -439,3 +441,44 @@ class SharedTraining:
             group_hyper.append(cur_hyper)
 
         return group_hyper
+
+    def _inference(self, patient_list, result_folder):
+        score = NestedDict()
+        for i in g.METRICS_LIST:
+            score["avg"][i] = []
+
+        for patient in tqdm(patient_list):
+            patient_folder = os.path.join(result_folder, "preds", patient)
+            g.create_folder(patient_folder)
+
+            # result contains: "gtvs" "dsc" "msc" "hd95"
+            patient_result = self._inference_single_patient(patient)
+
+            # save score of cur patient
+            for i in g.METRICS_LIST:
+                score[patient][i] = patient_result[i]
+                score["avg"][i].append(patient_result[i])
+
+            # save pred of cur patient
+            for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
+                g.save_nii(
+                    np_data=patient_result[i],
+                    save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
+                    spacing=g.NII_SPACING,
+                )
+                g.save_nii(
+                    np_data=g.binarize_img(patient_result[i]),
+                    save_path=os.path.join(
+                        patient_folder, "pred_{}_binary.nii".format(i)
+                    ),
+                    spacing=g.NII_SPACING,
+                )
+
+        # save score of all patients
+        for i in g.METRICS_LIST:
+            avg = score["avg"][i]
+            score["avg"][i] = sum(avg) / len(avg)
+        g.save_json(
+            data=score,
+            path=os.path.join(result_folder, "score.json"),
+        )

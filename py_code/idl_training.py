@@ -1,6 +1,5 @@
 import os
 import random
-import criterion as crit
 from datetime import datetime
 from itertools import product
 import numpy as np
@@ -13,7 +12,6 @@ import global_elems as g
 from idl_dataset import IDLDataSet
 from shared_training import SharedTraining
 from nested_dict import NestedDict
-# from tensorboard_writer import TensorBoardWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
@@ -1005,46 +1003,46 @@ class IDLTraining(SharedTraining):
                     # print(cur_patient_final_pred.shape)
 
                 # calculate scores excluding annotated slices
-                for score_type in ["dsc", "msd", "hd95"]:
-                    avg_score_dict[score_type][cur_round]["excluding.annotated"][
+                for metric_type in g.METRICS_LIST:
+                    avg_score_dict[metric_type][cur_round]["excluding.annotated"][
                         cur_patient
                     ] = crit.test_3d_score(
                         cur_round_pred,
                         cur_round_label,
-                        score_type=score_type,
+                        metric_type=metric_type,
                         binarize=True,
                     )
 
-                    avg_score_dict[score_type][cur_round]["full.slices"][
+                    avg_score_dict[metric_type][cur_round]["full.slices"][
                         cur_patient
-                    ] = iter_json_data[score_type]["3d"]
+                    ] = iter_json_data[metric_type]["3d"]
 
                     for i in ["excluding.annotated", "full.slices"]:
                         if (
-                            avg_score_dict[score_type][cur_round][i][cur_patient]
+                            avg_score_dict[metric_type][cur_round][i][cur_patient]
                             == "no.pred"
-                            or avg_score_dict[score_type][cur_round][i][cur_patient]
+                            or avg_score_dict[metric_type][cur_round][i][cur_patient]
                             == "no.label"
                         ):
-                            if score_type == "dsc":
-                                avg_score_dict[score_type][cur_round][i][
+                            if metric_type == "dsc":
+                                avg_score_dict[metric_type][cur_round][i][
                                     cur_patient
                                 ] = 0.0
                             else:
-                                avg_score_dict[score_type][cur_round][i][
+                                avg_score_dict[metric_type][cur_round][i][
                                     cur_patient
                                 ] = g.IMG_SIZE
 
                         elif (
-                            avg_score_dict[score_type][cur_round][i][cur_patient]
+                            avg_score_dict[metric_type][cur_round][i][cur_patient]
                             == "empty"
                         ):
-                            if score_type == "dsc":
-                                avg_score_dict[score_type][cur_round][i][
+                            if metric_type == "dsc":
+                                avg_score_dict[metric_type][cur_round][i][
                                     cur_patient
                                 ] = 1.0
                             else:
-                                avg_score_dict[score_type][cur_round][i][
+                                avg_score_dict[metric_type][cur_round][i][
                                     cur_patient
                                 ] = 0.0
 
@@ -1054,16 +1052,16 @@ class IDLTraining(SharedTraining):
         )
 
         # calculate avg value after all patients data recorded
-        for score_type in ["dsc", "msd", "hd95"]:
+        for metric_type in g.METRICS_LIST:
             for slice_type in ["excluding.annotated", "full.slices"]:
-                for cur_round in avg_score_dict[score_type]:
-                    cur_round_avg_score = avg_score_dict[score_type][cur_round][
+                for cur_round in avg_score_dict[metric_type]:
+                    cur_round_avg_score = avg_score_dict[metric_type][cur_round][
                         slice_type
                     ].values()
                     cur_round_avg_score = sum(cur_round_avg_score) / len(
                         cur_round_avg_score
                     )
-                    avg_score_dict[score_type][cur_round][
+                    avg_score_dict[metric_type][cur_round][
                         slice_type
                     ] = cur_round_avg_score
 
@@ -1187,19 +1185,19 @@ class IDLTraining(SharedTraining):
                 os.path.join(g.IDL_TENSORBOARD_FOLDER, "avg", "{}.score".format(dim))
             )
 
-            for score_type in ["dsc", "msd", "hd95"]:
+            for metric_type in g.METRICS_LIST:
                 former_iter_sum = 0
 
                 # loop through rounds
-                for cur_round in avg_score_dict[dim][score_type]:
+                for cur_round in avg_score_dict[dim][metric_type]:
                     if cur_round > 0:
-                        cur_round_iter = len(avg_score_dict[dim][score_type][cur_round])
+                        cur_round_iter = len(avg_score_dict[dim][metric_type][cur_round])
                     else:
                         cur_round_iter = 0
 
                     # loop through iterations
-                    for cur_iter in avg_score_dict[dim][score_type][cur_round]:
-                        avg_value = avg_score_dict[dim][score_type][cur_round][
+                    for cur_iter in avg_score_dict[dim][metric_type][cur_round]:
+                        avg_value = avg_score_dict[dim][metric_type][cur_round][
                             cur_iter
                         ].values()
                         avg_value = sum(avg_value) / len(avg_value)
@@ -1208,14 +1206,14 @@ class IDLTraining(SharedTraining):
                         if cur_round == 0 or cur_iter == cur_round_iter:
                             avg_writer.write_score_per_round(
                                 idl_id=idl_id,
-                                score_type=score_type,
+                                metric_type=metric_type,
                                 value=avg_value,
                                 round=cur_round,
                             )
                         # write score iter mapping
                         avg_writer.write_score_per_iter(
                             idl_id=idl_id,
-                            score_type=score_type,
+                            metric_type=metric_type,
                             value=avg_value,
                             former_iter_sum=former_iter_sum,
                             cur_iter=cur_iter,
@@ -1235,30 +1233,30 @@ class IDLTraining(SharedTraining):
     #     json_data: dict,
     #     avg_score_dict: dict,
     # ):
-    #     for score_type in ["dsc", "msd", "hd95"]:
+    #     for metric_type in g.METRICS_LIST:
 
     #         for i in ["2d.avg", "3d"]:
     #             if (
-    #                 json_data[score_type][i] == "no.pred"
-    #                 or json_data[score_type][i] == "no.label"
+    #                 json_data[metric_type][i] == "no.pred"
+    #                 or json_data[metric_type][i] == "no.label"
     #             ):
-    #                 if score_type == "dsc":
-    #                     json_data[score_type][i] = 0.0
+    #                 if metric_type == "dsc":
+    #                     json_data[metric_type][i] = 0.0
     #                 else:
-    #                     json_data[score_type][i] = g.IMG_SIZE
-    #             elif json_data[score_type][i] == "empty":
-    #                 if score_type == "dsc":
-    #                     json_data[score_type][i] = 1.0
+    #                     json_data[metric_type][i] = g.IMG_SIZE
+    #             elif json_data[metric_type][i] == "empty":
+    #                 if metric_type == "dsc":
+    #                     json_data[metric_type][i] = 1.0
     #                 else:
-    #                     json_data[score_type][i] = 0.0
+    #                     json_data[metric_type][i] = 0.0
 
     #         # record result for avg average calculation
-    #         avg_score_dict["3d"][score_type][cur_round][cur_iter][
+    #         avg_score_dict["3d"][metric_type][cur_round][cur_iter][
     #             cur_patient
-    #         ] = json_data[score_type]["3d"]
-    #         avg_score_dict["2d"][score_type][cur_round][cur_iter][
+    #         ] = json_data[metric_type]["3d"]
+    #         avg_score_dict["2d"][metric_type][cur_round][cur_iter][
     #             cur_patient
-    #         ] = json_data[score_type]["2d.avg"]
+    #         ] = json_data[metric_type]["2d.avg"]
 
     #         # (cur_round == 0) means: baseline
     #         # (cur_iter == total_iter) means: cur round finished
@@ -1266,31 +1264,31 @@ class IDLTraining(SharedTraining):
     #             # 3d score round mapping
     #             tensorboard_writer["3d"].write_score_per_round(
     #                 idl_id=idl_id,
-    #                 score_type=score_type,
-    #                 value=json_data[score_type]["3d"],
+    #                 metric_type=metric_type,
+    #                 value=json_data[metric_type]["3d"],
     #                 round=cur_round,
     #             )
     #             # 2d score round mapping
     #             tensorboard_writer["2d"].write_score_per_round(
     #                 idl_id=idl_id,
-    #                 score_type=score_type,
-    #                 value=json_data[score_type]["2d.avg"],
+    #                 metric_type=metric_type,
+    #                 value=json_data[metric_type]["2d.avg"],
     #                 round=cur_round,
     #             )
 
     #         # 3d score iter mapping
     #         tensorboard_writer["3d"].write_score_per_iter(
     #             idl_id=idl_id,
-    #             score_type=score_type,
-    #             value=json_data[score_type]["3d"],
+    #             metric_type=metric_type,
+    #             value=json_data[metric_type]["3d"],
     #             former_iter_sum=former_iter_sum,
     #             cur_iter=cur_iter,
     #         )
     #         # 2d score iter mapping
     #         tensorboard_writer["2d"].write_score_per_iter(
     #             idl_id=idl_id,
-    #             score_type=score_type,
-    #             value=json_data[score_type]["2d.avg"],
+    #             metric_type=metric_type,
+    #             value=json_data[metric_type]["2d.avg"],
     #             former_iter_sum=former_iter_sum,
     #             cur_iter=cur_iter,
     #         )

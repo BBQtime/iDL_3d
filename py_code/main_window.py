@@ -23,7 +23,9 @@ from PyQt5.QtWidgets import (
 )
 from ui_main_window import Ui_MainWindow
 
-# opencv.shape（height, width，channel）
+
+IDL_ID_HEAD = " ↳ iDL: "
+BASELINE_ID_HEAD = "Baseline: "
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -255,7 +257,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.__zoomin["start"].x() : self.__zoomin["end"].x(),
                 ]
             else:
-                g.exit_app(err_msg)
+                raise ValueError(err_msg)
 
         # resize to fit image frame
         origin_height = img.shape[0]
@@ -279,7 +281,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             elif len(img.shape) == 2:
                 black_border = np.zeros((final_height, resize_pos["x"]), np.uint8)
             else:
-                g.exit_app(err_msg)
+                raise ValueError(err_msg)
             img = cv2.resize(
                 img,
                 (resize_pos["width"], resize_pos["height"]),
@@ -300,7 +302,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             elif len(img.shape) == 2:
                 black_border = np.zeros((resize_pos["y"], final_width), np.uint8)
             else:
-                g.exit_app(err_msg)
+                raise ValueError(err_msg)
             img = cv2.resize(
                 img,
                 (resize_pos["width"], resize_pos["height"]),
@@ -313,10 +315,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_color(self):
         self.__color = NestedDict()
-        self.__color["label.gtvt"] = (0, 255, 255)  # light blue
-        self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
-        self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
-        self.__color["pred.gtvn"] = (255, 128, 0)  # orange
+        self.__color["label.gtvs"] = (0, 255, 255)
+        # self.__color["label.gtvt"] = (0, 255, 255)  # light blue
+        # self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
+        self.__color["pred.gtvs"] = (255, 255, 0)
+        # self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
+        # self.__color["pred.gtvn"] = (255, 128, 0)  # orange
         self.__color["annotated"] = (0, 255, 64)  # green
         self.__color["score.text"] = (0, 255, 64)  # green
 
@@ -358,8 +362,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __load_img(self, img_path: str):
         img = g.load_nii(img_path)
-        img[img < 0] = 0
-        img[img > 255] = 255
+        img = g.normalize_img(img)
+        # img[img < 0] = 0
+        # img[img > 255] = 255
         # turn upside down
         img = np.flip(m=img, axis=0)
         # img = np.rot90(m=img, k=2, axes=(0, 1))
@@ -375,7 +380,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__clear_img_data()
 
     def __clear_img_data(self):
-        self.__train_id = None
+        self.__baseline_id = None
+        self.__idl_id = None
         self.__score["dsc"] = None
         self.__score["msd"] = None
         self.__score["hd95"] = None
@@ -385,10 +391,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "pt",
             "mrt1",
             "mrt2",
-            "label.gtvt",
-            "label.gtvn",
-            "pred.gtvt",
-            "pred.gtvn",
+            "label.gtvs",
+            "pred.gtvs",
+            # "label.gtvt",
+            # "label.gtvn",
+            # "pred.gtvt",
+            # "pred.gtvn",
         ]:
             self.__img_data[i] = None
 
@@ -403,7 +411,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_side_bar(self):
         # set text
-        self.__text_labels["train.id"].setText("Choose iDL Result")
+        self.__text_labels["train.id"].setText("Choose Training Result")
         self.__text_labels["patient"].setText("Choose Patient")
         self.__text_labels["round"].setText("Choose Update Round")
         self.__text_labels["bright"].setText("Brightness")
@@ -425,8 +433,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__comboxes[i].setFont(font)
 
         # connect widget to function
-        idl_results_folders = g.get_sub_folders(g.TRAIN_RESULTS_FOLDER)
-        self.__comboxes["train.id"].addItems(idl_results_folders)
+        baseline_folders = g.get_sub_folders(g.TRAIN_RESULTS_FOLDER)
+        train_results_folders = []
+
+        for cur_baseline_folder in baseline_folders:
+            idl_folders = g.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, cur_baseline_folder)
+            )
+            idl_folders = idl_folders.remove("baseline")
+            # add baseline folder into list
+            train_results_folders.append(BASELINE_ID_HEAD + cur_baseline_folder)
+            # add sub idl folders into list
+            if idl_folders is not None:
+                for cur_idl_folder in idl_folders:
+                    train_results_folders.append(IDL_ID_HEAD + cur_idl_folder)
+
+        self.__comboxes["train.id"].addItems(train_results_folders)
+
         # set combobox dropdown width: 700px
         self.__comboxes["train.id"].setStyleSheet(
             """*
@@ -500,10 +523,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._btn_next_round.setEnabled(False)
         self.__comboxes["round"].clear()
         self.__clear_img_data()
-        self.__train_id = self.__comboxes["train.id"].currentText()
-        patient_list = g.get_sub_folders(
-            os.path.join(g.TRAIN_RESULTS_FOLDER, self.__train_id, "baseline")
-        )
+
+        train_id = self.__comboxes["train.id"].currentText()
+
+        # baseline
+        if train_id.startswith(BASELINE_ID_HEAD):
+            self.__baseline_id = train_id[len(BASELINE_ID_HEAD) :]
+            self.__idl_id = "baseline"
+            patient_list = g.get_sub_folders(
+                os.path.join(
+                    g.TRAIN_RESULTS_FOLDER,
+                    self.__baseline_id,
+                    self.__idl_id,
+                    "preds",
+                )
+            )
+        # idl
+        else:
+            # get baseline id
+            train_id_list = g.get_combox_content(self.__comboxes["train.id"])
+            idx = train_id_list.index(train_id)
+            while not train_id_list[idx].startswith(BASELINE_ID_HEAD):
+                idx -= 1
+            self.__baseline_id = train_id_list[idx][len(BASELINE_ID_HEAD) :]
+            # get idl id
+            self.__idl_id = train_id[len(IDL_ID_HEAD) :]
+            # get round
+            if self.__round is None:
+                self.__round = "round=01"
+            # get patient list
+            patient_list = g.get_sub_folders(
+                os.path.join(
+                    g.TRAIN_RESULTS_FOLDER,
+                    self.__baseline_id,
+                    self.__idl_id,
+                    self.__round,
+                    "preds",
+                )
+            )
+
         self.__comboxes["patient"].addItems(patient_list)
         self.__comboxes["patient"].activated.connect(self.__choose_patient)
         self.__comboxes["patient"].setEnabled(True)
@@ -526,43 +584,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             self.__patient = self.__comboxes["patient"].currentText()
 
-        cur_patient_folder = os.path.join(
-            g.TRAIN_RESULTS_FOLDER, self.__train_id, "baseline", self.__patient
+        # load imgs and label
+        self.__img_data["ct"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(self.__patient))
         )
-
-        # load baseline img
-        # baseline_folder = os.path.join(
-        #     cur_patient_folder,
-        #     "baseline",  # "round=00",
-        # )
-        for i in [
-            "ct",
-            "pt",
-            "mrt1",
-            "mrt2",
-            "label.gtvs",
-            # "label.gtvt",
-            # "label.gtvn",
-        ]:
-            # replace(".", "_"): file name is label_gtvt.nii
-            cur_img_path = os.path.join(
-                cur_patient_folder, i.replace(".", "_") + ".nii"
-            )
-            self.__img_data[i] = self.__load_img(cur_img_path)
+        self.__img_data["pt"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(self.__patient))
+        )
+        self.__img_data["mrt1"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T1dr.nii".format(self.__patient))
+        )
+        self.__img_data["mrt2"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(self.__patient))
+        )
+        # "GTVt","GTVn"
+        self.__img_data["label.gtvs"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(self.__patient))
+        )
 
         # load round combobox
         self.__comboxes["round"].clear()
-        round_list = ["baseline"]
-        for i in ["filter.fp", "post.process"]:
-            if os.path.exists(os.path.join(cur_patient_folder, i)):
-                round_list.append(i)
-        round_list += g.get_sub_folders(
-            # os.path.join(g.TRAIN_RESULTS_FOLDER, self.__train_id, self.__patient),
-            cur_patient_folder,
-            key_word="round=",
-        )
-        # for i in round_list:
-        self.__comboxes["round"].addItems(round_list)
+
+        if self.__idl_id == "baseline":
+            self.__comboxes["round"].addItem("baseline")
+        else:
+            round_list = g.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, self.__idl_id),
+                key_word="round=",
+            )
+            self.__comboxes["round"].addItems(round_list)
+
         self.__comboxes["round"].activated.connect(self.__choose_round)
         self.__comboxes["round"].setEnabled(True)
 
@@ -591,16 +642,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             self.__round = self.__comboxes["round"].currentText()
 
-        # load pred img
-        cur_round_folder = os.path.join(
-            g.TRAIN_RESULTS_FOLDER,
-            self.__train_id,
-            "baseline",
-            self.__patient,
-            # self.__round,
-        )
+        # load pred
+        if self.__idl_id == "baseline":
+            cur_patient_folder = os.path.join(
+                g.TRAIN_RESULTS_FOLDER,
+                self.__baseline_id,
+                self.__idl_id,
+                "preds",
+                self.__patient,
+            )
+        else:
+            cur_patient_folder = os.path.join(
+                g.TRAIN_RESULTS_FOLDER,
+                self.__baseline_id,
+                self.__idl_id,
+                self.__round,
+                "preds",
+                self.__patient,
+            )
         pred_path = NestedDict()
-        pred_path["pred.gtvs"] = os.path.join(cur_round_folder, "pred_gtvs.nii")
+        pred_path["pred.gtvs"] = os.path.join(cur_patient_folder, "pred_gtvs.nii")
         # pred_path["pred.gtvt"] = os.path.join(cur_round_folder, "pred_gtvt.nii")
         # pred_path["pred.gtvn"] = os.path.join(cur_round_folder, "pred_gtvn.nii")
 
@@ -608,20 +669,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = self.__load_img(pred_path[i])
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
-        # load dsc/msd/hd95
-        iter_file_name = g.get_sub_files(
-            cur_round_folder, key_word=".json", shuffle=False
-        )
-        # iter json file exists
-        if len(iter_file_name) > 0:
-            iter_file_name = iter_file_name[-1]
-            json_data = g.load_json(os.path.join(cur_round_folder, iter_file_name))
-            for i in ["dsc", "msd", "hd95"]:
-                self.__score[i] = json_data[i]["3d"]
-        # iter json file not exist
+        # load dsc/msd/hd95 scores
+        if self.__idl_id == "baseline":
+            score_json_path = os.path.join(
+                g.TRAIN_RESULTS_FOLDER,
+                self.__baseline_id,
+                self.__idl_id,
+                "score.json",
+            )
         else:
-            for i in ["dsc", "msd", "hd95"]:
-                self.__score[i] = None
+            score_json_path = os.path.join(
+                g.TRAIN_RESULTS_FOLDER,
+                self.__baseline_id,
+                self.__idl_id,
+                self.__round,
+                "score.json",
+            )
+
+        # load score json file
+        score_dict = g.load_json(score_json_path)
+        for metric_type in g.METRICS_LIST:
+            self.__score[metric_type] = score_dict[self.__patient][metric_type]
 
         # enable/disable prev/next round buttons
         idx = self.__comboxes["round"].currentIndex()
@@ -671,15 +739,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # set contour color
         color = NestedDict()
-        color["label.gtvt"] = self.__color["label.gtvt"]
-        color["label.gtvn"] = self.__color["label.gtvn"]
+        color["label.gtvs"] = self.__color["label.gtvs"]
+        # color["label.gtvt"] = self.__color["label.gtvt"]
+        # color["label.gtvn"] = self.__color["label.gtvn"]
 
         if self.__img_plane == "transverse" and is_annotated:
-            color["pred.gtvt"] = self.__color["annotated"]
-            color["pred.gtvn"] = self.__color["annotated"]
+            color["pred.gtvs"] = self.__color["annotated"]
+            # color["pred.gtvt"] = self.__color["annotated"]
+            # color["pred.gtvn"] = self.__color["annotated"]
         else:
-            color["pred.gtvt"] = self.__color["pred.gtvt"]
-            color["pred.gtvn"] = self.__color["pred.gtvn"]
+            color["pred.gtvs"] = self.__color["pred.gtvs"]
+            # color["pred.gtvt"] = self.__color["pred.gtvt"]
+            # color["pred.gtvn"] = self.__color["pred.gtvn"]
 
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
@@ -742,7 +813,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and prediction contour
-            for k in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+            # ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+            for k in ["label.gtvs", "pred.gtvs"]:
                 if self.__img_plane == "sagittal":
                     contour = self.__img_data[k][:, :, self.__slice_id].astype(np.uint8)
                 elif self.__img_plane == "coronal":
@@ -777,21 +849,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             text_pos_y = 10
 
             if g.is_number(self.__score["dsc"]):
-                cv_text += "3D DSC: {:.3f}".format(self.__score["dsc"])
+                cv_text += "DSC: {:.3f}".format(self.__score["dsc"])
             else:
-                cv_text += "3D DSC: N/A"
+                cv_text += "DSC: N/A"
             cv_text += "\n"
 
             if g.is_number(self.__score["msd"]):
-                cv_text += "3D MSD: {:.2f}".format(self.__score["msd"])
+                cv_text += "MSD: {:.2f}".format(self.__score["msd"])
             else:
-                cv_text += "3D MSD: N/A"
+                cv_text += "MSD: N/A"
             cv_text += "\n"
 
             if g.is_number(self.__score["hd95"]):
-                cv_text += "3D HD95: {:.2f}".format(self.__score["hd95"])
+                cv_text += "HD95: {:.2f}".format(self.__score["hd95"])
             else:
-                cv_text += "3D HD95: N/A"
+                cv_text += "HD95: N/A"
 
             self.__cv_put_text(
                 img=rgb_img,
@@ -801,46 +873,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
             # add text: ground truth/prediction
-            text_pos_y = height - 85
+            text_pos_y = height - 88 + 40  # height-85
             text_pos_gap = 20
-            cv_text = "GROUND TRUTH - GTVt"
+            cv_text = "LABEL - GTVs"  # "LABEL - GTVt"
             self.__cv_put_text(
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["label.gtvt"],
+                color=color["label.gtvs"],
             )
 
-            text_pos_y += text_pos_gap
-            cv_text = "GROUND TRUTH - GTVn"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["label.gtvn"],
-            )
+            # text_pos_y += text_pos_gap
+            # cv_text = "LABEL - GTVn"
+            # self.__cv_put_text(
+            #     img=rgb_img,
+            #     text=cv_text,
+            #     pos=(text_pos_x, text_pos_y),
+            #     color=color["label.gtvn"],
+            # )
 
             text_pos_y += text_pos_gap
-            cv_text = "PREDICTION - GTVt"
+            cv_text = "PRED - GTVs"  # "PRED - GTVt"
             if self.__img_plane == "transverse" and is_annotated:
                 cv_text += " (ANNOTATED)"
             self.__cv_put_text(
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["pred.gtvt"],
+                color=color["pred.gtvs"],
             )
 
-            text_pos_y += text_pos_gap
-            cv_text = "PREDICTION - GTVn"
-            if self.__img_plane == "transverse" and is_annotated:
-                cv_text += " (ANNOTATED)"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["pred.gtvn"],
-            )
+            # text_pos_y += text_pos_gap
+            # cv_text = "PRED - GTVn"
+            # if self.__img_plane == "transverse" and is_annotated:
+            #     cv_text += " (ANNOTATED)"
+            # self.__cv_put_text(
+            #     img=rgb_img,
+            #     text=cv_text,
+            #     pos=(text_pos_x, text_pos_y),
+            #     color=color["pred.gtvn"],
+            # )
 
             # show imgs
             qt_image = QImage(
@@ -865,7 +937,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load annotated slices
         json_path = os.path.join(
             g.TRAIN_RESULTS_FOLDER,
-            self.__train_id,
+            self.__baseline_id,
+            self.__idl_id,
             self.__patient,
             "annotated_slices.json",
         )
@@ -916,7 +989,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 text=line,
                 org=(pos[0], y),
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
-                fontScale=1.2,
+                fontScale=1.0,
                 color=color,
                 thickness=1,
                 lineType=cv2.LINE_AA,
@@ -946,8 +1019,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __refresh_title(self):
         win_tital = "iDL.Tool "
-        if self.__train_id is not None:
-            win_tital += "   Training.ID=" + self.__train_id
+        if self.__baseline_id is not None:
+            win_tital += "   Baseline.ID=" + self.__baseline_id
+        if self.__baseline_id is not None:
+            win_tital += "   iDL.ID=" + self.__idl_id
         if self.__patient is not None:
             win_tital += "   Patient=" + self.__patient[len("patient=") :]
         if self.__round is not None:
@@ -971,7 +1046,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         left = 30
         top = 0
         text_label_height = 25
-        gap = 80
+        gap = 60
         combox_height = 30
         radio_btn_height = 25
         # side bar location
@@ -997,13 +1072,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         top += text_label_height
         btn_width = 30
         annotat_ui_left = left
-        rect = QRect(annotat_ui_left, top - 1, btn_width, combox_height + 2)
+        rect = QRect(annotat_ui_left, top, btn_width, combox_height)
         self._btn_prev_round.setGeometry(rect)
         annotat_ui_left += btn_width
-        rect = QRect(annotat_ui_left, top, width - btn_width * 2, combox_height)
+        rect = QRect(annotat_ui_left + 1, top, width - btn_width * 2 - 2, combox_height)
         self.__comboxes["round"].setGeometry(rect)
         annotat_ui_left += width - btn_width * 2
-        rect = QRect(annotat_ui_left, top - 1, btn_width, combox_height + 2)
+        rect = QRect(annotat_ui_left, top, btn_width, combox_height)
         self._btn_next_round.setGeometry(rect)
 
         # brightness and contrast

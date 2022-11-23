@@ -17,9 +17,9 @@
 #         return
 
 #     def write_score_per_round(
-#         self, idl_id: str, score_type: str, value: float, cur_round: int
+#         self, idl_id: str, metric_type: str, value: float, cur_round: int
 #     ):
-#         map_title = score_type + ".round"
+#         map_title = metric_type + ".round"
 #         scalar_name = idl_id
 #         step = cur_round
 
@@ -28,12 +28,12 @@
 #     def write_score_per_iter(
 #         self,
 #         idl_id: str,
-#         score_type: str,
+#         metric_type: str,
 #         value: float,
 #         former_iter_sum: int,
 #         cur_iter: int,
 #     ):
-#         map_title = score_type + ".iter"
+#         map_title = metric_type + ".iter"
 #         scalar_name = idl_id
 #         step = former_iter_sum + cur_iter
 

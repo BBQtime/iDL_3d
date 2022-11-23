@@ -520,6 +520,7 @@ IDL_HYPER_JSON = None
 TRAIN_RESULTS_FOLDER = None
 BASELINE_TENSORBOARD_FOLDER = None
 IDL_TENSORBOARD_FOLDER = None
+METRICS_LIST = None
 
 
 def __global_init():
@@ -536,6 +537,7 @@ def __global_init():
     global TRAIN_RESULTS_FOLDER
     global BASELINE_TENSORBOARD_FOLDER
     global IDL_TENSORBOARD_FOLDER
+    global METRICS_LIST
 
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
     __json_data = load_json(os.path.join(PROJ_PATH, "settings.json"))
@@ -596,6 +598,8 @@ def __global_init():
     IDL_TENSORBOARD_FOLDER = os.path.join(
         PROJ_PATH, __json_data["idl.tensorboard.folder"]
     )
+
+    METRICS_LIST = ["dsc", "msd", "hd95"]
 
 
 __global_init()

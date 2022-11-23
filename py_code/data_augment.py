@@ -3,7 +3,7 @@ from imgaug import augmenters as iaa
 from numpy import ndarray
 
 
-class DataAugment:
+class DataAugmentation:
     def __init__(
         self,
         pct: float = 0.0,

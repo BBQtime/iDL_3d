@@ -8,7 +8,7 @@ from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
 from torchvision import transforms as T
-from data_augment import DataAugment
+from data_augment import DataAugmentation
 from typing import Tuple
 
 
@@ -37,7 +37,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
         augment_up_limit: int,
     ):
         if augment_method is not None:
-            self._data_augment = DataAugment(
+            self._data_augment = DataAugmentation(
                 pct=augment_pct,
                 method=augment_method,
                 low_limit=augment_low_limit,
@@ -59,14 +59,15 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # (before augmentation)
         img = g.normalize_img(img)
-        g.show_img(img, "before augment")
+        # g.show_img(img, "before augment")
 
         # data augmentation
         if self._data_augment is not None:
             img = self._data_augment.run(input_data=img, seed=augment_seed)
-        g.show_img(img, "after augment")
+        # g.show_img(img, "after augment")
 
-        # (no normalize after augmentation)
+        # no normalization after augmentation,
+        # nomalization might give background a positive value when rotating img
 
         # patch crop after augmentation, max size: 89 283 280
         # a:b -> [a,b)
@@ -97,6 +98,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # g.show_img(origin_gtvs_img[20])
         origin_shape = origin_gtvs_img.shape
 
+        # loop until target volume in patch is big enough
         while 1:
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
@@ -118,6 +120,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             # )
             # gtvt_img = self.__load_img(img_path=gtvt_path, augment_seed=augment_seed)
 
+            # load gtvn
             # gtvn_path = os.path.join(
             #     g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(cur_patient)
             # )
@@ -139,7 +142,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 patch_pos=patch_pos,
             )
 
-            # target volume is not big enough
+            # target volume in the patch is not big enough
             if gtvs_img.sum() < (origin_gtvs_img.sum() * target_vol_pct):
                 patch_pos = ()
                 continue

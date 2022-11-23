@@ -3,10 +3,10 @@ import os
 import torch
 from tqdm import tqdm
 from datetime import datetime
-from itertools import product
 from nested_dict import NestedDict
 from torch.utils.data import DataLoader
 from shared_training import SharedTraining
+from matplotlib import pyplot as plt
 
 # from tensorboard_writer import TensorBoardWriter
 from baseline_dataset import BaselineDataSet
@@ -24,7 +24,7 @@ class BaselineTraining(SharedTraining):
         self,
         hyper: dict,
         exist_cnn_path: str = None,
-        debug_mode: bool = False,
+        debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # epochs
         if debug_mode:
@@ -186,13 +186,16 @@ class BaselineTraining(SharedTraining):
             # current epoch finished
             self._epochs_actual = cur_epoch
 
-            # save loss data in json file
+            # save loss in json
             loss_dict = g.load_json(loss_save_path)
             cur_epoch_loss = NestedDict()
             cur_epoch_loss["train"] = train_loss
             cur_epoch_loss["valid"] = valid_loss
             loss_dict["epoch={:03d}".format(self._epochs_actual)] = cur_epoch_loss
             g.save_json(loss_dict, loss_save_path)
+
+            # draw loss figure
+            self.__loss_fig(loss_save_path)
 
             # save cnn
             if best_loss is None:
@@ -251,8 +254,12 @@ class BaselineTraining(SharedTraining):
             cnn_save_path = os.path.join(baseline_folder, "epoch=")
             hyper_save_path = os.path.join(baseline_folder, "hyper.json")
             loss_save_path = os.path.join(baseline_folder, "loss.json")
+
             # save an empty loss.json
             g.save_json(NestedDict(), loss_save_path)
+
+            # save hyper before and after training
+            self._save_hyper(hyper_save_path)
 
             # start training
             self.__training(cnn_save_path, loss_save_path)
@@ -267,6 +274,29 @@ class BaselineTraining(SharedTraining):
 
         return baseline_id_list
 
+    def loss_fig(self, baseline_id: str):
+        loss_json_path = os.path.join(
+            g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", "loss.json"
+        )
+        self.__loss_fig(loss_json_path)
+
+    def __loss_fig(self, loss_json_path: str):
+        plt.figure().clear()
+
+        loss_dict = g.load_json(loss_json_path)
+        train_loss = []
+        valid_loss = []
+
+        for i in loss_dict:
+            train_loss.append(loss_dict[i]["train"])
+            valid_loss.append(loss_dict[i]["valid"])
+
+        plt.plot(range(1, len(loss_dict) + 1), train_loss, label="train")
+        plt.plot(range(1, len(loss_dict) + 1), valid_loss, label="valid")
+        plt.legend()
+
+        plt.savefig(loss_json_path[:-4] + "png")
+
     def inference(
         self,
         baseline_id: str,
@@ -277,16 +307,10 @@ class BaselineTraining(SharedTraining):
         print(baseline_id)
 
         baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline")
-
-        hyper = g.load_json(os.path.join(baseline_folder, "hyper.json"))
-
         cnn_path = g.get_sub_files(
             baseline_folder, return_full_path=True, key_word=".pt"
         )[0]
-
-        avg_score = NestedDict()
-        for i in ["dsc", "msd", "hd95"]:
-            avg_score[i] = []
+        hyper = g.load_json(os.path.join(baseline_folder, "hyper.json"))
 
         # load and print hyper
         self._load_hyper(
@@ -297,44 +321,4 @@ class BaselineTraining(SharedTraining):
         if print_hyper:
             self._print_hyper()
 
-        for patient in tqdm(self._test_loader.dataset.patient_list):
-            patient_folder = os.path.join(baseline_folder, patient)
-            g.create_folder(patient_folder)
-
-            patient_result = self._inference_single_patient(patient)
-
-            # save score of cur patient
-            patient_score = NestedDict()
-            for i in ["dsc", "msd", "hd95"]:
-                patient_score[i] = patient_result[i]
-            g.save_json(
-                data=patient_score,
-                path=os.path.join(patient_folder, "score.json"),
-            )
-
-            # record average score
-            for i in ["dsc", "msd", "hd95"]:
-                avg_score[i].append(patient_result[i])
-
-            # save cur patient pred
-            for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
-                g.save_nii(
-                    np_data=patient_result[i],
-                    save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
-                    spacing=g.NII_SPACING,
-                )
-                g.save_nii(
-                    np_data=g.binarize_img(patient_result[i]),
-                    save_path=os.path.join(
-                        patient_folder, "pred_{}_binary.nii".format(i)
-                    ),
-                    spacing=g.NII_SPACING,
-                )
-
-        # save avg score of all patients
-        for i in ["dsc", "msd", "hd95"]:
-            avg_score[i] = sum(avg_score[i]) / len(avg_score[i])
-        g.save_json(
-            data=avg_score,
-            path=os.path.join(baseline_folder, "score.json"),
-        )
+        super()._inference(self._test_loader.dataset.patient_list, baseline_folder)
