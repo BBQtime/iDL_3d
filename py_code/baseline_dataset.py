@@ -176,7 +176,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
     # this function is only for training, not for inference
     def __getitem__(self, idx: int):
         patient = self.patient_list[idx]
-        return self.get_item(patient=patient, patch_pos=(), target_vol_pct=0.5)
+        return self.get_item(patient=patient, patch_pos=(), target_vol_pct=0)
 
 
 # # for testing

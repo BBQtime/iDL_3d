@@ -12,39 +12,31 @@ from idl_training import IDLTraining
 baseline = BaselineTraining()
 idl = IDLTraining()
 
-# baseline start new trainings
+
+# baseline:
+# patch.tumor.size.pct
+# patch.non.empty.pct
+
+# idl:
+# patch.ignore.other.slices
+
+# # baseline start new trainings
+# if 0:
+#     baseline.training(
+#         # train_remark="sym.unified.focal.loss",
+#         train_remark="target.vol.pct=0",
+#         debug_mode=0,
+#     )
+
+
+# simulated iDL
 if 1:
-    baseline_id_list = baseline.training(
-        # train_remark="sym.unified.focal.loss",
-        train_remark="hybrid.focal.loss",
+    idl.simulation(
+        baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+        train_remark="delete.this",
         debug_mode=0,
     )
 
-# if 0:
-#     baseline.loss_fig("2022.11.19.23.24.31_2022.11.19.23.24.32_unified.focal.loss")
-
-# baseline test exist cnns' scores
-if 0:
-    baseline.inference(
-        "2022.11.13.01.09.58_2022.11.13.06.02.17_sliding.win.32.128.128_epochs=100",
-    )
-
-
-# # simulated iDL
-# if 0:
-#     idl.simulation(
-#         # train_remark="",
-#         debug_mode=1,
-#     )
-
-
-# # baseline results visualization
-# if 0:
-#     idl.baseline_visualize(
-#         baseline_id="2022.03.19.23.16.31_2022.03.19.23.16.31_unet++_dropout=0.3_optimal",
-#         idl_results_folder=g.TRAIN_RESULTS_FOLDER,
-#         idl_id="baseline.visualize",
-#     )
 
 # # real-life iDL training
 # if 0:
@@ -56,6 +48,7 @@ if 0:
 #         cur_round=1,
 #     )
 
+
 # if 0:
 #     chart_maker.compare_idl_results(
 #         key_hyper="select.step",
@@ -64,6 +57,7 @@ if 0:
 #             "select.step=",
 #         ),
 #     )
+
 
 # if 0:
 #     chart_maker.patients_overview(

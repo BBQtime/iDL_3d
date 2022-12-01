@@ -5,7 +5,6 @@ import math
 import numpy as np
 import torch.nn as nn
 from loss_func import UnifiedFocalLoss
-from loss_func import DiceLoss
 from criterion import HybridFocalLoss
 from segment_metrics import SegmentationMetrics
 from tqdm import tqdm
@@ -92,7 +91,6 @@ class SharedTraining:
             delta = None
             gamma = None
 
-        # self._loss_func = DiceLoss().to(g.DEVICE)
         self._loss_func = HybridFocalLoss().to(g.DEVICE)
         # self._loss_func = UnifiedFocalLoss(
         #     weight=weight,
@@ -101,10 +99,7 @@ class SharedTraining:
         # ).to(g.DEVICE)
 
         # load cnn
-        self._cnn = self._load_cnn(
-            cnn_name=str(hyper["cnn.name"]),  # unet or unet++
-            exist_cnn_path=exist_cnn_path,
-        )
+        self._cnn = self._load_cnn(exist_cnn_path)
 
         # optimizer (no need to move to cuda)
         self._optim = optim.Adam(params=self._cnn.parameters(), lr=self._lr_actual)
@@ -123,22 +118,16 @@ class SharedTraining:
         )
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_cnn(self, cnn_name: str, exist_cnn_path: str = None):
+    def _load_cnn(self, exist_cnn_path: str = None):
         # new model
         if exist_cnn_path is None:
-            if cnn_name == "unet++":
-                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-            else:
-                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+            cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
 
         # exist cnn
         else:
             # load state dict only
             if g.CNN_STATE_DICT_ONLY:
-                if cnn_name == "unet++":
-                    cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-                else:
-                    cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
                 cnn.load_state_dict(torch.load(exist_cnn_path))
 
             # load entire cnn
@@ -217,7 +206,6 @@ class SharedTraining:
         hyper_dict["loss.func"] = "unified.focal.loss"
         hyper_dict["optim"] = "adam"
         hyper_dict["scheduler"] = "reduce.lr.on.plateau"
-        hyper_dict["cnn.name"] = self.__get_cnn_name()
         # save dict
         g.save_json(data=hyper_dict, path=json_path)
 
@@ -299,15 +287,13 @@ class SharedTraining:
     # train_id = start_time + train_remark
     def _init_train_id(
         self,
-        group_start_time: str,
         train_remark: str,
         debug_mode: bool,
         hyper_json_path: str,
         hyper: dict,
     ):
-        train_id = group_start_time
-        cur_start_time = self._get_cur_time_str()
-        train_id += "_" + cur_start_time
+
+        train_id = self._get_cur_time_str()
 
         if debug_mode:
             train_id += "_debug.mode.delete.this"
@@ -441,44 +427,3 @@ class SharedTraining:
             group_hyper.append(cur_hyper)
 
         return group_hyper
-
-    def _inference(self, patient_list, result_folder):
-        score = NestedDict()
-        for i in g.METRICS_LIST:
-            score["avg"][i] = []
-
-        for patient in tqdm(patient_list):
-            patient_folder = os.path.join(result_folder, "preds", patient)
-            g.create_folder(patient_folder)
-
-            # result contains: "gtvs" "dsc" "msc" "hd95"
-            patient_result = self._inference_single_patient(patient)
-
-            # save score of cur patient
-            for i in g.METRICS_LIST:
-                score[patient][i] = patient_result[i]
-                score["avg"][i].append(patient_result[i])
-
-            # save pred of cur patient
-            for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
-                g.save_nii(
-                    np_data=patient_result[i],
-                    save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
-                    spacing=g.NII_SPACING,
-                )
-                g.save_nii(
-                    np_data=g.binarize_img(patient_result[i]),
-                    save_path=os.path.join(
-                        patient_folder, "pred_{}_binary.nii".format(i)
-                    ),
-                    spacing=g.NII_SPACING,
-                )
-
-        # save score of all patients
-        for i in g.METRICS_LIST:
-            avg = score["avg"][i]
-            score["avg"][i] = sum(avg) / len(avg)
-        g.save_json(
-            data=score,
-            path=os.path.join(result_folder, "score.json"),
-        )

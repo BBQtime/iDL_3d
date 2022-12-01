@@ -7,8 +7,6 @@ from nested_dict import NestedDict
 from torch.utils.data import DataLoader
 from shared_training import SharedTraining
 from matplotlib import pyplot as plt
-
-# from tensorboard_writer import TensorBoardWriter
 from baseline_dataset import BaselineDataSet
 
 
@@ -139,11 +137,34 @@ class BaselineTraining(SharedTraining):
         hyper_dict["dropout"] = self._dropout
         super()._save_hyper(json_path, hyper_dict)
 
+    def loss_fig(self, baseline_id: str):
+        loss_json_path = os.path.join(
+            g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", "loss.json"
+        )
+        self.__loss_fig(loss_json_path)
+
+    def __loss_fig(self, loss_json_path: str):
+        plt.figure().clear()
+
+        loss_dict = g.load_json(loss_json_path)
+        train_loss = []
+        valid_loss = []
+
+        for i in loss_dict:
+            train_loss.append(loss_dict[i]["train"])
+            valid_loss.append(loss_dict[i]["valid"])
+
+        plt.ylim(min(train_loss) - 0.05, max(train_loss) + 0.05)
+        plt.plot(range(1, len(loss_dict) + 1), train_loss, label="train")
+        plt.plot(range(1, len(loss_dict) + 1), valid_loss, label="valid")
+        plt.legend()
+
+        plt.savefig(loss_json_path[:-4] + "png")
+
     def __training(self, cnn_save_path: str, loss_save_path: str):
-        g.clear_gpu_cache()
+        # g.clear_gpu_cache()
         g.print_line()
 
-        self._time_used = datetime.now()
         best_epoch = None
         best_loss = None
         patience_count = 0
@@ -215,19 +236,13 @@ class BaselineTraining(SharedTraining):
                         break
 
         # training over
-        self._time_used = datetime.now() - self._time_used
-        self._time_used = str(self._time_used).split(".", 2)[0]
-        g.clear_gpu_cache()
+        # g.clear_gpu_cache()
 
     def training(
         self,
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        baseline_id_list = []
-        group_start_time = self._get_cur_time_str()
-
-        # get all cartesian products of hyper dict values
         for hyper in self._load_group_hyper(g.BASELINE_HYPER_JSON):
 
             self._load_hyper(
@@ -237,14 +252,12 @@ class BaselineTraining(SharedTraining):
             g.print_line()
             self._print_hyper()
 
-            baseline_id = self._init_train_id(
-                group_start_time=group_start_time,
+            baseline_id = "baseline_" + self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=g.BASELINE_HYPER_JSON,
                 hyper=hyper,
                 debug_mode=debug_mode,
             )
-            baseline_id_list.append(baseline_id)
 
             baseline_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"
@@ -262,7 +275,10 @@ class BaselineTraining(SharedTraining):
             self._save_hyper(hyper_save_path)
 
             # start training
+            self._time_used = datetime.now()
             self.__training(cnn_save_path, loss_save_path)
+            self._time_used = datetime.now() - self._time_used
+            self._time_used = str(self._time_used).split(".", 2)[0]
 
             self._save_hyper(hyper_save_path)
 
@@ -271,31 +287,6 @@ class BaselineTraining(SharedTraining):
                 print_hyper=False,
                 debug_mode=debug_mode,
             )
-
-        return baseline_id_list
-
-    def loss_fig(self, baseline_id: str):
-        loss_json_path = os.path.join(
-            g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", "loss.json"
-        )
-        self.__loss_fig(loss_json_path)
-
-    def __loss_fig(self, loss_json_path: str):
-        plt.figure().clear()
-
-        loss_dict = g.load_json(loss_json_path)
-        train_loss = []
-        valid_loss = []
-
-        for i in loss_dict:
-            train_loss.append(loss_dict[i]["train"])
-            valid_loss.append(loss_dict[i]["valid"])
-
-        plt.plot(range(1, len(loss_dict) + 1), train_loss, label="train")
-        plt.plot(range(1, len(loss_dict) + 1), valid_loss, label="valid")
-        plt.legend()
-
-        plt.savefig(loss_json_path[:-4] + "png")
 
     def inference(
         self,
@@ -321,4 +312,44 @@ class BaselineTraining(SharedTraining):
         if print_hyper:
             self._print_hyper()
 
-        super()._inference(self._test_loader.dataset.patient_list, baseline_folder)
+        score = NestedDict()
+        for i in g.METRICS_LIST:
+            score["avg"][i] = []
+
+        for patient in tqdm(self._test_loader.dataset.patient_list):
+            patient_folder = os.path.join(
+                baseline_folder, "patients", "patient={}".format(patient)
+            )
+            g.create_folder(patient_folder)
+
+            # result contains: "gtvs" "dsc" "msc" "hd95"
+            patient_result = self._inference_single_patient(patient)
+
+            # save score of cur patient
+            for i in g.METRICS_LIST:
+                score["patient={}".format(patient)][i] = patient_result[i]
+                score["avg"][i].append(patient_result[i])
+
+            # save pred of cur patient
+            for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
+                g.save_nii(
+                    np_data=patient_result[i],
+                    save_path=os.path.join(patient_folder, "pred_{}.nii".format(i)),
+                    spacing=g.NII_SPACING,
+                )
+                g.save_nii(
+                    np_data=g.binarize_img(patient_result[i]),
+                    save_path=os.path.join(
+                        patient_folder, "pred_{}_binary.nii".format(i)
+                    ),
+                    spacing=g.NII_SPACING,
+                )
+
+        # save score of all patients
+        for i in g.METRICS_LIST:
+            avg = score["avg"][i]
+            score["avg"][i] = sum(avg) / len(avg)
+        g.save_json(
+            data=score,
+            path=os.path.join(baseline_folder, "score.json"),
+        )

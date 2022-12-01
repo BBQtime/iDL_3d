@@ -247,8 +247,8 @@ def __get_sub_items(
 
 def get_sub_items(
     folder_path: str,
-    return_full_path: bool = False,
     key_word: str = "",
+    return_full_path: bool = False,
     shuffle: bool = False,
     seed: int = None,
 ):
@@ -265,8 +265,8 @@ def get_sub_items(
 
 def get_sub_files(
     folder_path: str,
-    return_full_path: bool = False,
     key_word: str = "",
+    return_full_path: bool = False,
     shuffle: bool = False,
     seed: int = None,
 ):
@@ -283,8 +283,8 @@ def get_sub_files(
 
 def get_sub_folders(
     folder_path: str,
-    return_full_path: bool = False,
     key_word: str = "",
+    return_full_path: bool = False,
     shuffle: bool = False,
     seed: int = None,
 ):
@@ -499,8 +499,15 @@ def change_char_in_str(input_str: str, idx: int, new_val: str):
     return "".join(input_str)
 
 
-def sort_dict_by_value(input_dict: dict):
-    return {k: v for k, v in sorted(input_dict.items(), key=lambda item: item[1])}
+def sort_dict_by_value(input_dict: dict, reverse: bool) -> dict:
+    return {
+        k: v
+        for k, v in sorted(
+            input_dict.items(),
+            key=lambda item: item[1],
+            reverse=reverse,
+        )
+    }
 
 
 def get_list_avg(input_list: list):

@@ -24,13 +24,12 @@ from PyQt5.QtWidgets import (
 from ui_main_window import Ui_MainWindow
 
 
-IDL_ID_HEAD = " ↳ iDL: "
-BASELINE_ID_HEAD = "Baseline: "
-
-
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.__IDL_ID_HEAD = "      ↳ "
+
         self.setupUi(self)
         self._status_bar.hide()
         self._menu_bar.hide()
@@ -440,13 +439,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             idl_folders = g.get_sub_folders(
                 os.path.join(g.TRAIN_RESULTS_FOLDER, cur_baseline_folder)
             )
-            idl_folders = idl_folders.remove("baseline")
+            idl_folders.remove("baseline")
             # add baseline folder into list
-            train_results_folders.append(BASELINE_ID_HEAD + cur_baseline_folder)
+            train_results_folders.append(cur_baseline_folder)
             # add sub idl folders into list
-            if idl_folders is not None:
-                for cur_idl_folder in idl_folders:
-                    train_results_folders.append(IDL_ID_HEAD + cur_idl_folder)
+            for cur_idl_folder in idl_folders:
+                train_results_folders.append(self.__IDL_ID_HEAD + cur_idl_folder)
 
         self.__comboxes["train.id"].addItems(train_results_folders)
 
@@ -527,15 +525,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         train_id = self.__comboxes["train.id"].currentText()
 
         # baseline
-        if train_id.startswith(BASELINE_ID_HEAD):
-            self.__baseline_id = train_id[len(BASELINE_ID_HEAD) :]
+        if train_id.startswith("baseline_"):
+            self.__baseline_id = train_id
             self.__idl_id = "baseline"
             patient_list = g.get_sub_folders(
                 os.path.join(
                     g.TRAIN_RESULTS_FOLDER,
                     self.__baseline_id,
                     self.__idl_id,
-                    "preds",
+                    "patients",
                 )
             )
         # idl
@@ -543,11 +541,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # get baseline id
             train_id_list = g.get_combox_content(self.__comboxes["train.id"])
             idx = train_id_list.index(train_id)
-            while not train_id_list[idx].startswith(BASELINE_ID_HEAD):
+            while not train_id_list[idx].startswith("baseline_"):
                 idx -= 1
-            self.__baseline_id = train_id_list[idx][len(BASELINE_ID_HEAD) :]
+            self.__baseline_id = train_id_list[idx]
             # get idl id
-            self.__idl_id = train_id[len(IDL_ID_HEAD) :]
+            self.__idl_id = train_id[len(self.__IDL_ID_HEAD) :]
             # get round
             if self.__round is None:
                 self.__round = "round=01"
@@ -558,9 +556,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.__baseline_id,
                     self.__idl_id,
                     self.__round,
-                    "preds",
+                    "patients",
                 )
             )
+
+        # change patient_list from "patient=123" to "123"
+        for i in range(len(patient_list)):
+            patient_list[i] = patient_list[i][len("patient=") :]
 
         self.__comboxes["patient"].addItems(patient_list)
         self.__comboxes["patient"].activated.connect(self.__choose_patient)
@@ -648,8 +650,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
-                "preds",
-                self.__patient,
+                "patients",
+                "patient={}".format(self.__patient),
             )
         else:
             cur_patient_folder = os.path.join(
@@ -657,8 +659,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__baseline_id,
                 self.__idl_id,
                 self.__round,
-                "preds",
-                self.__patient,
+                "patients",
+                "patient={}".format(self.__patient),
             )
         pred_path = NestedDict()
         pred_path["pred.gtvs"] = os.path.join(cur_patient_folder, "pred_gtvs.nii")
@@ -689,7 +691,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load score json file
         score_dict = g.load_json(score_json_path)
         for metric_type in g.METRICS_LIST:
-            self.__score[metric_type] = score_dict[self.__patient][metric_type]
+            self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
+                metric_type
+            ]
 
         # enable/disable prev/next round buttons
         idx = self.__comboxes["round"].currentIndex()
