@@ -1,5 +1,6 @@
 import os
 import random
+import torch
 from datetime import datetime
 from itertools import product
 import numpy as np
@@ -18,6 +19,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 class IDLTraining(SharedTraining):
     def __load_next_lr(self, next_round: int):
+
+        # self._lr is a list of lr of each round
         if next_round > len(self._lr):
             next_round = len(self._lr)
 
@@ -279,8 +282,7 @@ class IDLTraining(SharedTraining):
         else:
             pred_folder = os.path.join(patient_folder, "round={:02d}".format(cur_round))
 
-        pred = g.load_nii(os.path.join(pred_folder, "pred_gtvs.nii"))
-        pred = g.binarize_img(pred)
+        pred = g.load_nii(os.path.join(pred_folder, "pred_gtvs.nii"), binary=True)
         label = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
         )
@@ -294,9 +296,9 @@ class IDLTraining(SharedTraining):
             else:
                 pred_slice_tumor_size = pred[cur_slice].sum()
                 if pred_slice_tumor_size > 0:
-                    candidate_slices[str(cur_slice)] = pred_slice_tumor_size
+                    candidate_slices[cur_slice] = pred_slice_tumor_size
                 elif label[cur_slice].sum() > 0:
-                    candidate_slices[str(cur_slice)] = 0
+                    candidate_slices[cur_slice] = 0
 
         # "equal.divide", round = 1
         if self._select_scenario == "equal.divide" and cur_round == 1:
@@ -329,123 +331,124 @@ class IDLTraining(SharedTraining):
 
     def __training_cur_round(
         self,
-        cur_result_folder: str,
-        cur_patient: str,
+        cur_round_folder: str,
         annotated_slices: dict,
         label_folder: str,
     ):
+        cur_round = Path(cur_round_folder).name
+        cur_round = int(cur_round[len("round=") :])
 
-        loss_save_path = os.path.join(round_folder, "loss.json")
+        patient = Path(cur_round_folder).parent.name
+        patient = patient[len("patient=") :]
 
-        # save an empty loss.json
-        g.save_json(NestedDict(), loss_save_path)
+        loss_json_path = os.path.join(Path(cur_round_folder).parent, "loss.json")
+        loss_dict = g.load_json(loss_json_path)
 
-        # len(annotated_slices) will always > 0
-        if len(annotated_slices) == 1:
-            if g.get_dict_keys(annotated_slices)[0] == "post.process":
-                cur_round = -1
-            else:
-                cur_round = 1
+        if cur_round == 1:
+            pred_folder = Path(cur_round_folder).parent.parent.parent.parent
+            pred_folder = os.path.join(
+                pred_folder, "baseline", "patients", "patient={}".format(patient)
+            )
         else:
-            cur_round = len(annotated_slices)
+            pred_folder = os.path.join(
+                Path(cur_round_folder).parent, "round={:02d}".format(cur_round - 1)
+            )
+
+        cur_round_time_used = datetime.now()
 
         # create iDL dataset
         idl_dataset = IDLDataSet(
-            patient=cur_patient,
-            slice_dict=annotated_slices,
+            patient=patient,
+            annotated_slices=annotated_slices,
             label_folder=label_folder,
+            pred_folder=pred_folder,
+            ignore_other_anotated_slices=False,
+            augment_methods=self._augment_methods,
             augment_times=self._augment_times,
             augment_pct=self._augment_pct,
-            augment_method=self._augment_method,
             augment_low_limit=self._augment_low_limit,
             augment_up_limit=self._augment_up_limit,
         )
 
         # optimize batch size (before create dataloader)
-        optim_batch_size = self._optimize_batch_size(idl_dataset)
+        self._batch_size_actual = self._optimize_batch_size(idl_dataset)
 
-        # idlive dataloader
+        # idl dataloader
         idl_loader = DataLoader(
             dataset=idl_dataset,
-            batch_size=optim_batch_size,
+            batch_size=self._batch_size_actual,
             shuffle=True,
             num_workers=g.NUM_WORKERS,
         )
 
         # iter loop
         for cur_iter in tqdm(range(self._iter)):
-            iter_time_used = datetime.now()
+            self._cnn.train()
             sum_loss = 0
             batch_num = 0
 
-            # switch to train mode before training
-            self._cnn.train()
-
             # freeze layers before iDL
             if self._layer_freezing:
-                # here, self._cnn is DataParallel, not network itself
                 if g.used_gpu_count() > 1:
+                    # here, self._cnn is DataParallel, not network itself
                     self._cnn.module.freeze_top()
                 else:
                     self._cnn.freeze_top()
 
-            for inputs, labels in idl_loader:
+            for inputs, labels, reserved_slices in idl_loader:
                 # zero grad at the begining of each mini-batch
                 self._optim.zero_grad()
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 outputs = self._cnn(inputs)
-                # if 1:
-                #     concat_img = torch.cat(
-                #         [
-                #             inputs[0, 0, :, :],  # ct
-                #             inputs[0, 1, :, :],  # pt
-                #             labels[0, 0, :, :],  # label
-                #             outputs[0, 0, :, :],  # pred
-                #         ],
-                #         dim=1,
-                #     )
-                #     g.show_img(concat_img, print_info=False)
+
+                mask = torch.ones_like(labels)
+                # remove non-annotated slices in outputs
+                for b in range(labels.shape[0]):  # batch
+                    for c in range(labels.shape[1]):  # channel
+                        for d in range(labels.shape[2]):  # depth
+                            if labels[b][c][d].sum() == 0:
+                                mask[b][c][d] = mask[b][c][d] - mask[b][c][d]
+                                # outputs[b][c][d] += torch.finfo(torch.float32).eps
+                            else:
+                                print("123")
+
+                outputs = outputs * mask
                 loss = self._loss_func(outputs, labels)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 self._optim.step()  # update param
                 sum_loss += loss.item()
                 batch_num += 1
 
-            # cur iteration finished
-            train_loss = sum_loss / batch_num
-            self._scheduler.step(train_loss)
-            iter_time_used = datetime.now() - iter_time_used
+            # cur iter finished
+            # update scheduler
+            iter_loss = sum_loss / batch_num
+            self._scheduler.step(iter_loss)
+            # record loss
+            loss_dict[
+                "iter={:03d}".format((cur_round - 1) * self._iter + (cur_iter + 1))
+            ] = iter_loss
 
-            # save loss data in json file
-            loss_save_path = os.path.join(
-                cur_result_folder, "patient={}".format(cur_patient), "train_loss.json"
-            )
-            train_loss_dict = g.load_json(loss_save_path)
+        # current round finished
+        # inference
+        self.inference(
+            cur_result_folder=cur_result_folder,
+            cur_patient=cur_patient,
+            cur_round=cur_round,
+            cur_iter=cur_iter + 1,
+            save_img=save_img,
+            iter_time_used=iter_time_used,
+        )
+        # save time used
+        cur_round_time_used = datetime.now() - cur_round_time_used
+        cur_round_time_used = str(cur_round_time_used).split(".", 2)[0]
+        time_save_path = os.path.join(Path(cur_round_folder).parent, "time_used.json")
+        time_used_dict = g.load_json(time_save_path)
+        time_used_dict["round={:02d}".format(cur_round)] = cur_round_time_used
+        g.save_json(time_used_dict, time_save_path)
 
-            # normal iDL without post processing
-            if cur_round >= 1:
-                train_loss_dict["iter"][
-                    "{:03d}".format((cur_round - 1) * self._iter + (cur_iter + 1))
-                ] = train_loss
-            # post processing, cur_round=-1
-            else:
-                train_loss_dict["iter"]["{:03d}".format(cur_iter + 1)] = train_loss
-            g.save_json(train_loss_dict, loss_save_path)
-
-            # test cnn and save scores of current iter
-            if cur_iter + 1 == self._iter:
-                save_img = True
-            else:
-                save_img = False
-            self.__test_process(
-                cur_result_folder=cur_result_folder,
-                cur_patient=cur_patient,
-                cur_round=cur_round,
-                cur_iter=cur_iter + 1,
-                save_img=save_img,
-                iter_time_used=iter_time_used,
-            )
+        # save loss
+        g.save_json(loss_dict, loss_json_path)
 
     def __training_cur_patient(
         self,
@@ -457,13 +460,18 @@ class IDLTraining(SharedTraining):
             idl_folder, "patients", "patient={}".format(patient)
         )
         g.create_folder(patient_folder)
+        # create a json to save time used for cur patient
+        g.save_json(NestedDict(), os.path.join(patient_folder, "time_used.json"))
+        # create an empty loss.json
+        g.save_json(NestedDict(), os.path.join(patient_folder, "loss.json"))
+
         g.print_line()
         print("patient:", patient)
 
         annotated_slices = NestedDict()
 
         # loop through each round
-        for i in range(len(self._select_step)):
+        for cur_round in range(1, len(self._select_step) + 1):
 
             cur_round_slices = self.__select_cur_round_slices(
                 patient_folder=patient_folder,
@@ -472,31 +480,33 @@ class IDLTraining(SharedTraining):
             if len(cur_round_slices) == 0:
                 break
 
-            # add cur round slices into annotated_slices(Dict)
-            cur_round = "round={:02d}".format(i + 1)
-            annotated_slices[cur_round] = cur_round_slices
+            # start current round
+            print("round:", cur_round + 1)
 
-            print("round:", i + 1)
+            # add cur_round_slices into annotated_slices BEFORE __training_cur_round()
+            annotated_slices["round={:02d}".format(cur_round)] = cur_round_slices
+
             self.__training_cur_round(
-                cur_result_folder=idl_folder,
-                cur_patient=patient,
+                cur_round_folder=os.path.join(
+                    patient_folder, "round={:02d}".format(cur_round)
+                ),
                 annotated_slices=annotated_slices,
                 label_folder=g.DATASET_FOLDER,
             )
 
             # load new lr before next round
             if self._lr_reset:
-                self.__load_next_lr(next_round=i + 2)
+                self.__load_next_lr(next_round=cur_round + 1)
 
         # save annotated slices in cur patient folder
-        # change list into string
         for i in annotated_slices:
             annotated_slices[i] = g.list_to_str(annotated_slices[i])
-        # save path
-        json_save_path = os.path.join(
-            idl_folder, "patient={}".format(patient), "annotated_slices.json"
+        g.save_json(
+            data=annotated_slices,
+            path=os.path.join(
+                idl_folder, "patient={}".format(patient), "annotated_slices.json"
+            ),
         )
-        g.save_json(data=annotated_slices, path=json_save_path)
 
     def simulation(
         self,
@@ -559,7 +569,7 @@ class IDLTraining(SharedTraining):
             self._save_hyper(hyper_save_path)
             # self.json_record_avg_score(self._idl_id)
 
-    def __test_process(
+    def inference(
         self,
         cur_result_folder: str,
         cur_patient: str,
@@ -808,3 +818,13 @@ class IDLTraining(SharedTraining):
                     ] = cur_round_avg_score
 
         g.save_json(avg_score_dict, os.path.join(train_result_folder, "avg_score.json"))
+
+
+# simulated iDL
+if 1:
+    idl = IDLTraining()
+    idl.simulation(
+        baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+        train_remark="delete.this",
+        debug_mode=1,
+    )

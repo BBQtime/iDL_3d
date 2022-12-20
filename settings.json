@@ -2,7 +2,7 @@
     "baseline.hyper.json": "baseline_hyper.json",
     "baseline.tensorboard.folder": "baseline_tensorboard",
     "cnn.state.dict.only": false,
-    "cuda.visible.devices": "0,1",
+    "cuda.visible.devices": "1",
     "dataset.folder": "/mnt/faststorage/alan/Scans3mm/",
     "dataset.split.json": "dataset_split.json",
     "dataset.split.seed": 65536,

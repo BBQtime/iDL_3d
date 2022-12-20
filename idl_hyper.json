@@ -1,9 +1,9 @@
 {
     "augment.low.limit": 2,
-    "augment.method": "combine",
+    "augment.methods": "elastic,scale,translate,rotate,flip.lr,flip.ud",
     "augment.times": 8,
     "augment.up.limit": 4,
-    "batch.size": 50,
+    "batch.size": 8,
     "dropout": 0.3,
     "iter": 30,
     "layer.freezing": false,
@@ -15,6 +15,6 @@
     "lr.decay.patience": 3,
     "lr.min": 1e-06,
     "lr.reset": true,
-    "select.scenario": "largest",
+    "select.scenario": "equal.divide",
     "select.step": "3,1,1"
 }

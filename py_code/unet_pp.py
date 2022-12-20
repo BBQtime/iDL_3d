@@ -190,30 +190,3 @@ class UNetPP(nn.Module):
         else:
             output = self.final(x04)
             return output
-
-
-# # for testing
-# if 1:
-#     img_size = 128
-#     img_depth = 32
-#     batch_size = 8
-#     in_channels = 4
-#     out_channels = 3
-#     g.clear_gpu_cache()
-
-#     cnn = UNetPP(in_channels, out_channels)
-#     if g.used_gpu_count() > 1:
-#         cnn = nn.DataParallel(cnn)
-#     cnn = cnn.to(g.DEVICE)
-
-#     input_data = torch.rand(
-#         batch_size,
-#         in_channels,
-#         img_depth,
-#         img_size,
-#         img_size,
-#     ).to(g.DEVICE)
-
-#     print(input_data.shape)
-#     output_data = cnn.forward(input_data)
-#     print(output_data.shape)

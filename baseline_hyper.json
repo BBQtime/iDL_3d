@@ -1,6 +1,6 @@
 {
     "augment.low.limit": 2,
-    "augment.method": "combine",
+    "augment.methods": "elastic,scale,translate,rotate,flip.lr,flip.ud",
     "augment.pct": 0.8,
     "augment.up.limit": 3,
     "batch.size": 8,

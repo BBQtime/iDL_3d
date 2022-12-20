@@ -21,21 +21,21 @@ idl = IDLTraining()
 # patch.ignore.other.slices
 
 # # baseline start new trainings
-# if 0:
+# if 1:
 #     baseline.training(
 #         # train_remark="sym.unified.focal.loss",
-#         train_remark="target.vol.pct=0",
-#         debug_mode=0,
+#         # train_remark="target.vol.pct=0",
+#         debug_mode=1,
 #     )
 
 
-# simulated iDL
-if 1:
-    idl.simulation(
-        baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
-        train_remark="delete.this",
-        debug_mode=0,
-    )
+# # simulated iDL
+# if 1:
+#     idl.simulation(
+#         baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+#         train_remark="delete.this",
+#         debug_mode=0,
+#     )
 
 
 # # real-life iDL training

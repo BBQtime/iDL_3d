@@ -77,8 +77,8 @@ class BaselineTraining(SharedTraining):
         # create dataset
         train_set = BaselineDataSet(
             patient_list=train_patient_list,
+            augment_methods=self._augment_methods,
             augment_pct=self._augment_pct,
-            augment_method=self._augment_method,
             augment_low_limit=self._augment_low_limit,
             augment_up_limit=self._augment_up_limit,
         )
@@ -295,7 +295,7 @@ class BaselineTraining(SharedTraining):
         debug_mode: bool = False,
     ):
         g.print_line()
-        print(baseline_id)
+        print("inference: ", baseline_id)
 
         baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline")
         cnn_path = g.get_sub_files(

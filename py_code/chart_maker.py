@@ -58,8 +58,7 @@ def patients_overview(
         label_nii_path = os.path.join(
             train_result_folder, cur_patient_folder, "baseline", "label.nii"
         )
-        label_data = g.load_nii(label_nii_path)
-        label_data = g.binarize_img(label_data)
+        label_data = g.load_nii(label_nii_path, binary=True)
         label_size = label_data.sum()
         label_size *= g.NII_SPACING[0] * g.NII_SPACING[1] * g.NII_SPACING[2]
         label_size *= 0.001  # mm3 to cm3

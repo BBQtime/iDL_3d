@@ -16,35 +16,19 @@ class BaselineDataSet(torch.utils.data.Dataset):
     def __init__(
         self,
         patient_list: list,
-        augment_pct: float = None,
-        augment_method: str = None,
-        augment_low_limit: int = None,
-        augment_up_limit: int = None,
+        augment_methods: list = [],
+        augment_pct: float = 0.0,
+        augment_low_limit: int = 0,
+        augment_up_limit: int = 0,
     ):
         self.patient_list = patient_list
-        self._init_augment(
-            augment_pct=augment_pct,
-            augment_method=augment_method,
-            augment_low_limit=augment_low_limit,
-            augment_up_limit=augment_up_limit,
-        )
 
-    def _init_augment(
-        self,
-        augment_pct: float,
-        augment_method: str,
-        augment_low_limit: int,
-        augment_up_limit: int,
-    ):
-        if augment_method is not None:
-            self._data_augment = DataAugmentation(
-                pct=augment_pct,
-                method=augment_method,
-                low_limit=augment_low_limit,
-                up_limit=augment_up_limit,
-            )
-        else:
-            self._data_augment = None
+        self.__augment = DataAugmentation(
+            methods=augment_methods,
+            pct=augment_pct,
+            low_limit=augment_low_limit,
+            up_limit=augment_up_limit,
+        )
 
     # must be overrided
     def __len__(self):
@@ -59,12 +43,11 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # (before augmentation)
         img = g.normalize_img(img)
-        # g.show_img(img, "before augment")
+        g.show_img(img, "before augment")
 
         # data augmentation
-        if self._data_augment is not None:
-            img = self._data_augment.run(input_data=img, seed=augment_seed)
-        # g.show_img(img, "after augment")
+        img = self.__augment.transform(input_data=img, seed=augment_seed)
+        g.show_img(img, "after augment")
 
         # no normalization after augmentation,
         # nomalization might give background a positive value when rotating img
@@ -91,12 +74,10 @@ class BaselineDataSet(torch.utils.data.Dataset):
         target_vol_pct: float = 0,  # make this 0 for inference
     ) -> Tuple[Tensor, Tensor]:
 
-        origin_gtvs_img = g.load_nii(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
+        origin_label_gtvs = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
+            binary=True,
         )
-        origin_gtvs_img = g.binarize_img(origin_gtvs_img)
-        # g.show_img(origin_gtvs_img[20])
-        origin_shape = origin_gtvs_img.shape
 
         # loop until target volume in patch is big enough
         while 1:
@@ -110,7 +91,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 patch_pos = []
                 for i in range(3):
                     patch_pos.append(
-                        random.randint(0, origin_shape[i] - g.PATCH_SIZE[i])
+                        random.randint(0, origin_label_gtvs.shape[i] - g.PATCH_SIZE[i])
                     )
                 patch_pos = tuple(patch_pos)
 
@@ -134,7 +115,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             #     gtvn_img = gtvs_img - gtvt_img
 
             # load gtvs
-            gtvs_img = self.__load_img(
+            label_gtvs = self.__load_img(
                 img_path=os.path.join(
                     g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)
                 ),
@@ -143,34 +124,32 @@ class BaselineDataSet(torch.utils.data.Dataset):
             )
 
             # target volume in the patch is not big enough
-            if gtvs_img.sum() < (origin_gtvs_img.sum() * target_vol_pct):
+            if label_gtvs.sum() < (origin_label_gtvs.sum() * target_vol_pct):
                 patch_pos = ()
                 continue
+            else:
+                break  # target volume is large enough, break
 
-            # bg_img = 1 - gtvt_img - gtvn_img
-            # g.show_img(bg_img)
-            # label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+        # bg_img = 1 - gtvt_img - gtvn_img
+        # g.show_img(bg_img)
+        # label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+        multi_model_imgs = None
+        for i in ["CT", "PT", "T1dr", "T2dr"]:
+            img_path = os.path.join(
+                g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
+            )
+            img = self.__load_img(
+                img_path=img_path,
+                augment_seed=augment_seed,
+                patch_pos=patch_pos,
+            )
 
-            multi_model_imgs = None
-            for i in ["CT", "PT", "T1dr", "T2dr"]:
-                img_path = os.path.join(
-                    g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
-                )
-                img = self.__load_img(
-                    img_path=img_path,
-                    augment_seed=augment_seed,
-                    patch_pos=patch_pos,
-                )
-
-                # concat multi-model img
-                if multi_model_imgs is None:
-                    multi_model_imgs = img
-                else:
-                    multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
-
-            break  # target volume is large enough, break
-
-        return multi_model_imgs, gtvs_img  # label_imgs
+            # concat multi-model img
+            if multi_model_imgs is None:
+                multi_model_imgs = img
+            else:
+                multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
+        return multi_model_imgs, label_gtvs  # label_imgs
 
     # must be overrided
     # this function is only for training, not for inference
@@ -180,16 +159,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
 
 # # for testing
-# # augment_method= translate / elastic / rotate / scale / combine
-# # no gtvn patients: ['138', '152', '168', '174', '175', '192', '194', '204',
-# # '220', '229', '239', '247', '257', '261', '276', '309', '311', '315',
-# # '323', '327', '333']
-# if 1:
-#     tmp_dataset = BaselineDataSet(
-#         patient_list=["175"],
-#         augment_method="combine",
-#         augment_pct=1.0,
-#         augment_low_limit=2,
-#         augment_up_limit=2,
-#     )
-#     tmp_dataset.__getitem__(0)
+# # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
+# tmp_dataset = BaselineDataSet(
+#     patient_list=["336"],
+#     augment_methods=["rotate", "flip.ud"],
+#     augment_pct=1.0,
+#     augment_low_limit=2,
+#     augment_up_limit=2,
+# )
+# tmp_dataset.__getitem__(0)

@@ -334,10 +334,26 @@ def print_line(len: int = 50):
     print("=" * len)
 
 
-def load_nii(nii_path: str):
+def binarize_img(
+    img: Union[ndarray, Tensor], threshold: float = 0.5
+) -> Union[ndarray, Tensor]:
+    if isinstance(img, ndarray):
+        ones = np.ones_like(img)
+        zeros = np.zeros_like(img)
+        img = np.where(img >= threshold, ones, zeros)
+    elif isinstance(img, Tensor):
+        ones = torch.ones_like(img)
+        zeros = torch.zeros_like(img)
+        img = torch.where(img >= threshold, ones, zeros)
+    return img
+
+
+def load_nii(nii_path: str, binary=False):
     img = sitk.ReadImage(nii_path)
     img = sitk.GetArrayFromImage(img)
     img = img.astype(np.float32)
+    if binary:
+        img = binarize_img(img)
     return img
 
 
@@ -440,20 +456,6 @@ def normalize_img(img: ndarray) -> ndarray:
     img = img - img.min()
     # make range between [0-1]
     img /= img.max()
-    return img
-
-
-def binarize_img(
-    img: Union[ndarray, Tensor], threshold: float = 0.5
-) -> Union[ndarray, Tensor]:
-    if isinstance(img, ndarray):
-        ones = np.ones_like(img)
-        zeros = np.zeros_like(img)
-        img = np.where(img >= threshold, ones, zeros)
-    elif isinstance(img, Tensor):
-        ones = torch.ones_like(img)
-        zeros = torch.zeros_like(img)
-        img = torch.where(img >= threshold, ones, zeros)
     return img
 
 

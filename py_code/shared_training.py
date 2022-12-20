@@ -59,16 +59,9 @@ class SharedTraining:
         # lr_decay_factor=1.0 will cause error
         self._lr_decay_factor = g.check_limit(self._lr_decay_factor, 0.01, 0.9999999999)
 
-        # augment method
-        self._augment_method = str(hyper["augment.method"]).lower()
-        if (
-            self._augment_method != "combine"
-            and self._augment_method != "scale"
-            and self._augment_method != "translate"
-            and self._augment_method != "rotate"
-            and self._augment_method != "elastic"
-        ):
-            self._augment_method = None
+        # augment methods
+        self._augment_methods = str(hyper["augment.methods"]).lower()
+        self._augment_methods = g.str_to_list(self._augment_methods)
 
         # augment lower/upper limit
         self._augment_low_limit = int(hyper["augment.low.limit"])
@@ -163,7 +156,7 @@ class SharedTraining:
         print_dict["batch size:"] = self._batch_size
         print_dict["batch size actual:"] = self._batch_size_actual
         print_dict["augment percent:"] = self._augment_pct
-        print_dict["augment method:"] = self._augment_method
+        print_dict["augment methods:"] = self._augment_methods
         print_dict["augment lower limit:"] = self._augment_low_limit
         print_dict["augment upper limit:"] = self._augment_up_limit
         try:
@@ -192,7 +185,7 @@ class SharedTraining:
         hyper_dict["batch.size"] = self._batch_size
         hyper_dict["batch.size.actual"] = self._batch_size_actual
         hyper_dict["augment.pct"] = self._augment_pct
-        hyper_dict["augment.method"] = self._augment_method
+        hyper_dict["augment.methods"] = g.list_to_str(self._augment_methods)
         hyper_dict["augment.low.limit"] = self._augment_low_limit
         hyper_dict["augment.up.limit"] = self._augment_up_limit
         try:
