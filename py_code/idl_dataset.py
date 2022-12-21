@@ -18,7 +18,6 @@ class IDLDataSet:
         patient: str,
         annotated_slices: dict,
         label_folder: str,
-        pred_folder: str,
         ignore_other_anotated_slices: bool,
         augment_methods: list = [],
         augment_times: int = 1,
@@ -27,10 +26,7 @@ class IDLDataSet:
         augment_up_limit: int = 0,
     ):
         self.patient = patient
-        self.__label_folder = label_folder
-        self.__pred_folder = pred_folder
         self.__ignore_other_anotated_slices = ignore_other_anotated_slices
-
         self.__augment = DataAugmentation(
             pct=augment_pct,
             methods=augment_methods,
@@ -38,17 +34,43 @@ class IDLDataSet:
             up_limit=augment_up_limit,
         )
 
+        # (1) simulated iDL
+        if label_folder == g.DATASET_FOLDER:
+            self.__gtvs_path = os.path.join(
+                label_folder, "HNCDL_{}_GTVs.nii".format(self.patient)
+            )
+        # (2) real iDL
+        else:
+            self.__gtvs_path = os.path.join(label_folder, "????.nii")
+
+        # get patch position
+        self.__img_shape = g.load_nii(self.__gtvs_path, out_dim=3).shape
+
         self.__annotated_slices = NestedDict()
         idx = 0
         for cur_round in reversed(annotated_slices):
             # current step
-            for slice_id in annotated_slices[cur_round]:
-                for i in range(augment_times):
-                    for patch_x in range(3):
-                        for patch_y in range(3):
-                            self.__annotated_slices[idx]["slice.id"] = slice_id
-                            self.__annotated_slices[idx]["patch.x"] = patch_x
-                            self.__annotated_slices[idx]["patch.y"] = patch_y
+            for cur_slice in annotated_slices[cur_round]:
+                d = cur_slice - int(g.PATCH_SIZE[0] / 2)
+                d = g.check_limit(d, 0, self.__img_shape[0] - g.PATCH_SIZE[0])
+                for times in range(augment_times):
+                    for h in range(3):
+                        for w in range(3):
+                            patch_pos = [d, h, w]
+                            for i in [1, 2]:
+                                if patch_pos[i] == 2:
+                                    patch_pos[i] = self.__img_shape[i] - g.PATCH_SIZE[i]
+                                elif patch_pos[i] == 1:
+                                    patch_pos[i] = round(
+                                        (self.__img_shape[i] - g.PATCH_SIZE[i]) / 2
+                                    )
+                                    patch_pos[i] = g.check_limit(
+                                        patch_pos[i],
+                                        0,
+                                        self.__img_shape[i] - g.PATCH_SIZE[i],
+                                    )
+                            self.__annotated_slices[idx]["slice.id"] = cur_slice
+                            self.__annotated_slices[idx]["patch.pos"] = tuple(patch_pos)
                             idx += 1
             if augment_times >= 16:
                 augment_times /= 4
@@ -63,6 +85,7 @@ class IDLDataSet:
         return len(self.__annotated_slices)
 
     def __crop_img(self, img, patch_pos):
+        # a:b means [a,b)
         img = img[
             patch_pos[0] : patch_pos[0] + g.PATCH_SIZE[0],
             patch_pos[1] : patch_pos[1] + g.PATCH_SIZE[1],
@@ -70,26 +93,40 @@ class IDLDataSet:
         ]
         return img
 
+    def __load_weight_map(self, cur_slice, patch_pos):
+        if self.__ignore_other_anotated_slices:
+            reserved_slices = [cur_slice]
+        else:
+            reserved_slices = []
+            for i in self.__annotated_slices:
+                reserved_slices.append(self.__annotated_slices[i]["slice.id"])
+            reserved_slices = g.list_remove_duplicates(reserved_slices)
+
+        weight_map = np.zeros(self.__img_shape, dtype=np.float32)
+        for i in range(weight_map.shape[0]):
+            if i in reserved_slices:
+                weight_map[i] = np.ones_like(weight_map[i])
+
+        weight_map = self.__crop_img(weight_map, patch_pos)
+
+        # unsqueeze img to 4 dim before convert to Tensor
+        weight_map = np.expand_dims(weight_map, axis=0)
+        # do NOT use "T.ToTensor()" in 3D, it will make (d,h,w) to (h,d,w)
+        weight_map = torch.from_numpy(weight_map)
+        return weight_map
+
     def __load_img(
         self,
         img_path: str,
         augment_seed: int,
         patch_pos: tuple,
-        weight_map: ndarray,
-        binary: bool = False,
     ):
-        img = g.load_nii(img_path, binary=binary)
-
         # make sure img.shape is 3
-        for i in range(len(img.shape) - 3):
-            img = np.squeeze(img, axis=0)
+        img = g.load_nii(img_path, binary=False, out_dim=3)
 
-        # (before augmentation)
+        # nomalization before augmentation
         img = g.normalize_img(img)
         # g.show_img(img, "before augment")
-
-        # go through weight map
-        img = img * weight_map
 
         # data augmentation
         img = self.__augment.transform(input_data=img, seed=augment_seed)
@@ -99,7 +136,6 @@ class IDLDataSet:
         # nomalization might give background a positive value when rotating img
 
         # patch crop after augmentation, max size: 89 283 280
-        # a:b -> [a,b)
         img = self.__crop_img(img, patch_pos)
         # g.show_img(img, "patch cropped")
 
@@ -109,89 +145,17 @@ class IDLDataSet:
         img = torch.from_numpy(img)
         return img
 
-    # def __remove_non_annotated_slices(self,input_img):
-
     # must be overrided
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
-        cur_slice = self.__annotated_slices[idx]
 
-        # (1) simulated iDL
-        if self.__label_folder == g.DATASET_FOLDER:
-            label_path = os.path.join(
-                self.__label_folder, "HNCDL_{}_GTVs.nii".format(self.patient)
-            )
-        # (2) real iDL
-        else:
-            pass
-            # label_path = os.path.join(self.__label_folder, "????.nii")
+        cur_slice = self.__annotated_slices[idx]["slice.id"]
+        patch_pos = self.__annotated_slices[idx]["patch.pos"]
+        weight_map = self.__load_weight_map(cur_slice=cur_slice, patch_pos=patch_pos)
 
-        pred_path = os.path.join(self.__pred_folder, "pred_gtvs.nii")
-
-        # get origin pred+label union
-        origin_union = g.load_nii(label_path, binary=True)
-        origin_union += g.load_nii(pred_path, binary=True)
-        origin_union = np.where(origin_union > 1, 1, origin_union)
-        # make sure shape is 3
-        for i in range(len(origin_union.shape) - 3):
-            img = np.squeeze(origin_union, axis=0)
-
-        # weight map
-        weight_map = np.zeros_like(origin_union)
-        for i in range(weight_map.shape[0]):
-            if i == cur_slice:
-                weight_map[i] = np.ones_like(weight_map[i])
-
-        # get patch position
-        central = ndimage.measurements.center_of_mass(
-            origin_union[cur_slice]
-        )  # central (h,w)
-        patch_pos = [cur_slice]
-        patch_pos.append(round(central[0]))
-        patch_pos.append(round(central[1]))
-        for i in range(3):
-            patch_pos[i] -= round(g.PATCH_SIZE[i] / 2)
-            if patch_pos[i] <= 0:
-                patch_pos[i] = 0
-        patch_pos = tuple(patch_pos)
-
-        while 1:
-            # make sure same group use the same augment_seed
-            # !!! use python random, DO NOT use np.random !!!
-            # np.random + dataloader will cause multi-processing problem
-            augment_seed = random.randint(0, 2**16)
-
-            cropped_union = self.__load_img(
-                img_path=label_path,
-                augment_seed=augment_seed,
-                patch_pos=patch_pos,
-                weight_map=weight_map,
-                binary=True,
-            )
-            cropped_union += self.__load_img(
-                img_path=pred_path,
-                augment_seed=augment_seed,
-                patch_pos=patch_pos,
-                weight_map=weight_map,
-                binary=True,
-            )
-            cropped_union = torch.where(cropped_union > 1, 1, cropped_union)
-
-            # target volume in the patch is not big enough
-            if cropped_union.sum() < origin_union.sum() * 0.99:
-                continue
-            # target volume in the patch is big enough, break
-            else:
-                break
-
-        # weight map
-        if self.__ignore_other_anotated_slices:
-            reserved_slices = [cur_slice]
-        else:
-            reserved_slices = list(dict.fromkeys(self.__annotated_slices))
-        weight_map = np.zeros_like(origin_union)
-        for i in range(weight_map.shape[0]):
-            if i in reserved_slices:
-                weight_map[i] = np.ones_like(weight_map[i])
+        # make sure same group use the same augment_seed
+        # !!! use python random, DO NOT use np.random !!!
+        # np.random + dataloader will cause multi-processing problem
+        augment_seed = random.randint(0, 2**16)
 
         # load gtvt
         # gtvt_path = os.path.join(
@@ -213,15 +177,8 @@ class IDLDataSet:
         #     gtvn_img = gtvs_img - gtvt_img
 
         label_gtvs = self.__load_img(
-            img_path=label_path,
-            augment_seed=augment_seed,
-            patch_pos=patch_pos,
-            weight_map=weight_map,
+            img_path=self.__gtvs_path, augment_seed=augment_seed, patch_pos=patch_pos
         )
-
-        weight_map = self.__crop_img(weight_map, patch_pos)
-        weight_map = np.expand_dims(weight_map, axis=0)
-        weight_map = torch.from_numpy(weight_map)
 
         # bg_img = 1 - gtvt_img - gtvn_img
         # g.show_img(bg_img)
@@ -233,9 +190,7 @@ class IDLDataSet:
                 g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(self.patient, i)
             )
             img = self.__load_img(
-                img_path=img_path,
-                augment_seed=augment_seed,
-                patch_pos=patch_pos,
+                img_path=img_path, augment_seed=augment_seed, patch_pos=patch_pos
             )
 
             # concat multi-model img
@@ -247,28 +202,28 @@ class IDLDataSet:
         return multi_model_imgs, label_gtvs, weight_map  # labels
 
 
-# for testing
-# augment_methods = translate / elastic / rotate / scale
-annotated_slices = dict()
-annotated_slices["round=00"] = [35, 42]
-annotated_slices["round=01"] = [24]
-pred_folder = os.path.join(
-    g.TRAIN_RESULTS_FOLDER,
-    "baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
-    "baseline",
-    "patients",
-    "patient=336",
-)
-tmp_dataset = IDLDataSet(
-    patient="336",
-    annotated_slices=annotated_slices,
-    label_folder=g.DATASET_FOLDER,
-    pred_folder=pred_folder,
-    ignore_other_anotated_slices=False,
-    augment_times=8,
-    augment_methods=["rotate"],
-    augment_pct=1.0,
-    augment_low_limit=1,
-    augment_up_limit=1,
-)
-tmp_dataset.__getitem__(1)
+# # for testing
+# # augment_methods = translate / elastic / rotate / scale
+# annotated_slices = dict()
+# annotated_slices["round=00"] = [35, 42]
+# annotated_slices["round=01"] = [24]
+# # pred_folder = os.path.join(
+# #     g.TRAIN_RESULTS_FOLDER,
+# #     "baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+# #     "baseline",
+# #     "patients",
+# #     "patient=336",
+# # )
+# tmp_dataset = IDLDataSet(
+#     patient="336",
+#     annotated_slices=annotated_slices,
+#     label_folder=g.DATASET_FOLDER,
+#     # pred_folder=pred_folder,
+#     ignore_other_anotated_slices=False,
+#     augment_times=2,
+#     augment_methods=["rotate"],
+#     augment_pct=1.0,
+#     augment_low_limit=1,
+#     augment_up_limit=1,
+# )
+# tmp_dataset.__getitem__(2)

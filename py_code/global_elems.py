@@ -72,6 +72,7 @@ def save_json(data: dict, path: str):
 def load_json(path: str) -> dict:
     with open(path, mode="r") as json_file:
         data = json.load(json_file)
+    data = NestedDict(data)
     # call "save_json" to sort data by key
     save_json(data=data, path=path)
     return data
@@ -321,6 +322,10 @@ def check_limit(
     return input_value
 
 
+def list_remove_duplicates(input_list: list):
+    return list(dict.fromkeys(input_list))
+
+
 def get_avg_value(input_data: Union[list, dict]) -> float:
     if isinstance(input_data, list):
         return sum(input_data) / len(input_data)
@@ -348,12 +353,15 @@ def binarize_img(
     return img
 
 
-def load_nii(nii_path: str, binary=False):
+def load_nii(nii_path: str, binary: bool = False, out_dim: int = 0):
     img = sitk.ReadImage(nii_path)
     img = sitk.GetArrayFromImage(img)
     img = img.astype(np.float32)
     if binary:
         img = binarize_img(img)
+    if out_dim > 0 and len(img.shape) > out_dim:
+        for i in range(len(img.shape) - out_dim):
+            img = np.squeeze(img, axis=0)
     return img
 
 

@@ -43,11 +43,11 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # (before augmentation)
         img = g.normalize_img(img)
-        g.show_img(img, "before augment")
+        # g.show_img(img, "before augment")
 
         # data augmentation
         img = self.__augment.transform(input_data=img, seed=augment_seed)
-        g.show_img(img, "after augment")
+        # g.show_img(img, "after augment")
 
         # no normalization after augmentation,
         # nomalization might give background a positive value when rotating img

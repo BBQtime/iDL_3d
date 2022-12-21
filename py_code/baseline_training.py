@@ -249,8 +249,6 @@ class BaselineTraining(SharedTraining):
                 hyper=hyper,
                 debug_mode=debug_mode,
             )
-            g.print_line()
-            self._print_hyper()
 
             baseline_id = "baseline_" + self._init_train_id(
                 train_remark=train_remark,
@@ -258,6 +256,9 @@ class BaselineTraining(SharedTraining):
                 hyper=hyper,
                 debug_mode=debug_mode,
             )
+            g.print_line()
+            print(baseline_id)
+            self._print_hyper()
 
             baseline_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"

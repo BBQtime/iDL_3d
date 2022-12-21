@@ -29,13 +29,13 @@ idl = IDLTraining()
 #     )
 
 
-# # simulated iDL
-# if 1:
-#     idl.simulation(
-#         baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
-#         train_remark="delete.this",
-#         debug_mode=0,
-#     )
+# simulated iDL
+if 1:
+    idl.simulation(
+        baseline_id="baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+        # train_remark="delete.this",
+        # debug_mode=1,
+    )
 
 
 # # real-life iDL training

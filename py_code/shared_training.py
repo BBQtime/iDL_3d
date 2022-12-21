@@ -316,12 +316,11 @@ class SharedTraining:
     def _optimize_batch_size(self, dataset: Union[BaselineDataSet, IDLDataSet]):
         dataset_len = dataset.__len__()
         if dataset_len > self._batch_size_actual:
-            batch_size = math.ceil(
+            self._batch_size_actual = math.ceil(
                 dataset_len / (math.ceil(dataset_len / self._batch_size_actual))
             )
         else:
-            batch_size = dataset_len  # self._batch_size_actual
-        return batch_size
+            self._batch_size_actual = dataset_len  # self._batch_size_actual
 
     def _inference_single_patient(self, patient: str) -> dict:
         result = NestedDict()
