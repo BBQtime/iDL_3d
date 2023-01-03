@@ -1,7 +1,7 @@
 {
     "augment.low.limit": 2,
     "augment.methods": "elastic,rotate,flip.lr,flip.ud",
-    "augment.times": 8,
+    "augment.times": 2,
     "augment.up.limit": 4,
     "batch.size": 8,
     "dropout": 0.3,
@@ -11,9 +11,9 @@
     "loss.gamma": 0.5,
     "loss.weight": 0.5,
     "lr": [
-        "1e-05,1e-05",
+        "2e-06,2e-06",
         "5e-06,5e-06",
-        "2e-06,2e-06"
+        "1e-05,1e-05"
     ],
     "lr.decay.factor": 0.7,
     "lr.decay.patience": 3,

@@ -532,7 +532,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 os.path.join(
                     g.TRAIN_RESULTS_FOLDER,
                     self.__baseline_id,
-                    self.__idl_id,
+                    "baseline",
                     "patients",
                 )
             )
@@ -543,19 +543,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             idx = train_id_list.index(train_id)
             while not train_id_list[idx].startswith("baseline_"):
                 idx -= 1
+                if idx == -1:  # for safty
+                    g.exit_app("__choose_train_id(): fail to get baseline id")
             self.__baseline_id = train_id_list[idx]
+
             # get idl id
             self.__idl_id = train_id[len(self.__IDL_ID_HEAD) :]
-            # get round
-            if self.__round is None:
-                self.__round = "round=01"
+
             # get patient list
             patient_list = g.get_sub_folders(
                 os.path.join(
                     g.TRAIN_RESULTS_FOLDER,
                     self.__baseline_id,
                     self.__idl_id,
-                    self.__round,
                     "patients",
                 )
             )
@@ -607,13 +607,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load round combobox
         self.__comboxes["round"].clear()
 
-        if self.__idl_id == "baseline":
-            self.__comboxes["round"].addItem("baseline")
-        else:
+        self.__comboxes["round"].addItem("00")
+        if self.__idl_id != "baseline":
             round_list = g.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, self.__idl_id),
+                os.path.join(
+                    g.TRAIN_RESULTS_FOLDER,
+                    self.__baseline_id,
+                    self.__idl_id,
+                    "patients",
+                    "patient={}".format(self.__patient),
+                ),
                 key_word="round=",
             )
+            # change round_list from "round=01" to "01"
+            for i in range(len(round_list)):
+                round_list[i] = round_list[i][len("round=") :]
             self.__comboxes["round"].addItems(round_list)
 
         self.__comboxes["round"].activated.connect(self.__choose_round)
@@ -636,7 +644,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __choose_round(self, reset_round: bool = True):
         round_list = g.get_combox_content(self.__comboxes["round"])
         if reset_round is False:
-            # see if round is in comboxes["round"]
+            # this happens when
+            # (1) current idl training has less round than prev idl training
+            # (2) the first time loading a idl training
             if self.__round not in round_list:
                 self.__round = self.__comboxes["round"].currentText()
             else:
@@ -645,25 +655,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__round = self.__comboxes["round"].currentText()
 
         # load pred
-        if self.__idl_id == "baseline":
-            cur_patient_folder = os.path.join(
+        if self.__idl_id == "baseline" or self.__round == "00":
+            pred_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
-                self.__idl_id,
+                "baseline",
                 "patients",
                 "patient={}".format(self.__patient),
             )
         else:
-            cur_patient_folder = os.path.join(
+            pred_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
-                self.__round,
                 "patients",
                 "patient={}".format(self.__patient),
+                "round={}".format(self.__round),
             )
         pred_path = NestedDict()
-        pred_path["pred.gtvs"] = os.path.join(cur_patient_folder, "pred_gtvs.nii")
+        pred_path["pred.gtvs"] = os.path.join(pred_folder, "pred_gtvs.nii")
         # pred_path["pred.gtvt"] = os.path.join(cur_round_folder, "pred_gtvt.nii")
         # pred_path["pred.gtvn"] = os.path.join(cur_round_folder, "pred_gtvn.nii")
 
@@ -672,28 +682,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
         # load dsc/msd/hd95 scores
-        if self.__idl_id == "baseline":
-            score_json_path = os.path.join(
+        score_dict = g.load_json(
+            os.path.join(
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
                 "score.json",
             )
-        else:
-            score_json_path = os.path.join(
-                g.TRAIN_RESULTS_FOLDER,
-                self.__baseline_id,
-                self.__idl_id,
-                self.__round,
-                "score.json",
-            )
+        )
 
-        # load score json file
-        score_dict = g.load_json(score_json_path)
         for metric_type in g.METRICS_LIST:
+            # baseline
             self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
                 metric_type
             ]
+            # idl
+            if self.__idl_id != "baseline":
+                self.__score[metric_type] = self.__score[metric_type][
+                    "round={}".format(self.__round)
+                ]
 
         # enable/disable prev/next round buttons
         idx = self.__comboxes["round"].currentIndex()

@@ -498,7 +498,7 @@ class IDLTraining(SharedTraining):
         idl_score_json_path = os.path.join(idl_score_json_path, "score.json")
         idl_score = g.load_json(idl_score_json_path)
         for i in g.METRICS_LIST:
-            idl_score["patient={}".format(patient)][i]["baseline"] = baseline_score[
+            idl_score["patient={}".format(patient)][i]["round=00"] = baseline_score[
                 "patient={}".format(patient)
             ][i]
         g.save_json(idl_score, idl_score_json_path)
