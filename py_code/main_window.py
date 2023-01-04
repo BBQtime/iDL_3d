@@ -625,7 +625,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__comboxes["round"].addItems(round_list)
 
         self.__comboxes["round"].activated.connect(self.__choose_round)
-        self.__comboxes["round"].setEnabled(True)
+        if self.__idl_id == "baseline":
+            self.__comboxes["round"].setEnabled(False)
+        else:
+            self.__comboxes["round"].setEnabled(True)
 
         # update slice id
         # if this is first time after initialization, slice_is=None,
@@ -938,11 +941,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __get_annotated_slices(self) -> list:
         # get current round
 
-        if self.__round.startswith("round="):
-            cur_round = int(self.__round[len("round=") :])
-            if cur_round == 0:
-                return []
-        else:
+        if self.__idl_id == "baseline" or self.__round == "00":
             return []
 
         # load annotated slices
@@ -950,21 +949,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             g.TRAIN_RESULTS_FOLDER,
             self.__baseline_id,
             self.__idl_id,
-            self.__patient,
+            "patients",
+            "patient={}".format(self.__patient),
             "annotated_slices.json",
         )
         if not os.path.exists(json_path):
             return []
 
         annotated_slice_dict = g.load_json(json_path)
-        if cur_round > len(annotated_slice_dict):
-            cur_round = len(annotated_slice_dict)
-
         annotated_slice_list = []
+
         for cur_round in annotated_slice_dict:
             annotated_slice_list += g.str_to_list(annotated_slice_dict[cur_round])
-            if cur_round == self.__round:
+            if (cur_round[len("round=") :]) == self.__round:
                 break
+
+        for i in range(len(annotated_slice_list)):
+            annotated_slice_list[i] = int(annotated_slice_list[i])
 
         return annotated_slice_list
 
@@ -979,7 +980,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         annotated_slices = self.__get_annotated_slices()
 
         # change slice_id from number to str "0xx"
-        if "{:03d}".format(self.__slice_id) in annotated_slices:
+        if int(self.__slice_id) in annotated_slices:
             return True
         else:
             return False

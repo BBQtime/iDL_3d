@@ -84,7 +84,7 @@ def list_to_str(input_list: list, split_symbol: str = ",") -> str:
     return split_symbol.join(str(i) for i in input_list)
 
 
-# "1,2,3,4" -> [1,2,3,4]
+# "1,2,3,4" -> ["1","2","3","4"]
 def str_to_list(input_str: str, split_symbol: str = ",") -> list:
     input_str = str(input_str)
     split_symbol = str(split_symbol)
