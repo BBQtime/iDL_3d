@@ -35,19 +35,15 @@ class BaselineDataSet(torch.utils.data.Dataset):
         return len(self.patient_list)
 
     def __load_img(self, img_path: str, augment_seed: int, patch_pos: tuple):
-        img = g.load_nii(img_path)
-
-        # make sure img.shape is 3
-        for i in range(len(img.shape) - 3):
-            img = np.squeeze(img, axis=0)
+        img = g.load_nii(nii_path=img_path, out_dim=3)
 
         # (before augmentation)
         img = g.normalize_img(img)
-        # g.show_img(img, "before augment")
+        # g.save_nii(img, os.path.join(g.PROJ_PATH, "debug", "before_augment.nii"))
 
         # data augmentation
         img = self.__augment.transform(input_data=img, seed=augment_seed)
-        # g.show_img(img, "after augment")
+        # g.save_nii(img, os.path.join(g.PROJ_PATH, "debug", "after_augment.nii"))
 
         # no normalization after augmentation,
         # nomalization might give background a positive value when rotating img
@@ -158,13 +154,14 @@ class BaselineDataSet(torch.utils.data.Dataset):
         return self.get_item(patient=patient, patch_pos=(), target_vol_pct=0)
 
 
-# # for testing
-# # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
-# tmp_dataset = BaselineDataSet(
-#     patient_list=["336"],
-#     augment_methods=["rotate", "flip.ud"],
-#     augment_pct=1.0,
-#     augment_low_limit=2,
-#     augment_up_limit=2,
-# )
-# tmp_dataset.__getitem__(0)
+# for testing
+# augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
+# if 0:
+#     tmp_dataset = BaselineDataSet(
+#         patient_list=["336"],
+#         augment_methods=["rotate"],
+#         augment_pct=1.0,
+#         augment_low_limit=1,
+#         augment_up_limit=1,
+#     )
+#     tmp_dataset.__getitem__(0)

@@ -33,7 +33,7 @@ class DataAugmentation:
         augment_dict["translate"] = iaa.Affine(
             translate_percent={"x": (-0.25, 0.25), "y": (-0.25, 0.25)}
         )
-        augment_dict["rotate"] = iaa.Affine(rotate=(10, 350))
+        augment_dict["rotate"] = iaa.Affine(rotate=(0, 360))
         augment_dict["flip.lr"] = iaa.Fliplr(1.0)
         augment_dict["flip.ud"] = iaa.Flipud(1.0)
 
@@ -51,6 +51,16 @@ class DataAugmentation:
     def transform(self, input_data: ndarray, seed: int) -> ndarray:
         if self.__transform is None:
             return input_data
-        else:
+
+        if len(input_data.shape) == 3:
+            for i in range(input_data.shape[0]):
+                ia.seed(seed)
+                input_data[i] = self.__transform(images=input_data[i])
+            return input_data
+
+        elif len(input_data.shape) == 2:
             ia.seed(seed)
             return self.__transform(images=input_data)
+
+        else:
+            return input_data

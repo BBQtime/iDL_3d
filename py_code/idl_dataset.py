@@ -55,10 +55,10 @@ class IDLDataSet:
                 d = g.check_limit(d, 0, self.__img_shape[0] - g.PATCH_SIZE[0])
                 # augmentation times
                 for times in range(augment_times):
-                    # for h in range(3):
-                    for h in [1]:
-                        # for w in range(3):
-                        for w in [1]:
+                    for h in range(3):
+                        # for h in [1]:
+                        for w in range(3):
+                            # for w in [1]:
                             patch_pos = [d, h, w]
                             for i in [1, 2]:
                                 if patch_pos[i] == 2:
@@ -110,7 +110,13 @@ class IDLDataSet:
             if i in reserved_slices:
                 weight_map[i] = np.ones_like(weight_map[i])
 
+        # g.save_nii(
+        #     weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map_origin.nii")
+        # )
         weight_map = self.__crop_img(weight_map, patch_pos)
+        # g.save_nii(
+        #     weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map_patch.nii")
+        # )
 
         # unsqueeze img to 4 dim before convert to Tensor
         weight_map = np.expand_dims(weight_map, axis=0)
@@ -139,8 +145,19 @@ class IDLDataSet:
         # nomalization might give background a positive value when rotating img
 
         # patch crop after augmentation, max size: 89 283 280
+        # weight_map = g.load_nii(
+        #     os.path.join(g.PROJ_PATH, "debug", "weight_map_origin.nii")
+        # )
+        # g.save_nii(
+        #     img * weight_map, os.path.join(g.PROJ_PATH, "debug", "img_origin.nii")
+        # )
         img = self.__crop_img(img, patch_pos)
-        # g.show_img(img, "patch cropped")
+        # weight_map = g.load_nii(
+        #     os.path.join(g.PROJ_PATH, "debug", "weight_map_patch.nii")
+        # )
+        # g.save_nii(
+        #     img * weight_map, os.path.join(g.PROJ_PATH, "debug", "img_patch.nii")
+        # )
 
         # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
@@ -209,8 +226,8 @@ class IDLDataSet:
 # augment_methods = translate / elastic / rotate / scale
 if 0:
     annotated_slices = dict()
-    annotated_slices["round=00"] = [35, 42]
-    annotated_slices["round=01"] = [24]
+    annotated_slices["round=00"] = [20, 40]
+    annotated_slices["round=01"] = [30]
     # pred_folder = os.path.join(
     #     g.TRAIN_RESULTS_FOLDER,
     #     "baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
@@ -225,7 +242,7 @@ if 0:
         # pred_folder=pred_folder,
         ignore_other_anotated_slices=False,
         augment_times=1,
-        augment_methods=["rotate"],
+        augment_methods=[],  # ["rotate"],
         augment_pct=1.0,
         augment_low_limit=1,
         augment_up_limit=1,

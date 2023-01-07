@@ -61,7 +61,10 @@ class SharedTraining:
 
         # augment methods
         self._augment_methods = str(hyper["augment.methods"]).lower()
-        self._augment_methods = g.str_to_list(self._augment_methods)
+        if self._augment_methods == "":
+            self._augment_methods = []
+        else:
+            self._augment_methods = g.str_to_list(self._augment_methods)
 
         # augment lower/upper limit
         self._augment_low_limit = int(hyper["augment.low.limit"])

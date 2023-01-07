@@ -441,6 +441,7 @@ class IDLTraining(SharedTraining):
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
+                labels = labels * weight_map
                 outputs = self._cnn(inputs)
                 outputs = outputs * weight_map
                 loss = self._loss_func(outputs, labels)
