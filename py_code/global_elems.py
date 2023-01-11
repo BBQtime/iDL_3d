@@ -95,6 +95,14 @@ def get_dict_keys(input_dict: dict):
     return list(input_dict.keys())
 
 
+def get_dict_key_max(input_dict: dict):
+    return max(input_dict.keys(), key=(lambda k: input_dict[k]))
+
+
+def get_dict_key_min(input_dict: dict):
+    return min(input_dict.keys(), key=(lambda k: input_dict[k]))
+
+
 # {"0": [a, b], "1": [c, d], "2": [e]} -> [a, b, c, d, e]
 def dict_to_list(input_dict: dict):
     output_list = []
@@ -532,11 +540,10 @@ NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
 DATASET_FOLDER = None
 DATASET_SPLITTING_JSON = None
-BASELINE_HYPER_JSON = None
-IDL_HYPER_JSON = None
+DATASET_K_FOLDS = None
+HYPER_JSON_BASELINE = None
+HYPER_JSON_IDL = None
 TRAIN_RESULTS_FOLDER = None
-BASELINE_TENSORBOARD_FOLDER = None
-IDL_TENSORBOARD_FOLDER = None
 METRICS_LIST = None
 
 
@@ -549,11 +556,10 @@ def __global_init():
     global CNN_STATE_DICT_ONLY
     global DATASET_FOLDER
     global DATASET_SPLITTING_JSON
-    global BASELINE_HYPER_JSON
-    global IDL_HYPER_JSON
+    global DATASET_K_FOLDS
+    global HYPER_JSON_BASELINE
+    global HYPER_JSON_IDL
     global TRAIN_RESULTS_FOLDER
-    global BASELINE_TENSORBOARD_FOLDER
-    global IDL_TENSORBOARD_FOLDER
     global METRICS_LIST
 
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
@@ -606,15 +612,10 @@ def __global_init():
 
     DATASET_FOLDER = __json_data["dataset.folder"]
     DATASET_SPLITTING_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
-    BASELINE_HYPER_JSON = os.path.join(PROJ_PATH, __json_data["baseline.hyper.json"])
-    IDL_HYPER_JSON = os.path.join(PROJ_PATH, __json_data["idl.hyper.json"])
+    DATASET_K_FOLDS = __json_data["dataset.k.folds"]
+    HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __json_data["hyper.json.baseline"])
+    HYPER_JSON_IDL = os.path.join(PROJ_PATH, __json_data["hyper.json.idl"])
     TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
-    BASELINE_TENSORBOARD_FOLDER = os.path.join(
-        PROJ_PATH, __json_data["baseline.tensorboard.folder"]
-    )
-    IDL_TENSORBOARD_FOLDER = os.path.join(
-        PROJ_PATH, __json_data["idl.tensorboard.folder"]
-    )
 
     METRICS_LIST = ["dsc", "msd", "hd95"]
 

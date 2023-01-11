@@ -180,12 +180,12 @@ class UNetPP(nn.Module):
         x03 = vgg["0"]["3"](torch.cat([x00, x01, x02, up["1"]["2"](x12)], 1))
         x04 = vgg["0"]["4"](torch.cat([x00, x01, x02, x03, up["1"]["3"](x13)], 1))
 
-        if 0:  # deep supervision:
-            output1 = self.final(x01)
-            output2 = self.final(x02)
-            output3 = self.final(x03)
-            output4 = self.final(x04)
-            return [output1, output2, output3, output4]
+        if 1:  # deep supervision:
+            output0 = self.final(x01)
+            output1 = self.final(x02)
+            output2 = self.final(x03)
+            output3 = self.final(x04)
+            return [output0, output1, output2, output3]
 
         else:
             output = self.final(x04)

@@ -7,6 +7,7 @@
     "dropout": 0.3,
     "early.stop.patience": 30,
     "epochs": 500,
+    "keep.best.cnn.num": 5,
     "loss.delta": 0.6,
     "loss.gamma": 0.5,
     "loss.weight": 0.5,

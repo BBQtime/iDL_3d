@@ -135,22 +135,11 @@ class SharedTraining:
             cnn = nn.DataParallel(cnn).to(g.DEVICE)
         return cnn
 
-    def __get_cnn_name(self):
-        if g.used_gpu_count() > 1:
-            cnn = self._cnn.module
-        else:
-            cnn = self._cnn
-        if isinstance(cnn, UNetPP):
-            return "unet++"
-        else:
-            return None
-
     def _print_hyper(self, print_dict: NestedDict):
         if torch.cuda.device_count() < 1:
             print_dict["device:"] = "cpu"
         else:
             print_dict["device:"] = "gpu: " + os.environ["CUDA_VISIBLE_DEVICES"]
-        print_dict["cnn name:"] = self.__get_cnn_name()
         print_dict["lr:"] = self._lr
         print_dict["lr actual:"] = self._lr_actual
         print_dict["lr decay factor:"] = self._lr_decay_factor
@@ -205,61 +194,52 @@ class SharedTraining:
         # save dict
         g.save_json(data=hyper_dict, path=json_path)
 
-    def _load_dataset(self, debug_mode: bool = False):
-        # if json file doesnt exist, spilt dataset and regenerate json file
-        if not os.path.exists(g.DATASET_SPLITTING_JSON):
-            self.__split_dataset()
-
+    def _load_dataset(self, fold: int, debug_mode: bool = False):
         json_data = g.load_json(g.DATASET_SPLITTING_JSON)
-        train_patient_list = json_data["train.patient.list"]
-        valid_patient_list = json_data["valid.patient.list"]
-        test_patient_list = json_data["test.patient.list"]
+
+        if len(json_data) - 1 != g.DATASET_K_FOLDS:
+            json_data = self.__split_dataset()
+
+        test_patients = g.str_to_list(json_data["test.patients"])
+        valid_patients = g.str_to_list(json_data["fold.{}".format(fold)])
+
+        train_patients = []
+        for i in json_data:
+            if i != "test.patients" and i != "fold.{}".format(fold):
+                train_patients += g.str_to_list(json_data[i])
+
+        # if 1:
+        #     print(set(train_patients) & set(valid_patients))
 
         if debug_mode:
-            train_patient_list = train_patient_list[:2]
-            valid_patient_list = valid_patient_list[:2]
-            test_patient_list = test_patient_list[:2]
+            train_patients = train_patients[:2]
+            valid_patients = valid_patients[:2]
+            test_patients = test_patients[:2]
 
-        return train_patient_list, valid_patient_list, test_patient_list
+        return train_patients, valid_patients, test_patients
 
     # split dataset and save result into json file
     def __split_dataset(self):
-        json_data = g.load_json(os.path.join(g.PROJ_PATH, "settings.json"))
+        dataset_split = g.load_json(g.DATASET_SPLITTING_JSON)
+        train_patients = []
 
-        dataset_split_seed = int(json_data["dataset.split.seed"])
-        train_pct = float(json_data["dataset.train.pct"])
-        train_pct = g.check_limit(train_pct, 0.5, 0.95)
-        valid_pct = float(json_data["dataset.valid.pct"])
-        valid_pct = g.check_limit(valid_pct, 0.05, 0.2)
-        test_pct = float(json_data["dataset.test.pct"])
-        test_pct = g.check_limit(test_pct, 0.05, 0.2)
-        total_pct = train_pct + valid_pct + test_pct
-        if total_pct > 1:
-            raise ValueError("percentage of train/valid/test set must <= 1")
+        for fold in g.get_dict_keys(dataset_split):
+            if fold != "test.patients":
+                train_patients += g.str_to_list(dataset_split[fold])
+                dataset_split.pop(fold)
 
-        # dataset_split_seed keeps train/valid/test unchanged everytime
-        patient_list = g.get_sub_folders(
-            folder_path=g.DATASET_FOLDER,
-            key_word="GTVt",
-            shuffle=True,
-            seed=dataset_split_seed,
-        )
+        fold_len = round(len(train_patients) / g.DATASET_K_FOLDS)
+        for fold in range(1, g.DATASET_K_FOLDS + 1):
+            if fold == g.DATASET_K_FOLDS:
+                dataset_split["fold.{}".format(fold)] = g.list_to_str(train_patients)
+            else:
+                dataset_split["fold.{}".format(fold)] = g.list_to_str(
+                    train_patients[:fold_len]
+                )
+                train_patients = train_patients[fold_len:]
 
-        train_num = int(len(patient_list) * train_pct)
-        valid_num = int(len(patient_list) * valid_pct)
-        if total_pct == 1:
-            test_num = len(patient_list) - train_num - valid_num
-        elif total_pct < 1:
-            test_num = int(len(patient_list) * test_pct)
-
-        json_data = NestedDict()
-        json_data["train.patient.list"] = patient_list[:train_num]
-        patient_list = patient_list[train_num:]
-        json_data["valid.patient.list"] = patient_list[:valid_num]
-        patient_list = patient_list[valid_num:]
-        json_data["test.patient.list"] = patient_list[:test_num]
-
-        g.save_json(json_data, g.DATASET_SPLITTING_JSON)
+        g.save_json(dataset_split, g.DATASET_SPLITTING_JSON)
+        return dataset_split
 
     def _save_cnn(self, save_path: str):
         if not save_path.endswith(".pt"):
@@ -325,7 +305,11 @@ class SharedTraining:
         else:
             self._batch_size_actual = dataset_len  # self._batch_size_actual
 
-    def _inference_single_patient(self, patient: str) -> dict:
+    def _inference_single_patient(
+        self,
+        patient: str,
+        unetpp_output: int = 3,
+    ) -> dict:
         result = NestedDict()
         dataset = BaselineDataSet(patient_list=[patient])
 
@@ -362,7 +346,7 @@ class SharedTraining:
                         # unsqueeze to add batch dim
                         inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
                         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-                        outputs = self._cnn.forward(inputs)
+                        outputs = self._cnn.forward(inputs)[unetpp_output]
                         outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
                         # add current output patch

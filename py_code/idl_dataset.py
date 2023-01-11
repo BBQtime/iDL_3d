@@ -55,10 +55,10 @@ class IDLDataSet:
                 d = g.check_limit(d, 0, self.__img_shape[0] - g.PATCH_SIZE[0])
                 # augmentation times
                 for times in range(augment_times):
-                    for h in range(3):
-                        # for h in [1]:
-                        for w in range(3):
-                            # for w in [1]:
+                    # for h in range(3):
+                    for h in [1]:
+                        # for w in range(3):
+                        for w in [1]:
                             patch_pos = [d, h, w]
                             for i in [1, 2]:
                                 if patch_pos[i] == 2:

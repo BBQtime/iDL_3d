@@ -197,7 +197,7 @@ class IDLTraining(SharedTraining):
     #     g.print_line()
     #     print(baseline_cnn_path)
     #     # load hypers
-    #     idl_hyper_dict = g.load_json(g.IDL_HYPER_JSON)
+    #     idl_hyper_dict = g.load_json(g.HYPER_JSON_IDL)
     #     baseline_hyper_dict = g.load_json(baseline_hyper_path)
 
     #     # make sure all hypers are unique, no arrangement
@@ -442,7 +442,7 @@ class IDLTraining(SharedTraining):
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
                 labels = labels * weight_map
-                outputs = self._cnn(inputs)
+                outputs = self._cnn(inputs)[3]
                 outputs = outputs * weight_map
                 loss = self._loss_func(outputs, labels)
                 loss.backward()  # get grad (must after: optim.zero_grad())
@@ -556,7 +556,7 @@ class IDLTraining(SharedTraining):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        for hyper in self._load_group_hyper(g.IDL_HYPER_JSON):
+        for hyper in self._load_group_hyper(g.HYPER_JSON_IDL):
 
             baseline_cnn_path = g.get_sub_files(
                 os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"),
@@ -573,7 +573,7 @@ class IDLTraining(SharedTraining):
             idl_id = "idl_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
-                hyper_json_path=g.IDL_HYPER_JSON,
+                hyper_json_path=g.HYPER_JSON_IDL,
                 hyper=hyper,
             )
             g.print_line()
