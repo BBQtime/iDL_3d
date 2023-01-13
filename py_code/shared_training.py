@@ -2,6 +2,7 @@ import global_elems as g
 import os
 import torch
 import math
+import random
 import numpy as np
 import torch.nn as nn
 from loss_func import UnifiedFocalLoss
@@ -227,6 +228,8 @@ class SharedTraining:
             if fold != "test.patients":
                 train_patients += g.str_to_list(dataset_split[fold])
                 dataset_split.pop(fold)
+
+        random.shuffle(train_patients)
 
         fold_len = round(len(train_patients) / g.DATASET_K_FOLDS)
         for fold in range(1, g.DATASET_K_FOLDS + 1):

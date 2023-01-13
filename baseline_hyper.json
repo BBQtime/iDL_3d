@@ -4,6 +4,7 @@
     "augment.pct": 0.8,
     "augment.up.limit": 3,
     "batch.size": 8,
+    "cross.valid": false,
     "dropout": 0.3,
     "early.stop.patience": 30,
     "epochs": 500,

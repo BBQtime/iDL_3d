@@ -74,6 +74,9 @@ class BaselineTraining(SharedTraining):
         self._patch_tar_vol_thold = float(hyper["patch.tar.vol.thold"])
         self._patch_tar_vol_thold = g.check_limit(self._patch_tar_vol_thold, 0, 1)
 
+        # use cross validation or not
+        self._cross_valid = bool(hyper["cross.valid"])
+
         # load shared hyper parameters
         super()._load_hyper(
             hyper=hyper,
@@ -136,6 +139,7 @@ class BaselineTraining(SharedTraining):
         print_dict["dataset.valid.len"] = self._valid_loader.dataset.__len__()
         print_dict["dataset.test.len"] = self._test_loader.dataset.__len__()
         print_dict["dataset.k.folds"] = g.DATASET_K_FOLDS
+        print_dict["cross.valid"] = self._cross_valid
         print_dict["patch.empty.pct"] = self._patch_empty_pct
         print_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._print_hyper(print_dict)
@@ -152,6 +156,7 @@ class BaselineTraining(SharedTraining):
         hyper_dict["dataset.valid.len"] = self._valid_loader.dataset.__len__()
         hyper_dict["dataset.test.len"] = self._test_loader.dataset.__len__()
         hyper_dict["dataset.k.folds"] = g.DATASET_K_FOLDS
+        hyper_dict["cross.valid"] = self._cross_valid
         hyper_dict["epochs"] = self._epochs
         hyper_dict["epochs.actual"] = self._epochs_actual
         hyper_dict["early.stop.patience"] = self._early_stop_patience
@@ -323,6 +328,9 @@ class BaselineTraining(SharedTraining):
 
                 # save hyper after training
                 self._save_hyper(hyper_save_path)
+
+                if self._cross_valid is False:
+                    break
 
             self.inference(
                 baseline_id=baseline_id,
