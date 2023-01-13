@@ -17,11 +17,13 @@ class BaselineDataSet(torch.utils.data.Dataset):
         self,
         patient_list: list,
         augment_methods: list = [],
-        augment_pct: float = 0.0,
+        augment_pct: float = 0,
         augment_low_limit: int = 0,
         augment_up_limit: int = 0,
+        patch_empty_pct: float = -1,  # -1 for valid/test set and inference
+        patch_tar_vol_thold: float = 0,  # 0 for valid/test set and inference
     ):
-        self.patient_list = patient_list
+        self.patient_list = patient_list  # make patient_list public
 
         self.__augment = DataAugmentation(
             methods=augment_methods,
@@ -29,6 +31,9 @@ class BaselineDataSet(torch.utils.data.Dataset):
             low_limit=augment_low_limit,
             up_limit=augment_up_limit,
         )
+
+        self.__patch_empty_pct = patch_empty_pct
+        self.__patch_tar_vol_thold = patch_tar_vol_thold
 
     # must be overrided
     def __len__(self):
@@ -46,7 +51,8 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # g.save_nii(img, os.path.join(g.PROJ_PATH, "debug", "after_augment.nii"))
 
         # no normalization after augmentation,
-        # nomalization might give background a positive value when rotating img
+        # because when rotating img
+        # nomalization might give background a positive value
 
         # patch crop after augmentation, max size: 89 283 280
         # a:b -> [a,b)
@@ -67,7 +73,6 @@ class BaselineDataSet(torch.utils.data.Dataset):
         self,
         patient: str,
         patch_pos: tuple = (),  # make this empty for training
-        target_vol_pct: float = 0,  # make this 0 for inference
     ) -> Tuple[Tensor, Tensor]:
 
         origin_label_gtvs = g.load_nii(
@@ -75,8 +80,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
             binary=True,
         )
 
+        patch_empty_thold = random.uniform(0, 1)
+        patch_tar_vol_thold_gtvs = origin_label_gtvs.sum() * self.__patch_tar_vol_thold
+        label_gtvs = None
+
         # loop until target volume in patch is big enough
-        while 1:
+        for attempt_num in range(50):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
@@ -111,7 +120,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             #     gtvn_img = gtvs_img - gtvt_img
 
             # load gtvs
-            label_gtvs = self.__load_img(
+            tmp_label_gtvs = self.__load_img(
                 img_path=os.path.join(
                     g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)
                 ),
@@ -119,12 +128,54 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 patch_pos=patch_pos,
             )
 
-            # target volume in the patch is not big enough
-            if label_gtvs.sum() < (origin_label_gtvs.sum() * target_vol_pct):
-                patch_pos = ()
-                continue
+            # current patch must contain label
+            if (
+                self.__patch_empty_pct == -1
+                or self.__patch_empty_pct < patch_empty_thold
+            ):
+                # target volume in the patch is not big enough
+                if tmp_label_gtvs.sum() < patch_tar_vol_thold_gtvs:
+                    # keep the largest patch
+                    if label_gtvs is None or tmp_label_gtvs.sum() > label_gtvs.sum():
+                        label_gtvs = tmp_label_gtvs
+                    # print(
+                    #     attempt_num,
+                    #     label_gtvs.sum() / origin_label_gtvs.sum(),
+                    #     tmp_label_gtvs.sum() / origin_label_gtvs.sum(),
+                    # )
+                    patch_pos = ()
+                    continue
+                # target volume is large enough, break
+                else:
+                    label_gtvs = tmp_label_gtvs
+                    # print(
+                    #     attempt_num,
+                    #     label_gtvs.sum() / origin_label_gtvs.sum(),
+                    #     tmp_label_gtvs.sum() / origin_label_gtvs.sum(),
+                    # )
+                    break
+
+            # current patch must be empty
             else:
-                break  # target volume is large enough, break
+                # current patch is empty, break
+                if tmp_label_gtvs.sum() == 0:
+                    label_gtvs = tmp_label_gtvs
+                    # print(
+                    #     attempt_num,
+                    #     label_gtvs.sum() / origin_label_gtvs.sum(),
+                    #     tmp_label_gtvs.sum() / origin_label_gtvs.sum(),
+                    # )
+                    break
+                else:
+                    # keep the smallest patch
+                    if label_gtvs is None or tmp_label_gtvs.sum() < label_gtvs.sum():
+                        label_gtvs = tmp_label_gtvs
+                    # print(
+                    #     attempt_num,
+                    #     label_gtvs.sum() / origin_label_gtvs.sum(),
+                    #     tmp_label_gtvs.sum() / origin_label_gtvs.sum(),
+                    # )
+                    continue
 
         # bg_img = 1 - gtvt_img - gtvn_img
         # g.show_img(bg_img)
@@ -151,7 +202,10 @@ class BaselineDataSet(torch.utils.data.Dataset):
     # this function is only for training, not for inference
     def __getitem__(self, idx: int):
         patient = self.patient_list[idx]
-        return self.get_item(patient=patient, patch_pos=(), target_vol_pct=0)
+        return self.get_item(
+            patient=patient,
+            patch_pos=(),
+        )
 
 
 # for testing
@@ -160,7 +214,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 #     tmp_dataset = BaselineDataSet(
 #         patient_list=["336"],
 #         augment_methods=["rotate"],
-#         augment_pct=1.0,
+#         augment_pct=1,
 #         augment_low_limit=1,
 #         augment_up_limit=1,
 #     )

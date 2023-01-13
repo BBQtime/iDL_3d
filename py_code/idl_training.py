@@ -41,7 +41,7 @@ class IDLTraining(SharedTraining):
         self._scheduler = ReduceLROnPlateau(
             optimizer=self._optim,
             mode="min",
-            factor=self._lr_decay_factor,  # "factor=1.0" will cause an error
+            factor=self._lr_decay_factor,  # "factor=1" will cause an error
             patience=self._lr_decay_patience,
             min_lr=self._lr_min,
         )
@@ -67,7 +67,7 @@ class IDLTraining(SharedTraining):
         self._scheduler = ReduceLROnPlateau(
             optimizer=self._optim,
             mode="min",
-            factor=self._lr_decay_factor,  # "factor=1.0" will cause an error
+            factor=self._lr_decay_factor,  # "factor=1" will cause an error
             patience=self._lr_decay_patience,
             min_lr=self._lr_min,
         )
@@ -100,7 +100,7 @@ class IDLTraining(SharedTraining):
             self._lr[i] = float(self._lr[i])
             self._lr[i] = g.check_limit(self._lr[i], 1e-10, None)
             # check lr_min, make sure it is lower than any lr in lr_step
-            self._lr_min = g.check_limit(self._lr_min, 0.0, self._lr[i])
+            self._lr_min = g.check_limit(self._lr_min, 0, self._lr[i])
 
         used_gpu_count = g.used_gpu_count()
         if used_gpu_count > 1:
@@ -159,14 +159,14 @@ class IDLTraining(SharedTraining):
 
     def _print_hyper(self):
         print_dict = NestedDict()
-        print_dict["num of patients:"] = len(self._patient_list)
-        print_dict["iter:"] = self._iter
-        print_dict["augment times:"] = self._augment_times
-        print_dict["slice select step:"] = self._select_step
-        print_dict["slice select scenario:"] = self._select_scenario
-        print_dict["layer freezing:"] = self._layer_freezing
-        print_dict["reset lr:"] = self._lr_reset
-        print_dict["dropout:"] = self._dropout
+        print_dict["patients.num"] = len(self._patient_list)
+        print_dict["iter"] = self._iter
+        print_dict["augment.times"] = self._augment_times
+        print_dict["select.step"] = self._select_step
+        print_dict["select.scenario"] = self._select_scenario
+        print_dict["layer.freezing"] = self._layer_freezing
+        print_dict["lr.reset"] = self._lr_reset
+        print_dict["dropout"] = self._dropout
         super()._print_hyper(print_dict)
 
     def _save_hyper(self, json_path: str):

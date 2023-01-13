@@ -41,7 +41,7 @@ class SharedTraining:
     def _load_hyper(self, hyper: dict, exist_cnn_path: str = None):
         # DROPOUT
         self._dropout = float(hyper["dropout"])
-        self._dropout = g.check_limit(self._dropout, 0.0, 0.9)
+        self._dropout = g.check_limit(self._dropout, 0, 0.9)
 
         # batch size
         self._batch_size = int(hyper["batch.size"])
@@ -56,7 +56,7 @@ class SharedTraining:
 
         # lr decay factor
         self._lr_decay_factor = float(hyper["lr.decay.factor"])
-        # lr_decay_factor=1.0 will cause error
+        # lr_decay_factor=1 will cause error
         self._lr_decay_factor = g.check_limit(self._lr_decay_factor, 0.01, 0.9999999999)
 
         # augment methods
@@ -78,9 +78,9 @@ class SharedTraining:
         # loss function parameters
         try:
             weight = float(hyper["loss.weight"])
-            weight = g.check_limit(weight, 0.0, 1.0)
+            weight = g.check_limit(weight, 0, 1)
             delta = float(hyper["loss.delta"])
-            delta = g.check_limit(delta, 0.0, 1.0)
+            delta = g.check_limit(delta, 0, 1)
             gamma = float(hyper["loss.gamma"])
         except TypeError:
             weight = None
@@ -108,7 +108,7 @@ class SharedTraining:
         self._scheduler = ReduceLROnPlateau(
             optimizer=self._optim,
             mode="min",
-            factor=self._lr_decay_factor,  # "factor=1.0" will cause an error
+            factor=self._lr_decay_factor,  # "factor=1" will cause an error
             patience=self._lr_decay_patience,
             min_lr=self._lr_min,
         )
@@ -137,38 +137,38 @@ class SharedTraining:
 
     def _print_hyper(self, print_dict: NestedDict):
         if torch.cuda.device_count() < 1:
-            print_dict["device:"] = "cpu"
+            print_dict["device"] = "cpu"
         else:
-            print_dict["device:"] = "gpu: " + os.environ["CUDA_VISIBLE_DEVICES"]
-        print_dict["lr:"] = self._lr
-        print_dict["lr actual:"] = self._lr_actual
-        print_dict["lr decay factor:"] = self._lr_decay_factor
-        print_dict["lr decay patience:"] = self._lr_decay_patience
-        print_dict["lr min:"] = self._lr_min
-        print_dict["batch size:"] = self._batch_size
-        print_dict["batch size actual:"] = self._batch_size_actual
-        print_dict["augment percent:"] = self._augment_pct
-        print_dict["augment methods:"] = self._augment_methods
-        print_dict["augment lower limit:"] = self._augment_low_limit
-        print_dict["augment upper limit:"] = self._augment_up_limit
+            print_dict["device"] = "gpu: " + os.environ["CUDA_VISIBLE_DEVICES"]
+        print_dict["lr"] = self._lr
+        print_dict["lr.actual"] = self._lr_actual
+        print_dict["lr.decay.factor"] = self._lr_decay_factor
+        print_dict["lr.decay.patience"] = self._lr_decay_patience
+        print_dict["lr.min"] = self._lr_min
+        print_dict["batch.size"] = self._batch_size
+        print_dict["batch.size.actual"] = self._batch_size_actual
+        print_dict["augment.pct"] = self._augment_pct
+        print_dict["augment.methods"] = self._augment_methods
+        print_dict["augment.low.limit"] = self._augment_low_limit
+        print_dict["augment.up.limit"] = self._augment_up_limit
         try:
-            print_dict["loss weight:"] = self._loss_func.weight
-            print_dict["loss delta:"] = self._loss_func.delta
-            print_dict["loss gamma:"] = self._loss_func.gamma
+            print_dict["loss.weight"] = self._loss_func.weight
+            print_dict["loss.delta"] = self._loss_func.delta
+            print_dict["loss.gamma"] = self._loss_func.gamma
         except AttributeError:
-            print_dict["loss weight:"] = None
-            print_dict["loss delta:"] = None
-            print_dict["loss gamma:"] = None
+            print_dict["loss.weight"] = None
+            print_dict["loss.delta"] = None
+            print_dict["loss.gamma"] = None
 
         print_dict = OrderedDict(sorted(print_dict.items()))
         for key, value in print_dict.items():
-            print(key, value)
+            print(key + ":", value)
 
     def _save_hyper(self, json_path: str, hyper_dict: NestedDict):
         if torch.cuda.device_count() < 1:
-            hyper_dict["device:"] = "cpu"
+            hyper_dict["device"] = "cpu"
         else:
-            hyper_dict["device:"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
+            hyper_dict["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
         hyper_dict["time.used"] = self._time_used
         hyper_dict["lr.actual"] = self._lr_actual
         hyper_dict["lr.decay.factor"] = self._lr_decay_factor
@@ -305,11 +305,7 @@ class SharedTraining:
         else:
             self._batch_size_actual = dataset_len  # self._batch_size_actual
 
-    def _inference_single_patient(
-        self,
-        patient: str,
-        unetpp_output: int = 3,
-    ) -> dict:
+    def _inference_single_patient(self, patient: str, unetpp_output: int = 3) -> dict:
         result = NestedDict()
         dataset = BaselineDataSet(patient_list=[patient])
 
@@ -340,7 +336,7 @@ class SharedTraining:
                 for h in patch_pos[1]:
                     for w in patch_pos[2]:
                         inputs, labels = dataset.get_item(
-                            patient=patient, patch_pos=(d, h, w), target_vol_pct=0
+                            patient=patient, patch_pos=(d, h, w)
                         )
 
                         # unsqueeze to add batch dim

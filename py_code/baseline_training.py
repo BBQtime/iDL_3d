@@ -42,7 +42,7 @@ class BaselineTraining(SharedTraining):
 
         # min lr
         self._lr_min = float(hyper["lr.min"])
-        self._lr_min = g.check_limit(self._lr_min, 0.0, self._lr)
+        self._lr_min = g.check_limit(self._lr_min, 0, self._lr)
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
         self._lr_decay_patience = int(hyper["lr.decay.patience"])
@@ -64,7 +64,15 @@ class BaselineTraining(SharedTraining):
 
         # augmentation percent
         self._augment_pct = float(hyper["augment.pct"])
-        self._augment_pct = g.check_limit(self._augment_pct, 0.0, 1.0)
+        self._augment_pct = g.check_limit(self._augment_pct, 0, 1)
+
+        # empty patch percent
+        self._patch_empty_pct = float(hyper["patch.empty.pct"])
+        self._patch_empty_pct = g.check_limit(self._patch_empty_pct, 0, 1)
+
+        # tumor size threshold in patch
+        self._patch_tar_vol_thold = float(hyper["patch.tar.vol.thold"])
+        self._patch_tar_vol_thold = g.check_limit(self._patch_tar_vol_thold, 0, 1)
 
         # load shared hyper parameters
         super()._load_hyper(
@@ -87,6 +95,8 @@ class BaselineTraining(SharedTraining):
             augment_pct=self._augment_pct,
             augment_low_limit=self._augment_low_limit,
             augment_up_limit=self._augment_up_limit,
+            patch_empty_pct=self._patch_empty_pct,
+            patch_tar_vol_thold=self._patch_tar_vol_thold,
         )
         valid_set = BaselineDataSet(patient_list=valid_patients)
         test_set = BaselineDataSet(patient_list=test_patients)
@@ -113,19 +123,21 @@ class BaselineTraining(SharedTraining):
 
     def _print_hyper(self):
         print_dict = NestedDict()
-        print_dict["dropout:"] = self._dropout
-        print_dict["epochs:"] = self._epochs
-        print_dict["early stopping patience:"] = self._early_stop_patience
-        print_dict["keep best cnn number:"] = self._keep_best_cnn_num
-        print_dict["dataset len:"] = (
+        print_dict["dropout"] = self._dropout
+        print_dict["epochs"] = self._epochs
+        print_dict["early.stop.patience"] = self._early_stop_patience
+        print_dict["keep.best.cnn.num"] = self._keep_best_cnn_num
+        print_dict["dataset.len"] = (
             self._train_loader.dataset.__len__()
             + self._valid_loader.dataset.__len__()
             + self._test_loader.dataset.__len__()
         )
-        print_dict["train set len:"] = self._train_loader.dataset.__len__()
-        print_dict["valid set len:"] = self._valid_loader.dataset.__len__()
-        print_dict["test set len:"] = self._test_loader.dataset.__len__()
-        print_dict["cross validation k folds:"] = g.DATASET_K_FOLDS
+        print_dict["dataset.train.len"] = self._train_loader.dataset.__len__()
+        print_dict["dataset.valid.len"] = self._valid_loader.dataset.__len__()
+        print_dict["dataset.test.len"] = self._test_loader.dataset.__len__()
+        print_dict["dataset.k.folds"] = g.DATASET_K_FOLDS
+        print_dict["patch.empty.pct"] = self._patch_empty_pct
+        print_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._print_hyper(print_dict)
 
     def _save_hyper(self, json_path: str):
@@ -145,6 +157,8 @@ class BaselineTraining(SharedTraining):
         hyper_dict["early.stop.patience"] = self._early_stop_patience
         hyper_dict["keep.best.cnn.num"] = self._keep_best_cnn_num
         hyper_dict["dropout"] = self._dropout
+        hyper_dict["patch.empty.pct"] = self._patch_empty_pct
+        hyper_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._save_hyper(json_path, hyper_dict)
 
     def loss_fig(self, baseline_id: str):
@@ -178,8 +192,8 @@ class BaselineTraining(SharedTraining):
         patience_count = 0
 
         for cur_epoch in range(1, self._epochs + 1):
-            print("Epoch: {}".format(cur_epoch))
-            print("Training:")
+            print("epoch: {}".format(cur_epoch))
+            print("training:")
             self._cnn.train()
             sum_loss = 0
             batch_num = 0
@@ -197,7 +211,7 @@ class BaselineTraining(SharedTraining):
             train_loss = sum_loss / batch_num
 
             # validation
-            print("Validation:")
+            print("validation:")
             self._cnn.eval()
             with torch.no_grad():
                 sum_loss = 0
@@ -292,7 +306,7 @@ class BaselineTraining(SharedTraining):
                     self._print_hyper()
 
                 g.print_line()
-                print("Cross Validation Fold: {}".format(fold))
+                print("cross validation fold: {}".format(fold))
 
                 # save an empty loss.json
                 g.save_json(NestedDict(), os.path.join(cur_fold_folder, "loss.json"))

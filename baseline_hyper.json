@@ -14,5 +14,7 @@
     "lr": 0.0005,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 5,
-    "lr.min": 1e-05
+    "lr.min": 1e-05,
+    "patch.empty.pct": 0.2,
+    "patch.tar.vol.thold": 0.5
 }

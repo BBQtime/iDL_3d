@@ -8,7 +8,7 @@
     "hyper.json.idl": "idl_hyper.json",
     "max.batch.size.win": 1,
     "nii.spacing": "1.171875,1.171875,3.0",
-    "num.workers": 8,
+    "num.workers": 32,
     "patch.size": "32,128,128",
     "train.results.folder": "train_results",
     "use.gpu": true

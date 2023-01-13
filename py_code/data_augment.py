@@ -7,18 +7,18 @@ class DataAugmentation:
     def __init__(
         self,
         methods: list = [],  # list of str
-        pct: float = 0.0,
-        low_limit: float = 0,
-        up_limit: float = 0,
+        pct: float = 0,
+        low_limit: int = 0,
+        up_limit: int = 0,
     ):
         self.__transform = None
 
-        if pct <= 0.0 or methods == []:
+        if pct <= 0 or methods == []:
             return
         if up_limit < low_limit:
             up_limit = low_limit
-        if pct > 1.0:
-            pct = 1.0
+        if pct > 1:
+            pct = 1
 
         augment_dict = dict()
         # iaa.ElasticTransformation():

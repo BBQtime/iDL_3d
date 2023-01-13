@@ -5,7 +5,7 @@ from torch import Tensor
 
 
 class VGGBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, dropout: float = 0.0):
+    def __init__(self, in_channels: int, out_channels: int, dropout: float = 0):
         super().__init__()
 
         # padding_mode: use "replicate" or "zeros"
@@ -91,7 +91,7 @@ class UNetPP(nn.Module):
             self.__unfreeze_layer(self.pool[i])
 
     def __init__(
-        self, in_channels: int = 4, out_channels: int = 1, dropout: float = 0.0
+        self, in_channels: int = 4, out_channels: int = 1, dropout: float = 0
     ):
         super().__init__()
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)

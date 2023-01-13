@@ -5,7 +5,7 @@
     "augment.up.limit": 4,
     "batch.size": 8,
     "dropout": 0.3,
-    "iter": 10,
+    "iter": 30,
     "layer.freezing": false,
     "loss.delta": 0.6,
     "loss.gamma": 0.5,

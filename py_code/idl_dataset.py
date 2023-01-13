@@ -21,7 +21,7 @@ class IDLDataSet:
         ignore_other_anotated_slices: bool,
         augment_methods: list = [],
         augment_times: int = 1,
-        augment_pct: float = 0.0,
+        augment_pct: float = 0,
         augment_low_limit: int = 0,
         augment_up_limit: int = 0,
     ):
@@ -222,29 +222,29 @@ class IDLDataSet:
         return multi_model_imgs, label_gtvs, weight_map  # labels
 
 
-# for testing
-# augment_methods = translate / elastic / rotate / scale
-if 0:
-    annotated_slices = dict()
-    annotated_slices["round=00"] = [20, 40]
-    annotated_slices["round=01"] = [30]
-    # pred_folder = os.path.join(
-    #     g.TRAIN_RESULTS_FOLDER,
-    #     "baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
-    #     "baseline",
-    #     "patients",
-    #     "patient=336",
-    # )
-    tmp_dataset = IDLDataSet(
-        patient="336",
-        annotated_slices=annotated_slices,
-        label_folder=g.DATASET_FOLDER,
-        # pred_folder=pred_folder,
-        ignore_other_anotated_slices=False,
-        augment_times=1,
-        augment_methods=[],  # ["rotate"],
-        augment_pct=1.0,
-        augment_low_limit=1,
-        augment_up_limit=1,
-    )
-    tmp_dataset.__getitem__(2)
+# # for testing
+# # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
+# if 0:
+#     annotated_slices = dict()
+#     annotated_slices["round=00"] = [20, 40]
+#     annotated_slices["round=01"] = [30]
+#     # pred_folder = os.path.join(
+#     #     g.TRAIN_RESULTS_FOLDER,
+#     #     "baseline_2022.11.27.06.23.46_target.vol.pct=0_lr=0.0005",
+#     #     "baseline",
+#     #     "patients",
+#     #     "patient=336",
+#     # )
+#     tmp_dataset = IDLDataSet(
+#         patient="336",
+#         annotated_slices=annotated_slices,
+#         label_folder=g.DATASET_FOLDER,
+#         # pred_folder=pred_folder,
+#         ignore_other_anotated_slices=False,
+#         augment_times=1,
+#         augment_methods=[],  # ["rotate"],
+#         augment_pct=1,
+#         augment_low_limit=1,
+#         augment_up_limit=1,
+#     )
+#     tmp_dataset.__getitem__(2)
