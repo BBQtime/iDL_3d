@@ -528,10 +528,6 @@ def sort_dict_by_value(input_dict: dict, reverse: bool) -> dict:
     }
 
 
-def get_list_avg(input_list: list):
-    return sum(input_list) / len(input_list)
-
-
 PROJ_PATH = None
 DEVICE = None
 NUM_WORKERS = None

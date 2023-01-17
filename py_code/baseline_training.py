@@ -1,6 +1,7 @@
 import global_elems as g
 import os
 import torch
+import math
 from tqdm import tqdm
 from datetime import datetime
 from nested_dict import NestedDict
@@ -277,15 +278,15 @@ class BaselineTraining(SharedTraining):
 
     def training(
         self,
-        train_remark: str = None,
+        train_remark: str = "",
         debug_mode: bool = False,
     ):
-        for hyper in self._load_group_hyper(g.HYPER_JSON_BASELINE):
+        for cur_hyper in self._load_group_hyper(g.HYPER_JSON_BASELINE):
 
             baseline_id = "baseline_" + self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=g.HYPER_JSON_BASELINE,
-                hyper=hyper,
+                hyper=cur_hyper,
                 debug_mode=debug_mode,
             )
             g.print_line()
@@ -296,22 +297,22 @@ class BaselineTraining(SharedTraining):
             )
             g.create_folder(baseline_folder)
 
-            for fold in range(1, g.DATASET_K_FOLDS + 1):
+            for cur_fold in range(1, g.DATASET_K_FOLDS + 1):
                 cur_fold_folder = os.path.join(
-                    baseline_folder, "fold={:02d}".format(fold)
+                    baseline_folder, "fold={:02d}".format(cur_fold)
                 )
                 g.create_folder(cur_fold_folder)
 
                 self._load_hyper(
-                    hyper=hyper,
-                    fold=fold,
+                    hyper=cur_hyper,
+                    fold=cur_fold,
                     debug_mode=debug_mode,
                 )
-                if fold == 1:
+                if cur_fold == 1:
                     self._print_hyper()
 
                 g.print_line()
-                print("cross validation fold: {}".format(fold))
+                print("cross validation fold: {}".format(cur_fold))
 
                 # save an empty loss.json
                 g.save_json(NestedDict(), os.path.join(cur_fold_folder, "loss.json"))
@@ -328,6 +329,8 @@ class BaselineTraining(SharedTraining):
 
                 # save hyper after training
                 self._save_hyper(hyper_save_path)
+                # clear time_used before next training
+                self._time_used = None
 
                 if self._cross_valid is False:
                     break
@@ -347,37 +350,43 @@ class BaselineTraining(SharedTraining):
         debug_mode: bool = False,
     ):
         g.print_line()
-        print("inference: ", baseline_id)
+        print("inference on {} set: {}".format(dataset, baseline_id))
 
-        for fold_folder in g.get_sub_folders(
-            os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"),
-            key_word="fold",
-        ):
-            fold = int(fold_folder[len("fold=") :])
-            fold_folder = os.path.join(
-                g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", fold_folder
+        baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline")
+
+        if dataset == "valid":
+            best_scores = NestedDict()
+
+        for cur_fold_folder in g.get_sub_folders(baseline_folder, key_word="fold"):
+
+            cur_fold = int(cur_fold_folder[len("fold=") :])
+            print("current fold: ", cur_fold)
+            cur_fold_folder = os.path.join(
+                g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", cur_fold_folder
             )
+            cur_hyper = g.load_json(os.path.join(cur_fold_folder, "hyper.json"))
 
-            hyper = g.load_json(os.path.join(fold_folder, "hyper.json"))
-
-            for epoch_folder in g.get_sub_folders(
-                fold_folder, return_full_path=True, key_word="epoch"
+            for cur_epoch_folder in g.get_sub_folders(
+                cur_fold_folder, key_word="epoch"
             ):
-                cnn_path = os.path.join(epoch_folder, "cnn.pt")
+
+                cur_epoch = int(cur_epoch_folder[len("epoch=") :])
+                print("current epoch: ", cur_epoch)
+                cur_epoch_folder = os.path.join(cur_fold_folder, cur_epoch_folder)
 
                 # load and print hyper
                 self._load_hyper(
-                    hyper=hyper,
-                    fold=fold,
-                    exist_cnn_path=cnn_path,
+                    hyper=cur_hyper,
+                    fold=cur_fold,
+                    exist_cnn_path=os.path.join(cur_epoch_folder, "cnn.pt"),
                     debug_mode=debug_mode,
                 )
                 if print_hyper:
                     self._print_hyper()
 
-                score = NestedDict()
+                cur_score = NestedDict()
                 for i in g.METRICS_LIST:
-                    score["avg"][i] = []
+                    cur_score["avg"][i] = []
 
                 if dataset == "test":
                     patient_list = self._test_loader.dataset.patient_list
@@ -385,9 +394,10 @@ class BaselineTraining(SharedTraining):
                     patient_list = self._valid_loader.dataset.patient_list
 
                 for patient in tqdm(patient_list):
+                    # if testset, create folder to save cur patient preds
                     if dataset == "test":
                         patient_folder = os.path.join(
-                            epoch_folder, "patients", "patient={}".format(patient)
+                            cur_epoch_folder, "patients", "patient={}".format(patient)
                         )
                         g.create_folder(patient_folder)
 
@@ -397,8 +407,10 @@ class BaselineTraining(SharedTraining):
                     # save score of cur patient
                     for i in g.METRICS_LIST:
                         if dataset == "test":
-                            score["patient={}".format(patient)][i] = patient_result[i]
-                        score["avg"][i].append(patient_result[i])
+                            cur_score["patient={}".format(patient)][i] = patient_result[
+                                i
+                            ]
+                        cur_score["avg"][i].append(patient_result[i])
 
                     # save pred of cur patient
                     if dataset == "test":
@@ -418,16 +430,82 @@ class BaselineTraining(SharedTraining):
                                 spacing=g.NII_SPACING,
                             )
 
-                # save score of all patients
+                # get avg score
                 for i in g.METRICS_LIST:
-                    avg = score["avg"][i]
-                    score["avg"][i] = sum(avg) / len(avg)
+                    avg = cur_score["avg"][i]
+                    cur_score["avg"][i] = sum(avg) / len(avg)
+                # cur_score = g.load_json(
+                #     os.path.join(cur_epoch_folder, "score_valid.json")
+                # )
 
+                # save score
                 if dataset == "test":
-                    score_save_path = os.path.join(epoch_folder, "score_test.json")
+                    g.save_json(
+                        data=cur_score,
+                        path=os.path.join(cur_epoch_folder, "score_test.json"),
+                    )
+                    continue
+
+                # validation set, delete non-optimal folds and epochs
+                if math.isnan(cur_score["avg"]["msd"]) or math.isnan(
+                    cur_score["avg"]["hd95"]
+                ):
+                    g.delete_folder(cur_epoch_folder)
+                    continue
+
+                if len(best_scores) == 0:
+                    save_cur_score = True
                 else:
-                    score_save_path = os.path.join(epoch_folder, "score_valid.json")
-                g.save_json(
-                    data=score,
-                    path=score_save_path,
-                )
+                    save_cur_score = None
+                    for fold in g.get_dict_keys(best_scores):
+                        for epoch in g.get_dict_keys(best_scores[fold]):
+                            if (
+                                cur_score["avg"]["dsc"]
+                                < best_scores[fold][epoch]["dsc"]
+                                and cur_score["avg"]["msd"]
+                                > best_scores[fold][epoch]["msd"]
+                                and cur_score["avg"]["hd95"]
+                                > best_scores[fold][epoch]["hd95"]
+                            ):
+                                save_cur_score = False
+                                break
+                            if (
+                                cur_score["avg"]["dsc"]
+                                > best_scores[fold][epoch]["dsc"]
+                                or cur_score["avg"]["msd"]
+                                < best_scores[fold][epoch]["msd"]
+                                or cur_score["avg"]["hd95"]
+                                < best_scores[fold][epoch]["hd95"]
+                            ):
+                                save_cur_score = True
+                            if (
+                                best_scores[fold][epoch]["dsc"]
+                                < cur_score["avg"]["dsc"]
+                                and best_scores[fold][epoch]["msd"]
+                                > cur_score["avg"]["msd"]
+                                and best_scores[fold][epoch]["hd95"]
+                                > cur_score["avg"]["hd95"]
+                            ):
+                                # delete worse score
+                                g.delete_folder(
+                                    os.path.join(
+                                        baseline_folder,
+                                        "fold={:02d}".format(fold),
+                                        "epoch={:03d}".format(epoch),
+                                    )
+                                )
+                                # best_scores[fold].pop(epoch)
+                                # if len(best_scores[fold]) == 0:
+                                #     best_scores.pop(fold)
+
+                        if save_cur_score is False:
+                            break
+
+                if save_cur_score:
+                    best_scores[cur_fold][cur_epoch] = cur_score["avg"]
+                    g.save_json(
+                        data=cur_score,
+                        path=os.path.join(cur_epoch_folder, "score_valid.json"),
+                    )
+                else:
+                    g.delete_folder(cur_epoch_folder)

@@ -12,10 +12,10 @@
     "loss.delta": 0.6,
     "loss.gamma": 0.5,
     "loss.weight": 0.5,
-    "lr": 0.0005,
+    "lr": 0.0002,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 5,
     "lr.min": 1e-05,
-    "patch.empty.pct": 0.2,
+    "patch.empty.pct": 0.1,
     "patch.tar.vol.thold": 0.5
 }

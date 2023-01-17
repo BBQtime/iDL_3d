@@ -15,6 +15,7 @@ from torch import optim
 from idl_dataset import IDLDataSet
 from typing import Union
 from unet_pp import UNetPP
+from unet_pp_slim import UNetPPSlim
 from datetime import datetime
 from nested_dict import NestedDict
 from baseline_dataset import BaselineDataSet
@@ -118,13 +119,15 @@ class SharedTraining:
     def _load_cnn(self, exist_cnn_path: str = None):
         # new model
         if exist_cnn_path is None:
-            cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+            # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+            cnn = UNetPPSlim(dropout=self._dropout).to(g.DEVICE)
 
         # exist cnn
         else:
             # load state dict only
             if g.CNN_STATE_DICT_ONLY:
-                cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+                # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
+                cnn = UNetPPSlim(dropout=self._dropout).to(g.DEVICE)
                 cnn.load_state_dict(torch.load(exist_cnn_path))
 
             # load entire cnn
@@ -277,7 +280,7 @@ class SharedTraining:
         if debug_mode:
             train_id += "_debug.mode.delete.this"
 
-        if train_remark != "" and train_remark is not None:
+        if train_remark != "":
             while train_remark.startswith("_"):
                 train_remark = train_remark[1:]
             while train_remark.endswith("_"):
