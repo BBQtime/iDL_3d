@@ -318,55 +318,66 @@ class SharedTraining:
         origin_labels = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
         )
-        origin_shape = origin_labels.shape
+        # origin_shape = origin_labels.shape
 
-        overlap_weight = np.zeros(origin_shape)
-        result["gtvs"] = np.zeros(origin_shape)
+        # overlap_weight = np.zeros(origin_shape)
+        # result["gtvs"] = np.zeros(origin_shape)
 
-        # generate patch position
-        patch_pos = []
-        for dim in range(3):
-            patch_pos.append([])
-            start = 0
-            end = origin_shape[dim] - g.PATCH_SIZE[dim]
-            stride = round(g.PATCH_SIZE[dim] / 3)
-            while start < end:
-                patch_pos[dim].append(start)
-                start += stride
-                if start >= end:
-                    patch_pos[dim].append(end)
+        # # generate patch position
+        # patch_pos = []
+        # for dim in range(3):
+        #     patch_pos.append([])
+        #     start = 0
+        #     end = origin_shape[dim] - g.PATCH_SIZE[dim]
+        #     stride = round(g.PATCH_SIZE[dim] / 3)
+        #     while start < end:
+        #         patch_pos[dim].append(start)
+        #         start += stride
+        #         if start >= end:
+        #             patch_pos[dim].append(end)
 
         self._cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
-            for d in patch_pos[0]:
-                for h in patch_pos[1]:
-                    for w in patch_pos[2]:
-                        inputs, labels = dataset.get_item(
-                            patient=patient, patch_pos=(d, h, w)
-                        )
+            inputs, labels = dataset.get_item(patient=patient)
+            inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
+            labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+            outputs = self._cnn.forward(inputs)[unetpp_output]
+            # squeeze batch
+            outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
+            # output channel 0, dont squeeze this, leave it for gtvt and gtvs
+            result["gtvs"] = outputs[0]
+            result["gtvs"] = g.central_pad(result["gtvs"], origin_labels.shape)
+            result["gtvs"] = g.central_crop(result["gtvs"], origin_labels.shape)
 
-                        # unsqueeze to add batch dim
-                        inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
-                        labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-                        outputs = self._cnn.forward(inputs)[unetpp_output]
-                        outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
+            # for d in patch_pos[0]:
+            #     for h in patch_pos[1]:
+            #         for w in patch_pos[2]:
+            #             inputs, labels = dataset.get_item(
+            #                 patient=patient, patch_pos=(d, h, w)
+            #             )
 
-                        # add current output patch
-                        result["gtvs"][
-                            d : d + g.PATCH_SIZE[0],
-                            h : h + g.PATCH_SIZE[1],
-                            w : w + g.PATCH_SIZE[2],
-                        ] += outputs[0]
-                        # [0]-gtvt, [1]-gtvn
+            #             # unsqueeze to add batch dim
+            #             inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
+            #             labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+            #             outputs = self._cnn.forward(inputs)[unetpp_output]
+            #             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
-                        # add current output weight to overlap weight tensor
-                        overlap_weight[
-                            d : d + g.PATCH_SIZE[0],
-                            h : h + g.PATCH_SIZE[1],
-                            w : w + g.PATCH_SIZE[2],
-                        ] += np.ones_like(outputs[0])
+            #             # add current output patch
+            #             result["gtvs"][
+            #                 d : d + g.PATCH_SIZE[0],
+            #                 h : h + g.PATCH_SIZE[1],
+            #                 w : w + g.PATCH_SIZE[2],
+            #             ] += outputs[0]
+            #             # [0]-gtvt, [1]-gtvn
 
-        result["gtvs"] /= overlap_weight
+            #             # add current output weight to overlap weight tensor
+            #             overlap_weight[
+            #                 d : d + g.PATCH_SIZE[0],
+            #                 h : h + g.PATCH_SIZE[1],
+            #                 w : w + g.PATCH_SIZE[2],
+            #             ] += np.ones_like(outputs[0])
+
+        # result["gtvs"] /= overlap_weight
 
         for metric_type in g.METRICS_LIST:
             # score_dict["gtvt"][metric_type] = self._seg_metrics[metric_type](

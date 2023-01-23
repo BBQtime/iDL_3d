@@ -5,7 +5,7 @@ from torch import Tensor
 
 
 class VGGBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, dropout: float = 0):
+    def __init__(self, in_chan: int, out_chan: int, dropout: float = 0):
         super().__init__()
 
         # padding_mode: use "replicate" or "zeros"
@@ -13,24 +13,24 @@ class VGGBlock(nn.Module):
         # "circular" has bugs
         self.double_conv = nn.Sequential(
             nn.Conv3d(
-                in_channels,
-                out_channels,
+                in_channels=in_chan,
+                out_channels=out_chan,
                 kernel_size=3,
                 stride=1,
                 padding=1,
                 padding_mode="replicate",
             ),
-            nn.BatchNorm3d(out_channels),
+            nn.BatchNorm3d(out_chan),
             nn.LeakyReLU(inplace=True),
             nn.Conv3d(
-                out_channels,
-                out_channels,
+                in_channels=out_chan,
+                out_channels=out_chan,
                 kernel_size=3,
                 stride=1,
                 padding=1,
                 padding_mode="replicate",
             ),
-            nn.BatchNorm3d(out_channels),
+            nn.BatchNorm3d(out_chan),
             nn.LeakyReLU(inplace=True),
         )
         if dropout > 0:
@@ -90,36 +90,46 @@ class UNetPPSlim(nn.Module):
         for i in range(4):
             self.__unfreeze_layer(self.pool[i])
 
-    def __init__(self, in_channels: int = 4, out_channels: int = 1, dropout: float = 0):
+    def __init__(self, in_chan: int = 4, out_chan: int = 1, dropout: float = 0):
         super().__init__()
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
 
-        edge_channels = 28
+        unet_chan = [16, 32, 64, 128, 256]
+        skip_chan = 8
+
         # vgg blocks
         self.vgg = nn.ModuleDict()
         for i in range(0, 4 + 1):
             # nn.ModuleDict module name must be "str"
             self.vgg[str(i)] = nn.ModuleDict()
 
-        self.vgg["0"]["0"] = VGGBlock(in_channels, edge_channels)
-        self.vgg["1"]["0"] = VGGBlock(edge_channels, 32)
-        self.vgg["2"]["0"] = VGGBlock(32, 64, dropout)
-        self.vgg["3"]["0"] = VGGBlock(64, 128, dropout)
-        self.vgg["4"]["0"] = VGGBlock(128, 256, dropout)
+        self.vgg["0"]["0"] = VGGBlock(in_chan, unet_chan[0])
+        self.vgg["1"]["0"] = VGGBlock(unet_chan[0], unet_chan[1])
+        self.vgg["2"]["0"] = VGGBlock(unet_chan[1], unet_chan[2], dropout)
+        self.vgg["3"]["0"] = VGGBlock(unet_chan[2], unet_chan[3], dropout)
+        self.vgg["4"]["0"] = VGGBlock(unet_chan[3], unet_chan[4], dropout)
 
-        self.vgg["0"]["1"] = VGGBlock(edge_channels + 32, 8)
-        self.vgg["1"]["1"] = VGGBlock(32 + 64, 8)
-        self.vgg["2"]["1"] = VGGBlock(64 + 128, 8)
-        self.vgg["3"]["1"] = VGGBlock(128 + 256, 128, dropout)
+        self.vgg["0"]["1"] = VGGBlock(unet_chan[0] + unet_chan[1], skip_chan)
+        self.vgg["1"]["1"] = VGGBlock(unet_chan[1] + unet_chan[2], skip_chan)
+        self.vgg["2"]["1"] = VGGBlock(unet_chan[2] + unet_chan[3], skip_chan)
+        self.vgg["3"]["1"] = VGGBlock(
+            unet_chan[3] + unet_chan[4], unet_chan[3], dropout
+        )
 
-        self.vgg["0"]["2"] = VGGBlock(edge_channels + 8 * 2, 8)
-        self.vgg["1"]["2"] = VGGBlock(32 + 8 * 2, 8)
-        self.vgg["2"]["2"] = VGGBlock(64 + 8 + 128, 64, dropout)
+        self.vgg["0"]["2"] = VGGBlock(unet_chan[0] + skip_chan * 2, skip_chan)
+        self.vgg["1"]["2"] = VGGBlock(unet_chan[1] + skip_chan * 2, skip_chan)
+        self.vgg["2"]["2"] = VGGBlock(
+            unet_chan[2] + skip_chan + unet_chan[3], unet_chan[2], dropout
+        )
 
-        self.vgg["0"]["3"] = VGGBlock(edge_channels + 8 * 3, 8)
-        self.vgg["1"]["3"] = VGGBlock(32 + 8 * 2 + 64, 32)
+        self.vgg["0"]["3"] = VGGBlock(unet_chan[0] + skip_chan * 3, skip_chan)
+        self.vgg["1"]["3"] = VGGBlock(
+            unet_chan[1] + skip_chan * 2 + unet_chan[2], unet_chan[1]
+        )
 
-        self.vgg["0"]["4"] = VGGBlock(edge_channels + 8 * 3 + 32, edge_channels)
+        self.vgg["0"]["4"] = VGGBlock(
+            unet_chan[0] + skip_chan * 3 + unet_chan[1], unet_chan[0]
+        )
 
         # upsample layers
         self.up = nn.ModuleDict()
@@ -127,19 +137,27 @@ class UNetPPSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        self.up["4"]["0"] = nn.ConvTranspose3d(256, 256, 2, 2)
+        self.up["4"]["0"] = nn.ConvTranspose3d(unet_chan[4], unet_chan[4], 2, 2)
 
-        self.up["3"]["0"] = nn.ConvTranspose3d(128, 128, 2, 2)
-        self.up["3"]["1"] = nn.ConvTranspose3d(128, 128, 2, 2)
+        self.up["3"]["0"] = nn.ConvTranspose3d(unet_chan[3], unet_chan[3], 2, 2)
+        self.up["3"]["1"] = nn.ConvTranspose3d(unet_chan[3], unet_chan[3], 2, 2)
 
-        self.up["2"]["0"] = nn.ConvTranspose3d(64, 64, 2, 2)
-        self.up["2"]["1"] = nn.ConvTranspose3d(8, 8, 2, 2)
-        self.up["2"]["2"] = nn.ConvTranspose3d(64, 64, 2, 2)
+        self.up["2"]["0"] = nn.ConvTranspose3d(unet_chan[2], unet_chan[2], 2, 2)
+        self.up["2"]["1"] = nn.ConvTranspose3d(skip_chan, skip_chan, 2, 2)
+        self.up["2"]["2"] = nn.ConvTranspose3d(unet_chan[2], unet_chan[2], 2, 2)
 
-        self.up["1"]["0"] = nn.ConvTranspose3d(32, 32, (1, 2, 2), (1, 2, 2))
-        self.up["1"]["1"] = nn.ConvTranspose3d(8, 8, (1, 2, 2), (1, 2, 2))
-        self.up["1"]["2"] = nn.ConvTranspose3d(8, 8, (1, 2, 2), (1, 2, 2))
-        self.up["1"]["3"] = nn.ConvTranspose3d(32, 32, (1, 2, 2), (1, 2, 2))
+        self.up["1"]["0"] = nn.ConvTranspose3d(
+            unet_chan[1], unet_chan[1], (1, 2, 2), (1, 2, 2)
+        )
+        self.up["1"]["1"] = nn.ConvTranspose3d(
+            skip_chan, skip_chan, (1, 2, 2), (1, 2, 2)
+        )
+        self.up["1"]["2"] = nn.ConvTranspose3d(
+            skip_chan, skip_chan, (1, 2, 2), (1, 2, 2)
+        )
+        self.up["1"]["3"] = nn.ConvTranspose3d(
+            unet_chan[1], unet_chan[1], (1, 2, 2), (1, 2, 2)
+        )
 
         # pooling layers
         self.pool = nn.ModuleDict()
@@ -151,14 +169,12 @@ class UNetPPSlim(nn.Module):
 
         # final layers
         self.final = nn.ModuleDict()
-        self.final["0"] = nn.Conv3d(8, out_channels, kernel_size=1, stride=1)
-        self.final["1"] = nn.Conv3d(8, out_channels, kernel_size=1, stride=1)
-        self.final["2"] = nn.Conv3d(8, out_channels, kernel_size=1, stride=1)
-        self.final["3"] = nn.Conv3d(
-            edge_channels, out_channels, kernel_size=1, stride=1
-        )
+        self.final["0"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
+        self.final["1"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
+        self.final["2"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
+        self.final["3"] = nn.Conv3d(unet_chan[0], out_chan, kernel_size=1, stride=1)
         for i in range(0, 3 + 1):
-            if out_channels == 1:
+            if out_chan == 1:
                 self.final["{}".format(i)] = nn.Sequential(
                     self.final["{}".format(i)], nn.Sigmoid()
                 )
@@ -224,22 +240,22 @@ class UNetPPSlim(nn.Module):
 
 
 # # for testing
-# if 0:
+# if 1:
 #     img_size = 256
 #     img_depth = 72
 #     batch_size = 4
-#     in_channels = 4
-#     out_channels = 3
+#     in_chan = 4
+#     out_chan = 3
 #     g.clear_gpu_cache()
 
-#     cnn = UNetPPSlim(in_channels, out_channels)
+#     cnn = UNetPPSlim(in_chan, out_chan)
 #     if g.used_gpu_count() > 1:
 #         cnn = nn.DataParallel(cnn)
 #     cnn = cnn.to(g.DEVICE)
 
 #     input_data = torch.rand(
 #         batch_size,
-#         in_channels,
+#         in_chan,
 #         img_depth,
 #         img_size,
 #         img_size,

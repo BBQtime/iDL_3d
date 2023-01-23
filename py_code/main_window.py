@@ -528,11 +528,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if train_id.startswith("baseline_"):
             self.__baseline_id = train_id
             self.__idl_id = "baseline"
+            fold_folder = g.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, "baseline"),
+                key_word="fold=",
+                return_full_path=True,
+            )[0]
+            epoch_folder = g.get_sub_folders(
+                fold_folder, key_word="epoch=", return_full_path=True
+            )[0]
             patient_list = g.get_sub_folders(
                 os.path.join(
-                    g.TRAIN_RESULTS_FOLDER,
-                    self.__baseline_id,
-                    "baseline",
+                    epoch_folder,
                     "patients",
                 )
             )
@@ -659,12 +665,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load pred
         if self.__idl_id == "baseline" or self.__round == "00":
+            fold_folder = g.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, "baseline"),
+                key_word="fold=",
+                return_full_path=True,
+            )[0]
+            epoch_folder = g.get_sub_folders(
+                fold_folder, key_word="epoch=", return_full_path=True
+            )[0]
             pred_folder = os.path.join(
-                g.TRAIN_RESULTS_FOLDER,
-                self.__baseline_id,
-                "baseline",
-                "patients",
-                "patient={}".format(self.__patient),
+                epoch_folder, "patients", "patient={}".format(self.__patient)
             )
         else:
             pred_folder = os.path.join(
@@ -685,14 +695,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
         # load dsc/msd/hd95 scores
-        score_dict = g.load_json(
-            os.path.join(
+        if self.__idl_id == "baseline":
+            score_path = os.path.join(epoch_folder, "score_test.json")
+        else:
+            score_path = os.path.join(
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
-                "score.json",
+                "score_test.json",
             )
-        )
+        score_dict = g.load_json(score_path)
 
         for metric_type in g.METRICS_LIST:
             # baseline
@@ -1031,12 +1043,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __refresh_title(self):
         win_tital = "iDL.Tool "
-        if self.__baseline_id is not None:
-            win_tital += "   Baseline.ID=" + self.__baseline_id
-        if self.__baseline_id is not None:
-            win_tital += "   iDL.ID=" + self.__idl_id
-        if self.__patient is not None:
-            win_tital += "   Patient=" + self.__patient[len("patient=") :]
+        # if self.__baseline_id is not None:
+        #     win_tital += "   Baseline.ID=" + self.__baseline_id
+        # if self.__baseline_id is not None:
+        #     win_tital += "   iDL.ID=" + self.__idl_id
+        # if self.__patient is not None:
+        #     win_tital += "   Patient=" + self.__patient[len("patient=") :]
         if self.__round is not None:
             win_tital += "   Num.of.Annotated.Slices="
             win_tital += str(len(self.__get_annotated_slices()))

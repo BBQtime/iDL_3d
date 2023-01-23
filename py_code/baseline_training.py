@@ -67,13 +67,13 @@ class BaselineTraining(SharedTraining):
         self._augment_pct = float(hyper["augment.pct"])
         self._augment_pct = g.check_limit(self._augment_pct, 0, 1)
 
-        # empty patch percent
-        self._patch_empty_pct = float(hyper["patch.empty.pct"])
-        self._patch_empty_pct = g.check_limit(self._patch_empty_pct, 0, 1)
+        # # empty patch percent
+        # self._patch_empty_pct = float(hyper["patch.empty.pct"])
+        # self._patch_empty_pct = g.check_limit(self._patch_empty_pct, 0, 1)
 
-        # tumor size threshold in patch
-        self._patch_tar_vol_thold = float(hyper["patch.tar.vol.thold"])
-        self._patch_tar_vol_thold = g.check_limit(self._patch_tar_vol_thold, 0, 1)
+        # # tumor size threshold in patch
+        # self._patch_tar_vol_thold = float(hyper["patch.tar.vol.thold"])
+        # self._patch_tar_vol_thold = g.check_limit(self._patch_tar_vol_thold, 0, 1)
 
         # use cross validation or not
         self._cross_valid = bool(hyper["cross.valid"])
@@ -99,8 +99,8 @@ class BaselineTraining(SharedTraining):
             augment_pct=self._augment_pct,
             augment_low_limit=self._augment_low_limit,
             augment_up_limit=self._augment_up_limit,
-            patch_empty_pct=self._patch_empty_pct,
-            patch_tar_vol_thold=self._patch_tar_vol_thold,
+            # patch_empty_pct=self._patch_empty_pct,
+            # patch_tar_vol_thold=self._patch_tar_vol_thold,
         )
         valid_set = BaselineDataSet(patient_list=valid_patients)
         test_set = BaselineDataSet(patient_list=test_patients)
@@ -141,8 +141,8 @@ class BaselineTraining(SharedTraining):
         print_dict["dataset.test.len"] = self._test_loader.dataset.__len__()
         print_dict["dataset.k.folds"] = g.DATASET_K_FOLDS
         print_dict["cross.valid"] = self._cross_valid
-        print_dict["patch.empty.pct"] = self._patch_empty_pct
-        print_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
+        # print_dict["patch.empty.pct"] = self._patch_empty_pct
+        # print_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._print_hyper(print_dict)
 
     def _save_hyper(self, json_path: str):
@@ -163,8 +163,8 @@ class BaselineTraining(SharedTraining):
         hyper_dict["early.stop.patience"] = self._early_stop_patience
         hyper_dict["keep.best.cnn.num"] = self._keep_best_cnn_num
         hyper_dict["dropout"] = self._dropout
-        hyper_dict["patch.empty.pct"] = self._patch_empty_pct
-        hyper_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
+        # hyper_dict["patch.empty.pct"] = self._patch_empty_pct
+        # hyper_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._save_hyper(json_path, hyper_dict)
 
     def loss_fig(self, baseline_id: str):

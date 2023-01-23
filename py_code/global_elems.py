@@ -391,14 +391,14 @@ def save_img(save_path: str, np_data: ndarray, extension_name: str = ".png"):
 
 
 # max size: 89 283 280
-def crop_img(img: ndarray, crop_size: tuple) -> ndarray:
+def central_crop(img: ndarray, crop_size: tuple) -> ndarray:
     in_size = NestedDict()
     in_size["d"], in_size["h"], in_size["w"] = img.shape
 
     out_size = NestedDict()
     out_size["d"] = crop_size[0]
     out_size["h"] = crop_size[1]
-    out_size["w"] = crop_size[0]
+    out_size["w"] = crop_size[2]
 
     if (
         in_size["d"] > out_size["d"]
@@ -408,17 +408,22 @@ def crop_img(img: ndarray, crop_size: tuple) -> ndarray:
         start_point = NestedDict()
 
         for i in ["w", "h", "d"]:
-            start_point[i] = (in_size[i] // 2) - (out_size[i] // 2)
+            if in_size[i] > out_size[i]:
+                # crop 1 more line on direction 1 (away from staring point)
+                start_point[i] = (in_size[i] - out_size[i]) // 2
+            else:
+                start_point[i] = 0
 
         img = img[
             start_point["d"] : start_point["d"] + out_size["d"],
             start_point["h"] : start_point["h"] + out_size["h"],
             start_point["w"] : start_point["w"] + out_size["w"],
         ]
+
     return img
 
 
-def pad_img(img: ndarray, pad_size: tuple) -> ndarray:
+def central_pad(img: ndarray, pad_size: tuple) -> ndarray:
     in_size = NestedDict()
     in_size["d"], in_size["h"], in_size["w"] = img.shape
 
@@ -429,16 +434,17 @@ def pad_img(img: ndarray, pad_size: tuple) -> ndarray:
 
     pad = NestedDict()
     for i in ["w", "h", "d"]:
-        pad[i][0] = pad[i][1] = 0
+        pad[i][0] = 0
+        pad[i][1] = 0
 
     for i in ["w", "h", "d"]:
         if out_size[i] > in_size[i]:
             cur_pad = out_size[i] - in_size[i]
+            pad[i][0] = int(cur_pad / 2)
             if cur_pad % 2 == 0:
-                pad[i][0] = pad[i][1] = int(cur_pad / 2)
+                pad[i][1] = pad[i][0]
             else:
-                pad[i][0] = int(cur_pad / 2)
-                # pad one more line on direction "1"
+                # pad 1 more line on direction 1 (away from staring point)
                 pad[i][1] = pad[i][0] + 1
 
     img = np.pad(
@@ -531,7 +537,8 @@ def sort_dict_by_value(input_dict: dict, reverse: bool) -> dict:
 PROJ_PATH = None
 DEVICE = None
 NUM_WORKERS = None
-PATCH_SIZE = None
+# PATCH_SIZE = None
+IMG_SIZE = None
 NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
 DATASET_FOLDER = None
@@ -547,7 +554,8 @@ def __global_init():
     global PROJ_PATH
     global DEVICE
     global NUM_WORKERS
-    global PATCH_SIZE
+    # global PATCH_SIZE
+    global IMG_SIZE
     global NII_SPACING
     global CNN_STATE_DICT_ONLY
     global DATASET_FOLDER
@@ -592,10 +600,21 @@ def __global_init():
     elif platform.system().lower() == "linux":
         NUM_WORKERS = __json_data["num.workers"]
 
-    PATCH_SIZE = []
-    for i in str_to_list(__json_data["patch.size"]):
-        PATCH_SIZE.append(int(i))
-    PATCH_SIZE = tuple(PATCH_SIZE)
+    # # patch size
+    # PATCH_SIZE = []
+    # for i in str_to_list(__json_data["patch.size"]):
+    #     # str_to_list will return a list of str
+    #     # change all items to int
+    #     PATCH_SIZE.append(int(i))
+    # PATCH_SIZE = tuple(PATCH_SIZE)
+
+    # img size
+    IMG_SIZE = []
+    for i in str_to_list(__json_data["img.size"]):
+        # str_to_list will return a list of str
+        # change all items to int
+        IMG_SIZE.append(int(i))
+    IMG_SIZE = tuple(IMG_SIZE)
 
     # make sure all elements in NII_SPACING are numbers
     NII_SPACING = []
