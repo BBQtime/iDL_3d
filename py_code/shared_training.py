@@ -6,6 +6,7 @@ import random
 import numpy as np
 import torch.nn as nn
 from loss_func import UnifiedFocalLoss
+from loss_func import DiceLoss
 from criterion import HybridFocalLoss
 from segment_metrics import SegmentationMetrics
 from tqdm import tqdm
@@ -89,12 +90,15 @@ class SharedTraining:
             delta = None
             gamma = None
 
-        self._loss_func = HybridFocalLoss().to(g.DEVICE)
-        # self._loss_func = UnifiedFocalLoss(
-        #     weight=weight,
-        #     delta=delta,
-        #     gamma=gamma,
-        # ).to(g.DEVICE)
+        # self._loss_func = DiceLoss().to(g.DEVICE)
+
+        # self._loss_func = HybridFocalLoss().to(g.DEVICE)
+
+        self._loss_func = UnifiedFocalLoss(
+            weight=weight,
+            delta=delta,
+            gamma=gamma,
+        ).to(g.DEVICE)
 
         # load cnn
         self._cnn = self._load_cnn(exist_cnn_path)
@@ -120,14 +124,16 @@ class SharedTraining:
         # new model
         if exist_cnn_path is None:
             # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-            cnn = UNetPPSlim(dropout=self._dropout).to(g.DEVICE)
+            cnn = UNetPPSlim(in_chan=4, out_chan=2, dropout=self._dropout).to(g.DEVICE)
 
         # exist cnn
         else:
             # load state dict only
             if g.CNN_STATE_DICT_ONLY:
                 # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-                cnn = UNetPPSlim(dropout=self._dropout).to(g.DEVICE)
+                cnn = UNetPPSlim(in_chan=4, out_chan=2, dropout=self._dropout).to(
+                    g.DEVICE
+                )
                 cnn.load_state_dict(torch.load(exist_cnn_path))
 
             # load entire cnn
@@ -216,9 +222,9 @@ class SharedTraining:
         #     print(set(train_patients) & set(valid_patients))
 
         if debug_mode:
-            train_patients = train_patients[:2]
-            valid_patients = valid_patients[:2]
-            test_patients = test_patients[:2]
+            train_patients = train_patients[: self._batch_size_actual]
+            valid_patients = valid_patients[: self._batch_size_actual]
+            test_patients = test_patients[: self._batch_size_actual]
 
         return train_patients, valid_patients, test_patients
 

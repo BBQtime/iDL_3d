@@ -90,7 +90,7 @@ class UNetPPSlim(nn.Module):
         for i in range(4):
             self.__unfreeze_layer(self.pool[i])
 
-    def __init__(self, in_chan: int = 4, out_chan: int = 1, dropout: float = 0):
+    def __init__(self, in_chan: int = 4, out_chan: int = 3, dropout: float = 0):
         super().__init__()
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
 

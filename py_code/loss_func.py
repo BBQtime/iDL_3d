@@ -8,10 +8,18 @@ import torch.nn as nn
 def identify_axis(shape):
     # Three dimensional
     if len(shape) == 5:
-        return [1, 2, 3]
+        # keras channels_last(default): (b, d, h, w, c)
+        # keras channels_first: (b, c, d, h, w)
+        # return [1, 2, 3]
+        # pytorch (b, c, d, h, w)
+        return (2, 3, 4)
     # Two dimensional
     elif len(shape) == 4:
-        return [1, 2]
+        # keras channels_last(default): (b, h, w, c)
+        # keras channels_first: (b, c, h, w)
+        # return [1, 2]
+        # pytorch (b, c, h, w)
+        return (2, 3)
     # Exception - Unknown
     else:
         raise ValueError("Metric: Shape of tensor is neither 2D or 3D.")
@@ -425,7 +433,7 @@ class UnifiedFocalLoss(nn.Module):
         self.weight = weight
         self.delta = delta
         self.gamma = gamma
-        self.__loss_func = sym_unified_focal_loss(
+        self.__loss_func = asym_unified_focal_loss(
             weight=self.weight, delta=self.delta, gamma=self.gamma
         )
 

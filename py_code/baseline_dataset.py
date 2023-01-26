@@ -197,9 +197,15 @@ class BaselineDataSet(torch.utils.data.Dataset):
             #         # )
             #         continue
 
-        # bg_img = 1 - gtvt_img - gtvn_img
-        # g.show_img(bg_img)
-        # label_imgs = torch.cat([gtvt_img, gtvn_img, bg_img], dim=0)
+        # load background
+        # label_bg = 1 - label_gtvt - label_gtvn
+        label_bg = 1 - label_gtvs
+        # g.show_img(label_gtvs)
+        # g.show_img(label_bg)
+        # !!! label FIRST !!!
+        # labels = torch.cat([label_bg, label_gtvt, label_gtvn], dim=0)
+        labels = torch.cat([label_bg, label_gtvs], dim=0)
+
         multi_model_imgs = None
         for i in ["CT", "PT", "T1dr", "T2dr"]:
             img_path = os.path.join(
@@ -216,7 +222,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 multi_model_imgs = img
             else:
                 multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
-        return multi_model_imgs, label_gtvs  # label_imgs
+        return multi_model_imgs, labels
 
     # must be overrided
     # this function is only for training, not for inference
@@ -230,7 +236,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
 # # for testing
 # # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
-# if 1:
+# if 0:
 #     tmp_dataset = BaselineDataSet(
 #         patient_list=["336"],
 #         augment_methods=["rotate"],
