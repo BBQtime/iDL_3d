@@ -321,7 +321,7 @@ class SharedTraining:
         result = NestedDict()
         dataset = BaselineDataSet(patient_list=[patient])
 
-        origin_labels = g.load_nii(
+        origin_gtvs = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
         )
         # origin_shape = origin_labels.shape
@@ -350,10 +350,10 @@ class SharedTraining:
             outputs = self._cnn.forward(inputs)[unetpp_output]
             # squeeze batch
             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
-            # output channel 0, dont squeeze this, leave it for gtvt and gtvs
-            result["gtvs"] = outputs[0]
-            result["gtvs"] = g.central_pad(result["gtvs"], origin_labels.shape)
-            result["gtvs"] = g.central_crop(result["gtvs"], origin_labels.shape)
+            result["gtvs"] = outputs[1]
+            for i in ["gtvs"]:
+                result[i] = g.central_pad(result[i], origin_gtvs.shape)
+                result[i] = g.central_crop(result[i], origin_gtvs.shape)
 
             # for d in patch_pos[0]:
             #     for h in patch_pos[1]:
@@ -393,7 +393,7 @@ class SharedTraining:
             #     outputs[1], labels[1]
             # )
             result[metric_type] = self._seg_metrics[metric_type](
-                result["gtvs"], origin_labels
+                result["gtvs"], origin_gtvs
             )
 
         return result

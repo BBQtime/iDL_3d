@@ -393,39 +393,41 @@ class BaselineTraining(SharedTraining):
                 else:
                     patient_list = self._valid_loader.dataset.patient_list
 
-                for patient in tqdm(patient_list):
+                for cur_patient in tqdm(patient_list):
                     # if testset, create folder to save cur patient preds
                     if dataset == "test":
-                        patient_folder = os.path.join(
-                            cur_epoch_folder, "patients", "patient={}".format(patient)
+                        cur_patient_folder = os.path.join(
+                            cur_epoch_folder,
+                            "patients",
+                            "patient={}".format(cur_patient),
                         )
-                        g.create_folder(patient_folder)
+                        g.create_folder(cur_patient_folder)
 
                     # result contains: "gtvs" "dsc" "msc" "hd95"
-                    patient_result = self._inference_single_patient(patient)
+                    cur_patient_result = self._inference_single_patient(cur_patient)
 
                     # save score of cur patient
                     for i in g.METRICS_LIST:
                         if dataset == "test":
-                            cur_score["patient={}".format(patient)][i] = patient_result[
+                            cur_score["patient={}".format(cur_patient)][
                                 i
-                            ]
-                        cur_score["avg"][i].append(patient_result[i])
+                            ] = cur_patient_result[i]
+                        cur_score["avg"][i].append(cur_patient_result[i])
 
                     # save pred of cur patient
                     if dataset == "test":
                         for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
                             g.save_nii(
-                                np_data=patient_result[i],
+                                np_data=cur_patient_result[i],
                                 save_path=os.path.join(
-                                    patient_folder, "pred_{}.nii".format(i)
+                                    cur_patient_folder, "pred_{}.nii".format(i)
                                 ),
                                 spacing=g.NII_SPACING,
                             )
                             g.save_nii(
-                                np_data=g.binarize_img(patient_result[i]),
+                                np_data=g.binarize_img(cur_patient_result[i]),
                                 save_path=os.path.join(
-                                    patient_folder, "pred_{}_binary.nii".format(i)
+                                    cur_patient_folder, "pred_{}_binary.nii".format(i)
                                 ),
                                 spacing=g.NII_SPACING,
                             )
