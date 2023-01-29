@@ -407,18 +407,18 @@ def asym_unified_focal_loss(weight=0.5, delta=0.6, gamma=0.5):
 
 
 # only for training
-class DiceLoss(nn.Module):
-    def __init__(
-        self,
-    ):
-        super().__init__()
-        self.__loss_func = dice_loss()
+# class DiceLoss(nn.Module):
+#     def __init__(
+#         self,
+#     ):
+#         super().__init__()
+#         self.__loss_func = dice_loss()
 
-    def forward(self, pred, label):
-        if pred.shape != label.shape:
-            raise ValueError("preds.shape != labels.shape")
+#     def forward(self, pred, label):
+#         if pred.shape != label.shape:
+#             raise ValueError("preds.shape != labels.shape")
 
-        return self.__loss_func(pred, label)
+#         return self.__loss_func(pred, label)
 
 
 # only for training
@@ -428,14 +428,21 @@ class UnifiedFocalLoss(nn.Module):
         weight: float = 0.5,
         delta: float = 0.6,
         gamma: float = 0.5,
+        asym: bool = True,
     ):
         super().__init__()
         self.weight = weight
         self.delta = delta
         self.gamma = gamma
-        self.__loss_func = asym_unified_focal_loss(
-            weight=self.weight, delta=self.delta, gamma=self.gamma
-        )
+        self.asym = asym
+        if self.asym:
+            self.__loss_func = asym_unified_focal_loss(
+                weight=self.weight, delta=self.delta, gamma=self.gamma
+            )
+        else:
+            self.__loss_func = sym_unified_focal_loss(
+                weight=self.weight, delta=self.delta, gamma=self.gamma
+            )
 
     def forward(self, pred, label):
         if pred.shape != label.shape:

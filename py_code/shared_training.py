@@ -6,8 +6,9 @@ import random
 import numpy as np
 import torch.nn as nn
 from loss_func import UnifiedFocalLoss
-from loss_func import DiceLoss
-from criterion import HybridFocalLoss
+
+# from loss_func import DiceLoss
+# from criterion import HybridFocalLoss
 from segment_metrics import SegmentationMetrics
 from tqdm import tqdm
 from itertools import product
@@ -85,19 +86,20 @@ class SharedTraining:
             delta = float(hyper["loss.delta"])
             delta = g.check_limit(delta, 0, 1)
             gamma = float(hyper["loss.gamma"])
+            asym = bool(hyper["loss.asym"])
         except TypeError:
             weight = None
             delta = None
             gamma = None
+            asym = None
 
         # self._loss_func = DiceLoss().to(g.DEVICE)
-
         # self._loss_func = HybridFocalLoss().to(g.DEVICE)
-
         self._loss_func = UnifiedFocalLoss(
             weight=weight,
             delta=delta,
             gamma=gamma,
+            asym=asym,
         ).to(g.DEVICE)
 
         # load cnn
@@ -165,10 +167,12 @@ class SharedTraining:
             print_dict["loss.weight"] = self._loss_func.weight
             print_dict["loss.delta"] = self._loss_func.delta
             print_dict["loss.gamma"] = self._loss_func.gamma
+            print_dict["loss.asym"] = self._loss_func.asym
         except AttributeError:
             print_dict["loss.weight"] = None
             print_dict["loss.delta"] = None
             print_dict["loss.gamma"] = None
+            print_dict["loss.asym"] = None
 
         print_dict = OrderedDict(sorted(print_dict.items()))
         for key, value in print_dict.items():
@@ -194,10 +198,12 @@ class SharedTraining:
             hyper_dict["loss.weight"] = self._loss_func.weight
             hyper_dict["loss.delta"] = self._loss_func.delta
             hyper_dict["loss.gamma"] = self._loss_func.gamma
+            hyper_dict["loss.asym"] = self._loss_func.asym
         except AttributeError:
             hyper_dict["loss.weight"] = None
             hyper_dict["loss.delta"] = None
             hyper_dict["loss.gamma"] = None
+            hyper_dict["loss.asym"] = None
         hyper_dict["loss.func"] = "unified.focal.loss"
         hyper_dict["optim"] = "adam"
         hyper_dict["scheduler"] = "reduce.lr.on.plateau"
