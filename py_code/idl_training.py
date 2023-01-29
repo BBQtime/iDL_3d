@@ -355,12 +355,12 @@ class IDLTraining(SharedTraining):
         # save pred of cur patient
         for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
             g.save_nii(
-                np_data=patient_result[i],
+                img=patient_result[i],
                 save_path=os.path.join(cur_round_folder, "pred_{}.nii".format(i)),
                 spacing=g.NII_SPACING,
             )
             g.save_nii(
-                np_data=g.binarize_img(patient_result[i]),
+                img=g.binarize_img(patient_result[i]),
                 save_path=os.path.join(
                     cur_round_folder, "pred_{}_binary.nii".format(i)
                 ),

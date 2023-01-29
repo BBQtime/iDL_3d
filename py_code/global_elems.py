@@ -45,6 +45,54 @@ def show_img(
     cv2.waitKey(0)
 
 
+def save_img(
+    img: Union[ndarray, Tensor],
+    save_folder: str = "",
+    img_name: str = "",
+    extension_name: str = ".png",
+):
+    if isinstance(img, Tensor):
+        # detach: return a tensor share the same memory but without grad
+        img = img.detach().cpu().numpy()
+
+    if len(img.shape) == 3:
+        img = img[img.shape[0] // 2]
+    elif len(img.shape) == 4:
+        img = img[img.shape[0] // 2][img.shape[1] // 2]
+
+    if save_folder == "":
+        save_folder = os.path.join(PROJ_PATH, "debug")
+    if img_name == "":
+        img_name = "debug"
+    if not img_name.endswith(extension_name):
+        img_name += extension_name
+    save_path = os.path.join(save_folder, img_name)
+
+    imageio.imwrite(save_path, img)
+    return save_path
+
+
+def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = None):
+    if isinstance(img, Tensor):
+        # detach: return a tensor share the same memory but without grad
+        img = img.detach().cpu().numpy()
+
+    if len(img.shape) > 3:
+        for i in range(len(img.shape) - 3):
+            if img.shape[i] == 1:
+                img = np.squeeze(img, axis=0)
+            else:
+                img = img[0]
+
+    itk_img = sitk.GetImageFromArray(img)
+    if spacing is None:
+        itk_img.SetSpacing(NII_SPACING)
+    else:
+        itk_img.SetSpacing(spacing)
+    sitk.WriteImage(itk_img, save_path)
+    return save_path
+
+
 def exit_app(msg: str = ""):
     if msg == "" or msg is None:
         msg = "debug exit"
@@ -361,7 +409,7 @@ def binarize_img(
     return img
 
 
-def load_nii(nii_path: str, binary: bool = False, out_dim: int = 0):
+def load_nii(nii_path: str, binary: bool = False, out_dim: int = 3):
     img = sitk.ReadImage(nii_path)
     img = sitk.GetArrayFromImage(img)
     img = img.astype(np.float32)
@@ -371,23 +419,6 @@ def load_nii(nii_path: str, binary: bool = False, out_dim: int = 0):
         for i in range(len(img.shape) - out_dim):
             img = np.squeeze(img, axis=0)
     return img
-
-
-def save_nii(np_data: ndarray, save_path: str, spacing: tuple = None):
-    itk_img = sitk.GetImageFromArray(np_data)
-    if spacing is None:
-        itk_img.SetSpacing(NII_SPACING)
-    else:
-        itk_img.SetSpacing(spacing)
-    sitk.WriteImage(itk_img, save_path)
-    return save_path
-
-
-def save_img(save_path: str, np_data: ndarray, extension_name: str = ".png"):
-    if not save_path.endswith(extension_name):
-        save_path += extension_name
-    imageio.imwrite(save_path, np_data)
-    return save_path
 
 
 # max size: 89 283 280

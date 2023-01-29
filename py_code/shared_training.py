@@ -16,7 +16,8 @@ from collections import OrderedDict
 from torch import optim
 from idl_dataset import IDLDataSet
 from typing import Union
-from unet_pp import UNetPP
+
+# from unet_pp import UNetPP
 from unet_pp_slim import UNetPPSlim
 from datetime import datetime
 from nested_dict import NestedDict
@@ -80,18 +81,12 @@ class SharedTraining:
         )
 
         # loss function parameters
-        try:
-            weight = float(hyper["loss.weight"])
-            weight = g.check_limit(weight, 0, 1)
-            delta = float(hyper["loss.delta"])
-            delta = g.check_limit(delta, 0, 1)
-            gamma = float(hyper["loss.gamma"])
-            asym = bool(hyper["loss.asym"])
-        except TypeError:
-            weight = None
-            delta = None
-            gamma = None
-            asym = None
+        weight = float(hyper["loss.weight"])
+        weight = g.check_limit(weight, 0, 1)
+        delta = float(hyper["loss.delta"])
+        delta = g.check_limit(delta, 0, 1)
+        gamma = float(hyper["loss.gamma"])
+        asym = bool(hyper["loss.asym"])
 
         # self._loss_func = DiceLoss().to(g.DEVICE)
         # self._loss_func = HybridFocalLoss().to(g.DEVICE)
@@ -126,14 +121,14 @@ class SharedTraining:
         # new model
         if exist_cnn_path is None:
             # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-            cnn = UNetPPSlim(in_chan=4, out_chan=2, dropout=self._dropout).to(g.DEVICE)
+            cnn = UNetPPSlim(in_chan=4, out_chan=3, dropout=self._dropout).to(g.DEVICE)
 
         # exist cnn
         else:
             # load state dict only
             if g.CNN_STATE_DICT_ONLY:
                 # cnn = UNetPP(dropout=self._dropout).to(g.DEVICE)
-                cnn = UNetPPSlim(in_chan=4, out_chan=2, dropout=self._dropout).to(
+                cnn = UNetPPSlim(in_chan=4, out_chan=3, dropout=self._dropout).to(
                     g.DEVICE
                 )
                 cnn.load_state_dict(torch.load(exist_cnn_path))
@@ -163,16 +158,10 @@ class SharedTraining:
         print_dict["augment.methods"] = self._augment_methods
         print_dict["augment.low.limit"] = self._augment_low_limit
         print_dict["augment.up.limit"] = self._augment_up_limit
-        try:
-            print_dict["loss.weight"] = self._loss_func.weight
-            print_dict["loss.delta"] = self._loss_func.delta
-            print_dict["loss.gamma"] = self._loss_func.gamma
-            print_dict["loss.asym"] = self._loss_func.asym
-        except AttributeError:
-            print_dict["loss.weight"] = None
-            print_dict["loss.delta"] = None
-            print_dict["loss.gamma"] = None
-            print_dict["loss.asym"] = None
+        print_dict["loss.weight"] = self._loss_func.weight
+        print_dict["loss.delta"] = self._loss_func.delta
+        print_dict["loss.gamma"] = self._loss_func.gamma
+        print_dict["loss.asym"] = self._loss_func.asym
 
         print_dict = OrderedDict(sorted(print_dict.items()))
         for key, value in print_dict.items():
@@ -194,16 +183,10 @@ class SharedTraining:
         hyper_dict["augment.methods"] = g.list_to_str(self._augment_methods)
         hyper_dict["augment.low.limit"] = self._augment_low_limit
         hyper_dict["augment.up.limit"] = self._augment_up_limit
-        try:
-            hyper_dict["loss.weight"] = self._loss_func.weight
-            hyper_dict["loss.delta"] = self._loss_func.delta
-            hyper_dict["loss.gamma"] = self._loss_func.gamma
-            hyper_dict["loss.asym"] = self._loss_func.asym
-        except AttributeError:
-            hyper_dict["loss.weight"] = None
-            hyper_dict["loss.delta"] = None
-            hyper_dict["loss.gamma"] = None
-            hyper_dict["loss.asym"] = None
+        hyper_dict["loss.weight"] = self._loss_func.weight
+        hyper_dict["loss.delta"] = self._loss_func.delta
+        hyper_dict["loss.gamma"] = self._loss_func.gamma
+        hyper_dict["loss.asym"] = self._loss_func.asym
         hyper_dict["loss.func"] = "unified.focal.loss"
         hyper_dict["optim"] = "adam"
         hyper_dict["scheduler"] = "reduce.lr.on.plateau"
@@ -330,23 +313,6 @@ class SharedTraining:
         origin_gtvs = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
         )
-        # origin_shape = origin_labels.shape
-
-        # overlap_weight = np.zeros(origin_shape)
-        # result["gtvs"] = np.zeros(origin_shape)
-
-        # # generate patch position
-        # patch_pos = []
-        # for dim in range(3):
-        #     patch_pos.append([])
-        #     start = 0
-        #     end = origin_shape[dim] - g.PATCH_SIZE[dim]
-        #     stride = round(g.PATCH_SIZE[dim] / 3)
-        #     while start < end:
-        #         patch_pos[dim].append(start)
-        #         start += stride
-        #         if start >= end:
-        #             patch_pos[dim].append(end)
 
         self._cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
@@ -356,52 +322,22 @@ class SharedTraining:
             outputs = self._cnn.forward(inputs)[unetpp_output]
             # squeeze batch
             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
-            result["gtvs"] = outputs[1]
-            for i in ["gtvs"]:
+
+            # get gtvt/gtvn/gtvs
+            result["gtvt"] = outputs[1]
+            result["gtvn"] = outputs[2]
+            result["gtvs"] = result["gtvt"] + result["gtvn"]
+            result["gtvs"] = np.where(result["gtvs"] > 1, 1, result["gtvs"])
+
+            # pad and crop to original size
+            for i in ["gtvt", "gtvn", "gtvs"]:
                 result[i] = g.central_pad(result[i], origin_gtvs.shape)
                 result[i] = g.central_crop(result[i], origin_gtvs.shape)
 
-            # for d in patch_pos[0]:
-            #     for h in patch_pos[1]:
-            #         for w in patch_pos[2]:
-            #             inputs, labels = dataset.get_item(
-            #                 patient=patient, patch_pos=(d, h, w)
-            #             )
-
-            #             # unsqueeze to add batch dim
-            #             inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
-            #             labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            #             outputs = self._cnn.forward(inputs)[unetpp_output]
-            #             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
-
-            #             # add current output patch
-            #             result["gtvs"][
-            #                 d : d + g.PATCH_SIZE[0],
-            #                 h : h + g.PATCH_SIZE[1],
-            #                 w : w + g.PATCH_SIZE[2],
-            #             ] += outputs[0]
-            #             # [0]-gtvt, [1]-gtvn
-
-            #             # add current output weight to overlap weight tensor
-            #             overlap_weight[
-            #                 d : d + g.PATCH_SIZE[0],
-            #                 h : h + g.PATCH_SIZE[1],
-            #                 w : w + g.PATCH_SIZE[2],
-            #             ] += np.ones_like(outputs[0])
-
-        # result["gtvs"] /= overlap_weight
-
         for metric_type in g.METRICS_LIST:
-            # score_dict["gtvt"][metric_type] = self._seg_metrics[metric_type](
-            #     outputs[0], labels[0]
-            # )
-            # score_dict["gtvn"][metric_type] = self._seg_metrics[metric_type](
-            #     outputs[1], labels[1]
-            # )
             result[metric_type] = self._seg_metrics[metric_type](
                 result["gtvs"], origin_gtvs
             )
-
         return result
 
     # protected function

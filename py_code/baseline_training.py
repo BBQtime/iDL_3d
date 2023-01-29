@@ -335,12 +335,14 @@ class BaselineTraining(SharedTraining):
                 if self._cross_valid is False:
                     break
 
-            self.inference(
-                baseline_id=baseline_id,
-                dataset="valid",
-                print_hyper=False,
-                debug_mode=debug_mode,
-            )
+            # inference
+            for dataset in ["valid", "test"]:
+                self.inference(
+                    baseline_id=baseline_id,
+                    dataset=dataset,
+                    print_hyper=False,
+                    debug_mode=debug_mode,
+                )
 
     def inference(
         self,
@@ -416,16 +418,16 @@ class BaselineTraining(SharedTraining):
 
                     # save pred of cur patient
                     if dataset == "test":
-                        for i in ["gtvs"]:  # ["gtvt", "gtvn"]:
+                        for i in ["gtvt", "gtvn", "gtvs"]:
                             g.save_nii(
-                                np_data=cur_patient_result[i],
+                                img=cur_patient_result[i],
                                 save_path=os.path.join(
                                     cur_patient_folder, "pred_{}.nii".format(i)
                                 ),
                                 spacing=g.NII_SPACING,
                             )
                             g.save_nii(
-                                np_data=g.binarize_img(cur_patient_result[i]),
+                                img=g.binarize_img(cur_patient_result[i]),
                                 save_path=os.path.join(
                                     cur_patient_folder, "pred_{}_binary.nii".format(i)
                                 ),
