@@ -27,7 +27,7 @@ class BaselineTraining(SharedTraining):
     ):
         # epochs
         if debug_mode:
-            self._epochs = 2  # run 2 epochs to compare difference in loss
+            self._epochs = 10  # run 2 epochs to compare difference in loss
         else:
             self._epochs = int(hyper["epochs"])
             self._epochs = g.check_limit(self._epochs, 1, None)
@@ -167,13 +167,31 @@ class BaselineTraining(SharedTraining):
         # hyper_dict["patch.tar.vol.thold"] = self._patch_tar_vol_thold
         super()._save_hyper(json_path, hyper_dict)
 
-    def loss_fig(self, baseline_id: str):
+    def draw_lr_fig(self, baseline_id: str):
+        lr_json_path = os.path.join(
+            g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", "lr.json"
+        )
+        self.__draw_lr_fig(lr_json_path)
+
+    def __draw_lr_fig(self, lr_json_path: str):
+        plt.figure().clear()
+
+        lr_dict = g.load_json(lr_json_path)
+        lr_list = []
+        for i in lr_dict:
+            lr_list.append(lr_dict[i])
+
+        plt.plot(range(1, len(lr_list) + 1), lr_list, label="lr")
+        plt.legend()
+        plt.savefig(lr_json_path[:-4] + "png")
+
+    def draw_loss_fig(self, baseline_id: str):
         loss_json_path = os.path.join(
             g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline", "loss.json"
         )
-        self.__loss_fig(loss_json_path)
+        self.__draw_loss_fig(loss_json_path)
 
-    def __loss_fig(self, loss_json_path: str):
+    def __draw_loss_fig(self, loss_json_path: str):
         plt.figure().clear()
 
         loss_dict = g.load_json(loss_json_path)
@@ -195,6 +213,7 @@ class BaselineTraining(SharedTraining):
 
         best_loss_dict = NestedDict()
         loss_save_path = os.path.join(cur_fold_folder, "loss.json")
+        lr_save_path = os.path.join(cur_fold_folder, "lr.json")
         patience_count = 0
 
         for cur_epoch in range(1, self._epochs + 1):
@@ -242,9 +261,17 @@ class BaselineTraining(SharedTraining):
             cur_epoch_loss["valid"] = valid_loss
             loss_dict["epoch={:03d}".format(self._epochs_actual)] = cur_epoch_loss
             g.save_json(loss_dict, loss_save_path)
-
             # draw loss figure
-            self.__loss_fig(loss_save_path)
+            self.__draw_loss_fig(loss_save_path)
+
+            # save lr in json
+            lr_dict = g.load_json(lr_save_path)
+            for param_group in self._optim.param_groups:
+                cur_epoch_lr = param_group["lr"]
+            lr_dict["epoch={:03d}".format(self._epochs_actual)] = cur_epoch_lr
+            g.save_json(lr_dict, lr_save_path)
+            # draw lr figure
+            self.__draw_lr_fig(lr_save_path)
 
             # save cnn
             if len(best_loss_dict) < self._keep_best_cnn_num:
@@ -316,6 +343,8 @@ class BaselineTraining(SharedTraining):
 
                 # save an empty loss.json
                 g.save_json(NestedDict(), os.path.join(cur_fold_folder, "loss.json"))
+                # save an empty lr.json
+                g.save_json(NestedDict(), os.path.join(cur_fold_folder, "lr.json"))
 
                 # save hyper before training
                 hyper_save_path = os.path.join(cur_fold_folder, "hyper.json")

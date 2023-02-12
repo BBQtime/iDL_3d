@@ -47,8 +47,8 @@ def show_img(
 
 def save_img(
     img: Union[ndarray, Tensor],
-    save_folder: str = "",
     img_name: str = "",
+    save_folder: str = "",
     extension_name: str = ".png",
 ):
     if isinstance(img, Tensor):

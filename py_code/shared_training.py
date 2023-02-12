@@ -49,15 +49,15 @@ class SharedTraining:
         self._dropout = g.check_limit(self._dropout, 0, 0.9)
 
         # batch size
-        self._batch_size = int(hyper["batch.size"])
+        self._batch_size = float(hyper["batch.size"])
         self._batch_size = g.check_limit(self._batch_size, 1, None)
 
         # actual batch size
         used_gpu_count = g.used_gpu_count()
         if used_gpu_count > 1:
-            self._batch_size_actual = self._batch_size * used_gpu_count
+            self._batch_size_actual = int(self._batch_size * used_gpu_count)
         else:
-            self._batch_size_actual = self._batch_size
+            self._batch_size_actual = int(self._batch_size)
 
         # lr decay factor
         self._lr_decay_factor = float(hyper["lr.decay.factor"])

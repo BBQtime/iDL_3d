@@ -113,6 +113,17 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
             )
             img = g.load_nii(nii_path=img_path, out_dim=3)
+
+            # ct img preprocessing (only focus on soft tissue)
+            if i == "CT":
+                # in origin_dicom, air is -1024. in our ct img, air is 0
+                window = 350  # window
+                level = 40 + 1024  # level
+                high = level + window / 2
+                low = level - window / 2
+                img = np.where(img > high, high, img)
+                img = np.where(img < low, low, img)
+
             img = self.__preprocess(img, augment_seed)
 
             # concat multi-model img
