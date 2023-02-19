@@ -307,12 +307,25 @@ class SharedTraining:
             self._batch_size_actual = dataset_len  # self._batch_size_actual
 
     def _inference_single_patient(self, patient: str, unetpp_output: int = 3) -> dict:
+        # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
         result = NestedDict()
+
         dataset = BaselineDataSet(patient_list=[patient])
 
-        origin_gtvs = g.load_nii(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
-        )
+        origin = NestedDict()
+        # load gtvt gtvs
+        for i in ["s", "t"]:
+            origin["gtv" + i] = g.load_nii(
+                os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTV{}.nii".format(patient, i)),
+                binary=True,
+                out_dim=3,
+            )
+        # load gtvn
+        gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
+        if os.path.exists(gtvn_path):
+            origin["gtvn"] = g.load_nii(gtvn_path, binary=True, out_dim=3)
+        else:
+            origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
 
         self._cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
@@ -323,21 +336,26 @@ class SharedTraining:
             # squeeze batch
             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
-            # get gtvt/gtvn/gtvs
-            result["gtvt"] = outputs[1]
-            result["gtvn"] = outputs[2]
-            result["gtvs"] = result["gtvt"] + result["gtvn"]
-            result["gtvs"] = np.where(result["gtvs"] > 1, 1, result["gtvs"])
+            # get gtvt/gtvn/gtvs img
+            result["gtvt"]["pred"] = outputs[1]
+            result["gtvn"]["pred"] = outputs[2]
+            result["gtvs"]["pred"] = outputs[1] + outputs[2]
+            result["gtvs"]["pred"] = np.where(
+                result["gtvs"]["pred"] > 1, 1, result["gtvs"]["pred"]
+            )
 
             # pad and crop to original size
-            for i in ["gtvt", "gtvn", "gtvs"]:
-                result[i] = g.central_pad(result[i], origin_gtvs.shape)
-                result[i] = g.central_crop(result[i], origin_gtvs.shape)
+            for i in ["gtvs", "gtvt", "gtvn"]:
+                result[i]["pred"] = g.central_pad(result[i]["pred"], origin[i].shape)
+                result[i]["pred"] = g.central_crop(result[i]["pred"], origin[i].shape)
 
-        for metric_type in g.METRICS_LIST:
-            result[metric_type] = self._seg_metrics[metric_type](
-                result["gtvs"], origin_gtvs
-            )
+        # calculate segment scores
+        for i in ["gtvs", "gtvt", "gtvn"]:
+            for metric_type in g.METRICS_LIST:
+                result[i][metric_type] = self._seg_metrics[metric_type](
+                    result[i]["pred"], origin[i]
+                )
+
         return result
 
     # protected function

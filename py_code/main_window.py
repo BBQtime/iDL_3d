@@ -314,12 +314,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_color(self):
         self.__color = NestedDict()
-        self.__color["label.gtvs"] = (0, 255, 255)
-        # self.__color["label.gtvt"] = (0, 255, 255)  # light blue
-        # self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
-        self.__color["pred.gtvs"] = (255, 255, 0)
-        # self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
-        # self.__color["pred.gtvn"] = (255, 128, 0)  # orange
+        self.__color["label.gtvt"] = (0, 255, 255)  # light blue
+        self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
+        self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
+        self.__color["pred.gtvn"] = (255, 128, 0)  # orange
         self.__color["annotated"] = (0, 255, 64)  # green
         self.__color["score.text"] = (0, 255, 64)  # green
 
@@ -360,10 +358,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_frames[i].setPalette(pal)
 
     def __load_img(self, img_path: str):
-        img = g.load_nii(img_path)
+        img = g.load_nii(img_path, binary=False, out_dim=3)
         img = g.normalize_img(img)
-        # img[img < 0] = 0
-        # img[img > 255] = 255
         # turn upside down
         img = np.flip(m=img, axis=0)
         # img = np.rot90(m=img, k=2, axes=(0, 1))
@@ -390,12 +386,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "pt",
             "mrt1",
             "mrt2",
-            "label.gtvs",
-            "pred.gtvs",
-            # "label.gtvt",
-            # "label.gtvn",
-            # "pred.gtvt",
-            # "pred.gtvn",
+            "label.gtvt",
+            "label.gtvn",
+            "pred.gtvt",
+            "pred.gtvn",
         ]:
             self.__img_data[i] = None
 
@@ -605,10 +599,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__img_data["mrt2"] = self.__load_img(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
-        # "GTVt","GTVn"
-        self.__img_data["label.gtvs"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(self.__patient))
+        # "GTVt"
+        self.__img_data["label.gtvt"] = self.__load_img(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(self.__patient))
         )
+        #  "GTVn"
+        gtvn_path = os.path.join(
+            g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(self.__patient)
+        )
+        if os.path.exists(gtvn_path):
+            self.__img_data["label.gtvn"] = self.__load_img(gtvn_path)
+        else:
+            gtvs_img = self.__load_img(
+                os.path.join(
+                    g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(self.__patient)
+                )
+            )
+            self.__img_data["label.gtvn"] = gtvs_img - self.__img_data["label.gtvt"]
 
         # load round combobox
         self.__comboxes["round"].clear()
@@ -686,11 +693,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "round={}".format(self.__round),
             )
         pred_path = NestedDict()
-        pred_path["pred.gtvs"] = os.path.join(pred_folder, "pred_gtvs.nii")
-        # pred_path["pred.gtvt"] = os.path.join(cur_round_folder, "pred_gtvt.nii")
-        # pred_path["pred.gtvn"] = os.path.join(cur_round_folder, "pred_gtvn.nii")
+        pred_path["pred.gtvt"] = os.path.join(pred_folder, "pred_gtvt.nii")
+        pred_path["pred.gtvn"] = os.path.join(pred_folder, "pred_gtvn.nii")
 
-        for i in ["pred.gtvs"]:  # ["pred.gtvt", "pred.gtvn"]:
+        for i in ["pred.gtvt", "pred.gtvn"]:
             self.__img_data[i] = self.__load_img(pred_path[i])
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
@@ -709,8 +715,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for metric_type in g.METRICS_LIST:
             # baseline
             self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
-                metric_type
-            ]
+                "gtvs"
+            ][metric_type]
             # idl
             if self.__idl_id != "baseline":
                 self.__score[metric_type] = self.__score[metric_type][
@@ -765,18 +771,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # set contour color
         color = NestedDict()
-        color["label.gtvs"] = self.__color["label.gtvs"]
-        # color["label.gtvt"] = self.__color["label.gtvt"]
-        # color["label.gtvn"] = self.__color["label.gtvn"]
+        color["label.gtvt"] = self.__color["label.gtvt"]
+        color["label.gtvn"] = self.__color["label.gtvn"]
 
         if self.__img_plane == "transverse" and is_annotated:
-            color["pred.gtvs"] = self.__color["annotated"]
-            # color["pred.gtvt"] = self.__color["annotated"]
-            # color["pred.gtvn"] = self.__color["annotated"]
+            color["pred.gtvt"] = self.__color["annotated"]
+            color["pred.gtvn"] = self.__color["annotated"]
         else:
-            color["pred.gtvs"] = self.__color["pred.gtvs"]
-            # color["pred.gtvt"] = self.__color["pred.gtvt"]
-            # color["pred.gtvn"] = self.__color["pred.gtvn"]
+            color["pred.gtvt"] = self.__color["pred.gtvt"]
+            color["pred.gtvn"] = self.__color["pred.gtvn"]
 
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
@@ -838,9 +841,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # blur after __fit_img_frame will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
-            # draw label and prediction contour
-            # ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
-            for k in ["label.gtvs", "pred.gtvs"]:
+            # draw label and pred contour
+            for k in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
                 if self.__img_plane == "sagittal":
                     contour = self.__img_data[k][:, :, self.__slice_id].astype(np.uint8)
                 elif self.__img_plane == "coronal":
@@ -874,22 +876,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             text_pos_x = 10
             text_pos_y = 10
 
-            if g.is_number(self.__score["dsc"]):
-                cv_text += "DSC: {:.3f}".format(self.__score["dsc"])
-            else:
-                cv_text += "DSC: N/A"
-            cv_text += "\n"
-
-            if g.is_number(self.__score["msd"]):
-                cv_text += "MSD: {:.2f}".format(self.__score["msd"])
-            else:
-                cv_text += "MSD: N/A"
-            cv_text += "\n"
-
-            if g.is_number(self.__score["hd95"]):
-                cv_text += "HD95: {:.2f}".format(self.__score["hd95"])
-            else:
-                cv_text += "HD95: N/A"
+            for metric_type in g.METRICS_LIST:
+                if g.is_number(self.__score[metric_type]):
+                    cv_text += metric_type.upper() + ": {:.3f}".format(
+                        self.__score[metric_type]
+                    )
+                else:
+                    cv_text += metric_type.upper() + ": N/A"
+                cv_text += "\n"
 
             self.__cv_put_text(
                 img=rgb_img,
@@ -899,46 +893,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
             # add text: ground truth/prediction
-            text_pos_y = height - 88 + 40  # height-85
+            text_pos_y = height - 88
             text_pos_gap = 20
-            cv_text = "LABEL - GTVs"  # "LABEL - GTVt"
+            cv_text = "LABEL - GTVt"
             self.__cv_put_text(
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["label.gtvs"],
+                color=color["label.gtvt"],
             )
 
-            # text_pos_y += text_pos_gap
-            # cv_text = "LABEL - GTVn"
-            # self.__cv_put_text(
-            #     img=rgb_img,
-            #     text=cv_text,
-            #     pos=(text_pos_x, text_pos_y),
-            #     color=color["label.gtvn"],
-            # )
+            text_pos_y += text_pos_gap
+            cv_text = "LABEL - GTVn"
+            self.__cv_put_text(
+                img=rgb_img,
+                text=cv_text,
+                pos=(text_pos_x, text_pos_y),
+                color=color["label.gtvn"],
+            )
 
             text_pos_y += text_pos_gap
-            cv_text = "PRED - GTVs"  # "PRED - GTVt"
+            cv_text = "PRED - GTVt"
             if self.__img_plane == "transverse" and is_annotated:
                 cv_text += " (ANNOTATED)"
             self.__cv_put_text(
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["pred.gtvs"],
+                color=color["pred.gtvt"],
             )
 
-            # text_pos_y += text_pos_gap
-            # cv_text = "PRED - GTVn"
-            # if self.__img_plane == "transverse" and is_annotated:
-            #     cv_text += " (ANNOTATED)"
-            # self.__cv_put_text(
-            #     img=rgb_img,
-            #     text=cv_text,
-            #     pos=(text_pos_x, text_pos_y),
-            #     color=color["pred.gtvn"],
-            # )
+            text_pos_y += text_pos_gap
+            cv_text = "PRED - GTVn"
+            if self.__img_plane == "transverse" and is_annotated:
+                cv_text += " (ANNOTATED)"
+            self.__cv_put_text(
+                img=rgb_img,
+                text=cv_text,
+                pos=(text_pos_x, text_pos_y),
+                color=color["pred.gtvn"],
+            )
 
             # show imgs
             qt_image = QImage(

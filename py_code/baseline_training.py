@@ -416,8 +416,9 @@ class BaselineTraining(SharedTraining):
                     self._print_hyper()
 
                 cur_score = NestedDict()
-                for i in g.METRICS_LIST:
-                    cur_score["avg"][i] = []
+                for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    for metric_type in g.METRICS_LIST:
+                        cur_score["avg"][gtv][metric_type] = []
 
                 if dataset == "test":
                     patient_list = self._test_loader.dataset.patient_list
@@ -434,44 +435,47 @@ class BaselineTraining(SharedTraining):
                         )
                         g.create_folder(cur_patient_folder)
 
-                    # result contains: "gtvs" "dsc" "msc" "hd95"
+                    # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
                     cur_patient_result = self._inference_single_patient(cur_patient)
 
                     # save score of cur patient
-                    for i in g.METRICS_LIST:
-                        if dataset == "test":
-                            cur_score["patient={}".format(cur_patient)][
-                                i
-                            ] = cur_patient_result[i]
-                        cur_score["avg"][i].append(cur_patient_result[i])
+                    for gtv in ["gtvs", "gtvt", "gtvn"]:
+                        for metric_type in g.METRICS_LIST:
+                            # add cur patient result in avg_list
+                            cur_score["avg"][gtv][metric_type].append(
+                                cur_patient_result[gtv][metric_type]
+                            )
+                            # record cur patient result if on test test
+                            if dataset == "test":
+                                cur_score["patient={}".format(cur_patient)][gtv][
+                                    metric_type
+                                ] = cur_patient_result[gtv][metric_type]
 
                     # save pred of cur patient
                     if dataset == "test":
-                        for i in ["gtvt", "gtvn", "gtvs"]:
+                        for gtv in ["gtvt", "gtvn", "gtvs"]:
                             g.save_nii(
-                                img=cur_patient_result[i],
+                                img=cur_patient_result[gtv]["pred"],
                                 save_path=os.path.join(
-                                    cur_patient_folder, "pred_{}.nii".format(i)
+                                    cur_patient_folder, "pred_{}.nii".format(gtv)
                                 ),
                                 spacing=g.NII_SPACING,
                             )
                             g.save_nii(
-                                img=g.binarize_img(cur_patient_result[i]),
+                                img=g.binarize_img(cur_patient_result[gtv]["pred"]),
                                 save_path=os.path.join(
-                                    cur_patient_folder, "pred_{}_binary.nii".format(i)
+                                    cur_patient_folder, "pred_{}_binary.nii".format(gtv)
                                 ),
                                 spacing=g.NII_SPACING,
                             )
 
                 # get avg score
-                for i in g.METRICS_LIST:
-                    avg = cur_score["avg"][i]
-                    cur_score["avg"][i] = sum(avg) / len(avg)
-                # cur_score = g.load_json(
-                #     os.path.join(cur_epoch_folder, "score_valid.json")
-                # )
+                for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    for metric_type in g.METRICS_LIST:
+                        avg = cur_score["avg"][gtv][metric_type]
+                        cur_score["avg"][gtv][metric_type] = sum(avg) / len(avg)
 
-                # save score
+                # save score (test set)
                 if dataset == "test":
                     g.save_json(
                         data=cur_score,
@@ -479,9 +483,9 @@ class BaselineTraining(SharedTraining):
                     )
                     continue
 
-                # validation set, delete non-optimal folds and epochs
-                if math.isnan(cur_score["avg"]["msd"]) or math.isnan(
-                    cur_score["avg"]["hd95"]
+                # valid set, delete non-optimal folds and epochs
+                if math.isnan(cur_score["avg"]["gtvs"]["msd"]) or math.isnan(
+                    cur_score["avg"]["gtvs"]["hd95"]
                 ):
                     g.delete_folder(cur_epoch_folder)
                     continue
@@ -490,36 +494,40 @@ class BaselineTraining(SharedTraining):
                     save_cur_score = True
                 else:
                     save_cur_score = None
+                    # loop through best_scores
                     for fold in g.get_dict_keys(best_scores):
                         for epoch in g.get_dict_keys(best_scores[fold]):
+                            # cur_score is worse than best_score, dont save
                             if (
-                                cur_score["avg"]["dsc"]
+                                cur_score["avg"]["gtvs"]["dsc"]
                                 < best_scores[fold][epoch]["dsc"]
-                                and cur_score["avg"]["msd"]
+                                and cur_score["avg"]["gtvs"]["msd"]
                                 > best_scores[fold][epoch]["msd"]
-                                and cur_score["avg"]["hd95"]
+                                and cur_score["avg"]["gtvs"]["hd95"]
                                 > best_scores[fold][epoch]["hd95"]
                             ):
                                 save_cur_score = False
                                 break
+                            # cur_score is better than best_score, save
+                            # (at least one of dsc/msd/hd95 is better)
                             if (
-                                cur_score["avg"]["dsc"]
+                                cur_score["avg"]["gtvs"]["dsc"]
                                 > best_scores[fold][epoch]["dsc"]
-                                or cur_score["avg"]["msd"]
+                                or cur_score["avg"]["gtvs"]["msd"]
                                 < best_scores[fold][epoch]["msd"]
-                                or cur_score["avg"]["hd95"]
+                                or cur_score["avg"]["gtvs"]["hd95"]
                                 < best_scores[fold][epoch]["hd95"]
                             ):
                                 save_cur_score = True
+                            # best_score is worse than cur score, delete best_score
                             if (
                                 best_scores[fold][epoch]["dsc"]
-                                < cur_score["avg"]["dsc"]
+                                < cur_score["avg"]["gtvs"]["dsc"]
                                 and best_scores[fold][epoch]["msd"]
-                                > cur_score["avg"]["msd"]
+                                > cur_score["avg"]["gtvs"]["msd"]
                                 and best_scores[fold][epoch]["hd95"]
-                                > cur_score["avg"]["hd95"]
+                                > cur_score["avg"]["gtvs"]["hd95"]
                             ):
-                                # delete worse score
                                 g.delete_folder(
                                     os.path.join(
                                         baseline_folder,
@@ -527,15 +535,12 @@ class BaselineTraining(SharedTraining):
                                         "epoch={:03d}".format(epoch),
                                     )
                                 )
-                                # best_scores[fold].pop(epoch)
-                                # if len(best_scores[fold]) == 0:
-                                #     best_scores.pop(fold)
-
                         if save_cur_score is False:
                             break
 
+                # save cur avg score
                 if save_cur_score:
-                    best_scores[cur_fold][cur_epoch] = cur_score["avg"]
+                    best_scores[cur_fold][cur_epoch] = cur_score["avg"]["gtvs"]
                     g.save_json(
                         data=cur_score,
                         path=os.path.join(cur_epoch_folder, "score_valid.json"),

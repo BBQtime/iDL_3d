@@ -272,7 +272,7 @@ class IDLTraining(SharedTraining):
         patient = Path(patient_folder).name
         patient = patient[len("patient=") :]
 
-        # get available slices and 2d dsc
+        # get prev round pred and label path
         if cur_round == 1:
             prev_round_pred_folder = Path(patient_folder).parent.parent.parent
             prev_round_pred_folder = os.path.join(
@@ -285,12 +285,15 @@ class IDLTraining(SharedTraining):
             prev_round_pred_folder = os.path.join(
                 patient_folder, "round={:02d}".format(cur_round - 1)
             )
-
         pred = g.load_nii(
-            os.path.join(prev_round_pred_folder, "pred_gtvs.nii"), binary=True
+            os.path.join(prev_round_pred_folder, "pred_gtvs.nii"),
+            binary=True,
+            out_dim=3,
         )
         label = g.load_nii(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
+            binary=True,
+            out_dim=3,
         )
 
         # go through pred and record tumor size

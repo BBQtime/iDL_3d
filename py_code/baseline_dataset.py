@@ -112,7 +112,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             img_path = os.path.join(
                 g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
             )
-            img = g.load_nii(nii_path=img_path, out_dim=3)
+            img = g.load_nii(nii_path=img_path, binary=False, out_dim=3)
 
             # ct img preprocessing (only focus on soft tissue)
             if i == "CT":

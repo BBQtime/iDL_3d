@@ -18,7 +18,6 @@ class IDLDataSet:
         patient: str,
         annotated_slices: dict,
         label_folder: str,
-        ignore_other_anotated_slices: bool,
         augment_methods: list = [],
         augment_times: int = 1,
         augment_pct: float = 0,
@@ -26,7 +25,6 @@ class IDLDataSet:
         augment_up_limit: int = 0,
     ):
         self.patient = patient
-        self.__ignore_other_anotated_slices = ignore_other_anotated_slices
         self.__augment = DataAugmentation(
             pct=augment_pct,
             methods=augment_methods,
@@ -36,45 +34,26 @@ class IDLDataSet:
 
         # (1) simulated iDL
         if label_folder == g.DATASET_FOLDER:
-            self.__gtvs_path = os.path.join(
-                label_folder, "HNCDL_{}_GTVs.nii".format(self.patient)
+            self.__gtvt_path = os.path.join(
+                label_folder, "HNCDL_{}_GTVt.nii".format(self.patient)
+            )
+            self.__gtvn_path = os.path.join(
+                label_folder, "HNCDL_{}_GTVn.nii".format(self.patient)
             )
         # (2) real iDL
         else:
             self.__gtvs_path = os.path.join(label_folder, "????.nii")
-
-        # get patch position
-        self.__img_shape = g.load_nii(self.__gtvs_path, out_dim=3).shape
 
         self.__annotated_slices = NestedDict()
         idx = 0
         for cur_round in reversed(annotated_slices):
             # current step
             for cur_slice in annotated_slices[cur_round]:
-                d = cur_slice - int(g.PATCH_SIZE[0] / 2)
-                d = g.check_limit(d, 0, self.__img_shape[0] - g.PATCH_SIZE[0])
                 # augmentation times
                 for times in range(augment_times):
-                    # for h in range(3):
-                    for h in [1]:
-                        # for w in range(3):
-                        for w in [1]:
-                            patch_pos = [d, h, w]
-                            for i in [1, 2]:
-                                if patch_pos[i] == 2:
-                                    patch_pos[i] = self.__img_shape[i] - g.PATCH_SIZE[i]
-                                elif patch_pos[i] == 1:
-                                    patch_pos[i] = round(
-                                        (self.__img_shape[i] - g.PATCH_SIZE[i]) / 2
-                                    )
-                                    patch_pos[i] = g.check_limit(
-                                        patch_pos[i],
-                                        0,
-                                        self.__img_shape[i] - g.PATCH_SIZE[i],
-                                    )
-                            self.__annotated_slices[idx]["slice.id"] = cur_slice
-                            self.__annotated_slices[idx]["patch.pos"] = tuple(patch_pos)
-                            idx += 1
+                    self.__annotated_slices[idx]["slice.id"] = cur_slice
+                    self.__annotated_slices[idx]["patch.pos"] = tuple(patch_pos)
+                    idx += 1
             if augment_times >= 16:
                 augment_times /= 4
             else:
