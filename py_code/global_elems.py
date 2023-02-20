@@ -19,8 +19,6 @@ from torch import Tensor
 from PyQt5 import QtWidgets
 from typing import Union
 from natsort import natsorted
-import matplotlib
-from matplotlib import pyplot as plt
 
 
 def show_img(

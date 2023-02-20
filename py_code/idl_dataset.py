@@ -18,6 +18,7 @@ class IDLDataSet:
         patient: str,
         annotated_slices: dict,
         label_folder: str,
+        pred_folder: str,
         augment_methods: list = [],
         augment_times: int = 1,
         augment_pct: float = 0,
@@ -42,7 +43,8 @@ class IDLDataSet:
             )
         # (2) real iDL
         else:
-            self.__gtvs_path = os.path.join(label_folder, "????.nii")
+            self.__gtvt_path = os.path.join(label_folder, "????.nii")
+            self.__gtvn_path = os.path.join(label_folder, "????.nii")
 
         self.__annotated_slices = NestedDict()
         idx = 0
