@@ -225,7 +225,7 @@ class SharedTraining:
         if debug_mode:
             train_id += "_debug.mode.delete.this"
 
-        if train_remark != "" or train_remark is not None:
+        if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
                 train_remark = train_remark[1:]
             while train_remark.endswith("_"):
@@ -272,12 +272,11 @@ class SharedTraining:
             origin["gtv" + i] = g.load_nii(
                 os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTV{}.nii".format(patient, i)),
                 binary=True,
-                out_dim=3,
             )
         # load gtvn
         gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
         if os.path.exists(gtvn_path):
-            origin["gtvn"] = g.load_nii(gtvn_path, binary=True, out_dim=3)
+            origin["gtvn"] = g.load_nii(gtvn_path, binary=True)
         else:
             origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
 

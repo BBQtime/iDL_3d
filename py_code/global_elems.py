@@ -489,6 +489,18 @@ def central_pad(img: ndarray, pad_size: tuple) -> ndarray:
     return img
 
 
+# ct img preprocessing (only focus on soft tissue)
+def ct_preprocess(ct_img):
+    # in origin_dicom, air is -1024. in our ct img, air is 0
+    window = 350  # window
+    level = 40 + 1024  # level
+    high = level + window / 2
+    low = level - window / 2
+    ct_img = np.where(ct_img > high, high, ct_img)
+    ct_img = np.where(ct_img < low, low, ct_img)
+    return ct_img
+
+
 def clear_linux_trash():
     if platform.system().lower() == "linux":
         clear_folder("/home/alan/.local/share/Trash/files/")

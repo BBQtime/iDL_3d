@@ -56,14 +56,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
         img = torch.from_numpy(img)
         return img
 
-    def get_item(
-        self,
-        patient: str,
-        # patch_pos: tuple = (),  # make this empty for training
-    ) -> Tuple[Tensor, Tensor]:
+    def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
 
-        gtvs_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient))
-        origin_gtvs = g.load_nii(gtvs_path, binary=True, out_dim=3)
+        origin_gtvs = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
+            binary=True,
+        )
         final_gtvs = None
 
         # loop until target volume in patch is big enough
@@ -77,9 +75,9 @@ class BaselineDataSet(torch.utils.data.Dataset):
             # load gtvs
             tmp_gtvs = self.__preprocess(origin_gtvs, augment_seed)
 
-            # target volume in the patch is not big enough
+            # target volume is not big enough
             if tmp_gtvs.sum() < origin_gtvs.sum() * 0.999:
-                # keep the largest patch
+                # keep the gtvs with largest target volume
                 if final_gtvs is None or tmp_gtvs.sum() > final_gtvs.sum():
                     final_gtvs = tmp_gtvs
                 continue
@@ -89,14 +87,16 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 break
 
         # load gtvt
-        gtvt_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient))
-        origin_gtvt = g.load_nii(gtvt_path, binary=True, out_dim=3)
+        origin_gtvt = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            binary=True,
+        )
         final_gtvt = self.__preprocess(origin_gtvt, augment_seed)
 
         # load gtvn
         gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
         if os.path.exists(gtvn_path):
-            origin_gtvn = g.load_nii(gtvn_path, binary=True, out_dim=3)
+            origin_gtvn = g.load_nii(gtvn_path, binary=True)
         else:
             origin_gtvn = origin_gtvs - origin_gtvt
         final_gtvn = self.__preprocess(origin_gtvn, augment_seed)
@@ -112,17 +112,10 @@ class BaselineDataSet(torch.utils.data.Dataset):
             img_path = os.path.join(
                 g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
             )
-            img = g.load_nii(nii_path=img_path, binary=False, out_dim=3)
+            img = g.load_nii(img_path)
 
-            # ct img preprocessing (only focus on soft tissue)
             if i == "CT":
-                # in origin_dicom, air is -1024. in our ct img, air is 0
-                window = 350  # window
-                level = 40 + 1024  # level
-                high = level + window / 2
-                low = level - window / 2
-                img = np.where(img > high, high, img)
-                img = np.where(img < low, low, img)
+                img = g.ct_preprocess(img)
 
             img = self.__preprocess(img, augment_seed)
 

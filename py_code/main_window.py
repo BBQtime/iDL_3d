@@ -358,7 +358,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_frames[i].setPalette(pal)
 
     def __load_img(self, img_path: str):
-        img = g.load_nii(img_path, binary=False, out_dim=3)
+        img = g.load_nii(img_path)
         img = g.normalize_img(img)
         # turn upside down
         img = np.flip(m=img, axis=0)
@@ -708,7 +708,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
-                "score_test.json",
+                "score.json",
             )
         score_dict = g.load_json(score_path)
 
