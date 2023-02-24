@@ -13,22 +13,19 @@ from typing import Tuple
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
-    def __init__(
-        self,
-        patient_list: list,
-        augment_methods: list = [],
-        augment_pct: float = 0,
-        augment_low_limit: int = 0,
-        augment_up_limit: int = 0,
-    ):
+    def __init__(self, patient_list: list, augment: dict = {}):
+
         self.patient_list = patient_list  # make patient_list public
 
-        self.__augment = DataAugmentation(
-            methods=augment_methods,
-            pct=augment_pct,
-            low_limit=augment_low_limit,
-            up_limit=augment_up_limit,
-        )
+        if len(augment) == 0:
+            self.__augment = DataAugmentation()
+        else:
+            self.__augment = DataAugmentation(
+                methods=augment["methods"],
+                pct=augment["pct"],
+                low_limit=augment["low.limit"],
+                up_limit=augment["up.limit"],
+            )
 
     # must be overrided
     def __len__(self):
@@ -114,8 +111,9 @@ class BaselineDataSet(torch.utils.data.Dataset):
             )
             img = g.load_nii(img_path)
 
+            # ct windowing before normalization
             if i == "CT":
-                img = g.ct_preprocess(img)
+                img = g.ct_windowing(img)
 
             img = self.__preprocess(img, augment_seed)
 

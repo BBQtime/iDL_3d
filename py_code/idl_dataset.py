@@ -1,15 +1,14 @@
 import global_elems as g
 import os
-import math
 import torch
 import numpy as np
 from torch import Tensor
 from typing import Tuple
 import random
 from data_augment import DataAugmentation
-from scipy import ndimage
 from numpy import ndarray
 from nested_dict import NestedDict
+from scipy.ndimage import distance_transform_edt
 
 
 class IDLDataSet:
@@ -19,68 +18,63 @@ class IDLDataSet:
         annotated_slices: dict,
         label_folder: str,
         pred_folder: str,
-        augment_methods: list = [],
-        augment_times: int = 1,
-        augment_pct: float = 0,
-        augment_low_limit: int = 0,
-        augment_up_limit: int = 0,
+        augment: dict,
+        weight: dict,
     ):
         self.patient = patient  # make this public
 
-        self.__augment = DataAugmentation(
-            pct=augment_pct,
-            methods=augment_methods,
-            low_limit=augment_low_limit,
-            up_limit=augment_up_limit,
-        )
-        self.__augment_times = augment_times
+        if len(augment) == 0:
+            self.__augment = DataAugmentation()
+        else:
+            self.__augment = DataAugmentation(
+                methods=augment["methods"],
+                pct=augment["pct"],
+                low_limit=augment["low.limit"],
+                up_limit=augment["up.limit"],
+            )
+        self.__augment_times = augment["times"]
 
+        # save origin images
         self.__origin = NestedDict()
 
         # load label
         # (1) simulated iDL
         if label_folder == g.DATASET_FOLDER:
-            self.__origin["label.gtvt"] = g.load_nii(
-                os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
-                binary=True,
-            )
+            # gtvs / gtvt
+            for i in ["s", "t"]:
+                self.__origin["label.gtv{}".format(i)] = g.load_nii(
+                    os.path.join(label_folder, "HNCDL_{}_GTV{}.nii".format(patient, i)),
+                    binary=True,
+                )
+            # gtvn
             label_gtvn_path = os.path.join(
                 label_folder, "HNCDL_{}_GTVn.nii".format(patient)
             )
             if os.path.exists(label_gtvn_path):
                 self.__origin["label.gtvn"] = g.load_nii(label_gtvn_path, binary=True)
             else:
-                label_gtvs_img = g.load_nii(
-                    os.path.join(label_folder, "HNCDL_{}_GTVs.nii".format(patient)),
-                    binary=True,
-                )
                 self.__origin["label.gtvn"] = (
-                    label_gtvs_img - self.__origin["label.gtvt"]
+                    self.__origin["label.gtvs"] - self.__origin["label.gtvt"]
                 )
-
         # (2) real iDL
         else:
-            self.__origin["label.gtvt"] = g.load_nii(
-                os.path.join(label_folder, "pred_gtvt.nii"), binary=True
-            )
-            self.__origin["label.gtvn"] = g.load_nii(
-                os.path.join(label_folder, "pred_gtvn.nii"), binary=True
-            )
+            for i in ["s", "t", "n"]:
+                self.__origin["label.gtv{}".format(i)] = g.load_nii(
+                    os.path.join(label_folder, "pred_gtv{}".format(i)), binary=True
+                )
 
         # load pred
-        self.__origin["pred.gtvt"] = g.load_nii(
-            os.path.join(pred_folder, "pred_gtvt.nii"), binary=True
-        )
-        self.__origin["pred.gtvn"] = g.load_nii(
-            os.path.join(pred_folder, "pred_gtvn.nii"), binary=True
-        )
+        for i in ["s", "t", "n"]:
+            self.__origin["pred.gtv{}".format(i)] = g.load_nii(
+                os.path.join(pred_folder, "pred_gtv{}.nii".format(i)), binary=True
+            )
 
         # load ct/pt/mr1/mt2
-        self.__origin["ct"] = g.ct_preprocess(
-            g.load_nii(
-                os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
-            )
+        self.__origin["ct"] = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
         )
+        # ct windowing before normalization
+        self.__origin["ct"] = g.ct_windowing(self.__origin["ct"])
         self.__origin["pt"] = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(patient))
         )
@@ -91,34 +85,63 @@ class IDLDataSet:
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(patient))
         )
 
-        self.__origin["weight.map"] = self.__load_weight_map(annotated_slices)
+        # weight map
+        self.__origin["weight"] = self.__load_weight_map(annotated_slices, weight)
 
-        # for cur_round in reversed(annotated_slices):
-        #     # current step
-        #     for cur_slice in annotated_slices[cur_round]:
-        #         # augmentation times
-        #         for times in range(augment_times):
-        #             self.__annotated_slices[idx]["slice.id"] = cur_slice
-        #             self.__annotated_slices[idx]["patch.pos"] = tuple(patch_pos)
-        #     if augment_times >= 16:
-        #         augment_times /= 4
-        #     else:
-        #         augment_times /= 2
-        #     # rounded up
-        #     augment_times = math.ceil(augment_times)
+    def __load_weight_map(self, annotated_slices, weight):
+        # annotate slice mask
+        slice_mask = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
+        # dont change weight["annotate.slice"], use another variable
+        annotated_slice_weight = weight["annotated.slice"]
+        for cur_round in reversed(annotated_slices):
+            # current step
+            for cur_slice in annotated_slices[cur_round]:
+                slice_mask[cur_slice] = (
+                    np.ones_like(slice_mask[cur_slice]) * annotated_slice_weight
+                )
+            annotated_slice_weight *= weight["prev.round.decay"]
+            if annotated_slice_weight < weight["background"]:
+                annotated_slice_weight = weight["background"]
+        # g.save_nii(
+        #     slice_mask,
+        #     os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
+        # )
 
-    def __load_weight_map(self, annotated_slices):
-        annotated_slices = g.dict_to_list(annotated_slices)
-        annotated_slices = g.list_remove_duplicates(annotated_slices)
+        # get annotation (keep weight=1 before distance map)
+        fp = self.__origin["pred.gtvs"] * (1 - self.__origin["label.gtvs"])
+        fn = (1 - self.__origin["pred.gtvs"]) * self.__origin["label.gtvs"]
+        annotation = (fp + fn) * np.where(slice_mask > 0, 1, 0)
+        annotation = annotation.astype(np.float32)
+        # g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
-        weight_map = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
+        # distance map
+        distance_map = distance_transform_edt(np.logical_not(annotation))
+        distance_map = distance_map.astype(np.float32)
+        distance_map = np.where(
+            distance_map >= 2 * weight["distance.step"],
+            -weight["background"],
+            distance_map,
+        )
+        distance_map = np.where(
+            distance_map >= weight["distance.step"],
+            -weight["background"] / 2,
+            distance_map,
+        )
+        distance_map = np.where(distance_map >= 0, 0, distance_map)
+        distance_map *= -1
+        # g.save_nii(distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii"))
 
-        for i in range(weight_map.shape[0]):
-            if i in annotated_slices:
-                weight_map[i] = np.ones_like(weight_map[i])
+        # weighted annotation
+        annotation = (
+            annotation * slice_mask * (weight["annotation"] / weight["annotated.slice"])
+        )
+        # g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
-        g.save_nii(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
-        return weight_map
+        weight = np.maximum(distance_map, slice_mask)
+        weight = np.maximum(weight, annotation)
+        # g.save_nii(weight, os.path.join(g.PROJ_PATH, "debug", "weight.nii"))
+
+        return weight
 
     # must be overrided
     def __len__(self):
@@ -220,36 +243,48 @@ class IDLDataSet:
             else:
                 multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
 
-        # weight_map
-        weight_map = self.__preprocess(self.__origin["weight.map"], augment_seed)
+        # weight map
+        weight = self.__preprocess(self.__origin["weight"], augment_seed)
 
-        return multi_model_imgs, labels, weight_map
+        return multi_model_imgs, labels, weight
 
 
-# for testing
-if 0:
-    annotated_slices = dict()
-    annotated_slices["round=00"] = [20, 40]
-    annotated_slices["round=01"] = [30]
-    pred_folder = os.path.join(
-        g.TRAIN_RESULTS_FOLDER,
-        "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
-        "baseline",
-        "fold=01",
-        "epoch=171",
-        "patients",
-        "patient=336",
-    )
-    # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
-    tmp_dataset = IDLDataSet(
-        patient="336",
-        annotated_slices=annotated_slices,
-        label_folder=g.DATASET_FOLDER,
-        pred_folder=pred_folder,
-        augment_times=1,
-        augment_methods=["translate"],
-        augment_pct=1,
-        augment_low_limit=1,
-        augment_up_limit=1,
-    )
-    tmp_dataset.__getitem__(2)
+# # for testing
+# if 0:
+#     weight = dict()
+#     weight["annotation"] = 3
+#     weight["distance.step"] = 10
+#     weight["annotated.slice"] = 2
+#     weight["prev.round.decay"] = 0.5
+#     weight["background"] = 0.2
+
+#     augment = dict()
+#     augment["methods"] = ["translate"]
+#     augment["pct"] = 1
+#     augment["low.limit"] = 1
+#     augment["up.limit"] = 1
+#     augment["times"] = 1
+
+#     annotated_slices = dict()
+#     annotated_slices["round=00"] = [20, 40]
+#     annotated_slices["round=01"] = [30]
+
+#     pred_folder = os.path.join(
+#         g.TRAIN_RESULTS_FOLDER,
+#         "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
+#         "baseline",
+#         "fold=01",
+#         "epoch=171",
+#         "patients",
+#         "patient=336",
+#     )
+#     # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
+#     tmp_dataset = IDLDataSet(
+#         patient="336",
+#         annotated_slices=annotated_slices,
+#         label_folder=g.DATASET_FOLDER,
+#         pred_folder=pred_folder,
+#         augment=augment,
+#         weight=weight,
+#     )
+#     tmp_dataset.__getitem__(2)

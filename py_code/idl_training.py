@@ -146,6 +146,27 @@ class IDLTraining(SharedTraining):
         ):
             hyper["select.scenario"] = "random"
 
+        # weight map parameters
+        hyper["weight.background"] = float(hyper["weight.background"])
+        if hyper["weight.background"] > 1:
+            hyper["weight.background"] = 1
+
+        hyper["weight.annotated.slice"] = float(hyper["weight.annotated.slice"])
+        if hyper["weight.annotated.slice"] < 1:
+            hyper["weight.annotated.slice"] = 1
+
+        hyper["weight.annotation"] = float(hyper["weight.annotation"])
+        if hyper["weight.annotation"] < hyper["weight.annotated.slice"]:
+            hyper["weight.annotation"] = hyper["weight.annotated.slice"]
+
+        hyper["weight.distance.step"] = int(hyper["weight.distance.step"])
+        if hyper["weight.distance.step"] < 1:
+            hyper["weight.distance.step"] = 1
+
+        hyper["weight.prev.round.decay"] = float(hyper["weight.prev.round.decay"])
+        if hyper["weight.prev.round.decay"] > 1:
+            hyper["weight.prev.round.decay"] = 1
+
         # load shared hyper
         super()._load_hyper(
             hyper=hyper,
@@ -413,16 +434,27 @@ class IDLTraining(SharedTraining):
         cur_round_time_used = datetime.now()
 
         # create iDL dataset
+        augment = dict()
+        augment["methods"] = hyper["augment.methods"]
+        augment["pct"] = hyper["augment.pct"]
+        augment["low.limit"] = hyper["augment.low.limit"]
+        augment["up.limit"] = hyper["augment.up.limit"]
+        augment["times"] = hyper["augment.times"]
+
+        weight = dict()
+        weight["annotation"] = hyper["weight.annotation"]
+        weight["annotated.slice"] = hyper["weight.annotated.slice"]
+        weight["prev.round.decay"] = hyper["weight.prev.round.decay"]
+        weight["distance.step"] = hyper["weight.distance.step"]
+        weight["background"] = hyper["weight.background"]
+
         idl_dataset = IDLDataSet(
             patient=patient,
             annotated_slices=annotated_slices,
             label_folder=label_folder,
             pred_folder=pred_folder,
-            augment_methods=hyper["augment.methods"],
-            augment_times=hyper["augment.times"],
-            augment_pct=hyper["augment.pct"],
-            augment_low_limit=hyper["augment.low.limit"],
-            augment_up_limit=hyper["augment.up.limit"],
+            augment=augment,
+            weight=weight,
         )
 
         # optimize batch size (before create dataloader)
@@ -450,15 +482,15 @@ class IDLTraining(SharedTraining):
                 else:
                     hyper["cnn"].freeze_top()
 
-            for inputs, labels, weight_map in idl_loader:
+            for inputs, labels, weight in idl_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
-                weight_map = weight_map.to(g.DEVICE)
-                labels = labels * weight_map
+                weight = weight.to(g.DEVICE)
+                labels = labels * weight
                 outputs = hyper["cnn"](inputs)[3]
-                outputs = outputs * weight_map
+                outputs = outputs * weight
                 loss = hyper["loss.func"](outputs, labels)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param

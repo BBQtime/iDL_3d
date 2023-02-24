@@ -119,13 +119,13 @@ class BaselineTraining(SharedTraining):
         )
 
         # create dataset
-        train_set = BaselineDataSet(
-            patient_list=train_patients,
-            augment_methods=hyper["augment.methods"],
-            augment_pct=hyper["augment.pct"],
-            augment_low_limit=hyper["augment.low.limit"],
-            augment_up_limit=hyper["augment.up.limit"],
-        )
+        augment = dict()
+        augment["methods"] = hyper["augment.methods"]
+        augment["pct"] = hyper["augment.pct"]
+        augment["low.limit"] = hyper["augment.low.limit"]
+        augment["up.limit"] = hyper["augment.up.limit"]
+
+        train_set = BaselineDataSet(patient_list=train_patients, augment=augment)
         valid_set = BaselineDataSet(patient_list=valid_patients)
         test_set = BaselineDataSet(patient_list=test_patients)
 

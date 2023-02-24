@@ -489,8 +489,8 @@ def central_pad(img: ndarray, pad_size: tuple) -> ndarray:
     return img
 
 
-# ct img preprocessing (only focus on soft tissue)
-def ct_preprocess(ct_img):
+# ct windowing (only focus on soft tissue)
+def ct_windowing(ct_img):
     # in origin_dicom, air is -1024. in our ct img, air is 0
     window = 350  # window
     level = 40 + 1024  # level

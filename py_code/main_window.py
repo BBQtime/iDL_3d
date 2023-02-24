@@ -358,7 +358,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_frames[i].setPalette(pal)
 
     def __load_img(self, img_path: str):
-        img = g.load_nii(img_path)
+        img = g.load_nii(img_path, binary=False)
+        # ct windowing before normalization
+        if "CT" in img_path:
+            img = g.ct_windowing(img)
         img = g.normalize_img(img)
         # turn upside down
         img = np.flip(m=img, axis=0)
