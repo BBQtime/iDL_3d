@@ -153,8 +153,11 @@ def get_dict_key_min(input_dict: dict):
 def dict_to_list(input_dict: dict):
     output_list = []
     for cur_key in input_dict:
-        for cur_value in input_dict[cur_key]:
-            output_list.append(cur_value)
+        if isinstance(input_dict[cur_key], list):
+            for cur_value in input_dict[cur_key]:
+                output_list.append(cur_value)
+        else:
+            output_list.append(input_dict[cur_key])
     return output_list
 
 

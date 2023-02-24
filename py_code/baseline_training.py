@@ -191,8 +191,6 @@ class BaselineTraining(SharedTraining):
         self.__draw_loss_fig(loss_json_path)
 
     def __draw_loss_fig(self, loss_json_path: str):
-        plt.figure().clear()
-
         loss_dict = g.load_json(loss_json_path)
         train_loss = []
         valid_loss = []
@@ -201,6 +199,8 @@ class BaselineTraining(SharedTraining):
             train_loss.append(loss_dict[i]["train"])
             valid_loss.append(loss_dict[i]["valid"])
 
+        # draw figure
+        plt.figure().clear()
         plt.ylim(min(train_loss) - 0.05, max(train_loss) + 0.05)
         plt.plot(range(1, len(loss_dict) + 1), train_loss, label="train")
         plt.plot(range(1, len(loss_dict) + 1), valid_loss, label="valid")

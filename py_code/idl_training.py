@@ -418,6 +418,7 @@ class IDLTraining(SharedTraining):
         patient = Path(cur_round_folder).parent.name
         patient = patient[len("patient=") :]
 
+        idl_folder = Path(cur_round_folder).parent.parent.parent
         loss_json_path = os.path.join(Path(cur_round_folder).parent, "loss.json")
         loss_dict = g.load_json(loss_json_path)
 
@@ -501,10 +502,18 @@ class IDLTraining(SharedTraining):
             # update scheduler
             iter_loss = sum_loss / batch_num
             hyper["scheduler"].step(iter_loss)
+
             # record loss
             loss_dict[
                 "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
             ] = iter_loss
+            # save loss and update loss figure after every iter, if there is only one patient
+            patient_folder_list = g.get_sub_folders(
+                os.path.join(idl_folder, "patients")
+            )
+            if len(patient_folder_list) <= 1:
+                g.save_json(loss_dict, loss_json_path)
+                self.__draw_loss_fig(idl_folder)
 
         # current round finished
         # inference
@@ -589,6 +598,9 @@ class IDLTraining(SharedTraining):
             if hyper["lr.reset"]:
                 self.__load_next_round_lr(cur_round + 1, hyper)
 
+        # draw avg loss of all trained patients
+        self.__draw_loss_fig(idl_folder)
+
         # save annotated slices in cur patient folder
         for i in annotated_slices:
             annotated_slices[i] = g.list_to_str(annotated_slices[i])
@@ -601,6 +613,38 @@ class IDLTraining(SharedTraining):
                 "annotated_slices.json",
             ),
         )
+
+    def draw_loss_fig(self, baseline_id: str, idl_id: str):
+        idl_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id)
+        self.__draw_loss_fig(idl_folder)
+
+    def __draw_loss_fig(self, idl_folder: str):
+        # avg loss dict
+        avg_loss = NestedDict()
+        for cur_patient_folder in g.get_sub_folders(
+            os.path.join(idl_folder, "patients"), return_full_path=True
+        ):
+            cur_patient_loss = g.load_json(
+                os.path.join(cur_patient_folder, "loss.json")
+            )
+            if len(avg_loss) == 0:
+                for i in cur_patient_loss:
+                    avg_loss[i] = [cur_patient_loss[i]]
+            else:
+                for i in avg_loss:
+                    avg_loss[i].append(cur_patient_loss[i])
+
+        for i in avg_loss:
+            avg_loss[i] = g.get_avg_value(avg_loss[i])
+
+        avg_loss = g.dict_to_list(avg_loss)
+
+        # draw figure
+        plt.figure().clear()
+        plt.ylim(min(avg_loss) - 0.05, max(avg_loss) + 0.05)
+        plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
+        plt.legend()
+        plt.savefig(os.path.join(idl_folder, "loss.png"))
 
     def simulation(
         self,
