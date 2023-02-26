@@ -122,29 +122,28 @@ class IDLTraining(SharedTraining):
         # freeze layers
         hyper["layer.freezing"] = bool(hyper["layer.freezing"])
 
-        # select step
-        if debug_mode:
-            hyper["select.step"] = [2, 1]
-        else:
-            hyper["select.step"] = hyper["select.step"]
-            # select.step is saved in json file as a string, not a list, because:
-            # (1) it's easier to read the json file (only one line)
-            # (2) a "list" will be recognized as multiple hyper parameters,
-            # then start multiple training
-            hyper["select.step"] = g.str_to_list(hyper["select.step"])
-            for i in range(len(hyper["select.step"])):
-                hyper["select.step"][i] = int(hyper["select.step"][i])
-                hyper["select.step"][i] = g.check_limit(
-                    hyper["select.step"][i], 1, None
+        # select.step is saved in json file as a string, not a list, because:
+        # (1) it's easier to read the json file (only one line)
+        # (2) a "list" will be recognized as multiple hyper parameters,
+        # then start multiple training
+        for plane in ["transverse", "coronal", "sagittal"]:
+            hyper["select.step"][plane] = g.str_to_list(hyper["select.step"][plane])
+            for i in range(len(hyper["select.step"][plane])):
+                hyper["select.step"][plane][i] = int(hyper["select.step"][plane][i])
+                hyper["select.step"][plane][i] = g.check_limit(
+                    hyper["select.step"][plane][i], 1, None
                 )
 
         # select scenario
-        hyper["select.scenario"] = str(hyper["select.scenario"]).lower()
-        if (
-            hyper["select.scenario"] != "largest"
-            and hyper["select.scenario"] != "equal.divide"
-        ):
-            hyper["select.scenario"] = "random"
+        for plane in ["transverse", "coronal", "sagittal"]:
+            hyper["select.scenario"][plane] = str(
+                hyper["select.scenario"][plane]
+            ).lower()
+            if (
+                hyper["select.scenario"][plane] != "largest"
+                and hyper["select.scenario"][plane] != "equal.divide"
+            ):
+                hyper["select.scenario"][plane] = "random"
 
         # weight map parameters
         hyper["weight.background"] = float(hyper["weight.background"])
@@ -188,10 +187,13 @@ class IDLTraining(SharedTraining):
     def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
         simple_hyper = NestedDict()
         for i in hyper:
-            if i == "lr" or i == "select.step":
+            if i == "lr":
                 simple_hyper[i] = g.list_to_str(hyper[i])
             elif i == "patients":
                 simple_hyper[i] = len(hyper[i])
+            elif i == "select.step":
+                for plane in hyper[i]:
+                    simple_hyper[i][plane] = g.list_to_str(hyper[i][plane])
             else:
                 simple_hyper[i] = hyper[i]
         return simple_hyper
@@ -284,28 +286,31 @@ class IDLTraining(SharedTraining):
 
     # in this function, cur round slices have not been added into annotated_slices
     def __select_cur_round_slices(
-        self, patient_folder: str, annotated_slices: dict, hyper: NestedDict
+        self,
+        annotated_slices: dict,
+        hyper: NestedDict,
+        patient_folder: str,
+        baseline_epoch_folder: str,
     ) -> list:  # return a list of int
 
-        cur_round_slices = []
-        candidate_slices = NestedDict()  # {"slice_id": pred_tumor_size}
-        cur_round = len(annotated_slices) + 1
+        cur_round_slices = NestedDict()
+        for plane in ["transverse", "coronal", "sagittal"]:
+            cur_round_slices[plane] = []
+
+        cur_round = max(
+            len(annotated_slices["transverse"]),
+            len(annotated_slices["coronal"]),
+            len(annotated_slices["sagittal"]),
+        )
+        cur_round += 1
 
         patient = Path(patient_folder).name
         patient = patient[len("patient=") :]
 
         # get prev round pred and label path
         if cur_round == 1:
-            fold_folder = g.get_sub_folders(
-                os.path.join(Path(patient_folder).parent.parent.parent, "baseline"),
-                key_word="fold=",
-                return_full_path=True,
-            )[0]
-            epoch_folder = g.get_sub_folders(
-                fold_folder, "epoch=", return_full_path=True
-            )[0]
             prev_round_pred_folder = os.path.join(
-                epoch_folder,
+                baseline_epoch_folder,
                 "patients",
                 "patient={}".format(patient),
             )
@@ -322,45 +327,74 @@ class IDLTraining(SharedTraining):
             binary=True,
         )
 
-        # go through pred and record tumor size
-        annotated_slices = g.dict_to_list(annotated_slices)
-        for cur_slice in range(pred.shape[0]):
-            # skip slice that already been annotated
-            if cur_slice in annotated_slices:
+        for plane in ["transverse", "coronal", "sagittal"]:
+            # skip cur plane if no slice needs to be selected
+            if len(hyper["select.step"][plane]) < cur_round:
                 continue
+
+            candidate_slices = dict()
+
+            # go through pred and record tumor size
+            if plane == "transverse":
+                slice_counts = pred.shape[0]
+            elif plane == "coronal":
+                slice_counts = pred.shape[1]
+            elif plane == "sagittal":
+                slice_counts = pred.shape[2]
+            for cur_slice in range(slice_counts):
+                # skip slice that already been annotated
+                if cur_slice in g.dict_to_list(annotated_slices[plane]):
+                    continue
+                else:
+                    if plane == "transverse":
+                        pred_cur_slice_tumor_size = pred[cur_slice, :, :].sum()
+                        label_cur_slice_tumor_size = label[cur_slice, :, :].sum()
+                    elif plane == "coronal":
+                        pred_cur_slice_tumor_size = pred[:, cur_slice, :].sum()
+                        label_cur_slice_tumor_size = label[:, cur_slice, :].sum()
+                    elif plane == "sagittal":
+                        pred_cur_slice_tumor_size = pred[:, :, cur_slice].sum()
+                        label_cur_slice_tumor_size = label[:, :, cur_slice].sum()
+                    # if there is prediction, add cur slice(also it's tumor size) into candidates
+                    if pred_cur_slice_tumor_size > 0:
+                        candidate_slices[cur_slice] = pred_cur_slice_tumor_size
+                    # if no prediction but there is label, also add cur slice into candidates
+                    elif label_cur_slice_tumor_size > 0:
+                        candidate_slices[cur_slice] = 0
+
+            # "equal.divide", round = 1
+            if hyper["select.scenario"][plane] == "equal.divide" and cur_round == 1:
+                divided_parts = hyper["select.step"][plane][0] + 1
+                candidate_slices = g.get_dict_keys(candidate_slices)
+                for part in range(1, divided_parts):
+                    idx = len(candidate_slices) * part / divided_parts
+                    idx = round(idx)
+                    idx = g.check_limit(idx, 1, len(candidate_slices))
+                    cur_round_slices[plane].append(candidate_slices[idx - 1])
+
+            # "random"
+            elif hyper["select.scenario"][plane] == "random":
+                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
+                random.shuffle(cur_round_slices[plane])
+
+            # (1) "largest"
+            # (2) "equal.divide", round >= 2
             else:
-                pred_slice_tumor_size = pred[cur_slice].sum()
-                if pred_slice_tumor_size > 0:
-                    candidate_slices[cur_slice] = pred_slice_tumor_size
-                elif label[cur_slice].sum() > 0:
-                    candidate_slices[cur_slice] = 0
+                # descrease sort the dict (return a list of tuple)
+                candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
+                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
 
-        # "equal.divide", round = 1
-        if hyper["select.scenario"] == "equal.divide" and cur_round == 1:
-            divided_parts = hyper["select.step"][0] + 1
-            candidate_slices = g.get_dict_keys(candidate_slices)
-            for i in range(1, divided_parts):
-                idx = len(candidate_slices) * i / divided_parts
-                idx = round(idx)
-                idx = g.check_limit(idx, 1, len(candidate_slices))
-                cur_round_slices.append(candidate_slices[idx - 1])
+            # narrow cur_round_slices based on select.step
+            cur_round_slices_count = hyper["select.step"][plane][cur_round - 1]
+            if cur_round_slices_count < len(cur_round_slices[plane]):
+                cur_round_slices[plane] = cur_round_slices[plane][
+                    :cur_round_slices_count
+                ]
 
-        # "random"
-        elif hyper["select.scenario"] == "random":
-            cur_round_slices = g.get_dict_keys(candidate_slices)
-            random.shuffle(cur_round_slices)
-
-        # (1) "largest"
-        # (2) "equal.divide", round >= 2
-        else:
-            # descrease sort the dict (return a list of tuple)
-            candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
-            cur_round_slices = g.get_dict_keys(candidate_slices)
-
-        # narrow cur_round_slices based on select.step
-        cur_round_slices_num = hyper["select.step"][cur_round - 1]
-        if cur_round_slices_num < len(cur_round_slices):
-            cur_round_slices = cur_round_slices[:cur_round_slices_num]
+            # add cur_round_slices into annotated_slices
+            annotated_slices[plane][
+                "round={:02d}".format(cur_round)
+            ] = cur_round_slices[plane]
 
         return cur_round_slices
 
@@ -483,15 +517,15 @@ class IDLTraining(SharedTraining):
                 else:
                     hyper["cnn"].freeze_top()
 
-            for inputs, labels, weight in idl_loader:
+            for inputs, labels, weight_map in idl_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
-                weight = weight.to(g.DEVICE)
-                labels = labels * weight
+                weight_map = weight_map.to(g.DEVICE)
+                labels = labels * weight_map
                 outputs = hyper["cnn"](inputs)[3]
-                outputs = outputs * weight
+                outputs = outputs * weight_map
                 loss = hyper["loss.func"](outputs, labels)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
@@ -567,21 +601,29 @@ class IDLTraining(SharedTraining):
         annotated_slices = NestedDict()
 
         # loop through each round
-        for cur_round in range(1, len(hyper["select.step"]) + 1):
+        max_round = max(
+            len(hyper["select.step"]["transverse"]),
+            len(hyper["select.step"]["coronal"]),
+            len(hyper["select.step"]["sagittal"]),
+        )
+        for cur_round in range(1, max_round + 1):
 
+            # cur round slices are add into annotated_slices in this function
             cur_round_slices = self.__select_cur_round_slices(
-                patient_folder=patient_folder,
                 annotated_slices=annotated_slices,
                 hyper=hyper,
+                patient_folder=patient_folder,
+                baseline_epoch_folder=baseline_epoch_folder,
             )
-            if len(cur_round_slices) == 0:
+            if (
+                len(cur_round_slices["transverse"]) == 0
+                and len(cur_round_slices["coronal"]) == 0
+                and len(cur_round_slices["sagittal"]) == 0
+            ):
                 break
 
             # start current round
             print("round:", cur_round)
-
-            # add cur_round_slices into annotated_slices BEFORE __training_cur_round()
-            annotated_slices["round={:02d}".format(cur_round)] = cur_round_slices
 
             cur_round_folder = os.path.join(
                 patient_folder, "round={:02d}".format(cur_round)
@@ -602,8 +644,11 @@ class IDLTraining(SharedTraining):
         self.__draw_loss_fig(idl_folder)
 
         # save annotated slices in cur patient folder
-        for i in annotated_slices:
-            annotated_slices[i] = g.list_to_str(annotated_slices[i])
+        for plane in ["transverse", "coronal", "sagittal"]:
+            for cur_round in annotated_slices[plane]:
+                annotated_slices[plane][cur_round] = g.list_to_str(
+                    annotated_slices[plane][cur_round]
+                )
         g.save_json(
             data=annotated_slices,
             path=os.path.join(
@@ -707,7 +752,7 @@ class IDLTraining(SharedTraining):
                 )
 
                 # 2 patients to check avg score
-                if debug_mode and hyper["patients"].index(patient) == 1:
+                if debug_mode and hyper["patients"].index(patient) == 0:
                     break
 
                 # reset cnn/optimizer/scheduler before next patient

@@ -10,6 +10,8 @@ from numpy import ndarray
 from nested_dict import NestedDict
 from scipy.ndimage import distance_transform_edt
 
+DEBUG_SAVE_IMG = False
+
 
 class IDLDataSet:
     def __init__(
@@ -41,11 +43,10 @@ class IDLDataSet:
         # (1) simulated iDL
         if label_folder == g.DATASET_FOLDER:
             # gtvs / gtvt
-            for i in ["s", "t"]:
-                self.__origin["label.gtv{}".format(i)] = g.load_nii(
-                    os.path.join(label_folder, "HNCDL_{}_GTV{}.nii".format(patient, i)),
-                    binary=True,
-                )
+            self.__origin["label.gtvt"] = g.load_nii(
+                os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
+                binary=True,
+            )
             # gtvn
             label_gtvn_path = os.path.join(
                 label_folder, "HNCDL_{}_GTVn.nii".format(patient)
@@ -53,20 +54,22 @@ class IDLDataSet:
             if os.path.exists(label_gtvn_path):
                 self.__origin["label.gtvn"] = g.load_nii(label_gtvn_path, binary=True)
             else:
-                self.__origin["label.gtvn"] = (
-                    self.__origin["label.gtvs"] - self.__origin["label.gtvt"]
+                label_gtvs = g.load_nii(
+                    os.path.join(label_folder, "HNCDL_{}_GTVs.nii".format(patient)),
+                    binary=True,
                 )
+                self.__origin["label.gtvn"] = label_gtvs - self.__origin["label.gtvt"]
         # (2) real iDL
         else:
-            for i in ["s", "t", "n"]:
-                self.__origin["label.gtv{}".format(i)] = g.load_nii(
-                    os.path.join(label_folder, "pred_gtv{}".format(i)), binary=True
+            for gtv in ["t", "n"]:
+                self.__origin["label.gtv{}".format(gtv)] = g.load_nii(
+                    os.path.join(label_folder, "pred_gtv{}".format(gtv)), binary=True
                 )
 
         # load pred
-        for i in ["s", "t", "n"]:
-            self.__origin["pred.gtv{}".format(i)] = g.load_nii(
-                os.path.join(pred_folder, "pred_gtv{}.nii".format(i)), binary=True
+        for gtv in ["t", "n"]:
+            self.__origin["pred.gtv{}".format(gtv)] = g.load_nii(
+                os.path.join(pred_folder, "pred_gtv{}.nii".format(gtv)), binary=True
             )
 
         # load ct/pt/mr1/mt2
@@ -86,33 +89,92 @@ class IDLDataSet:
         )
 
         # weight map
-        self.__origin["weight"] = self.__load_weight_map(annotated_slices, weight)
+        self.__origin["weight.map"], slice_mask = self.__load_weight_map(
+            annotated_slices, weight
+        )
 
-    def __load_weight_map(self, annotated_slices, weight):
-        # annotate slice mask
-        slice_mask = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
-        # dont change weight["annotate.slice"], use another variable
-        annotated_slice_weight = weight["annotated.slice"]
-        for cur_round in reversed(annotated_slices):
-            # current step
-            for cur_slice in annotated_slices[cur_round]:
-                slice_mask[cur_slice] = (
-                    np.ones_like(slice_mask[cur_slice]) * annotated_slice_weight
+        # overwrite pred to label on non-annotated slices
+        if DEBUG_SAVE_IMG:
+            g.save_nii(
+                self.__origin["label.gtvt"],
+                os.path.join(g.PROJ_PATH, "debug", "origin_label.nii"),
+            )
+            g.save_nii(
+                self.__origin["pred.gtvt"],
+                os.path.join(g.PROJ_PATH, "debug", "pred.nii"),
+            )
+
+        for gtv in ["t", "n"]:
+            self.__origin["label.gtv{}".format(gtv)] *= slice_mask
+            self.__origin["label.gtv{}".format(gtv)] += self.__origin[
+                "pred.gtv{}".format(gtv)
+            ] * (1 - slice_mask)
+
+        if DEBUG_SAVE_IMG:
+            g.save_nii(
+                self.__origin["label.gtvt"],
+                os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
+            )
+
+    def __load_weight_map(self, annotated_slices: dict, weight: dict) -> dict:
+        # annotated slice mask
+        slice_mask = NestedDict()
+        max_round = max(
+            len(annotated_slices["transverse"]),
+            len(annotated_slices["coronal"]),
+            len(annotated_slices["sagittal"]),
+        )
+
+        for plane in ["transverse", "coronal", "sagittal"]:
+            # annotated slice mask
+            slice_mask[plane] = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
+
+            for cur_round in annotated_slices[plane]:
+                # dont change weight["annotate.slice"], use another variable
+                slice_weight = weight["annotated.slice"]
+                cur_round_int = int(cur_round[len("round=") :])
+                slice_weight *= pow(
+                    weight["prev.round.decay"], (max_round - cur_round_int)
                 )
-            annotated_slice_weight *= weight["prev.round.decay"]
-            if annotated_slice_weight < weight["background"]:
-                annotated_slice_weight = weight["background"]
-        # g.save_nii(
-        #     slice_mask,
-        #     os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
-        # )
+
+                if slice_weight < weight["background"]:
+                    slice_weight = weight["background"]
+
+                # current step
+                for cur_slice in annotated_slices[plane][cur_round]:
+                    if plane == "transverse":
+                        slice_mask[plane][cur_slice, :, :] = (
+                            np.ones_like(slice_mask[plane][0, :, :]) * slice_weight
+                        )
+                    elif plane == "coronal":
+                        slice_mask[plane][:, cur_slice, :] = (
+                            np.ones_like(slice_mask[plane][:, 0, :]) * slice_weight
+                        )
+                    elif plane == "sagittal":
+                        slice_mask[plane][:, :, cur_slice] = (
+                            np.ones_like(slice_mask[plane][:, :, 0]) * slice_weight
+                        )
+
+        # get max value of each plane
+        slice_mask = np.maximum(
+            np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
+            slice_mask["sagittal"],
+        )
+        if DEBUG_SAVE_IMG:
+            g.save_nii(
+                slice_mask,
+                os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
+            )
 
         # get annotation (keep weight=1 before distance map)
-        fp = self.__origin["pred.gtvs"] * (1 - self.__origin["label.gtvs"])
-        fn = (1 - self.__origin["pred.gtvs"]) * self.__origin["label.gtvs"]
+        label_gtvs = np.maximum(
+            self.__origin["label.gtvt"], self.__origin["label.gtvn"]
+        )
+        pred_gtvs = np.maximum(self.__origin["pred.gtvt"], self.__origin["pred.gtvn"])
+        fp = pred_gtvs * (1 - label_gtvs)
+        fn = (1 - pred_gtvs) * label_gtvs
         annotation = (fp + fn) * np.where(slice_mask > 0, 1, 0)
         annotation = annotation.astype(np.float32)
-        # g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
         # distance map
         distance_map = distance_transform_edt(np.logical_not(annotation))
@@ -129,19 +191,27 @@ class IDLDataSet:
         )
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
-        # g.save_nii(distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii"))
+        if DEBUG_SAVE_IMG:
+            g.save_nii(
+                distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii")
+            )
 
         # weighted annotation
         annotation = (
             annotation * slice_mask * (weight["annotation"] / weight["annotated.slice"])
         )
-        # g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
+        if DEBUG_SAVE_IMG:
+            g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
-        weight = np.maximum(distance_map, slice_mask)
-        weight = np.maximum(weight, annotation)
-        # g.save_nii(weight, os.path.join(g.PROJ_PATH, "debug", "weight.nii"))
+        # final_weight_map
+        weight_map = np.maximum(np.maximum(distance_map, slice_mask), annotation)
+        if DEBUG_SAVE_IMG:
+            g.save_nii(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
 
-        return weight
+        # return slice_mask to overwrite pred to label on non-annotated slices
+        slice_mask = np.where(slice_mask > 0, 1, 0)
+
+        return weight_map, slice_mask
 
     # must be overrided
     def __len__(self):
@@ -244,9 +314,9 @@ class IDLDataSet:
                 multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
 
         # weight map
-        weight = self.__preprocess(self.__origin["weight"], augment_seed)
+        weight_map = self.__preprocess(self.__origin["weight.map"], augment_seed)
 
-        return multi_model_imgs, labels, weight
+        return multi_model_imgs, labels, weight_map
 
 
 # # for testing

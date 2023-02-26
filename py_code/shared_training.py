@@ -223,7 +223,7 @@ class SharedTraining:
         train_id = self._get_cur_time_str()
 
         if debug_mode:
-            train_id += "_debug.mode.delete.this"
+            train_id += "_delete.this"
 
         if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
@@ -292,10 +292,7 @@ class SharedTraining:
             # get gtvt/gtvn/gtvs img
             result["gtvt"]["pred"] = outputs[1]
             result["gtvn"]["pred"] = outputs[2]
-            result["gtvs"]["pred"] = outputs[1] + outputs[2]
-            result["gtvs"]["pred"] = np.where(
-                result["gtvs"]["pred"] > 1, 1, result["gtvs"]["pred"]
-            )
+            result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
 
             # pad and crop to original size
             for i in ["gtvs", "gtvt", "gtvn"]:
@@ -333,7 +330,11 @@ class SharedTraining:
             # create current hyper param combination
             cur_hyper = NestedDict()
             for i in range(len(cur_values)):
-                cur_hyper[hyper_keys[i]] = cur_values[i]
+                # copy the value if it is a dict, avoid using same memory
+                if isinstance(cur_values[i], dict):
+                    cur_hyper[hyper_keys[i]] = cur_values[i].copy()
+                else:
+                    cur_hyper[hyper_keys[i]] = cur_values[i]
             group_hyper.append(cur_hyper)
 
         return group_hyper
