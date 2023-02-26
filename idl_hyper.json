@@ -5,7 +5,10 @@
     "augment.up.limit": 3,
     "batch.size": 2,
     "dropout": 0.3,
-    "iter": 20,
+    "iter": [
+        10,
+        20
+    ],
     "layer.freezing": false,
     "loss.asym": true,
     "loss.delta": 0.5,
@@ -16,8 +19,23 @@
     "lr.decay.patience": 3,
     "lr.min": 1e-06,
     "lr.reset": true,
-    "select.scenario": "equal.divide",
-    "select.step": "3,1,1",
+    "select.scenario": {
+        "coronal": "equal.divide",
+        "sagittal": "equal.divide",
+        "transverse": "equal.divide"
+    },
+    "select.step": [
+        {
+            "coronal": "1",
+            "sagittal": "1",
+            "transverse": "1"
+        },
+        {
+            "coronal": "2",
+            "sagittal": "2",
+            "transverse": "2"
+        }
+    ],
     "weight.annotated.slice": 2,
     "weight.annotation": 3,
     "weight.background": 0.2,
