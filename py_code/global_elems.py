@@ -132,9 +132,12 @@ def list_to_str(input_list: list, split_symbol: str = ",") -> str:
 
 # "1,2,3,4" -> ["1","2","3","4"]
 def str_to_list(input_str: str, split_symbol: str = ",") -> list:
-    input_str = str(input_str)
-    split_symbol = str(split_symbol)
-    return input_str.split(",")
+    if input_str == "":
+        return []
+    else:
+        input_str = str(input_str)
+        split_symbol = str(split_symbol)
+        return input_str.split(",")
 
 
 def get_dict_keys(input_dict: dict):

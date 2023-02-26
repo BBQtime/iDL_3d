@@ -10,7 +10,7 @@ from numpy import ndarray
 from nested_dict import NestedDict
 from scipy.ndimage import distance_transform_edt
 
-DEBUG_SAVE_IMG = False
+DEBUG_SAVE_IMG = 0
 
 
 class IDLDataSet:

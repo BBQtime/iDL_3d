@@ -26,14 +26,9 @@
     },
     "select.step": [
         {
-            "coronal": "1",
-            "sagittal": "1",
-            "transverse": "1"
-        },
-        {
-            "coronal": "2",
-            "sagittal": "2",
-            "transverse": "2"
+            "coronal": "",
+            "sagittal": "",
+            "transverse": "3,1,1"
         }
     ],
     "weight.annotated.slice": 2,

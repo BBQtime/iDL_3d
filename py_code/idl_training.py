@@ -131,7 +131,7 @@ class IDLTraining(SharedTraining):
             for i in range(len(hyper["select.step"][plane])):
                 hyper["select.step"][plane][i] = int(hyper["select.step"][plane][i])
                 hyper["select.step"][plane][i] = g.check_limit(
-                    hyper["select.step"][plane][i], 1, None
+                    hyper["select.step"][plane][i], 0, None
                 )
 
         # select scenario

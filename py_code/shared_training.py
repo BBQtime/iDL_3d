@@ -243,7 +243,7 @@ class SharedTraining:
             if len(origin_hyper_dict[key]) > 1:
                 # replace "_" with "." in key name
                 train_id += "_" + key.replace("_", ".")
-                train_id += "=" + str(hyper[key]).replace("_", ".")
+                train_id += "=" + str(hyper[key]).replace("_", ".").replace(" ", "")
 
         return train_id
 
