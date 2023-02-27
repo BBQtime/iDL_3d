@@ -61,7 +61,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
         )
         final_gtvs = None
 
-        # loop until target volume in patch is big enough
+        # loop until target volume is big enough
         for k in range(50):
 
             # make sure same group use the same augment_seed

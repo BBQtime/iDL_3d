@@ -5,10 +5,7 @@
     "augment.up.limit": 3,
     "batch.size": 2,
     "dropout": 0.3,
-    "iter": [
-        10,
-        20
-    ],
+    "iter": 10,
     "layer.freezing": false,
     "loss.asym": true,
     "loss.delta": 0.5,
@@ -26,9 +23,9 @@
     },
     "select.step": [
         {
-            "coronal": "",
-            "sagittal": "",
-            "transverse": "3,1,1"
+            "coronal": "1",
+            "sagittal": "1",
+            "transverse": "1"
         }
     ],
     "weight.annotated.slice": 2,

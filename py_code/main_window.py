@@ -769,15 +769,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return
 
         # check if cur slice is annotated
-        if self.__img_plane == "transverse":
-            is_annotated = self.__is_annotated()
+        is_annotated = self.__is_annotated()
 
         # set contour color
         color = NestedDict()
         color["label.gtvt"] = self.__color["label.gtvt"]
         color["label.gtvn"] = self.__color["label.gtvn"]
 
-        if self.__img_plane == "transverse" and is_annotated:
+        if is_annotated:
             color["pred.gtvt"] = self.__color["annotated"]
             color["pred.gtvn"] = self.__color["annotated"]
         else:
@@ -808,34 +807,73 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
             rgb_img = cv2.addWeighted(rgb_img, contrast, blank, 0, bright)
 
-            # add mask to annotated slices on "sagittal" or "coronal"
-            if self.__img_plane == "sagittal" or self.__img_plane == "coronal":
-                total_slices_num = self.__img_data["ct"].shape[0]
-                rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
+            # add mask to annotated slices
+            annotated_slices = NestedDict()
+            total_slices_num = NestedDict()
+            if self.__img_plane == "transverse":
+                annotated_slices["horizontal"] = self.__get_annotated_slices("coronal")
+                total_slices_num["horizontal"] = self.__img_data["ct"].shape[1]
+                annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
+                total_slices_num["vertical"] = self.__img_data["ct"].shape[2]
+            elif self.__img_plane == "coronal":
+                annotated_slices["horizontal"] = self.__get_annotated_slices(
+                    "transverse"
+                )
+                total_slices_num["horizontal"] = self.__img_data["ct"].shape[0]
+                annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
+                total_slices_num["vertical"] = self.__img_data["ct"].shape[2]
+            elif self.__img_plane == "sagittal":
+                annotated_slices["horizontal"] = self.__get_annotated_slices(
+                    "transverse"
+                )
+                total_slices_num["horizontal"] = self.__img_data["ct"].shape[0]
+                annotated_slices["vertical"] = self.__get_annotated_slices("coronal")
+                total_slices_num["vertical"] = self.__img_data["ct"].shape[1]
 
-                for cur_annotated_slice in self.__get_annotated_slices():
-                    cur_annotated_slice = int(cur_annotated_slice)
+            rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
 
-                    # mask
-                    cur_annotated_slice_mask = cv2.rectangle(
-                        rgb_img_zeros,
-                        (0, total_slices_num - (cur_annotated_slice - 1)),
-                        (
-                            rgb_img.shape[1] - 1,
-                            total_slices_num - (cur_annotated_slice - 1),
-                        ),
+            annotated_slices_mask = None
+
+            # annotated slices mask
+            for direction in ["horizontal", "vertical"]:
+                for cur_annotated_slice in annotated_slices[direction]:
+                    # image is reversed in the transverse plane
+                    if self.__img_plane != "transverse" and direction == "horizontal":
+                        slice_pos = total_slices_num[direction] - cur_annotated_slice
+                    else:
+                        slice_pos = cur_annotated_slice
+
+                    if direction == "horizontal":
+                        x1 = 0
+                        y1 = slice_pos
+                        x2 = rgb_img.shape[1] - 1
+                        y2 = slice_pos
+                    elif direction == "vertical":
+                        x1 = slice_pos
+                        y1 = 0
+                        x2 = slice_pos
+                        y2 = rgb_img.shape[0] - 1
+
+                    cur_slice_mask = cv2.rectangle(
+                        img=rgb_img_zeros,
+                        pt1=(x1, y1),
+                        pt2=(x2, y2),
                         color=self.__color["annotated"],
                         thickness=-1,
                     )
-                    rgb_img = cv2.addWeighted(
-                        src1=rgb_img,
-                        alpha=1,
-                        src2=cur_annotated_slice_mask,
-                        beta=1,  # 0.5,
-                        gamma=0,
-                    )
-                    # break
-                pass
+                    if annotated_slices_mask is None:
+                        annotated_slices_mask = cur_slice_mask
+                    else:
+                        annotated_slices_mask += cur_slice_mask
+
+            if annotated_slices_mask is not None:
+                rgb_img = cv2.addWeighted(
+                    src1=rgb_img,
+                    alpha=1,
+                    src2=annotated_slices_mask,
+                    beta=1,  # 0.5,
+                    gamma=0,
+                )
 
             # resize and fit img frame
             rgb_img, self.__resize_pos[i] = self.__fit_img_frame(
@@ -917,7 +955,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             text_pos_y += text_pos_gap
             cv_text = "PRED - GTVt"
-            if self.__img_plane == "transverse" and is_annotated:
+            if is_annotated:
                 cv_text += " (ANNOTATED)"
             self.__cv_put_text(
                 img=rgb_img,
@@ -928,7 +966,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             text_pos_y += text_pos_gap
             cv_text = "PRED - GTVn"
-            if self.__img_plane == "transverse" and is_annotated:
+            if is_annotated:
                 cv_text += " (ANNOTATED)"
             self.__cv_put_text(
                 img=rgb_img,
@@ -947,7 +985,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             self.__img_frames[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __get_annotated_slices(self) -> list:
+    def __get_annotated_slices(self, plane) -> list:
         # get current round
 
         if self.__idl_id == "baseline" or self.__round == "00":
@@ -965,31 +1003,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not os.path.exists(json_path):
             return []
 
-        annotated_slice_dict = g.load_json(json_path)
-        annotated_slice_list = []
+        annotated_slices_dict = g.load_json(json_path)[plane]
+        annotated_slices_list = []
 
-        for cur_round in annotated_slice_dict:
-            annotated_slice_list += g.str_to_list(annotated_slice_dict[cur_round])
+        for cur_round in annotated_slices_dict:
+            annotated_slices_list += g.str_to_list(annotated_slices_dict[cur_round])
+
             if (cur_round[len("round=") :]) == self.__round:
                 break
 
-        for i in range(len(annotated_slice_list)):
-            annotated_slice_list[i] = int(annotated_slice_list[i])
+        for i in range(len(annotated_slices_list)):
+            annotated_slices_list[i] = int(annotated_slices_list[i])
 
-        return annotated_slice_list
+        return annotated_slices_list
 
     def __is_annotated(self) -> bool:
         if self.__img_data["ct"] is None:
             return False
 
-        # only run in "transverse" plane
-        if self.__img_plane == "sagittal" or self.__img_plane == "coronal":
-            return False
-
-        annotated_slices = self.__get_annotated_slices()
-
-        # change slice_id from number to str "0xx"
-        if int(self.__slice_id) in annotated_slices:
+        if int(self.__slice_id) in self.__get_annotated_slices(self.__img_plane):
             return True
         else:
             return False
@@ -1048,7 +1080,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #     win_tital += "   Patient=" + self.__patient[len("patient=") :]
         if self.__round is not None:
             win_tital += "   Num.of.Annotated.Slices="
-            win_tital += str(len(self.__get_annotated_slices()))
+            win_tital += str(len(self.__get_annotated_slices(self.__img_plane)))
         if self.__slice_id is not None:
             img_depth = self.__get_img_depth()
             if img_depth is not None:

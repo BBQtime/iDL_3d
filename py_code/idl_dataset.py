@@ -252,7 +252,7 @@ class IDLDataSet:
             + self.__origin["pred.gtvn"].sum()
         )
 
-        # loop until target volume in patch is big enough
+        # loop until target volume is big enough
         for k in range(50):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!

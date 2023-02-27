@@ -21,6 +21,15 @@ from typing import Union
 from natsort import natsorted
 
 
+def exit_app(msg: str = ""):
+    if msg == "" or msg is None:
+        msg = "debug exit"
+    else:
+        msg = str(msg)
+    print(msg)
+    assert 0, msg
+
+
 def show_img(
     img: Union[ndarray, Tensor], win_title: str = "", print_info: bool = False
 ):
@@ -89,15 +98,6 @@ def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = None)
         itk_img.SetSpacing(spacing)
     sitk.WriteImage(itk_img, save_path)
     return save_path
-
-
-def exit_app(msg: str = ""):
-    if msg == "" or msg is None:
-        msg = "debug exit"
-    else:
-        msg = str(msg)
-    print(msg)
-    assert 0, msg
 
 
 def save_json(data: dict, path: str):
@@ -581,10 +581,21 @@ def sort_dict_by_value(input_dict: dict, reverse: bool) -> dict:
     }
 
 
+def delete_debug_results():
+    for baseline_result in get_sub_folders(TRAIN_RESULTS_FOLDER, return_full_path=True):
+        if "delete.this" in baseline_result:
+            delete_folder(baseline_result)
+        else:
+            for idl_result in get_sub_folders(
+                baseline_result, key_word="idl_", return_full_path=True
+            ):
+                if "delete.this" in idl_result:
+                    delete_folder(idl_result)
+
+
 PROJ_PATH = None
 DEVICE = None
 NUM_WORKERS = None
-# PATCH_SIZE = None
 IMG_SIZE = None
 NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
@@ -601,7 +612,6 @@ def __global_init():
     global PROJ_PATH
     global DEVICE
     global NUM_WORKERS
-    # global PATCH_SIZE
     global IMG_SIZE
     global NII_SPACING
     global CNN_STATE_DICT_ONLY
@@ -646,14 +656,6 @@ def __global_init():
 
     elif platform.system().lower() == "linux":
         NUM_WORKERS = __json_data["num.workers"]
-
-    # # patch size
-    # PATCH_SIZE = []
-    # for i in str_to_list(__json_data["patch.size"]):
-    #     # str_to_list will return a list of str
-    #     # change all items to int
-    #     PATCH_SIZE.append(int(i))
-    # PATCH_SIZE = tuple(PATCH_SIZE)
 
     # img size
     IMG_SIZE = []
