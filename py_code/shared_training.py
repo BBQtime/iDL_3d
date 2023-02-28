@@ -5,9 +5,7 @@ import math
 import random
 import numpy as np
 import torch.nn as nn
-from loss_func import UnifiedFocalLoss
 from segment_metrics import SegmentationMetrics
-from tqdm import tqdm
 from itertools import product
 from collections import OrderedDict
 from torch import optim
@@ -85,13 +83,6 @@ class SharedTraining:
 
         hyper["loss.gamma"] = float(hyper["loss.gamma"])
         hyper["loss.asym"] = bool(hyper["loss.asym"])
-
-        hyper["loss.func"] = UnifiedFocalLoss(
-            weight=hyper["loss.weight"],
-            delta=hyper["loss.delta"],
-            gamma=hyper["loss.gamma"],
-            asym=hyper["loss.asym"],
-        ).to(g.DEVICE)
 
         # load cnn
         self._load_cnn(hyper, exist_cnn_path)

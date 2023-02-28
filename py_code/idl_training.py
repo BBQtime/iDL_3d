@@ -1,11 +1,8 @@
 import os
 import random
-import torch
 from datetime import datetime
-from itertools import product
-import numpy as np
 from pathlib import Path
-from collections import OrderedDict
+from loss_func import UnifiedFocalLoss
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
@@ -171,6 +168,15 @@ class IDLTraining(SharedTraining):
             hyper=hyper,
             exist_cnn_path=baseline_cnn_path,
         )
+
+        # run this after shared hyper loaded, loss parameters are needed
+        hyper["loss.func"] = UnifiedFocalLoss(
+            asym=hyper["loss.asym"],
+            weight=hyper["loss.weight"],
+            delta=hyper["loss.delta"],
+            gamma=hyper["loss.gamma"],
+            gtvt_only=True,
+        ).to(g.DEVICE)
 
         # run this after shared hyper loaded, actual batch size is needed
         hyper["patients"] = self.__load_dataset(hyper=hyper, debug_mode=debug_mode)

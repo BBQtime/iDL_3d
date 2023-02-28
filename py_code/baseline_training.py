@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from shared_training import SharedTraining
 from matplotlib import pyplot as plt
 from baseline_dataset import BaselineDataSet
+from loss_func import UnifiedFocalLoss
 
 
 class BaselineTraining(SharedTraining):
@@ -101,6 +102,15 @@ class BaselineTraining(SharedTraining):
             hyper=hyper,
             exist_cnn_path=exist_cnn_path,
         )
+
+        # run this after shared hyper loaded, loss parameters are needed
+        hyper["loss.func"] = UnifiedFocalLoss(
+            asym=hyper["loss.asym"],
+            weight=hyper["loss.weight"],
+            delta=hyper["loss.delta"],
+            gamma=hyper["loss.gamma"],
+            gtvt_only=False,
+        ).to(g.DEVICE)
 
         # run this after shared hyper loaded, actual batch size is needed
         (
