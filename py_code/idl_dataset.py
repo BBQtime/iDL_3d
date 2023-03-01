@@ -262,6 +262,7 @@ class IDLDataSet:
             # load gtvs
             for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
                 tmp[i] = self.__preprocess(self.__origin[i], augment_seed)
+                tmp[i] = g.binarize_img(tmp[i])
 
             tmp_label_pred_sum = (
                 tmp["label.gtvt"].sum()
@@ -296,7 +297,7 @@ class IDLDataSet:
                 break
 
         # background
-        background = 1 - final["label.gtvt"] - final["label.gtvn"]
+        background = 1 - torch.maximum(final["label.gtvt"], final["label.gtvn"])
         # !!! background FIRST !!!
         labels = torch.cat(
             [background, final["label.gtvt"], final["label.gtvn"]], dim=0

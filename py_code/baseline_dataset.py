@@ -89,6 +89,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             binary=True,
         )
         final_gtvt = self.__preprocess(origin_gtvt, augment_seed)
+        final_gtvt = g.binarize_img(final_gtvt)
 
         # load gtvn
         gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
@@ -97,10 +98,10 @@ class BaselineDataSet(torch.utils.data.Dataset):
         else:
             origin_gtvn = origin_gtvs - origin_gtvt
         final_gtvn = self.__preprocess(origin_gtvn, augment_seed)
+        final_gtvn = g.binarize_img(final_gtvn)
 
         # load background
-        background = 1 - final_gtvt - final_gtvn
-
+        background = 1 - torch.maximum(final_gtvt, final_gtvn)
         # !!! background FIRST !!!
         labels = torch.cat([background, final_gtvt, final_gtvn], dim=0)
 
