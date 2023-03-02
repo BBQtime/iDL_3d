@@ -32,6 +32,9 @@ class BaselineDataSet(torch.utils.data.Dataset):
         return len(self.patient_list)
 
     def __preprocess(self, img: ndarray, augment_seed: int):
+        # DO NOT alter origin img
+        img = img.copy()
+
         # normalize before augmentation
         if not img.max() == img.min() == 0:
             img = g.normalize_img(img)
@@ -44,8 +47,11 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = g.central_crop(img, g.IMG_SIZE)
         img = g.central_pad(img, g.IMG_SIZE)
+        img = g.central_crop(img, g.IMG_SIZE)
+
+        # clip, because data augmentation will sometime make img >1 or <0
+        img = np.clip(img, 0, 1)
 
         # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
@@ -60,6 +66,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             binary=True,
         )
         final_gtvs = None
+        final_augment_seed = None
 
         # loop until target volume is big enough
         for k in range(50):
@@ -67,20 +74,23 @@ class BaselineDataSet(torch.utils.data.Dataset):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            augment_seed = random.randint(0, 2**16)
+            tmp_augment_seed = random.randint(0, 2**16)
 
             # load gtvs
-            tmp_gtvs = self.__preprocess(origin_gtvs, augment_seed)
+            tmp_gtvs = self.__preprocess(origin_gtvs, tmp_augment_seed)
+            tmp_gtvs = g.binarize_img(tmp_gtvs)
 
             # target volume is not big enough
             if tmp_gtvs.sum() < origin_gtvs.sum() * 0.999:
-                # keep the gtvs with largest target volume
+                # keep the largest gtvs and the augment seed
                 if final_gtvs is None or tmp_gtvs.sum() > final_gtvs.sum():
                     final_gtvs = tmp_gtvs
+                    final_augment_seed = tmp_augment_seed
                 continue
             # target volume is large enough, break
             else:
                 final_gtvs = tmp_gtvs
+                final_augment_seed = tmp_augment_seed
                 break
 
         # load gtvt
@@ -88,7 +98,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
-        final_gtvt = self.__preprocess(origin_gtvt, augment_seed)
+        final_gtvt = self.__preprocess(origin_gtvt, final_augment_seed)
         final_gtvt = g.binarize_img(final_gtvt)
 
         # load gtvn
@@ -97,7 +107,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             origin_gtvn = g.load_nii(gtvn_path, binary=True)
         else:
             origin_gtvn = origin_gtvs - origin_gtvt
-        final_gtvn = self.__preprocess(origin_gtvn, augment_seed)
+        final_gtvn = self.__preprocess(origin_gtvn, final_augment_seed)
         final_gtvn = g.binarize_img(final_gtvn)
 
         # load background
@@ -116,7 +126,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
             if i == "CT":
                 img = g.ct_windowing(img)
 
-            img = self.__preprocess(img, augment_seed)
+            img = self.__preprocess(img, final_augment_seed)
 
             # concat multi-model img
             if multi_model_imgs is None:

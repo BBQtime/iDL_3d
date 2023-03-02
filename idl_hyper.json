@@ -5,13 +5,19 @@
     "augment.up.limit": 3,
     "batch.size": 2,
     "dropout": 0.3,
-    "iter": 5,
+    "iter": [
+        5,
+        10
+    ],
     "layer.freezing": false,
     "loss.asym": true,
     "loss.delta": 0.5,
     "loss.gamma": 0.3,
     "loss.weight": 0.5,
-    "lr": "4e-05,4e-05",
+    "lr": [
+        "4e-05,4e-05",
+        "8e-05,8e-05"
+    ],
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 3,
     "lr.min": 1e-06,

@@ -236,7 +236,7 @@ class BaselineTraining(SharedTraining):
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 outputs = hyper["cnn"](inputs)[3]
-                loss = hyper["loss.func"](outputs, labels)
+                loss = hyper["loss.func"](outputs, labels, weight_map=None)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
@@ -253,7 +253,7 @@ class BaselineTraining(SharedTraining):
                     inputs = inputs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
                     outputs = hyper["cnn"](inputs)[3]
-                    loss = hyper["loss.func"](outputs, labels)
+                    loss = hyper["loss.func"](outputs, labels, weight_map=None)
                     sum_loss += loss.item()
                     batch_num += 1
             valid_loss = sum_loss / batch_num

@@ -217,9 +217,18 @@ class IDLDataSet:
     def __len__(self):
         return self.__augment_times
 
-    def __preprocess(self, img: ndarray, augment_seed: int):
+    def __preprocess(
+        self,
+        img: ndarray,
+        augment_seed: int,
+        normalize: bool = True,  # only for weight map, if normalize is False
+        clip_up_limit: float = 1,  # only for weight map, if clip_up_limit is not 1
+    ):
+        # DO NOT alter origin img
+        img = img.copy()
+
         # normalize before augmentation
-        if not img.max() == img.min() == 0:
+        if normalize and (not img.max() == img.min() == 0):
             img = g.normalize_img(img)
 
         # data augmentation
@@ -230,8 +239,11 @@ class IDLDataSet:
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = g.central_crop(img, g.IMG_SIZE)
         img = g.central_pad(img, g.IMG_SIZE)
+        img = g.central_crop(img, g.IMG_SIZE)
+
+        # clip, because data augmentation will sometime make img >1 or <0
+        img = np.clip(img, 0, clip_up_limit)
 
         # unsqueeze img to 4 dim before convert to Tensor
         img = np.expand_dims(img, axis=0)
@@ -257,11 +269,11 @@ class IDLDataSet:
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            augment_seed = random.randint(0, 2**16)
+            tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
             for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
-                tmp[i] = self.__preprocess(self.__origin[i], augment_seed)
+                tmp[i] = self.__preprocess(self.__origin[i], tmp["augment.seed"])
                 tmp[i] = g.binarize_img(tmp[i])
 
             tmp_label_pred_sum = (
@@ -274,11 +286,18 @@ class IDLDataSet:
             # target volume is not big enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
 
+                # nothing in "final" dict
                 if len(final) == 0:
-                    for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+                    for i in [
+                        "label.gtvt",
+                        "label.gtvn",
+                        "pred.gtvt",
+                        "pred.gtvn",
+                        "augment.seed",
+                    ]:
                         final[i] = tmp[i]
 
-                # keep the gtvt/gtvn with largest target volume
+                # keep the gtvt/gtvn/seed with largest target volume
                 final_label_pred_sum = (
                     final["label.gtvt"].sum()
                     + final["label.gtvn"].sum()
@@ -286,13 +305,25 @@ class IDLDataSet:
                     + final["pred.gtvn"].sum()
                 )
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+                    for i in [
+                        "label.gtvt",
+                        "label.gtvn",
+                        "pred.gtvt",
+                        "pred.gtvn",
+                        "augment.seed",
+                    ]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+                for i in [
+                    "label.gtvt",
+                    "label.gtvn",
+                    "pred.gtvt",
+                    "pred.gtvn",
+                    "augment.seed",
+                ]:
                     final[i] = tmp[i]
                 break
 
@@ -306,7 +337,7 @@ class IDLDataSet:
         # multi model imgs
         multi_model_imgs = None
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            img = self.__preprocess(self.__origin[i], augment_seed)
+            img = self.__preprocess(self.__origin[i], final["augment.seed"])
 
             # concat multi-model img
             if multi_model_imgs is None:
@@ -315,7 +346,12 @@ class IDLDataSet:
                 multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
 
         # weight map
-        weight_map = self.__preprocess(self.__origin["weight.map"], augment_seed)
+        weight_map = self.__preprocess(
+            img=self.__origin["weight.map"],
+            augment_seed=final["augment.seed"],
+            normalize=False,
+            clip_up_limit=self.__origin["weight.map"].max(),
+        )
 
         return multi_model_imgs, labels, weight_map
 

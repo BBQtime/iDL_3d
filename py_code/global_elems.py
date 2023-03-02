@@ -79,7 +79,7 @@ def save_img(
     return save_path
 
 
-def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = None):
+def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = ()):
     if isinstance(img, Tensor):
         # detach: return a tensor share the same memory but without grad
         img = img.detach().cpu().numpy()
@@ -92,7 +92,7 @@ def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = None)
                 img = img[0]
 
     itk_img = sitk.GetImageFromArray(img)
-    if spacing is None:
+    if spacing == ():
         itk_img.SetSpacing(NII_SPACING)
     else:
         itk_img.SetSpacing(spacing)

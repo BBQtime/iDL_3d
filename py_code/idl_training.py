@@ -148,8 +148,8 @@ class IDLTraining(SharedTraining):
             hyper["weight.background"] = 1
 
         hyper["weight.annotated.slice"] = float(hyper["weight.annotated.slice"])
-        if hyper["weight.annotated.slice"] < 1:
-            hyper["weight.annotated.slice"] = 1
+        if hyper["weight.annotated.slice"] < hyper["weight.background"]:
+            hyper["weight.annotated.slice"] = hyper["weight.background"]
 
         hyper["weight.annotation"] = float(hyper["weight.annotation"])
         if hyper["weight.annotation"] < hyper["weight.annotated.slice"]:
@@ -161,7 +161,7 @@ class IDLTraining(SharedTraining):
 
         hyper["weight.prev.round.decay"] = float(hyper["weight.prev.round.decay"])
         if hyper["weight.prev.round.decay"] > 1:
-            hyper["weight.prev.round.decay"] = 1
+            hyper["weight.prev.round.decay"] = 1.0
 
         # load shared hyper
         super()._load_hyper(
@@ -529,10 +529,8 @@ class IDLTraining(SharedTraining):
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
-                labels = labels * weight_map
                 outputs = hyper["cnn"](inputs)[3]
-                outputs = outputs * weight_map
-                loss = hyper["loss.func"](outputs, labels)
+                loss = hyper["loss.func"](outputs, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
