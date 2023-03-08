@@ -106,12 +106,9 @@ class IDLTraining(SharedTraining):
         hyper["lr.decay.patience"] = int(hyper["lr.decay.patience"])
         g.check_limit(hyper["lr.decay.patience"], 1, hyper["iter"])
 
-        # augmentation times (based on after shared hyper)
-        if debug_mode:
-            hyper["augment.times"] = 2
-        else:
-            hyper["augment.times"] = int(hyper["augment.times"])
-            hyper["augment.times"] = g.check_limit(hyper["augment.times"], 1, None)
+        # augmentation times
+        hyper["augment.times"] = int(hyper["augment.times"])
+        hyper["augment.times"] = g.check_limit(hyper["augment.times"], 1, None)
 
         # augmentation percent (based on augment_times)
         hyper["augment.pct"] = hyper["augment.times"] / (hyper["augment.times"] + 1)
@@ -409,23 +406,21 @@ class IDLTraining(SharedTraining):
 
         patient = Path(cur_round_folder).parent.name
 
-        score_json_path = os.path.join(
-            Path(cur_round_folder).parent.parent.parent, "score.json"
-        )
-
         # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
         patient_result = self._inference_single_patient(
             patient=patient[len("patient=") :], hyper=hyper
         )
 
         # save score of cur patient
-        score = g.load_json(score_json_path)
+        idl_folder = Path(cur_round_folder).parent.parent.parent
         for gtv in ["gtvs", "gtvt", "gtvn"]:
+            score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
+            score = g.load_json(score_json_path)
             for metric_type in g.METRICS_LIST:
-                score[patient][gtv][metric_type][cur_round] = patient_result[gtv][
+                score[patient][metric_type][cur_round] = patient_result[gtv][
                     metric_type
                 ]
-        g.save_json(score, score_json_path)
+            g.save_json(score, score_json_path)
 
         # save pred of cur patient
         for gtv in ["gtvt", "gtvn", "gtvs"]:
@@ -585,19 +580,18 @@ class IDLTraining(SharedTraining):
         # create an empty loss.json
         g.save_json(NestedDict(), os.path.join(patient_folder, "loss.json"))
 
-        # copy baseline score to idl score
+        # initialize idl score (copy from baseline)
         baseline_score = g.load_json(
             os.path.join(baseline_epoch_folder, "score_test.json")
         )
-
-        idl_score_json_path = os.path.join(idl_folder, "score.json")
-        idl_score = g.load_json(idl_score_json_path)
         for gtv in ["gtvs", "gtvt", "gtvn"]:
+            idl_score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
+            idl_score = g.load_json(idl_score_json_path)
             for metric_type in g.METRICS_LIST:
-                idl_score["patient={}".format(patient)][gtv][metric_type][
+                idl_score["patient={}".format(patient)][metric_type][
                     "round=00"
                 ] = baseline_score["patient={}".format(patient)][gtv][metric_type]
-        g.save_json(idl_score, idl_score_json_path)
+            g.save_json(idl_score, idl_score_json_path)
 
         g.print_line()
         print("patient:", patient)
@@ -690,7 +684,6 @@ class IDLTraining(SharedTraining):
 
         # draw figure
         plt.figure().clear()
-        plt.ylim(min(avg_loss) - 0.05, max(avg_loss) + 0.05)
         plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
         plt.legend()
         plt.savefig(os.path.join(idl_folder, "loss.png"))
@@ -740,8 +733,11 @@ class IDLTraining(SharedTraining):
             hyper_save_path = os.path.join(idl_folder, "hyper.json")
             self.__save_hyper(hyper, hyper_save_path)
 
-            # create an empty score.json
-            g.save_json(NestedDict(), os.path.join(idl_folder, "score.json"))
+            # create an empty score json files
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
+                g.save_json(
+                    NestedDict(), os.path.join(idl_folder, "score_{}.json".format(gtv))
+                )
 
             # training start time
             hyper["time.used"] = datetime.now()
@@ -755,7 +751,7 @@ class IDLTraining(SharedTraining):
                     idl_folder=idl_folder,
                 )
 
-                # 2 patients to check avg score
+                # debug mode, only 1 or 2 patients
                 if debug_mode and hyper["patients"].index(patient) == 0:
                     break
 
@@ -774,24 +770,23 @@ class IDLTraining(SharedTraining):
             self.__record_avg_score(idl_folder)
 
     def __record_avg_score(self, idl_folder: str):
-        score_json_path = os.path.join(idl_folder, "score.json")
-        score_dict = g.load_json(score_json_path)
-        avg = NestedDict()
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
+            score = g.load_json(score_json_path)
+            avg = NestedDict()
 
-        for patient in score_dict:
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
+            # add all patients score in to a list
+            for patient in score:
                 for metric in g.METRICS_LIST:
-                    for cur_round in score_dict[patient][gtv][metric]:
-                        if avg[gtv][metric][cur_round] == {}:
-                            avg[gtv][metric][cur_round] = []
-                        avg[gtv][metric][cur_round].append(
-                            score_dict[patient][gtv][metric][cur_round]
-                        )
+                    for cur_round in score[patient][metric]:
+                        if avg[metric][cur_round] == {}:
+                            avg[metric][cur_round] = []
+                        avg[metric][cur_round].append(score[patient][metric][cur_round])
 
-        for metric in g.METRICS_LIST:
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
-                for cur_round in avg[gtv][metric]:
-                    score_dict["avg"][gtv][metric][cur_round] = g.get_avg_value(
-                        avg[gtv][metric][cur_round]
+            # calculate avg score
+            for metric in g.METRICS_LIST:
+                for cur_round in avg[metric]:
+                    score["avg"][metric][cur_round] = g.get_avg_value(
+                        avg[metric][cur_round]
                     )
-        g.save_json(data=score_dict, path=os.path.join(score_json_path))
+            g.save_json(data=score, path=os.path.join(score_json_path))

@@ -718,7 +718,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for metric_type in g.METRICS_LIST:
             # baseline
             self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
-                "gtvs"
+                "gtvt"
             ][metric_type]
             # idl
             if self.__idl_id != "baseline":

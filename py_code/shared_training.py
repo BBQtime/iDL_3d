@@ -42,7 +42,7 @@ class SharedTraining:
         hyper["dropout"] = g.check_limit(hyper["dropout"], 0, 0.9)
 
         # batch size
-        hyper["batch.size"] = float(hyper["batch.size"])
+        hyper["batch.size"] = int(hyper["batch.size"])
         hyper["batch.size"] = g.check_limit(hyper["batch.size"], 1, None)
 
         # actual batch size

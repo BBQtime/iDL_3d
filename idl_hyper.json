@@ -5,19 +5,13 @@
     "augment.up.limit": 3,
     "batch.size": 2,
     "dropout": 0.3,
-    "iter": [
-        5,
-        10
-    ],
+    "iter": 20,
     "layer.freezing": false,
     "loss.asym": true,
     "loss.delta": 0.5,
     "loss.gamma": 0.3,
-    "loss.weight": 0.5,
-    "lr": [
-        "4e-05,4e-05",
-        "8e-05,8e-05"
-    ],
+    "loss.weight": 0.1,
+    "lr": "8e-05,8e-05",
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 3,
     "lr.min": 1e-06,
@@ -27,18 +21,13 @@
         "sagittal": "equal.divide",
         "transverse": "equal.divide"
     },
-    "select.step": [
-        {
-            "coronal": "1",
-            "sagittal": "1",
-            "transverse": "1"
-        }
-    ],
-    "weight.annotated.slice": 2,
-    "weight.annotation": [
-        3,
-        6
-    ],
+    "select.step": {
+        "coronal": "1",
+        "sagittal": "1",
+        "transverse": "1"
+    },
+    "weight.annotated.slice": 2.0,
+    "weight.annotation": 3.0,
     "weight.background": 0.2,
     "weight.distance.step": 5,
     "weight.prev.round.decay": 0.5

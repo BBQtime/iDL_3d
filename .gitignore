@@ -7,3 +7,4 @@ idl_tensorboard/
 idl_figs/
 py_code/debug.py
 py_code/main.py
+idl_hyper.txt

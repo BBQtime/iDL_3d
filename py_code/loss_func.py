@@ -1,30 +1,11 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import global_elems as g
 from torch import Tensor
+from torch import tensor
 
 EPSILON = torch.finfo(torch.float32).eps
-
-# Helper function to enable loss function to be flexibly used for
-# both 2D or 3D image segmentation - source: https://github.com/frankkramer-lab/MIScnn
-def identify_axis(shape):
-    # Three dimensional
-    if len(shape) == 5:
-        # keras channels_last(default): (b, d, h, w, c)
-        # keras channels_first: (b, c, d, h, w)
-        # return [1, 2, 3]
-        # pytorch (b, c, d, h, w)
-        return (2, 3, 4)
-    # Two dimensional
-    elif len(shape) == 4:
-        # keras channels_last(default): (b, h, w, c)
-        # keras channels_first: (b, c, h, w)
-        # return [1, 2]
-        # pytorch (b, c, h, w)
-        return (2, 3)
-    # Exception - Unknown
-    else:
-        raise ValueError("Metric: Shape of tensor is neither 2D or 3D.")
 
 
 def split_input_data(input_imgs: Tensor, gtvt_only: bool):
@@ -54,9 +35,10 @@ def focal_loss(
         # background.max might still = 1, which will cause gradient vanishing
         pred = split_input_data(pred, gtvt_only)
         label = split_input_data(label, gtvt_only)
+        if weight_map is not None:
+            weight_map = weight_map[:, 0, :, :, :]
 
         loss = dict()
-
         if gtvt_only:
             chan_list = ["back", "gtvt"]
         else:
@@ -83,22 +65,22 @@ def focal_loss(
             else:
                 loss[i] = loss[i] * delta
 
+            # add weight to loss
             if weight_map is not None:
-                loss[i] = loss[i] * weight_map[:, 0, :, :, :]
+                loss[i] = loss[i] * weight_map
 
-        # average loss
-        loss_list = []
-        for i in chan_list:
-            loss_list.append(loss[i])
-
-        return torch.mean(torch.sum(torch.stack(loss_list, dim=-1), dim=-1))
+        loss = g.dict_to_list(loss)
+        loss = torch.stack(loss, dim=-1)
+        loss = torch.sum(loss, dim=-1)
+        loss = torch.mean(loss)
+        return loss
 
     return loss_function
 
 
 def focal_tversky_loss(
     asym: bool,  # =true for imbalanced dataset, only enhance foreground
-    delta: float,  # weight given to false negative (delta) and false positive (1-delta)
+    delta: float,  # weight given to FN (delta) and FP (1-delta)
     gamma: float,  # focal parameter controls the degree of foreground enhancement
     gtvt_only: bool,
 ):
@@ -132,30 +114,38 @@ def focal_tversky_loss(
         # calculate loss through each channel
         axis = (1, 2, 3)
         for i in chan_list:
-            # clip values to prevent division by zero error
-            pred[i] = torch.clip(pred[i], EPSILON, 1.0 - EPSILON)
 
             tp[i] = torch.sum(label[i] * pred[i], dim=axis)
             fn[i] = torch.sum(label[i] * (up_limit - pred[i]), dim=axis)
             fp[i] = torch.sum((up_limit - label[i]) * pred[i], dim=axis)
+
+            # tp[i] = label[i] * pred[i]
+            # fn[i] = label[i] * (1 - pred[i])
+            # fp[i] = pred[i] * (1 - label[i])
+
             loss[i] = (tp[i] + EPSILON) / (
                 tp[i] + delta * fn[i] + (1 - delta) * fp[i] + EPSILON
             )
             loss[i] = 1 - loss[i]
 
             # always enhance foreground
-            # enhance background when symmetrical
+            # enhance background when symmetrical (larger gamma, more enhancement)
             if i != "back" or not asym:
-                # enhancement (larger gamma, more enhancement)
+                # clip values to prevent division by zero error
+                loss[i] = torch.clip(loss[i], EPSILON)
                 # loss always > 0, both before and after this step
                 loss[i] = loss[i] * torch.pow(loss[i], -gamma)
 
-        # average loss
-        loss_list = []
-        for i in chan_list:
-            loss_list.append(loss[i])
+            # # add weight to loss
+            # if weight_map is not None:
+            #     loss[i] = loss[i] * weight_map
 
-        return torch.mean(torch.stack(loss_list, dim=-1))
+        loss = g.dict_to_list(loss)
+        loss = torch.stack(loss, dim=-1)
+        # loss = torch.mean(loss, dim=-1)
+        loss = torch.mean(loss)
+
+        return loss
 
     return loss_function
 
@@ -169,19 +159,25 @@ def unified_focal_loss(
 ):
     def loss_function(pred, label, weight_map=None):
 
-        ftl = focal_tversky_loss(
-            asym=asym,
-            delta=delta,
-            gamma=gamma,
-            gtvt_only=gtvt_only,
-        )(pred, label, weight_map)
+        if weight > 0:
+            ftl = focal_tversky_loss(
+                asym=asym,
+                delta=delta,
+                gamma=gamma,
+                gtvt_only=gtvt_only,
+            )(pred, label, weight_map)
+        else:
+            ftl = tensor(0, dtype=torch.float32)
 
-        fl = focal_loss(
-            asym=asym,
-            delta=delta,
-            gamma=gamma,
-            gtvt_only=gtvt_only,
-        )(pred, label, weight_map)
+        if weight < 1:
+            fl = focal_loss(
+                asym=asym,
+                delta=delta,
+                gamma=gamma,
+                gtvt_only=gtvt_only,
+            )(pred, label, weight_map)
+        else:
+            fl = tensor(0, dtype=torch.float32)
 
         return (weight * ftl) + (1 - weight) * fl
 
