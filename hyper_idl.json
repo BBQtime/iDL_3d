@@ -32,11 +32,34 @@
         "sagittal": "1",
         "transverse": "1"
     },
-    "weight": {
-        "annotation": 3.0,
-        "background": 0.2,
-        "distance.step": 5,
-        "prev.round.decay": 0.5,
-        "slice": 2.0
-    }
+    "weight": [
+        {
+            "annotation": 3.0,
+            "background": 0.2,
+            "distance.step": 3,
+            "prev.round.decay": 0.5,
+            "slice": 2.0
+        },
+        {
+            "annotation": 3.0,
+            "background": 0.2,
+            "distance.step": 7,
+            "prev.round.decay": 0.5,
+            "slice": 2.0
+        },
+        {
+            "annotation": 3.0,
+            "background": 0.5,
+            "distance.step": 5,
+            "prev.round.decay": 0.5,
+            "slice": 2.0
+        },
+        {
+            "annotation": 3.0,
+            "background": 0.7,
+            "distance.step": 5,
+            "prev.round.decay": 0.5,
+            "slice": 2.0
+        }
+    ]
 }

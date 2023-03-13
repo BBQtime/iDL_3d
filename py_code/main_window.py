@@ -711,15 +711,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 g.TRAIN_RESULTS_FOLDER,
                 self.__baseline_id,
                 self.__idl_id,
-                "score.json",
+                "score_gtvt.json",
             )
         score_dict = g.load_json(score_path)
 
         for metric_type in g.METRICS_LIST:
             # baseline
             self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
-                "gtvt"
-            ][metric_type]
+                metric_type
+            ]
             # idl
             if self.__idl_id != "baseline":
                 self.__score[metric_type] = self.__score[metric_type][

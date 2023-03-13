@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import global_elems as g
@@ -8,7 +7,8 @@ from torch import tensor
 EPSILON = torch.finfo(torch.float32).eps
 
 
-def split_input_data(input_imgs: Tensor, gtvt_only: bool):
+def split_channels(input_imgs: Tensor, gtvt_only: bool) -> dict:
+
     output_imgs = dict()
 
     # dimension: [batch, channel, depth, height, width]
@@ -26,26 +26,14 @@ def focal_loss(
     asym: bool,  # asym=true for imbalanced dataset, only suppress background
     delta: float,  # weight given to foreground (delta) amd background (1-delta)
     gamma: float,  # focal parameter controls the degree of background suppression
-    gtvt_only: bool,
 ):
-    def loss_function(pred, label, weight_map=None):
-
-        # !!! clip pred after this function: split_input_data !!!
-        # because if gtvt_only, then background = background + gtvn
-        # background.max might still = 1, which will cause gradient vanishing
-        pred = split_input_data(pred, gtvt_only)
-        label = split_input_data(label, gtvt_only)
-        if weight_map is not None:
-            weight_map = weight_map[:, 0, :, :, :]
+    def loss_function(pred: dict, label: dict, weight_map: Tensor = None) -> Tensor:
 
         loss = dict()
-        if gtvt_only:
-            chan_list = ["back", "gtvt"]
-        else:
-            chan_list = ["back", "gtvt", "gtvn"]
 
         # calculate loss through each channel
-        for i in chan_list:
+        for i in pred.keys():
+
             # clip values to prevent division by zero error
             pred[i] = torch.clip(pred[i], EPSILON, 1.0 - EPSILON)
 
@@ -82,67 +70,43 @@ def focal_tversky_loss(
     asym: bool,  # =true for imbalanced dataset, only enhance foreground
     delta: float,  # weight given to FN (delta) and FP (1-delta)
     gamma: float,  # focal parameter controls the degree of foreground enhancement
-    gtvt_only: bool,
 ):
-    def loss_function(pred, label, weight_map=None):
+    axis = (1, 2, 3)
 
-        # !!! clip pred after multiplying by the weight_map !!!
-        # multiplying by weight_map will make pred.min=0
-        if weight_map is not None:
-            pred = pred * weight_map
-            label = label * weight_map
-            up_limit = weight_map.max()
-        else:
-            up_limit = 1
-
-        # !!! clip pred after this function: split_input_data !!!
-        # because if gtvt_only, then background = background + gtvn
-        # background.max might still = 1, which will cause gradient vanishing
-        pred = split_input_data(pred, gtvt_only)
-        label = split_input_data(label, gtvt_only)
+    def loss_function(pred: dict, label: dict, weight_map: Tensor = None) -> Tensor:
 
         tp = dict()
         fn = dict()
         fp = dict()
         loss = dict()
 
-        if gtvt_only:
-            chan_list = ["back", "gtvt"]
-        else:
-            chan_list = ["back", "gtvt", "gtvn"]
-
         # calculate loss through each channel
-        axis = (1, 2, 3)
-        for i in chan_list:
+        for i in pred.keys():
 
-            tp[i] = torch.sum(label[i] * pred[i], dim=axis)
-            fn[i] = torch.sum(label[i] * (up_limit - pred[i]), dim=axis)
-            fp[i] = torch.sum((up_limit - label[i]) * pred[i], dim=axis)
-
-            # tp[i] = label[i] * pred[i]
-            # fn[i] = label[i] * (1 - pred[i])
-            # fp[i] = pred[i] * (1 - label[i])
+            if weight_map is not None:
+                tp[i] = torch.sum(label[i] * pred[i] * weight_map, dim=axis)
+                fn[i] = torch.sum(label[i] * (1 - pred[i]) * weight_map, dim=axis)
+                fp[i] = torch.sum((1 - label[i]) * pred[i] * weight_map, dim=axis)
+            else:
+                tp[i] = torch.sum(label[i] * pred[i], dim=axis)
+                fn[i] = torch.sum(label[i] * (1 - pred[i]), dim=axis)
+                fp[i] = torch.sum((1 - label[i]) * pred[i], dim=axis)
 
             loss[i] = (tp[i] + EPSILON) / (
                 tp[i] + delta * fn[i] + (1 - delta) * fp[i] + EPSILON
             )
             loss[i] = 1 - loss[i]
 
-            # always enhance foreground
-            # enhance background when symmetrical (larger gamma, more enhancement)
+            # always enhance foreground, enhance background when symmetrical
+            # larger gamma, more enhancement
             if i != "back" or not asym:
                 # clip values to prevent division by zero error
                 loss[i] = torch.clip(loss[i], EPSILON)
                 # loss always > 0, both before and after this step
                 loss[i] = loss[i] * torch.pow(loss[i], -gamma)
 
-            # # add weight to loss
-            # if weight_map is not None:
-            #     loss[i] = loss[i] * weight_map
-
         loss = g.dict_to_list(loss)
         loss = torch.stack(loss, dim=-1)
-        # loss = torch.mean(loss, dim=-1)
         loss = torch.mean(loss)
 
         return loss
@@ -157,25 +121,30 @@ def unified_focal_loss(
     gamma: float,  # focal parameter controls the degree of background suppression and foreground enhancement
     gtvt_only: bool,
 ):
-    def loss_function(pred, label, weight_map=None):
+    def loss_function(pred: Tensor, label: Tensor, weight_map: Tensor = None) -> Tensor:
+
+        pred = split_channels(pred, gtvt_only)
+        label = split_channels(label, gtvt_only)
+
+        if weight_map is not None:
+            # weight_map: [b,c,d,h,w] -> [b,d,h,w]
+            weight_map = weight_map[:, 0, :, :, :]
 
         if weight > 0:
-            ftl = focal_tversky_loss(
-                asym=asym,
-                delta=delta,
-                gamma=gamma,
-                gtvt_only=gtvt_only,
-            )(pred, label, weight_map)
+            ftl = focal_tversky_loss(asym=asym, delta=delta, gamma=gamma)(
+                pred=pred,
+                label=label,
+                weight_map=weight_map,
+            )
         else:
             ftl = tensor(0, dtype=torch.float32)
 
         if weight < 1:
-            fl = focal_loss(
-                asym=asym,
-                delta=delta,
-                gamma=gamma,
-                gtvt_only=gtvt_only,
-            )(pred, label, weight_map)
+            fl = focal_loss(asym=asym, delta=delta, gamma=gamma)(
+                pred=pred,
+                label=label,
+                weight_map=weight_map,
+            )
         else:
             fl = tensor(0, dtype=torch.float32)
 
