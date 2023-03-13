@@ -1,0 +1,28 @@
+{
+    "augment": {
+        "low.limit": 2,
+        "methods": "elastic,rotate,flip.lr,flip.ud",
+        "pct": 0.8,
+        "up.limit": 3
+    },
+    "batch.size": 2,
+    "cross.valid": false,
+    "dropout": 0.3,
+    "epoch": {
+        "early.stop": 30,
+        "init": 500
+    },
+    "keep.best.cnn.num": 5,
+    "loss": {
+        "asym": true,
+        "delta": 0.5,
+        "gamma": 0.3,
+        "weight": 0.5
+    },
+    "lr": {
+        "decay.factor": 0.5,
+        "decay.patience": 5,
+        "init": 0.0002,
+        "min": 1e-05
+    }
+}

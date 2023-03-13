@@ -31,9 +31,9 @@ class BaselineTraining(SharedTraining):
         #     print(set(train_patients) & set(valid_patients))
 
         if debug_mode:
-            train_patients = train_patients[: hyper["batch.size.actual"]]
-            valid_patients = valid_patients[: hyper["batch.size.actual"]]
-            test_patients = test_patients[: hyper["batch.size.actual"]]
+            train_patients = train_patients[: hyper["batch.size"]["actual"]]
+            valid_patients = valid_patients[: hyper["batch.size"]["actual"]]
+            test_patients = test_patients[: hyper["batch.size"]["actual"]]
 
         return train_patients, valid_patients, test_patients
 
@@ -45,57 +45,58 @@ class BaselineTraining(SharedTraining):
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # cross valid folds
-        hyper["dataset.k.folds"] = g.DATASET_K_FOLDS
+        hyper["dataset"]["k.folds"] = g.DATASET_K_FOLDS
+
+        # use cross validation or not
+        hyper["dataset"]["cross.valid"] = bool(hyper["cross.valid"])
+        hyper.pop("cross.valid")
 
         # epochs
         if debug_mode:
             # at least 2 epochs to compare difference in loss
-            hyper["epochs"] = 3
+            hyper["epoch"]["init"] = 2
         else:
-            hyper["epochs"] = int(hyper["epochs"])
-            hyper["epochs"] = g.check_limit(hyper["epochs"], 1, None)
+            hyper["epoch"]["init"] = int(hyper["epoch"]["init"])
+            hyper["epoch"]["init"] = g.check_limit(hyper["epoch"]["init"], 1, None)
 
-        # record actual epochs because of "early.stop.patience"
-        hyper["epochs.actual"] = 0
+        # record actual epochs because of early stop
+        hyper["epoch"]["actual"] = 0
+
+        # early stop, based on epoch
+        hyper["epoch"]["early.stop"] = int(hyper["epoch"]["early.stop"])
+        hyper["epoch"]["early.stop"] = g.check_limit(
+            hyper["epoch"]["early.stop"], 1, hyper["epoch"]["init"]
+        )
 
         # lr
-        hyper["lr"] = float(hyper["lr"])
-        hyper["lr"] = g.check_limit(hyper["lr"], 1e-10, None)
+        hyper["lr"]["init"] = float(hyper["lr"]["init"])
+        hyper["lr"]["init"] = g.check_limit(hyper["lr"]["init"], 1e-10, None)
 
         # actual lr
         if g.used_gpu_count() > 1:
-            hyper["lr.actual"] = hyper["lr"] * g.used_gpu_count()
+            hyper["lr"]["actual"] = hyper["lr"]["init"] * g.used_gpu_count()
         else:
-            hyper["lr.actual"] = hyper["lr"]
+            hyper["lr"]["actual"] = hyper["lr"]["init"]
 
         # min lr
-        hyper["lr.min"] = float(hyper["lr.min"])
-        hyper["lr.min"] = g.check_limit(hyper["lr.min"], 0, hyper["lr"])
+        hyper["lr"]["min"] = float(hyper["lr"]["min"])
+        hyper["lr"]["min"] = g.check_limit(hyper["lr"]["min"], 0, hyper["lr"]["init"])
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr.decay.patience"] = int(hyper["lr.decay.patience"])
-        hyper["lr.decay.patience"] = g.check_limit(
-            hyper["lr.decay.patience"], 1, hyper["epochs"]
-        )
-
-        # early stop, based on epoch
-        hyper["early.stop.patience"] = int(hyper["early.stop.patience"])
-        hyper["early.stop.patience"] = g.check_limit(
-            hyper["early.stop.patience"], 1, hyper["epochs"]
+        hyper["lr"]["decay.patience"] = int(hyper["lr"]["decay.patience"])
+        hyper["lr"]["decay.patience"] = g.check_limit(
+            hyper["lr"]["decay.patience"], 1, hyper["epoch"]["init"]
         )
 
         # number of best valid loss cnn retained
         hyper["keep.best.cnn.num"] = int(hyper["keep.best.cnn.num"])
         hyper["keep.best.cnn.num"] = g.check_limit(
-            hyper["keep.best.cnn.num"], 1, hyper["epochs"]
+            hyper["keep.best.cnn.num"], 1, hyper["epoch"]["init"]
         )
 
         # augmentation percent
-        hyper["augment.pct"] = float(hyper["augment.pct"])
-        hyper["augment.pct"] = g.check_limit(hyper["augment.pct"], 0, 1)
-
-        # use cross validation or not
-        hyper["cross.valid"] = bool(hyper["cross.valid"])
+        hyper["augment"]["pct"] = float(hyper["augment"]["pct"])
+        hyper["augment"]["pct"] = g.check_limit(hyper["augment"]["pct"], 0, 1)
 
         # load shared hyper parameters
         super()._load_hyper(
@@ -104,11 +105,11 @@ class BaselineTraining(SharedTraining):
         )
 
         # run this after shared hyper loaded, loss parameters are needed
-        hyper["loss.func"] = UnifiedFocalLoss(
-            asym=hyper["loss.asym"],
-            weight=hyper["loss.weight"],
-            delta=hyper["loss.delta"],
-            gamma=hyper["loss.gamma"],
+        hyper["loss"]["func"] = UnifiedFocalLoss(
+            asym=hyper["loss"]["asym"],
+            weight=hyper["loss"]["weight"],
+            delta=hyper["loss"]["delta"],
+            gamma=hyper["loss"]["gamma"],
             gtvt_only=False,
         ).to(g.DEVICE)
 
@@ -119,42 +120,38 @@ class BaselineTraining(SharedTraining):
             test_patients,
         ) = self.__load_dataset(hyper=hyper, fold=fold, debug_mode=debug_mode)
 
-        hyper["dataset.train.len"] = train_patients.__len__()
-        hyper["dataset.valid.len"] = valid_patients.__len__()
-        hyper["dataset.test.len"] = test_patients.__len__()
-        hyper["dataset.len"] = (
+        hyper["dataset"]["train.len"] = train_patients.__len__()
+        hyper["dataset"]["valid.len"] = valid_patients.__len__()
+        hyper["dataset"]["test.len"] = test_patients.__len__()
+        hyper["dataset"]["len"] = (
             train_patients.__len__()
             + valid_patients.__len__()
             + test_patients.__len__()
         )
 
         # create dataset
-        augment = dict()
-        augment["methods"] = hyper["augment.methods"]
-        augment["pct"] = hyper["augment.pct"]
-        augment["low.limit"] = hyper["augment.low.limit"]
-        augment["up.limit"] = hyper["augment.up.limit"]
-
-        train_set = BaselineDataSet(patient_list=train_patients, augment=augment)
+        train_set = BaselineDataSet(
+            patient_list=train_patients, augment=hyper["augment"]
+        )
         valid_set = BaselineDataSet(patient_list=valid_patients)
         test_set = BaselineDataSet(patient_list=test_patients)
 
         # dataloader
         hyper["train.loader"] = DataLoader(
             dataset=train_set,
-            batch_size=hyper["batch.size.actual"],
+            batch_size=hyper["batch.size"]["actual"],
             shuffle=True,  # only shuffle train loader
             num_workers=g.NUM_WORKERS,
         )
         hyper["valid.loader"] = DataLoader(
             dataset=valid_set,
-            batch_size=hyper["batch.size.actual"],
+            batch_size=hyper["batch.size"]["actual"],
             shuffle=False,
             num_workers=g.NUM_WORKERS,
         )
         hyper["test.loader"] = DataLoader(
             dataset=test_set,
-            batch_size=hyper["batch.size.actual"],
+            batch_size=hyper["batch.size"]["actual"],
             shuffle=False,
             num_workers=g.NUM_WORKERS,
         )
@@ -164,8 +161,12 @@ class BaselineTraining(SharedTraining):
         for i in hyper:
             if i == "train.loader" or i == "valid.loader" or i == "test.loader":
                 pass
+
+            elif isinstance(hyper[i], list) or isinstance(hyper[i], dict):
+                simple_hyper[i] = hyper[i].copy()
             else:
                 simple_hyper[i] = hyper[i]
+
         return simple_hyper
 
     def __print_hyper(self, hyper: NestedDict):
@@ -223,7 +224,7 @@ class BaselineTraining(SharedTraining):
         lr_save_path = os.path.join(cur_fold_folder, "lr.json")
         patience_count = 0
 
-        for cur_epoch in range(1, hyper["epochs"] + 1):
+        for cur_epoch in range(1, hyper["epoch"]["init"] + 1):
             g.print_line()
             print("epoch: {}".format(cur_epoch))
             print("training:")
@@ -236,7 +237,7 @@ class BaselineTraining(SharedTraining):
                 inputs = inputs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 outputs = hyper["cnn"](inputs)[3]
-                loss = hyper["loss.func"](outputs, labels, weight_map=None)
+                loss = hyper["loss"]["func"](outputs, labels, weight_map=None)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
@@ -253,21 +254,21 @@ class BaselineTraining(SharedTraining):
                     inputs = inputs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
                     outputs = hyper["cnn"](inputs)[3]
-                    loss = hyper["loss.func"](outputs, labels, weight_map=None)
+                    loss = hyper["loss"]["func"](outputs, labels, weight_map=None)
                     sum_loss += loss.item()
                     batch_num += 1
             valid_loss = sum_loss / batch_num
             hyper["scheduler"].step(valid_loss)
 
             # current epoch finished
-            hyper["epochs.actual"] = cur_epoch
+            hyper["epoch"]["actual"] = cur_epoch
 
             # save loss in json
             loss_dict = g.load_json(loss_save_path)
             cur_epoch_loss = NestedDict()
             cur_epoch_loss["train"] = train_loss
             cur_epoch_loss["valid"] = valid_loss
-            loss_dict["epoch={:03d}".format(hyper["epochs.actual"])] = cur_epoch_loss
+            loss_dict["epoch={:03d}".format(hyper["epoch"]["actual"])] = cur_epoch_loss
             g.save_json(loss_dict, loss_save_path)
             # draw loss figure
             self.__draw_loss_fig(loss_save_path)
@@ -276,7 +277,7 @@ class BaselineTraining(SharedTraining):
             lr_dict = g.load_json(lr_save_path)
             for param_group in hyper["optim"].param_groups:
                 cur_epoch_lr = param_group["lr"]
-            lr_dict["epoch={:03d}".format(hyper["epochs.actual"])] = cur_epoch_lr
+            lr_dict["epoch={:03d}".format(hyper["epoch"]["actual"])] = cur_epoch_lr
             g.save_json(lr_dict, lr_save_path)
             # draw lr figure
             self.__draw_lr_fig(lr_save_path)
@@ -308,7 +309,7 @@ class BaselineTraining(SharedTraining):
                     patience_count = 0
                 else:
                     patience_count += 1
-                    if patience_count >= hyper["early.stop.patience"]:
+                    if patience_count >= hyper["epoch"]["early.stop"]:
                         break
 
     def training(
@@ -372,7 +373,7 @@ class BaselineTraining(SharedTraining):
                 # clear time_used before next training
                 hyper["time.used"] = None
 
-                if hyper["cross.valid"] is False:
+                if hyper["dataset"]["cross.valid"] is False:
                     break
 
             # inference

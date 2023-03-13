@@ -42,55 +42,67 @@ class SharedTraining:
         hyper["dropout"] = g.check_limit(hyper["dropout"], 0, 0.9)
 
         # batch size
-        hyper["batch.size"] = int(hyper["batch.size"])
-        hyper["batch.size"] = g.check_limit(hyper["batch.size"], 1, None)
+        # new training, hyper["batch.size"] is a number
+        # inference, hyper["batch.size"] is a dict
+        if not isinstance(hyper["batch.size"], dict):
+            hyper["batch.size"] = {"init": int(hyper["batch.size"])}
+        hyper["batch.size"]["init"] = g.check_limit(
+            hyper["batch.size"]["init"], 1, None
+        )
 
         # actual batch size
         if g.used_gpu_count() > 1:
-            hyper["batch.size.actual"] = int(hyper["batch.size"] * g.used_gpu_count())
+            hyper["batch.size"]["actual"] = int(
+                hyper["batch.size"]["init"] * g.used_gpu_count()
+            )
         else:
-            hyper["batch.size.actual"] = int(hyper["batch.size"])
+            hyper["batch.size"]["actual"] = int(hyper["batch.size"]["init"])
 
         # lr decay factor
-        hyper["lr.decay.factor"] = float(hyper["lr.decay.factor"])
+        hyper["lr"]["decay.factor"] = float(hyper["lr"]["decay.factor"])
         # lr_decay_factor=1 will cause error
-        hyper["lr.decay.factor"] = g.check_limit(
-            hyper["lr.decay.factor"], 0.01, 0.9999999999
+        hyper["lr"]["decay.factor"] = g.check_limit(
+            hyper["lr"]["decay.factor"], 0.01, 0.9999999999
         )
 
         # augment methods
-        hyper["augment.methods"] = str(hyper["augment.methods"]).lower()
-        if hyper["augment.methods"] == "":
-            hyper["augment.methods"] = []
+        hyper["augment"]["methods"] = str(hyper["augment"]["methods"]).lower()
+        if hyper["augment"]["methods"] == "":
+            hyper["augment"]["methods"] = []
         else:
-            hyper["augment.methods"] = g.str_to_list(hyper["augment.methods"])
+            hyper["augment"]["methods"] = g.str_to_list(hyper["augment"]["methods"])
 
         # augment lower/upper limit
-        hyper["augment.low.limit"] = int(hyper["augment.low.limit"])
-        hyper["augment.low.limit"] = g.check_limit(hyper["augment.low.limit"], 1, 4)
+        hyper["augment"]["low.limit"] = int(hyper["augment"]["low.limit"])
+        hyper["augment"]["low.limit"] = g.check_limit(
+            hyper["augment"]["low.limit"], 1, 4
+        )
 
-        hyper["augment.up.limit"] = int(hyper["augment.up.limit"])
-        hyper["augment.up.limit"] = g.check_limit(
-            hyper["augment.up.limit"], hyper["augment.low.limit"], 4
+        hyper["augment"]["up.limit"] = int(hyper["augment"]["up.limit"])
+        hyper["augment"]["up.limit"] = g.check_limit(
+            hyper["augment"]["up.limit"], hyper["augment"]["low.limit"], 4
         )
 
         # loss function parameters
-        hyper["loss.weight"] = float(hyper["loss.weight"])
-        hyper["loss.weight"] = g.check_limit(hyper["loss.weight"], 0, 1)
+        hyper["loss"]["weight"] = float(hyper["loss"]["weight"])
+        hyper["loss"]["weight"] = g.check_limit(hyper["loss"]["weight"], 0, 1)
 
-        hyper["loss.delta"] = float(hyper["loss.delta"])
-        hyper["loss.delta"] = g.check_limit(hyper["loss.delta"], 0, 1)
+        hyper["loss"]["delta"] = float(hyper["loss"]["delta"])
+        hyper["loss"]["delta"] = g.check_limit(hyper["loss"]["delta"], 0, 1)
 
-        hyper["loss.gamma"] = float(hyper["loss.gamma"])
-        hyper["loss.asym"] = bool(hyper["loss.asym"])
+        hyper["loss"]["gamma"] = float(hyper["loss"]["gamma"])
+
+        hyper["loss"]["asym"] = bool(hyper["loss"]["asym"])
 
         # load cnn
         self._load_cnn(hyper, exist_cnn_path)
 
         # optimizer (no need to move to cuda)
-        hyper["optim"] = optim.Adam(
-            params=hyper["cnn"].parameters(), lr=hyper["lr.actual"]
-        )
+        if isinstance(hyper["lr"]["actual"], list):
+            actual_lr = hyper["lr"]["actual"][0]
+        else:
+            actual_lr = hyper["lr"]["actual"]
+        hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=actual_lr)
 
         # scheduler
         # (1) mode = min(default): lr will reduce when the watched parameter stops decreasing
@@ -100,9 +112,9 @@ class SharedTraining:
         hyper["scheduler"] = ReduceLROnPlateau(
             optimizer=hyper["optim"],
             mode="min",
-            factor=hyper["lr.decay.factor"],  # "factor=1" will cause an error
-            patience=hyper["lr.decay.patience"],
-            min_lr=hyper["lr.min"],
+            factor=hyper["lr"]["decay.factor"],  # "factor=1" will cause an error
+            patience=hyper["lr"]["decay.patience"],
+            min_lr=hyper["lr"]["min"],
         )
 
     # if float64 needed, use: "cnn.to(torch.double)"
@@ -135,23 +147,38 @@ class SharedTraining:
         for i in hyper:
             if i == "metrics":
                 pass
-            elif i == "augment.methods":
-                simple_hyper[i] = g.list_to_str(hyper[i])
-            elif i == "loss.func":
-                simple_hyper[i] = "unified.focal.loss"
+
+            elif i == "augment":
+                simple_hyper[i] = hyper[i].copy()
+                simple_hyper[i]["methods"] = g.list_to_str(simple_hyper[i]["methods"])
+
+            elif i == "loss":
+                simple_hyper[i] = hyper[i].copy()
+                simple_hyper[i]["func"] = "unified.focal.loss"
+
             elif i == "cnn":
                 simple_hyper[i] = "unet.pp.slim"
+
             elif i == "optim":
                 simple_hyper[i] = "adam"
+
             elif i == "scheduler":
                 simple_hyper[i] = "reduce.lr.on.plateau"
+
+            elif isinstance(hyper[i], list) or isinstance(hyper[i], dict):
+                simple_hyper[i] = hyper[i].copy()
             else:
                 simple_hyper[i] = hyper[i]
+
+        simple_hyper = dict(OrderedDict(sorted(simple_hyper.items())))
+        for i in simple_hyper:
+            if isinstance(simple_hyper[i], dict):
+                simple_hyper[i] = dict(OrderedDict(sorted(simple_hyper[i].items())))
+
         return simple_hyper
 
     def _print_hyper(self, hyper: NestedDict):
         simple_hyper = self.__get_simple_hyper(hyper)
-        simple_hyper = OrderedDict(sorted(simple_hyper.items()))
         for key, value in simple_hyper.items():
             print(key + ":", value)
 
@@ -242,12 +269,12 @@ class SharedTraining:
         self, hyper: NestedDict, dataset: Union[BaselineDataSet, IDLDataSet]
     ):
         dataset_len = dataset.__len__()
-        if dataset_len > hyper["batch.size.actual"]:
-            hyper["batch.size.actual"] = math.ceil(
-                dataset_len / (math.ceil(dataset_len / hyper["batch.size.actual"]))
+        if dataset_len > hyper["batch.size"]["actual"]:
+            hyper["batch.size"]["actual"] = math.ceil(
+                dataset_len / (math.ceil(dataset_len / hyper["batch.size"]["actual"]))
             )
         else:
-            hyper["batch.size.actual"] = dataset_len
+            hyper["batch.size"]["actual"] = dataset_len
 
     def _inference_single_patient(
         self, patient: str, hyper: NestedDict, unetpp_output: int = 3

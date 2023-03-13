@@ -1,0 +1,42 @@
+{
+    "augment": {
+        "low.limit": 2,
+        "methods": "elastic,rotate,flip.lr,flip.ud",
+        "times": 4,
+        "up.limit": 3
+    },
+    "batch.size": 2,
+    "dropout": 0.3,
+    "iter": 20,
+    "layer.freezing": false,
+    "loss": {
+        "asym": true,
+        "delta": 0.5,
+        "gamma": 0.3,
+        "weight": 0.1
+    },
+    "lr": {
+        "decay.factor": 0.5,
+        "decay.patience": 3,
+        "init": "8e-05,8e-05",
+        "min": 1e-06,
+        "reset": true
+    },
+    "select.scenario": {
+        "coronal": "equal.divide",
+        "sagittal": "equal.divide",
+        "transverse": "equal.divide"
+    },
+    "select.step": {
+        "coronal": "1",
+        "sagittal": "1",
+        "transverse": "1"
+    },
+    "weight": {
+        "annotation": 3.0,
+        "background": 0.2,
+        "distance.step": 5,
+        "prev.round.decay": 0.5,
+        "slice": 2.0
+    }
+}

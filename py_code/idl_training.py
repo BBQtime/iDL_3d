@@ -16,18 +16,20 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 class IDLTraining(SharedTraining):
     def __load_next_round_lr(self, next_round: int, hyper: NestedDict):
-        # hyper["lr"] is a list of lr of each round
-        if next_round > len(hyper["lr"]):
-            next_round = len(hyper["lr"])
+        # hyper["lr"]["init"] is a list of lr of each round
+        if next_round > len(hyper["lr"]["init"]):
+            next_round = len(hyper["lr"]["init"])
 
         if g.used_gpu_count() > 1:
-            hyper["lr.actual"] = hyper["lr"][next_round - 1] * g.used_gpu_count()
+            hyper["lr"]["actual"].append(
+                hyper["lr"]["init"][next_round - 1] * g.used_gpu_count()
+            )
         else:
-            hyper["lr.actual"] = hyper["lr"][next_round - 1]
+            hyper["lr"]["actual"].append(hyper["lr"]["init"][next_round - 1])
 
         # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(
-            params=hyper["cnn"].parameters(), lr=hyper["lr.actual"]
+            params=hyper["cnn"].parameters(), lr=hyper["lr"]["actual"][-1]
         )
 
         # scheduler
@@ -38,23 +40,24 @@ class IDLTraining(SharedTraining):
         hyper["scheduler"] = ReduceLROnPlateau(
             optimizer=hyper["optim"],
             mode="min",
-            factor=hyper["lr.decay.factor"],  # "factor=1" will cause an error
-            patience=hyper["lr.decay.patience"],
-            min_lr=hyper["lr.min"],
+            factor=hyper["lr"]["decay.factor"],  # "factor=1" will cause an error
+            patience=hyper["lr"]["decay.patience"],
+            min_lr=hyper["lr"]["min"],
         )
 
+    # reset cnn/optimizer/scheduler before next patient
     def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
-        # RELOAD CNN
+        # reload cnn
         super()._load_cnn(hyper, baseline_cnn_path)
 
-        if g.used_gpu_count() > 1:
-            hyper["lr.actual"] = hyper["lr"][0] * g.used_gpu_count()
-        else:
-            hyper["lr.actual"] = hyper["lr"][0]
+        # if g.used_gpu_count() > 1:
+        #     hyper["lr"]["actual"] = hyper["lr"]["init"][0] * g.used_gpu_count()
+        # else:
+        #     hyper["lr"]["actual"] = hyper["lr"]["init"][0]
 
         # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(
-            params=hyper["cnn"].parameters(), lr=hyper["lr.actual"]
+            params=hyper["cnn"].parameters(), lr=hyper["lr"]["actual"][0]
         )
 
         # scheduler
@@ -65,9 +68,9 @@ class IDLTraining(SharedTraining):
         hyper["scheduler"] = ReduceLROnPlateau(
             optimizer=hyper["optim"],
             mode="min",
-            factor=hyper["lr.decay.factor"],  # "factor=1" will cause an error
-            patience=hyper["lr.decay.patience"],
-            min_lr=hyper["lr.min"],
+            factor=hyper["lr"]["decay.factor"],  # "factor=1" will cause an error
+            patience=hyper["lr"]["decay.patience"],
+            min_lr=hyper["lr"]["min"],
         )
 
     def __load_hyper(
@@ -80,38 +83,43 @@ class IDLTraining(SharedTraining):
             hyper["iter"] = int(hyper["iter"])
             g.check_limit(hyper["iter"], 1, None)
 
-        # min lr
-        hyper["lr.min"] = float(hyper["lr.min"])
-
         # reset lr before next round or not
-        hyper["lr.reset"] = bool(hyper["lr.reset"])
+        hyper["lr"]["reset"] = bool(hyper["lr"]["reset"])
+
+        # min lr (before init lr)
+        hyper["lr"]["min"] = float(hyper["lr"]["min"])
 
         # lr (list)
         # the list of lr is saved in json file as a string, not a list, because:
         # (1) string is easier to read the json file (only one line)
         # (2) a "list" will be recognized as multiple hyper parameters
-        hyper["lr"] = g.str_to_list(hyper["lr"])
-        for i in range(len(hyper["lr"])):
-            hyper["lr"][i] = float(hyper["lr"][i])
-            hyper["lr"][i] = g.check_limit(hyper["lr"][i], 1e-10, None)
+        hyper["lr"]["init"] = g.str_to_list(hyper["lr"]["init"])
+        for i in range(len(hyper["lr"]["init"])):
+            hyper["lr"]["init"][i] = float(hyper["lr"]["init"][i])
+            hyper["lr"]["init"][i] = g.check_limit(hyper["lr"]["init"][i], 1e-10, None)
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr.min"] = g.check_limit(hyper["lr.min"], 0, hyper["lr"][i])
+            hyper["lr"]["min"] = g.check_limit(
+                hyper["lr"]["min"], 0, hyper["lr"]["init"][i]
+            )
 
+        hyper["lr"]["actual"] = []
         if g.used_gpu_count() > 1:
-            hyper["lr.actual"] = hyper["lr"][0] * g.used_gpu_count()
+            hyper["lr"]["actual"].append(hyper["lr"]["init"][0] * g.used_gpu_count())
         else:
-            hyper["lr.actual"] = hyper["lr"][0]
+            hyper["lr"]["actual"].append(hyper["lr"]["init"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr.decay.patience"] = int(hyper["lr.decay.patience"])
-        g.check_limit(hyper["lr.decay.patience"], 1, hyper["iter"])
+        hyper["lr"]["decay.patience"] = int(hyper["lr"]["decay.patience"])
+        g.check_limit(hyper["lr"]["decay.patience"], 1, hyper["iter"])
 
         # augmentation times
-        hyper["augment.times"] = int(hyper["augment.times"])
-        hyper["augment.times"] = g.check_limit(hyper["augment.times"], 1, None)
+        hyper["augment"]["times"] = int(hyper["augment"]["times"])
+        hyper["augment"]["times"] = g.check_limit(hyper["augment"]["times"], 1, None)
 
         # augmentation percent (based on augment_times)
-        hyper["augment.pct"] = hyper["augment.times"] / (hyper["augment.times"] + 1)
+        hyper["augment"]["pct"] = hyper["augment"]["times"] / (
+            hyper["augment"]["times"] + 1
+        )
 
         # freeze layers
         hyper["layer.freezing"] = bool(hyper["layer.freezing"])
@@ -140,25 +148,25 @@ class IDLTraining(SharedTraining):
                 hyper["select.scenario"][plane] = "random"
 
         # weight map parameters
-        hyper["weight.background"] = float(hyper["weight.background"])
-        if hyper["weight.background"] > 1:
-            hyper["weight.background"] = 1
+        hyper["weight"]["background"] = float(hyper["weight"]["background"])
+        if hyper["weight"]["background"] > 1:
+            hyper["weight"]["background"] = 1
 
-        hyper["weight.annotated.slice"] = float(hyper["weight.annotated.slice"])
-        if hyper["weight.annotated.slice"] < hyper["weight.background"]:
-            hyper["weight.annotated.slice"] = hyper["weight.background"]
+        hyper["weight"]["slice"] = float(hyper["weight"]["slice"])
+        if hyper["weight"]["slice"] < hyper["weight"]["background"]:
+            hyper["weight"]["slice"] = hyper["weight"]["background"]
 
-        hyper["weight.annotation"] = float(hyper["weight.annotation"])
-        if hyper["weight.annotation"] < hyper["weight.annotated.slice"]:
-            hyper["weight.annotation"] = hyper["weight.annotated.slice"]
+        hyper["weight"]["annotation"] = float(hyper["weight"]["annotation"])
+        if hyper["weight"]["annotation"] < hyper["weight"]["slice"]:
+            hyper["weight"]["annotation"] = hyper["weight"]["slice"]
 
-        hyper["weight.distance.step"] = int(hyper["weight.distance.step"])
-        if hyper["weight.distance.step"] < 1:
-            hyper["weight.distance.step"] = 1
+        hyper["weight"]["distance.step"] = int(hyper["weight"]["distance.step"])
+        if hyper["weight"]["distance.step"] < 1:
+            hyper["weight"]["distance.step"] = 1
 
-        hyper["weight.prev.round.decay"] = float(hyper["weight.prev.round.decay"])
-        if hyper["weight.prev.round.decay"] > 1:
-            hyper["weight.prev.round.decay"] = 1.0
+        hyper["weight"]["prev.round.decay"] = float(hyper["weight"]["prev.round.decay"])
+        if hyper["weight"]["prev.round.decay"] > 1:
+            hyper["weight"]["prev.round.decay"] = 1.0
 
         # load shared hyper
         super()._load_hyper(
@@ -167,11 +175,11 @@ class IDLTraining(SharedTraining):
         )
 
         # run this after shared hyper loaded, loss parameters are needed
-        hyper["loss.func"] = UnifiedFocalLoss(
-            asym=hyper["loss.asym"],
-            weight=hyper["loss.weight"],
-            delta=hyper["loss.delta"],
-            gamma=hyper["loss.gamma"],
+        hyper["loss"]["func"] = UnifiedFocalLoss(
+            asym=hyper["loss"]["asym"],
+            weight=hyper["loss"]["weight"],
+            delta=hyper["loss"]["delta"],
+            gamma=hyper["loss"]["gamma"],
             gtvt_only=True,
         ).to(g.DEVICE)
 
@@ -183,7 +191,7 @@ class IDLTraining(SharedTraining):
         test_patients = g.str_to_list(json_data["test.patients"])
 
         if debug_mode:
-            test_patients = test_patients[: hyper["batch.size.actual"]]
+            test_patients = test_patients[: hyper["batch.size"]["actual"]]
 
         return test_patients
 
@@ -191,14 +199,23 @@ class IDLTraining(SharedTraining):
         simple_hyper = NestedDict()
         for i in hyper:
             if i == "lr":
-                simple_hyper[i] = g.list_to_str(hyper[i])
+                simple_hyper[i] = hyper[i].copy()
+                for k in ["init", "actual"]:
+                    simple_hyper[i][k] = g.list_to_str(simple_hyper[i][k])
+
             elif i == "patients":
                 simple_hyper[i] = len(hyper[i])
+
             elif i == "select.step":
-                for plane in hyper[i]:
-                    simple_hyper[i][plane] = g.list_to_str(hyper[i][plane])
+                simple_hyper[i] = hyper[i].copy()
+                for plane in simple_hyper[i]:
+                    simple_hyper[i][plane] = g.list_to_str(simple_hyper[i][plane])
+
+            elif isinstance(hyper[i], list) or isinstance(hyper[i], dict):
+                simple_hyper[i] = hyper[i].copy()
             else:
                 simple_hyper[i] = hyper[i]
+
         return simple_hyper
 
     def __print_hyper(self, hyper: NestedDict):
@@ -470,27 +487,13 @@ class IDLTraining(SharedTraining):
         cur_round_time_used = datetime.now()
 
         # create iDL dataset
-        augment = dict()
-        augment["methods"] = hyper["augment.methods"]
-        augment["pct"] = hyper["augment.pct"]
-        augment["low.limit"] = hyper["augment.low.limit"]
-        augment["up.limit"] = hyper["augment.up.limit"]
-        augment["times"] = hyper["augment.times"]
-
-        weight = dict()
-        weight["annotation"] = hyper["weight.annotation"]
-        weight["annotated.slice"] = hyper["weight.annotated.slice"]
-        weight["prev.round.decay"] = hyper["weight.prev.round.decay"]
-        weight["distance.step"] = hyper["weight.distance.step"]
-        weight["background"] = hyper["weight.background"]
-
         idl_dataset = IDLDataSet(
             patient=patient,
             annotated_slices=annotated_slices,
             label_folder=label_folder,
             pred_folder=pred_folder,
-            augment=augment,
-            weight=weight,
+            augment=hyper["augment"],
+            weight=hyper["weight"],
         )
 
         # optimize batch size (before create dataloader)
@@ -499,7 +502,7 @@ class IDLTraining(SharedTraining):
         # idl dataloader
         idl_loader = DataLoader(
             dataset=idl_dataset,
-            batch_size=hyper["batch.size.actual"],
+            batch_size=hyper["batch.size"]["actual"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,
         )
@@ -525,7 +528,7 @@ class IDLTraining(SharedTraining):
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
                 outputs = hyper["cnn"](inputs)[3]
-                loss = hyper["loss.func"](outputs, labels, weight_map)
+                loss = hyper["loss"]["func"](outputs, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
@@ -634,8 +637,11 @@ class IDLTraining(SharedTraining):
                 annotated_slices=annotated_slices,
             )
 
+            if cur_round == max_round:
+                break
+
             # load new lr before next round
-            if hyper["lr.reset"]:
+            if hyper["lr"]["reset"]:
                 self.__load_next_round_lr(cur_round + 1, hyper)
 
         # draw avg loss of all trained patients

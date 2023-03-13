@@ -131,7 +131,7 @@ class IDLDataSet:
 
             for cur_round in annotated_slices[plane]:
                 # dont change weight["annotate.slice"], use another variable
-                slice_weight = weight["annotated.slice"]
+                slice_weight = weight["slice"]
                 cur_round_int = int(cur_round[len("round=") :])
                 slice_weight *= pow(
                     weight["prev.round.decay"], (max_round - cur_round_int)
@@ -198,7 +198,7 @@ class IDLDataSet:
 
         # weighted annotation
         annotation = (
-            annotation * slice_mask * (weight["annotation"] / weight["annotated.slice"])
+            annotation * slice_mask * (weight["annotation"] / weight["slice"])
         )
         if DEBUG_SAVE_IMG:
             g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
@@ -361,7 +361,7 @@ class IDLDataSet:
 #     weight = dict()
 #     weight["annotation"] = 3
 #     weight["distance.step"] = 10
-#     weight["annotated.slice"] = 2
+#     weight["slice"] = 2
 #     weight["prev.round.decay"] = 0.5
 #     weight["background"] = 0.2
 

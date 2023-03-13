@@ -126,8 +126,11 @@ def load_json(path: str) -> dict:
 
 # [1,2,3,4] -> "1,2,3,4"
 def list_to_str(input_list: list, split_symbol: str = ",") -> str:
-    split_symbol = str(split_symbol)
-    return split_symbol.join(str(i) for i in input_list)
+    if isinstance(input_list, str):
+        return input_list
+    else:
+        split_symbol = str(split_symbol)
+        return split_symbol.join(str(i) for i in input_list)
 
 
 # "1,2,3,4" -> ["1","2","3","4"]
@@ -604,6 +607,7 @@ DATASET_SPLITTING_JSON = None
 DATASET_K_FOLDS = None
 HYPER_JSON_BASELINE = None
 HYPER_JSON_IDL = None
+HYPER_JSON_IDL_GTVN = None
 TRAIN_RESULTS_FOLDER = None
 METRICS_LIST = None
 
@@ -620,6 +624,7 @@ def __global_init():
     global DATASET_K_FOLDS
     global HYPER_JSON_BASELINE
     global HYPER_JSON_IDL
+    global HYPER_JSON_IDL_GTVN
     global TRAIN_RESULTS_FOLDER
     global METRICS_LIST
 
@@ -679,6 +684,7 @@ def __global_init():
     DATASET_K_FOLDS = __json_data["dataset.k.folds"]
     HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __json_data["hyper.json.baseline"])
     HYPER_JSON_IDL = os.path.join(PROJ_PATH, __json_data["hyper.json.idl"])
+    HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvn"])
     TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
 
     METRICS_LIST = ["dsc", "msd", "hd95"]
