@@ -403,7 +403,8 @@ def print_line(len: int = 50):
 
 
 def binarize_img(
-    img: Union[ndarray, Tensor], threshold: float = 0.5
+    img: Union[ndarray, Tensor],
+    threshold: float = 0.5,
 ) -> Union[ndarray, Tensor]:
     if isinstance(img, ndarray):
         ones = np.ones_like(img)
@@ -416,7 +417,11 @@ def binarize_img(
     return img
 
 
-def load_nii(nii_path: str, binary: bool = False, out_dim: int = 3):
+def load_nii(
+    nii_path: str,
+    binary: bool = False,
+    out_dim: int = 3,
+) -> ndarray:
     img = sitk.ReadImage(nii_path)
     img = sitk.GetArrayFromImage(img)
     img = img.astype(np.float32)
@@ -429,46 +434,46 @@ def load_nii(nii_path: str, binary: bool = False, out_dim: int = 3):
 
 
 # max size: 89 283 280
-def central_crop(img: ndarray, crop_size: tuple) -> ndarray:
-    in_size = NestedDict()
-    in_size["d"], in_size["h"], in_size["w"] = img.shape
+def central_crop(img: ndarray, shape: tuple) -> ndarray:
+    in_shape = NestedDict()
+    in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
-    out_size = NestedDict()
-    out_size["d"] = crop_size[0]
-    out_size["h"] = crop_size[1]
-    out_size["w"] = crop_size[2]
+    out_shape = NestedDict()
+    out_shape["d"] = shape[0]
+    out_shape["h"] = shape[1]
+    out_shape["w"] = shape[2]
 
     if (
-        in_size["d"] > out_size["d"]
-        or in_size["h"] > out_size["h"]
-        or in_size["w"] > out_size["w"]
+        in_shape["d"] > out_shape["d"]
+        or in_shape["h"] > out_shape["h"]
+        or in_shape["w"] > out_shape["w"]
     ):
         start_point = NestedDict()
 
         for i in ["w", "h", "d"]:
-            if in_size[i] > out_size[i]:
+            if in_shape[i] > out_shape[i]:
                 # crop 1 more line on direction 1 (away from staring point)
-                start_point[i] = (in_size[i] - out_size[i]) // 2
+                start_point[i] = (in_shape[i] - out_shape[i]) // 2
             else:
                 start_point[i] = 0
 
         img = img[
-            start_point["d"] : start_point["d"] + out_size["d"],
-            start_point["h"] : start_point["h"] + out_size["h"],
-            start_point["w"] : start_point["w"] + out_size["w"],
+            start_point["d"] : start_point["d"] + out_shape["d"],
+            start_point["h"] : start_point["h"] + out_shape["h"],
+            start_point["w"] : start_point["w"] + out_shape["w"],
         ]
 
     return img
 
 
-def central_pad(img: ndarray, pad_size: tuple) -> ndarray:
-    in_size = NestedDict()
-    in_size["d"], in_size["h"], in_size["w"] = img.shape
+def central_pad(img: ndarray, shape: tuple) -> ndarray:
+    in_shape = NestedDict()
+    in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
-    out_size = NestedDict()
-    out_size["d"] = pad_size[0]
-    out_size["h"] = pad_size[1]
-    out_size["w"] = pad_size[2]
+    out_shape = NestedDict()
+    out_shape["d"] = shape[0]
+    out_shape["h"] = shape[1]
+    out_shape["w"] = shape[2]
 
     pad = NestedDict()
     for i in ["w", "h", "d"]:
@@ -476,8 +481,8 @@ def central_pad(img: ndarray, pad_size: tuple) -> ndarray:
         pad[i][1] = 0
 
     for i in ["w", "h", "d"]:
-        if out_size[i] > in_size[i]:
-            cur_pad = out_size[i] - in_size[i]
+        if out_shape[i] > in_shape[i]:
+            cur_pad = out_shape[i] - in_shape[i]
             pad[i][0] = int(cur_pad / 2)
             if cur_pad % 2 == 0:
                 pad[i][1] = pad[i][0]
@@ -599,7 +604,7 @@ def delete_debug_results():
 PROJ_PATH = None
 DEVICE = None
 NUM_WORKERS = None
-IMG_SIZE = None
+IMG_SHAPE = None
 NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
 DATASET_FOLDER = None
@@ -616,7 +621,7 @@ def __global_init():
     global PROJ_PATH
     global DEVICE
     global NUM_WORKERS
-    global IMG_SIZE
+    global IMG_SHAPE
     global NII_SPACING
     global CNN_STATE_DICT_ONLY
     global DATASET_FOLDER
@@ -663,12 +668,12 @@ def __global_init():
         NUM_WORKERS = __json_data["num.workers"]
 
     # img size
-    IMG_SIZE = []
+    IMG_SHAPE = []
     for i in str_to_list(__json_data["img.size"]):
         # str_to_list will return a list of str
         # change all items to int
-        IMG_SIZE.append(int(i))
-    IMG_SIZE = tuple(IMG_SIZE)
+        IMG_SHAPE.append(int(i))
+    IMG_SHAPE = tuple(IMG_SHAPE)
 
     # make sure all elements in NII_SPACING are numbers
     NII_SPACING = []

@@ -2,12 +2,9 @@ import global_elems as g
 import os
 import random
 import torch
-import math
 import numpy as np
-from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
-from torchvision import transforms as T
 from data_augment import DataAugmentation
 from typing import Tuple
 
@@ -47,8 +44,8 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = g.central_pad(img, g.IMG_SIZE)
-        img = g.central_crop(img, g.IMG_SIZE)
+        img = g.central_pad(img, g.IMG_SHAPE)
+        img = g.central_crop(img, g.IMG_SHAPE)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)

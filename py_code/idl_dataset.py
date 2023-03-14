@@ -238,9 +238,9 @@ class IDLDataSet:
         # because when rotating img
         # nomalization might give background a positive value
 
-        # crop and pad after augmentation, max size: 89 283 280
-        img = g.central_pad(img, g.IMG_SIZE)
-        img = g.central_crop(img, g.IMG_SIZE)
+        # pad/crop after augmentation, max size: 89 283 280
+        img = g.central_pad(img, g.IMG_SHAPE)
+        img = g.central_crop(img, g.IMG_SHAPE)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)

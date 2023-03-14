@@ -1,5 +1,6 @@
 import os
 import random
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 from loss_func import UnifiedFocalLoss
@@ -12,6 +13,7 @@ from idl_dataset import IDLDataSet
 from shared_training import SharedTraining
 from nested_dict import NestedDict
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from scipy.ndimage import measurements
 
 
 class IDLTraining(SharedTraining):
@@ -143,6 +145,7 @@ class IDLTraining(SharedTraining):
             ).lower()
             if (
                 hyper["select.scenario"][plane] != "largest"
+                and hyper["select.scenario"][plane] != "gravity.center"
                 and hyper["select.scenario"][plane] != "equal.divide"
             ):
                 hyper["select.scenario"][plane] = "random"
@@ -327,7 +330,7 @@ class IDLTraining(SharedTraining):
         patient = Path(patient_folder).name
         patient = patient[len("patient=") :]
 
-        # get prev round pred and label path
+        # get prev round folder path
         if cur_round == 1:
             prev_round_pred_folder = os.path.join(
                 baseline_epoch_folder,
@@ -338,52 +341,69 @@ class IDLTraining(SharedTraining):
             prev_round_pred_folder = os.path.join(
                 patient_folder, "round={:02d}".format(cur_round - 1)
             )
-        # gtvt only
+
+        # load gtvt pred/label
         pred = g.load_nii(
-            os.path.join(prev_round_pred_folder, "pred_gtvt.nii"), binary=True
+            os.path.join(prev_round_pred_folder, "pred_gtvt.nii"),
+            binary=True,
         )
         label = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
+        target = np.maximum(pred, label)
+        target_center = measurements.center_of_mass(target)
 
+        # select slices through each plane
         for plane in ["transverse", "coronal", "sagittal"]:
+
             # skip cur plane if no slice needs to be selected
             if len(hyper["select.step"][plane]) < cur_round:
                 continue
 
             candidate_slices = dict()
+            cur_plane_annotated_slices = g.dict_to_list(annotated_slices[plane])
 
             # go through pred and record tumor size
             if plane == "transverse":
-                slice_counts = pred.shape[0]
+                slice_counts = target.shape[0]
             elif plane == "coronal":
-                slice_counts = pred.shape[1]
+                slice_counts = target.shape[1]
             elif plane == "sagittal":
-                slice_counts = pred.shape[2]
+                slice_counts = target.shape[2]
+
             for cur_slice in range(slice_counts):
                 # skip slice that already been annotated
-                if cur_slice in g.dict_to_list(annotated_slices[plane]):
+                if cur_slice in cur_plane_annotated_slices:
                     continue
                 else:
                     if plane == "transverse":
-                        pred_cur_slice_tumor_size = pred[cur_slice, :, :].sum()
-                        label_cur_slice_tumor_size = label[cur_slice, :, :].sum()
+                        cur_slice_target_volume = target[cur_slice, :, :].sum()
                     elif plane == "coronal":
-                        pred_cur_slice_tumor_size = pred[:, cur_slice, :].sum()
-                        label_cur_slice_tumor_size = label[:, cur_slice, :].sum()
+                        cur_slice_target_volume = target[:, cur_slice, :].sum()
                     elif plane == "sagittal":
-                        pred_cur_slice_tumor_size = pred[:, :, cur_slice].sum()
-                        label_cur_slice_tumor_size = label[:, :, cur_slice].sum()
-                    # if there is prediction, add cur slice(also it's tumor size) into candidates
-                    if pred_cur_slice_tumor_size > 0:
-                        candidate_slices[cur_slice] = pred_cur_slice_tumor_size
-                    # if no prediction but there is label, also add cur slice into candidates
-                    elif label_cur_slice_tumor_size > 0:
-                        candidate_slices[cur_slice] = 0
+                        cur_slice_target_volume = target[:, :, cur_slice].sum()
+                    # add slice with target (pred or label) into candidates
+                    if cur_slice_target_volume > 0:
+                        candidate_slices[cur_slice] = cur_slice_target_volume
+
+            # "largest"
+            if hyper["select.scenario"][plane] == "largest":
+                # descrease sort the dict (return a list of tuple)
+                candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
+                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
+
+            # "gravity.center", round =1
+            elif hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
+                if plane == "transverse":
+                    cur_round_slices[plane].append(round(target_center[0]))
+                elif plane == "coronal":
+                    cur_round_slices[plane].append(round(target_center[1]))
+                elif plane == "sagittal":
+                    cur_round_slices[plane].append(round(target_center[2]))
 
             # "equal.divide", round = 1
-            if hyper["select.scenario"][plane] == "equal.divide" and cur_round == 1:
+            elif hyper["select.scenario"][plane] == "equal.divide" and cur_round == 1:
                 divided_parts = hyper["select.step"][plane][0] + 1
                 candidate_slices = g.get_dict_keys(candidate_slices)
                 for part in range(1, divided_parts):
@@ -392,20 +412,18 @@ class IDLTraining(SharedTraining):
                     idx = g.check_limit(idx, 1, len(candidate_slices))
                     cur_round_slices[plane].append(candidate_slices[idx - 1])
 
-            # "random"
-            elif hyper["select.scenario"][plane] == "random":
+            # (1) "random"
+            # (2) "gravity.center", round >= 2
+            # (3) "equal.divide", round >= 2
+            else:
                 cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
                 random.shuffle(cur_round_slices[plane])
 
-            # (1) "largest"
-            # (2) "equal.divide", round >= 2
-            else:
-                # descrease sort the dict (return a list of tuple)
-                candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
-                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
-
             # narrow cur_round_slices based on select.step
-            cur_round_slices_count = hyper["select.step"][plane][cur_round - 1]
+            if hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
+                cur_round_slices_count = 1
+            else:
+                cur_round_slices_count = hyper["select.step"][plane][cur_round - 1]
             if cur_round_slices_count < len(cur_round_slices[plane]):
                 cur_round_slices[plane] = cur_round_slices[plane][
                     :cur_round_slices_count
@@ -616,6 +634,8 @@ class IDLTraining(SharedTraining):
                 patient_folder=patient_folder,
                 baseline_epoch_folder=baseline_epoch_folder,
             )
+
+            # no slice needs to be annotated in cur round
             if (
                 len(cur_round_slices["transverse"]) == 0
                 and len(cur_round_slices["coronal"]) == 0
