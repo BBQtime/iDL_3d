@@ -2,6 +2,7 @@ import os
 import random
 import numpy as np
 from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
 from loss_func import UnifiedFocalLoss
 from torch.utils.data import DataLoader
@@ -171,6 +172,9 @@ class IDLTraining(SharedTraining):
         if hyper["weight"]["prev.round.decay"] > 1:
             hyper["weight"]["prev.round.decay"] = 1.0
 
+        # load patients
+        hyper["patients"] = self.__load_dataset(debug_mode)
+
         # load shared hyper
         super()._load_hyper(
             hyper=hyper,
@@ -186,16 +190,13 @@ class IDLTraining(SharedTraining):
             gtvt_only=True,
         ).to(g.DEVICE)
 
-        # run this after shared hyper loaded, actual batch size is needed
-        hyper["patients"] = self.__load_dataset(hyper=hyper, debug_mode=debug_mode)
-
-    def __load_dataset(self, hyper: NestedDict, debug_mode: bool = False):
+    def __load_dataset(self, debug_mode: bool = False):
         json_data = g.load_json(g.DATASET_SPLITTING_JSON)
         test_patients = g.str_to_list(json_data["test.patients"])
 
+        # debug mode, only 1 or 2 patients
         if debug_mode:
-            test_patients = test_patients[: hyper["batch.size"]["actual"]]
-
+            test_patients = test_patients[:1]
         return test_patients
 
     def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
@@ -293,7 +294,7 @@ class IDLTraining(SharedTraining):
     #         annotated_slices["round=01"].append(slice_id)
 
     #     # training start time
-    #     hyper["time.used"] = datetime.now()
+    #     hyper["time.spent"] = datetime.now()
 
     #     self.__training_cur_round(
     #         cur_result_folder=cur_result_folder,
@@ -302,8 +303,8 @@ class IDLTraining(SharedTraining):
     #         label_folder=cur_round_folder,
     #     )
 
-    #     # get training time used before save hyper
-    #     hyper["time.used"] = datetime.now() - hyper["time.used"]
+    #     # get training time spent before save hyper
+    #     hyper["time.spent"] = datetime.now() - hyper["time.spent"]
     #     # save hyper
     #     self.__save_hyper(os.path.join(cur_result_folder, "hyper.json"))
 
@@ -448,7 +449,7 @@ class IDLTraining(SharedTraining):
 
         # save score of cur patient
         idl_folder = Path(cur_round_folder).parent.parent.parent
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
+        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
             score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
             score = g.load_json(score_json_path)
             for metric_type in g.METRICS_LIST:
@@ -458,19 +459,19 @@ class IDLTraining(SharedTraining):
             g.save_json(score, score_json_path)
 
         # save pred of cur patient
-        for gtv in ["gtvt", "gtvn", "gtvs"]:
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
             g.save_nii(
                 img=patient_result[gtv]["pred"],
                 save_path=os.path.join(cur_round_folder, "pred_{}.nii".format(gtv)),
                 spacing=g.NII_SPACING,
             )
-            g.save_nii(
-                img=g.binarize_img(patient_result[gtv]["pred"]),
-                save_path=os.path.join(
-                    cur_round_folder, "pred_{}_binary.nii".format(gtv)
-                ),
-                spacing=g.NII_SPACING,
-            )
+            # g.save_nii(
+            #     img=g.binarize_img(patient_result[gtv]["pred"]),
+            #     save_path=os.path.join(
+            #         cur_round_folder, "pred_{}_binary.nii".format(gtv)
+            #     ),
+            #     spacing=g.NII_SPACING,
+            # )
 
     def __training_cur_round(
         self,
@@ -501,8 +502,8 @@ class IDLTraining(SharedTraining):
                 Path(cur_round_folder).parent, "round={:02d}".format(cur_round - 1)
             )
 
-        # record time used
-        cur_round_time_used = datetime.now()
+        # record current round time spent
+        cur_round_time_spent = datetime.now()
 
         # create iDL dataset
         idl_dataset = IDLDataSet(
@@ -573,13 +574,13 @@ class IDLTraining(SharedTraining):
         # inference
         self.__inference_cur_round(cur_round_folder=cur_round_folder, hyper=hyper)
 
-        # save time used
-        cur_round_time_used = datetime.now() - cur_round_time_used
-        cur_round_time_used = str(cur_round_time_used).split(".", 2)[0]
-        time_save_path = os.path.join(Path(cur_round_folder).parent, "time_used.json")
-        time_used_dict = g.load_json(time_save_path)
-        time_used_dict["round={:02d}".format(cur_round)] = cur_round_time_used
-        g.save_json(time_used_dict, time_save_path)
+        # save time spent
+        cur_round_time_spent = datetime.now() - cur_round_time_spent
+        round_str = "round={:02d}".format(cur_round)
+        if hyper["time.spent"]["avg"][round_str] == {}:
+            hyper["time.spent"]["avg"][round_str] = cur_round_time_spent
+        else:
+            hyper["time.spent"]["avg"][round_str] += cur_round_time_spent
 
         # save loss
         g.save_json(loss_dict, loss_json_path)
@@ -596,8 +597,6 @@ class IDLTraining(SharedTraining):
             idl_folder, "patients", "patient={}".format(patient)
         )
         g.create_folder(patient_folder)
-        # create a json to save time used for cur patient
-        g.save_json(NestedDict(), os.path.join(patient_folder, "time_used.json"))
         # create an empty loss.json
         g.save_json(NestedDict(), os.path.join(patient_folder, "loss.json"))
 
@@ -605,7 +604,7 @@ class IDLTraining(SharedTraining):
         baseline_score = g.load_json(
             os.path.join(baseline_epoch_folder, "score_test.json")
         )
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
+        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
             idl_score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
             idl_score = g.load_json(idl_score_json_path)
             for metric_type in g.METRICS_LIST:
@@ -760,13 +759,13 @@ class IDLTraining(SharedTraining):
             self.__save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
+            for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
                 g.save_json(
                     NestedDict(), os.path.join(idl_folder, "score_{}.json".format(gtv))
                 )
 
             # training start time
-            hyper["time.used"] = datetime.now()
+            hyper["time.spent"]["total"] = datetime.now()
 
             # patient loop
             for patient in hyper["patients"]:
@@ -777,10 +776,6 @@ class IDLTraining(SharedTraining):
                     idl_folder=idl_folder,
                 )
 
-                # debug mode, only 1 or 2 patients
-                if debug_mode and hyper["patients"].index(patient) == 0:
-                    break
-
                 # reset cnn/optimizer/scheduler before next patient
                 if patient != hyper["patients"][-1]:
                     self.__reset_cnn(
@@ -788,15 +783,25 @@ class IDLTraining(SharedTraining):
                         baseline_cnn_path=baseline_cnn_path,
                     )
 
-            # get training time used before save hyper
-            hyper["time.used"] = datetime.now() - hyper["time.used"]
-            hyper["time.used"] = str(hyper["time.used"]).split(".", 2)[0]
+            # record total time spent
+            hyper["time.spent"]["total"] = datetime.now() - hyper["time.spent"]["total"]
+            hyper["time.spent"]["total"] = str(hyper["time.spent"]["total"]).split(
+                ".", 2
+            )[0]
+
+            # record avg time spent per patient
+            for cur_round in hyper["time.spent"]["avg"]:
+                hyper["time.spent"]["avg"][cur_round] /= len(hyper["patients"])
+                hyper["time.spent"]["avg"][cur_round] = str(
+                    hyper["time.spent"]["avg"][cur_round]
+                ).split(".", 2)[0]
+
             self.__save_hyper(hyper, hyper_save_path)
 
             self.__record_avg_score(idl_folder)
 
     def __record_avg_score(self, idl_folder: str):
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
+        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
             score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
             score = g.load_json(score_json_path)
             avg = NestedDict()

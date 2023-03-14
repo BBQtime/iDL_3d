@@ -362,17 +362,18 @@ class BaselineTraining(SharedTraining):
                 self.__save_hyper(hyper, hyper_save_path)
 
                 # start training
-                hyper["time.used"] = datetime.now()
+                hyper["time.spent"] = datetime.now()
                 self.__training(hyper, cur_fold_folder)
-                hyper["time.used"] = datetime.now() - hyper["time.used"]
-                hyper["time.used"] = str(hyper["time.used"]).split(".", 2)[0]
+                hyper["time.spent"] = datetime.now() - hyper["time.spent"]
+                hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
                 # save hyper after training
                 self.__save_hyper(hyper, hyper_save_path)
 
-                # clear time_used before next training
-                hyper["time.used"] = None
+                # clear time spent before next training
+                hyper.pop("time.spent")
 
+                # stop if no cross validation
                 if hyper["dataset"]["cross.valid"] is False:
                     break
 
