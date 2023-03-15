@@ -1,27 +1,18 @@
 import global_elems as g
-import SimpleITK as sitk
+import platform
 import os
 import sys
 import cv2
 import numpy as np
 from typing import Tuple
 from nested_dict import NestedDict
-from datetime import datetime
 from tkinter import Tk
 from tkinter import filedialog
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QPoint, QRect, Qt, QSize
-from PyQt5.QtGui import QPalette, QImage, QPixmap, QFont
-from PyQt5.QtWidgets import (
-    QApplication,
-    QGridLayout,
-    QLayout,
-    QMainWindow,
-    QMenu,
-    QAction,
-    QRubberBand,
-)
-from ui_main_window import Ui_MainWindow
+from PyQt5.QtCore import QPoint, QRect, Qt
+from PyQt5.QtGui import QPalette, QImage, QPixmap
+from PyQt5.QtWidgets import QApplication, QMainWindow, QRubberBand
+from Ui_main_window import Ui_MainWindow
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -329,16 +320,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__img_frames["mrt2"] = self._img_frame_mrt2
 
         self.__text_labels = NestedDict()
-        self.__text_labels["train.id"] = self._text_label_idl_id
+        self.__text_labels["baseline"] = self._text_label_baseline
+        self.__text_labels["idl.gtvt"] = self._text_label_idl_gtvt
+        self.__text_labels["idl.gtvn"] = self._text_label_idl_gtvn
         self.__text_labels["patient"] = self._text_label_patient
         self.__text_labels["round"] = self._text_label_round
         self.__text_labels["bright"] = self._text_label_bright
         self.__text_labels["contrast"] = self._text_label_contrast
 
         self.__comboxes = NestedDict()
-        self.__comboxes["train.id"] = self._combox_idl_id
+        self.__comboxes["baseline"] = self._combox_baseline
+        self.__comboxes["idl.gtvt"] = self._combox_idl_gtvt
+        self.__comboxes["idl.gtvn"] = self._combox_idl_gtvn
         self.__comboxes["patient"] = self._combox_patient
         self.__comboxes["round"] = self._combox_round
+
+        self.__btns = NestedDict()
+        self.__btns["prev.baseline"] = self._btn_prev_baseline
+        self.__btns["next.baseline"] = self._btn_next_baseline
+        self.__btns["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
+        self.__btns["next.idl.gtvt"] = self._btn_next_idl_gtvt
+        self.__btns["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
+        self.__btns["next.idl.gtvn"] = self._btn_next_idl_gtvn
+        self.__btns["prev.patient"] = self._btn_prev_patient
+        self.__btns["next.patient"] = self._btn_next_patient
+        self.__btns["prev.round"] = self._btn_prev_round
+        self.__btns["next.round"] = self._btn_next_round
 
         self.__radio_btns = NestedDict()
         self.__radio_btns["transverse"] = self._radio_btn_transverse
@@ -407,7 +414,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_side_bar(self):
         # set text
-        self.__text_labels["train.id"].setText("Choose Training Result")
+        self.__text_labels["baseline"].setText("Choose Baseline Result")
+        self.__text_labels["idl.gtvt"].setText("Choose iDL GTVt Result")
+        self.__text_labels["idl.gtvn"].setText("Choose iDL GTVn Result")
         self.__text_labels["patient"].setText("Choose Patient")
         self.__text_labels["round"].setText("Choose Update Round")
         self.__text_labels["bright"].setText("Brightness")
@@ -417,15 +426,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__radio_btns["sagittal"].setText("Sagittal")
 
         # set font
-        font = self.__text_labels["train.id"].font()
+        font = self.__text_labels["baseline"].font()
         font.setPointSize(8)
         font.setBold(True)
-        for i in ["train.id", "patient", "round", "bright", "contrast"]:
+        for i in [
+            "baseline",
+            "idl.gtvt",
+            "idl.gtvn",
+            "patient",
+            "round",
+            "bright",
+            "contrast",
+        ]:
             self.__text_labels[i].setFont(font)
         for i in ["transverse", "coronal", "sagittal"]:
             self.__radio_btns[i].setFont(font)
         font.setBold(False)
-        for i in ["train.id", "patient", "round"]:
+        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__comboxes[i].setFont(font)
 
         # connect widget to function
@@ -436,39 +453,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             idl_folders = g.get_sub_folders(
                 os.path.join(g.TRAIN_RESULTS_FOLDER, cur_baseline_folder)
             )
-            idl_folders.remove("baseline")
+            if "baseline" in idl_folders:
+                idl_folders.remove("baseline")
             # add baseline folder into list
             train_results_folders.append(cur_baseline_folder)
             # add sub idl folders into list
             for cur_idl_folder in idl_folders:
                 train_results_folders.append(self.__IDL_ID_HEAD + cur_idl_folder)
 
-        self.__comboxes["train.id"].addItems(train_results_folders)
+        self.__comboxes["idl.gtvt"].addItems(train_results_folders)
 
         # set combobox dropdown width: 700px
-        self.__comboxes["train.id"].setStyleSheet(
-            """*
-            QComboBox QAbstractItemView
-            {
-                min-width: 700px;
-            }
-            """
-        )
-        self.__comboxes["train.id"].activated.connect(self.__choose_train_id)
-        self._btn_prev_round.clicked.connect(self.__choose_prev_round)
-        self._btn_next_round.clicked.connect(self.__choose_next_round)
+        for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+            self.__comboxes[i].setStyleSheet(
+                """*
+                QComboBox QAbstractItemView
+                {
+                    min-width: 700px;
+                }
+                """
+            )
+
+        # connect ui to functions
+        self.__comboxes["idl.gtvt"].activated.connect(self.__choose_train_id)
+        self.__btns["prev.round"].clicked.connect(self.__choose_prev_round)
+        self.__btns["next.round"].clicked.connect(self.__choose_next_round)
+
         for i in ["bright", "contrast"]:
             self.__sliders[i].valueChanged.connect(self.__refresh_imgs)
         for i in ["transverse", "coronal", "sagittal"]:
             self.__radio_btns[i].toggled.connect(self.__set_img_plane)
 
         # set initial state
-        self.__comboxes["patient"].setEnabled(False)
-        self.__comboxes["round"].setEnabled(False)
-        self._btn_prev_round.setEnabled(False)
-        self._btn_prev_round.setArrowType(Qt.LeftArrow)
-        self._btn_next_round.setEnabled(False)
-        self._btn_next_round.setArrowType(Qt.RightArrow)
+        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
+            self.__comboxes[i].setEnabled(False)
+            self.__btns["prev.{}".format(i)].setEnabled(False)
+            self.__btns["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
+            self.__btns["next.{}".format(i)].setEnabled(False)
+            self.__btns["next.{}".format(i)].setArrowType(Qt.RightArrow)
+
         self.__radio_btns["transverse"].setChecked(True)
         self.__radio_btns["coronal"].setChecked(False)
         self.__radio_btns["sagittal"].setChecked(False)
@@ -514,12 +537,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__reset_zoomin()
         self.__comboxes["patient"].clear()
         self.__comboxes["round"].setEnabled(False)
-        self._btn_prev_round.setEnabled(False)
-        self._btn_next_round.setEnabled(False)
+        self.__btns["prev.round"].setEnabled(False)
+        self.__btns["next.round"].setEnabled(False)
         self.__comboxes["round"].clear()
         self.__clear_img_data()
 
-        train_id = self.__comboxes["train.id"].currentText()
+        train_id = self.__comboxes["idl.gtvt"].currentText()
 
         # baseline
         if train_id.startswith("baseline_"):
@@ -542,7 +565,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # idl
         else:
             # get baseline id
-            train_id_list = g.get_combox_content(self.__comboxes["train.id"])
+            train_id_list = g.get_combox_content(self.__comboxes["idl.gtvt"])
             idx = train_id_list.index(train_id)
             while not train_id_list[idx].startswith("baseline_"):
                 idx -= 1
@@ -729,19 +752,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # enable/disable prev/next round buttons
         idx = self.__comboxes["round"].currentIndex()
         if idx == 0:
-            self._btn_prev_round.setEnabled(False)
+            self.__btns["prev.round"].setEnabled(False)
             if len(round_list) > 1:
-                self._btn_next_round.setEnabled(True)
+                self.__btns["next.round"].setEnabled(True)
             else:
-                self._btn_next_round.setEnabled(False)
+                self.__btns["next.round"].setEnabled(False)
 
         elif idx == (self.__comboxes["round"].count() - 1):
-            self._btn_prev_round.setEnabled(True)
-            self._btn_next_round.setEnabled(False)
+            self.__btns["prev.round"].setEnabled(True)
+            self.__btns["next.round"].setEnabled(False)
 
         else:
-            self._btn_prev_round.setEnabled(True)
-            self._btn_next_round.setEnabled(True)
+            self.__btns["prev.round"].setEnabled(True)
+            self.__btns["next.round"].setEnabled(True)
 
         # update ui
         self.__refresh_imgs()
@@ -1099,42 +1122,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         left = 30
         top = 0
         text_label_height = 25
-        gap = 60
         combox_height = 30
         radio_btn_height = 25
+        arrow_btn_width = 30
+
+        if platform.system().lower() == "linux":
+            gap = 45
+        elif platform.system().lower() == "windows":
+            gap = 60
+        else:
+            gap = 60
+
         # side bar location
         side_bar_x = self.geometry().width() - side_bar_width
         width = side_bar_width - left * 2
         left += side_bar_x
 
-        # idl_id / patient
-        for i in ["train.id", "patient"]:
+        # text label / comboxes / btns
+        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
+            # text label
             top += gap
             rect = QRect(left, top, width, text_label_height)
             self.__text_labels[i].setGeometry(rect)
             top += text_label_height
-            rect = QRect(left, top, width, combox_height)
+
+            # btn prev
+            tmp_left = left
+            rect = QRect(tmp_left, top, arrow_btn_width, combox_height)
+            self.__btns["prev.{}".format(i)].setGeometry(rect)
+
+            # combox
+            tmp_left += arrow_btn_width
+            rect = QRect(
+                tmp_left + 1, top, width - arrow_btn_width * 2 - 2, combox_height
+            )
             self.__comboxes[i].setGeometry(rect)
 
-        # text label of "round"
-        top += gap
-        rect = QRect(left, top, width, text_label_height)
-        self.__text_labels["round"].setGeometry(rect)
-
-        # btn and text_box of "round"
-        top += text_label_height
-        btn_width = 30
-        annotat_ui_left = left
-        rect = QRect(annotat_ui_left, top, btn_width, combox_height)
-        self._btn_prev_round.setGeometry(rect)
-        annotat_ui_left += btn_width
-        rect = QRect(annotat_ui_left + 1, top, width - btn_width * 2 - 2, combox_height)
-        self.__comboxes["round"].setGeometry(rect)
-        annotat_ui_left += width - btn_width * 2
-        rect = QRect(annotat_ui_left, top, btn_width, combox_height)
-        self._btn_next_round.setGeometry(rect)
+            # btn next
+            tmp_left += width - arrow_btn_width * 2
+            rect = QRect(tmp_left, top, arrow_btn_width, combox_height)
+            self.__btns["next.{}".format(i)].setGeometry(rect)
 
         # brightness and contrast
+        top += gap * 0.5
         for i in ["bright", "contrast"]:
             top += gap
             rect = QRect(left, top, width, text_label_height)
@@ -1144,7 +1174,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__sliders[i].setGeometry(rect)
 
         # img plane
-        top += gap
+        top += gap * 1.5
         for i in ["transverse", "coronal", "sagittal"]:
             rect = QRect(left, top, width, radio_btn_height)
             self.__radio_btns[i].setGeometry(rect)
