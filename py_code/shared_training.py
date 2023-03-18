@@ -9,7 +9,7 @@ from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
 from torch import optim
-from idl_dataset import IDLDataSet
+from idl_gtvt_dataset import IDLGTVtDataSet
 from typing import Union
 from unet_pp_slim import UNetPPSlim
 from datetime import datetime
@@ -266,7 +266,7 @@ class SharedTraining:
         return train_id
 
     def _optimize_batch_size(
-        self, hyper: NestedDict, dataset: Union[BaselineDataSet, IDLDataSet]
+        self, hyper: NestedDict, dataset: Union[BaselineDataSet, IDLGTVtDataSet]
     ):
         dataset_len = dataset.__len__()
         if dataset_len > hyper["batch.size"]["actual"]:

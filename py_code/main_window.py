@@ -4,6 +4,7 @@ import os
 import sys
 import cv2
 import numpy as np
+from pathlib import Path
 from typing import Tuple
 from nested_dict import NestedDict
 from tkinter import Tk
@@ -18,8 +19,6 @@ from Ui_main_window import Ui_MainWindow
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        self.__IDL_ID_HEAD = "      ↳ "
 
         self.setupUi(self)
         self._status_bar.hide()
@@ -39,6 +38,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
         # self.setWindowState(Qt.WindowMaximized)
+
+        # load first baseline result
+        self.__choose_baseline()
 
     def __init_zoomin(self):
         self.__zoomin = NestedDict()
@@ -385,8 +387,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__clear_img_data()
 
     def __clear_img_data(self):
-        self.__baseline_id = None
-        self.__idl_id = None
+        self.__baseline_folder = None
+        self.__idl_gtvt_folder = None
         self.__score["dsc"] = None
         self.__score["msd"] = None
         self.__score["hd95"] = None
@@ -445,37 +447,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__comboxes[i].setFont(font)
 
-        # connect widget to function
-        baseline_folders = g.get_sub_folders(g.TRAIN_RESULTS_FOLDER)
-        train_results_folders = []
-
-        for cur_baseline_folder in baseline_folders:
-            idl_folders = g.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, cur_baseline_folder)
-            )
-            if "baseline" in idl_folders:
-                idl_folders.remove("baseline")
-            # add baseline folder into list
-            train_results_folders.append(cur_baseline_folder)
-            # add sub idl folders into list
-            for cur_idl_folder in idl_folders:
-                train_results_folders.append(self.__IDL_ID_HEAD + cur_idl_folder)
-
-        self.__comboxes["idl.gtvt"].addItems(train_results_folders)
-
         # set combobox dropdown width: 700px
         for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
             self.__comboxes[i].setStyleSheet(
                 """*
                 QComboBox QAbstractItemView
                 {
-                    min-width: 700px;
+                    min-width: 500px;
                 }
                 """
             )
 
+        # fill the baseline combobox
+        epoch_folders = []
+        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word="epoch="):
+            if "epoch=" in Path(i).name:
+                # format "baseline_id/fold=12/epoch=123"
+                epoch_folders.append(i[len(g.TRAIN_RESULTS_FOLDER) + 1 :])
+        self.__comboxes["baseline"].addItems(epoch_folders)
+
         # connect ui to functions
-        self.__comboxes["idl.gtvt"].activated.connect(self.__choose_train_id)
+        self.__comboxes["baseline"].activated.connect(self.__choose_baseline)
+        self.__comboxes["idl.gtvt"].activated.connect(self.__choose_idl_gtvt)
+        self.__comboxes["patient"].activated.connect(self.__choose_patient)
+        self.__comboxes["round"].activated.connect(self.__choose_round)
         self.__btns["prev.round"].clicked.connect(self.__choose_prev_round)
         self.__btns["next.round"].clicked.connect(self.__choose_next_round)
 
@@ -485,11 +480,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__radio_btns[i].toggled.connect(self.__set_img_plane)
 
         # set initial state
-        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__comboxes[i].setEnabled(False)
-            self.__btns["prev.{}".format(i)].setEnabled(False)
+        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
+            # self.__comboxes[i].setEnabled(False)
             self.__btns["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
-            self.__btns["next.{}".format(i)].setEnabled(False)
             self.__btns["next.{}".format(i)].setArrowType(Qt.RightArrow)
 
         self.__radio_btns["transverse"].setChecked(True)
@@ -533,65 +526,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             self.__img_frames[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __choose_train_id(self):
-        self.__reset_zoomin()
-        self.__comboxes["patient"].clear()
-        self.__comboxes["round"].setEnabled(False)
-        self.__btns["prev.round"].setEnabled(False)
-        self.__btns["next.round"].setEnabled(False)
-        self.__comboxes["round"].clear()
-        self.__clear_img_data()
+    def __choose_baseline(self):
+        # self.__reset_zoomin()
+        for i in ["idl.gtvt", "idl.gtvn"]:
+            self.__comboxes[i].clear()
 
-        train_id = self.__comboxes["idl.gtvt"].currentText()
-
-        # baseline
-        if train_id.startswith("baseline_"):
-            self.__baseline_id = train_id
-            self.__idl_id = "baseline"
-            fold_folder = g.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, "baseline"),
-                key_word="fold=",
-                return_full_path=True,
-            )[0]
-            epoch_folder = g.get_sub_folders(
-                fold_folder, key_word="epoch=", return_full_path=True
-            )[0]
-            patient_list = g.get_sub_folders(
-                os.path.join(
-                    epoch_folder,
-                    "patients",
-                )
-            )
-        # idl
+        # fill idl.gtvt combox
+        epoch_folder = self.__comboxes["baseline"].currentText()
+        if g.TRAIN_RESULTS_FOLDER.endswith("/"):
+            epoch_folder = g.TRAIN_RESULTS_FOLDER + epoch_folder
         else:
-            # get baseline id
-            train_id_list = g.get_combox_content(self.__comboxes["idl.gtvt"])
-            idx = train_id_list.index(train_id)
-            while not train_id_list[idx].startswith("baseline_"):
-                idx -= 1
-                if idx == -1:  # for safty
-                    g.exit_app("__choose_train_id(): fail to get baseline id")
-            self.__baseline_id = train_id_list[idx]
+            epoch_folder = g.TRAIN_RESULTS_FOLDER + "/" + epoch_folder
+        idl_gtvt_folders = g.get_sub_folders(os.path.join(epoch_folder, "idl_gtvt"))
+        self.__comboxes["idl.gtvt"].addItems(idl_gtvt_folders)
 
-            # get idl id
-            self.__idl_id = train_id[len(self.__IDL_ID_HEAD) :]
+        self.__baseline_folder = os.path.join(epoch_folder, "baseline")
 
-            # get patient list
-            patient_list = g.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_FOLDER,
-                    self.__baseline_id,
-                    self.__idl_id,
-                    "patients",
-                )
-            )
+        self.__choose_idl_gtvt()
+
+    def __choose_idl_gtvt(self):
+        # self.__reset_zoomin()
+        # self.__clear_img_data()
+
+        idl_gtvt_id = self.__comboxes["idl.gtvt"].currentText()
+        self.__idl_gtvt_folder = os.path.join(
+            Path(self.__baseline_folder).parent, "idl_gtvt", idl_gtvt_id
+        )
+        patient_list = g.get_sub_folders(
+            os.path.join(self.__idl_gtvt_folder, "patients")
+        )
 
         # change patient_list from "patient=123" to "123"
         for i in range(len(patient_list)):
             patient_list[i] = patient_list[i][len("patient=") :]
 
         self.__comboxes["patient"].addItems(patient_list)
-        self.__comboxes["patient"].activated.connect(self.__choose_patient)
         self.__comboxes["patient"].setEnabled(True)
 
         # dont reset patient when train id changed
@@ -645,29 +614,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load round combobox
         self.__comboxes["round"].clear()
-
         self.__comboxes["round"].addItem("00")
-        if self.__idl_id != "baseline":
-            round_list = g.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_FOLDER,
-                    self.__baseline_id,
-                    self.__idl_id,
-                    "patients",
-                    "patient={}".format(self.__patient),
-                ),
-                key_word="round=",
-            )
-            # change round_list from "round=01" to "01"
-            for i in range(len(round_list)):
-                round_list[i] = round_list[i][len("round=") :]
-            self.__comboxes["round"].addItems(round_list)
-
-        self.__comboxes["round"].activated.connect(self.__choose_round)
-        if self.__idl_id == "baseline":
-            self.__comboxes["round"].setEnabled(False)
-        else:
-            self.__comboxes["round"].setEnabled(True)
+        round_list = g.get_sub_folders(
+            os.path.join(
+                self.__idl_gtvt_folder,
+                "patients",
+                "patient={}".format(self.__patient),
+            ),
+            key_word="round=",
+        )
+        # change round_list from "round=01" to "01"
+        for i in range(len(round_list)):
+            round_list[i] = round_list[i][len("round=") :]
+        self.__comboxes["round"].addItems(round_list)
+        self.__comboxes["round"].setEnabled(True)
 
         # update slice id
         # if this is first time after initialization, slice_is=None,
@@ -697,23 +657,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__round = self.__comboxes["round"].currentText()
 
         # load pred
-        if self.__idl_id == "baseline" or self.__round == "00":
-            fold_folder = g.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, self.__baseline_id, "baseline"),
-                key_word="fold=",
-                return_full_path=True,
-            )[0]
-            epoch_folder = g.get_sub_folders(
-                fold_folder, key_word="epoch=", return_full_path=True
-            )[0]
+        if self.__round == "00":
             pred_folder = os.path.join(
-                epoch_folder, "patients", "patient={}".format(self.__patient)
+                self.__baseline_folder, "patients", "patient={}".format(self.__patient)
             )
         else:
             pred_folder = os.path.join(
-                g.TRAIN_RESULTS_FOLDER,
-                self.__baseline_id,
-                self.__idl_id,
+                self.__idl_gtvt_folder,
                 "patients",
                 "patient={}".format(self.__patient),
                 "round={}".format(self.__round),
@@ -727,27 +677,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
         # load dsc/msd/hd95 scores
-        if self.__idl_id == "baseline":
-            score_path = os.path.join(epoch_folder, "score_test.json")
-        else:
-            score_path = os.path.join(
-                g.TRAIN_RESULTS_FOLDER,
-                self.__baseline_id,
-                self.__idl_id,
-                "score_gtvt.json",
-            )
+        score_path = os.path.join(self.__idl_gtvt_folder, "score.json")
         score_dict = g.load_json(score_path)
 
         for metric_type in g.METRICS_LIST:
-            # baseline
             self.__score[metric_type] = score_dict["patient={}".format(self.__patient)][
                 metric_type
-            ]
-            # idl
-            if self.__idl_id != "baseline":
-                self.__score[metric_type] = self.__score[metric_type][
-                    "round={}".format(self.__round)
-                ]
+            ]["round={}".format(self.__round)]
 
         # enable/disable prev/next round buttons
         idx = self.__comboxes["round"].currentIndex()
@@ -1011,14 +947,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __get_annotated_slices(self, plane) -> list:
         # get current round
 
-        if self.__idl_id == "baseline" or self.__round == "00":
+        if self.__round == "00":
             return []
 
         # load annotated slices
         json_path = os.path.join(
-            g.TRAIN_RESULTS_FOLDER,
-            self.__baseline_id,
-            self.__idl_id,
+            self.__idl_gtvt_folder,
             "patients",
             "patient={}".format(self.__patient),
             "annotated_slices.json",
@@ -1120,14 +1054,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __refresh_side_bar(self, side_bar_width: int):
         # these are adjustable
         left = 30
-        top = 0
+        top = -10
         text_label_height = 25
         combox_height = 30
         radio_btn_height = 25
         arrow_btn_width = 30
 
         if platform.system().lower() == "linux":
-            gap = 45
+            gap = 40
         elif platform.system().lower() == "windows":
             gap = 60
         else:
@@ -1164,7 +1098,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__btns["next.{}".format(i)].setGeometry(rect)
 
         # brightness and contrast
-        top += gap * 0.5
+        top += gap * 0.55
         for i in ["bright", "contrast"]:
             top += gap
             rect = QRect(left, top, width, text_label_height)
@@ -1174,7 +1108,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__sliders[i].setGeometry(rect)
 
         # img plane
-        top += gap * 1.5
+        top += gap * 1.55
         for i in ["transverse", "coronal", "sagittal"]:
             rect = QRect(left, top, width, radio_btn_height)
             self.__radio_btns[i].setGeometry(rect)

@@ -589,16 +589,24 @@ def sort_dict_by_value(input_dict: dict, reverse: bool) -> dict:
     }
 
 
+def __walk_sub_folders(folder_path: str) -> list:
+    sub_folders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
+    for folder_path in list(sub_folders):
+        sub_folders.extend(__walk_sub_folders(folder_path))
+    return sub_folders
+
+
+def walk_sub_folders(folder_path: str, key_word: str = ""):
+    sub_folders = []
+    for i in __walk_sub_folders(folder_path):
+        if key_word == "" or key_word in i:
+            sub_folders.append(i)
+    return sub_folders
+
+
 def delete_debug_results():
-    for baseline_result in get_sub_folders(TRAIN_RESULTS_FOLDER, return_full_path=True):
-        if "delete.this" in baseline_result:
-            delete_folder(baseline_result)
-        else:
-            for idl_result in get_sub_folders(
-                baseline_result, key_word="idl_", return_full_path=True
-            ):
-                if "delete.this" in idl_result:
-                    delete_folder(idl_result)
+    for cur_folder in walk_sub_folders(TRAIN_RESULTS_FOLDER, key_word="delete.this"):
+        delete_folder(cur_folder)
 
 
 PROJ_PATH = None
@@ -611,7 +619,7 @@ DATASET_FOLDER = None
 DATASET_SPLITTING_JSON = None
 DATASET_K_FOLDS = None
 HYPER_JSON_BASELINE = None
-HYPER_JSON_IDL = None
+HYPER_JSON_IDL_GTVT = None
 HYPER_JSON_IDL_GTVN = None
 TRAIN_RESULTS_FOLDER = None
 METRICS_LIST = None
@@ -628,7 +636,7 @@ def __global_init():
     global DATASET_SPLITTING_JSON
     global DATASET_K_FOLDS
     global HYPER_JSON_BASELINE
-    global HYPER_JSON_IDL
+    global HYPER_JSON_IDL_GTVT
     global HYPER_JSON_IDL_GTVN
     global TRAIN_RESULTS_FOLDER
     global METRICS_LIST
@@ -688,7 +696,7 @@ def __global_init():
     DATASET_SPLITTING_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
     DATASET_K_FOLDS = __json_data["dataset.k.folds"]
     HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __json_data["hyper.json.baseline"])
-    HYPER_JSON_IDL = os.path.join(PROJ_PATH, __json_data["hyper.json.idl"])
+    HYPER_JSON_IDL_GTVT = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvt"])
     HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvn"])
     TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
 

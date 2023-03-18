@@ -13,7 +13,7 @@ from scipy.ndimage import distance_transform_edt
 DEBUG_SAVE_IMG = 0
 
 
-class IDLDataSet:
+class IDLGTVtDataSet:
     def __init__(
         self,
         patient: str,
@@ -197,9 +197,7 @@ class IDLDataSet:
             )
 
         # weighted annotation
-        annotation = (
-            annotation * slice_mask * (weight["annotation"] / weight["slice"])
-        )
+        annotation = annotation * slice_mask * (weight["annotation"] / weight["slice"])
         if DEBUG_SAVE_IMG:
             g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
@@ -386,7 +384,7 @@ class IDLDataSet:
 #         "patient=336",
 #     )
 #     # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
-#     tmp_dataset = IDLDataSet(
+#     tmp_dataset = IDLGTVtDataSet(
 #         patient="336",
 #         annotated_slices=annotated_slices,
 #         label_folder=g.DATASET_FOLDER,

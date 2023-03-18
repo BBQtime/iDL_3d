@@ -1,8 +1,7 @@
 import os
 import random
-import numpy as np
+import statistics
 from datetime import datetime
-from datetime import timedelta
 from pathlib import Path
 from loss_func import UnifiedFocalLoss
 from torch.utils.data import DataLoader
@@ -10,14 +9,14 @@ from tqdm import tqdm
 from torch import optim
 import matplotlib.pyplot as plt
 import global_elems as g
-from idl_dataset import IDLDataSet
+from idl_gtvt_dataset import IDLGTVtDataSet
 from shared_training import SharedTraining
 from nested_dict import NestedDict
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.ndimage import measurements
 
 
-class IDLTraining(SharedTraining):
+class IDLGTVtTraining(SharedTraining):
     def __load_next_round_lr(self, next_round: int, hyper: NestedDict):
         # hyper["lr"]["init"] is a list of lr of each round
         if next_round > len(hyper["lr"]["init"]):
@@ -52,11 +51,6 @@ class IDLTraining(SharedTraining):
     def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
         # reload cnn
         super()._load_cnn(hyper, baseline_cnn_path)
-
-        # if g.used_gpu_count() > 1:
-        #     hyper["lr"]["actual"] = hyper["lr"]["init"][0] * g.used_gpu_count()
-        # else:
-        #     hyper["lr"]["actual"] = hyper["lr"]["init"][0]
 
         # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(
@@ -234,19 +228,19 @@ class IDLTraining(SharedTraining):
     #     self,
     #     baseline_id: str,
     #     idl_results_folder: str,
-    #     idl_id: str,
+    #     idl_gtvt_id: str,
     #     cur_patient: str,
     #     cur_round: int,
     #     debug_mode: bool = False,
     # ):
-    #     self._idl_id = idl_id
+    #     self._idl_gtvt_id = idl_gtvt_id
 
     #     # get baseline cnn and hyper path
     #     baseline_cnn_path, baseline_hyper_path = self.__get_baseline_paths(baseline_id)
     #     g.print_line()
     #     print(baseline_cnn_path)
     #     # load hypers
-    #     idl_hyper_dict = g.load_json(g.HYPER_JSON_IDL)
+    #     idl_hyper_dict = g.load_json(g.HYPER_JSON_IDL_GTVT)
     #     baseline_hyper_dict = g.load_json(baseline_hyper_path)
 
     #     # make sure all hypers are unique, no arrangement
@@ -268,7 +262,7 @@ class IDLTraining(SharedTraining):
     #     # check if result folder exist
     #     cur_result_folder = os.path.join(idl_results_folder, self._idl_id)
     #     if not os.path.exists(cur_result_folder):
-    #         g.exit_app("IDLTraining.real_training(): iDL result folder doesn't exist")
+    #         g.exit_app("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
 
     #     # create json file to save train loss
     #     train_loss_dict = NestedDict()
@@ -314,7 +308,6 @@ class IDLTraining(SharedTraining):
         annotated_slices: dict,
         hyper: NestedDict,
         patient_folder: str,
-        baseline_epoch_folder: str,
     ) -> list:  # return a list of int
 
         cur_round_slices = NestedDict()
@@ -331,29 +324,11 @@ class IDLTraining(SharedTraining):
         patient = Path(patient_folder).name
         patient = patient[len("patient=") :]
 
-        # get prev round folder path
-        if cur_round == 1:
-            prev_round_pred_folder = os.path.join(
-                baseline_epoch_folder,
-                "patients",
-                "patient={}".format(patient),
-            )
-        else:
-            prev_round_pred_folder = os.path.join(
-                patient_folder, "round={:02d}".format(cur_round - 1)
-            )
-
-        # load gtvt pred/label
-        pred = g.load_nii(
-            os.path.join(prev_round_pred_folder, "pred_gtvt.nii"),
-            binary=True,
-        )
         label = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
-        target = np.maximum(pred, label)
-        target_center = measurements.center_of_mass(target)
+        label_center = measurements.center_of_mass(label)
 
         # select slices through each plane
         for plane in ["transverse", "coronal", "sagittal"]:
@@ -367,11 +342,11 @@ class IDLTraining(SharedTraining):
 
             # go through pred and record tumor size
             if plane == "transverse":
-                slice_counts = target.shape[0]
+                slice_counts = label.shape[0]
             elif plane == "coronal":
-                slice_counts = target.shape[1]
+                slice_counts = label.shape[1]
             elif plane == "sagittal":
-                slice_counts = target.shape[2]
+                slice_counts = label.shape[2]
 
             for cur_slice in range(slice_counts):
                 # skip slice that already been annotated
@@ -379,14 +354,14 @@ class IDLTraining(SharedTraining):
                     continue
                 else:
                     if plane == "transverse":
-                        cur_slice_target_volume = target[cur_slice, :, :].sum()
+                        cur_slice_tumor_size = label[cur_slice, :, :].sum()
                     elif plane == "coronal":
-                        cur_slice_target_volume = target[:, cur_slice, :].sum()
+                        cur_slice_tumor_size = label[:, cur_slice, :].sum()
                     elif plane == "sagittal":
-                        cur_slice_target_volume = target[:, :, cur_slice].sum()
+                        cur_slice_tumor_size = label[:, :, cur_slice].sum()
                     # add slice with target (pred or label) into candidates
-                    if cur_slice_target_volume > 0:
-                        candidate_slices[cur_slice] = cur_slice_target_volume
+                    if cur_slice_tumor_size > 0:
+                        candidate_slices[cur_slice] = cur_slice_tumor_size
 
             # "largest"
             if hyper["select.scenario"][plane] == "largest":
@@ -397,11 +372,11 @@ class IDLTraining(SharedTraining):
             # "gravity.center", round =1
             elif hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
                 if plane == "transverse":
-                    cur_round_slices[plane].append(round(target_center[0]))
+                    cur_round_slices[plane].append(round(label_center[0]))
                 elif plane == "coronal":
-                    cur_round_slices[plane].append(round(target_center[1]))
+                    cur_round_slices[plane].append(round(label_center[1]))
                 elif plane == "sagittal":
-                    cur_round_slices[plane].append(round(target_center[2]))
+                    cur_round_slices[plane].append(round(label_center[2]))
 
             # "equal.divide", round = 1
             elif hyper["select.scenario"][plane] == "equal.divide" and cur_round == 1:
@@ -448,15 +423,12 @@ class IDLTraining(SharedTraining):
         )
 
         # save score of cur patient
-        idl_folder = Path(cur_round_folder).parent.parent.parent
-        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
-            score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
-            score = g.load_json(score_json_path)
-            for metric_type in g.METRICS_LIST:
-                score[patient][metric_type][cur_round] = patient_result[gtv][
-                    metric_type
-                ]
-            g.save_json(score, score_json_path)
+        idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
+        score_json_path = os.path.join(idl_gtvt_folder, "score.json")
+        score = g.load_json(score_json_path)
+        for metric_type in g.METRICS_LIST:
+            score[patient][metric_type][cur_round] = patient_result["gtvt"][metric_type]
+        g.save_json(score, score_json_path)
 
         # save pred of cur patient
         for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -476,7 +448,7 @@ class IDLTraining(SharedTraining):
     def __training_cur_round(
         self,
         cur_round_folder: str,
-        baseline_epoch_folder: str,
+        epoch_folder: str,
         label_folder: str,
         hyper: NestedDict,
         annotated_slices: dict,
@@ -489,13 +461,13 @@ class IDLTraining(SharedTraining):
         patient = Path(cur_round_folder).parent.name
         patient = patient[len("patient=") :]
 
-        idl_folder = Path(cur_round_folder).parent.parent.parent
+        idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
         loss_json_path = os.path.join(Path(cur_round_folder).parent, "loss.json")
         loss_dict = g.load_json(loss_json_path)
 
         if cur_round == 1:
             pred_folder = os.path.join(
-                baseline_epoch_folder, "patients", "patient={}".format(patient)
+                epoch_folder, "baseline", "patients", "patient={}".format(patient)
             )
         else:
             pred_folder = os.path.join(
@@ -506,7 +478,7 @@ class IDLTraining(SharedTraining):
         cur_round_time_spent = datetime.now()
 
         # create iDL dataset
-        idl_dataset = IDLDataSet(
+        idl_gtvt_dataset = IDLGTVtDataSet(
             patient=patient,
             annotated_slices=annotated_slices,
             label_folder=label_folder,
@@ -516,11 +488,11 @@ class IDLTraining(SharedTraining):
         )
 
         # optimize batch size (before create dataloader)
-        self._optimize_batch_size(hyper=hyper, dataset=idl_dataset)
+        self._optimize_batch_size(hyper=hyper, dataset=idl_gtvt_dataset)
 
-        # idl dataloader
-        idl_loader = DataLoader(
-            dataset=idl_dataset,
+        # idl gtvt dataloader
+        idl_gtvt_loader = DataLoader(
+            dataset=idl_gtvt_dataset,
             batch_size=hyper["batch.size"]["actual"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,
@@ -540,7 +512,7 @@ class IDLTraining(SharedTraining):
                 else:
                     hyper["cnn"].freeze_top()
 
-            for inputs, labels, weight_map in idl_loader:
+            for inputs, labels, weight_map in idl_gtvt_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
                 inputs = inputs.to(g.DEVICE)
@@ -564,11 +536,11 @@ class IDLTraining(SharedTraining):
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
             patient_folder_list = g.get_sub_folders(
-                os.path.join(idl_folder, "patients")
+                os.path.join(idl_gtvt_folder, "patients")
             )
             if len(patient_folder_list) <= 1:
                 g.save_json(loss_dict, loss_json_path)
-                self.__draw_loss_fig(idl_folder)
+                self.__draw_loss_fig(idl_gtvt_folder)
 
         # current round finished
         # inference
@@ -588,13 +560,13 @@ class IDLTraining(SharedTraining):
     def __training_cur_patient(
         self,
         patient: str,
-        baseline_epoch_folder: str,
-        idl_folder: str,
+        epoch_folder: str,
+        idl_gtvt_folder: str,
         hyper: NestedDict,
     ):
         # create current patient folder
         patient_folder = os.path.join(
-            idl_folder, "patients", "patient={}".format(patient)
+            idl_gtvt_folder, "patients", "patient={}".format(patient)
         )
         g.create_folder(patient_folder)
         # create an empty loss.json
@@ -602,16 +574,15 @@ class IDLTraining(SharedTraining):
 
         # initialize idl score (copy from baseline)
         baseline_score = g.load_json(
-            os.path.join(baseline_epoch_folder, "score_test.json")
+            os.path.join(epoch_folder, "baseline", "score_test.json")
         )
-        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
-            idl_score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
-            idl_score = g.load_json(idl_score_json_path)
-            for metric_type in g.METRICS_LIST:
-                idl_score["patient={}".format(patient)][metric_type][
-                    "round=00"
-                ] = baseline_score["patient={}".format(patient)][gtv][metric_type]
-            g.save_json(idl_score, idl_score_json_path)
+        idl_gtvt_score_path = os.path.join(idl_gtvt_folder, "score.json")
+        idl_gtvt_score = g.load_json(idl_gtvt_score_path)
+        for metric_type in g.METRICS_LIST:
+            idl_gtvt_score["patient={}".format(patient)][metric_type][
+                "round=00"
+            ] = baseline_score["patient={}".format(patient)]["gtvt"][metric_type]
+        g.save_json(idl_gtvt_score, idl_gtvt_score_path)
 
         g.print_line()
         print("patient:", patient)
@@ -631,7 +602,6 @@ class IDLTraining(SharedTraining):
                 annotated_slices=annotated_slices,
                 hyper=hyper,
                 patient_folder=patient_folder,
-                baseline_epoch_folder=baseline_epoch_folder,
             )
 
             # no slice needs to be annotated in cur round
@@ -650,7 +620,7 @@ class IDLTraining(SharedTraining):
             )
             self.__training_cur_round(
                 cur_round_folder=cur_round_folder,
-                baseline_epoch_folder=baseline_epoch_folder,
+                epoch_folder=epoch_folder,
                 label_folder=g.DATASET_FOLDER,
                 hyper=hyper,
                 annotated_slices=annotated_slices,
@@ -664,7 +634,7 @@ class IDLTraining(SharedTraining):
                 self.__load_next_round_lr(cur_round + 1, hyper)
 
         # draw avg loss of all trained patients
-        self.__draw_loss_fig(idl_folder)
+        self.__draw_loss_fig(idl_gtvt_folder)
 
         # save annotated slices in cur patient folder
         for plane in ["transverse", "coronal", "sagittal"]:
@@ -675,22 +645,22 @@ class IDLTraining(SharedTraining):
         g.save_json(
             data=annotated_slices,
             path=os.path.join(
-                idl_folder,
+                idl_gtvt_folder,
                 "patients",
                 "patient={}".format(patient),
                 "annotated_slices.json",
             ),
         )
 
-    def draw_loss_fig(self, baseline_id: str, idl_id: str):
-        idl_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id)
-        self.__draw_loss_fig(idl_folder)
+    def draw_loss_fig(self, baseline_id: str, idl_gtvt_id: str):
+        idl_gtvt_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_gtvt_id)
+        self.__draw_loss_fig(idl_gtvt_folder)
 
-    def __draw_loss_fig(self, idl_folder: str):
+    def __draw_loss_fig(self, idl_gtvt_folder: str):
         # avg loss dict
         avg_loss = NestedDict()
         for cur_patient_folder in g.get_sub_folders(
-            os.path.join(idl_folder, "patients"), return_full_path=True
+            os.path.join(idl_gtvt_folder, "patients"), return_full_path=True
         ):
             cur_patient_loss = g.load_json(
                 os.path.join(cur_patient_folder, "loss.json")
@@ -711,37 +681,53 @@ class IDLTraining(SharedTraining):
         plt.figure().clear()
         plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
         plt.legend()
-        plt.savefig(os.path.join(idl_folder, "loss.png"))
+        plt.savefig(os.path.join(idl_gtvt_folder, "loss.png"))
 
     def simulation(
         self,
         baseline_id: str,
+        fold: int = 0,
+        epoch: int = 0,
         train_remark: str = "",
         debug_mode: bool = False,
     ):
-        for hyper in self._load_group_hyper(g.HYPER_JSON_IDL):
+        for hyper in self._load_group_hyper(g.HYPER_JSON_IDL_GTVT):
 
-            idl_id = "idl_" + self._init_train_id(
+            idl_gtvt_id = "idl_gtvt_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
-                hyper_json_path=g.HYPER_JSON_IDL,
+                hyper_json_path=g.HYPER_JSON_IDL_GTVT,
                 hyper=hyper,
             )
             g.print_line()
-            print(idl_id)
+            print(idl_gtvt_id)
 
-            # use first fold folder
-            baseline_fold_folder = g.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, "baseline"),
-                key_word="fold=",
+            # find fold folder
+            if fold <= 0:
+                key_word = "fold="
+            else:
+                key_word = "fold={:02d}".format(fold)
+            fold_folder = g.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id),
+                key_word=key_word,
                 return_full_path=True,
             )[0]
-            # use first epoch folder
-            baseline_epoch_folder = g.get_sub_folders(
-                baseline_fold_folder, "epoch=", return_full_path=True
-            )[0]
-            baseline_cnn_path = os.path.join(baseline_epoch_folder, "cnn.pt")
 
+            # find epoch folder
+            if epoch <= 0:
+                key_word = "epoch="
+            else:
+                key_word = "epoch={:03d}".format(epoch)
+            epoch_folder = g.get_sub_folders(
+                fold_folder, key_word=key_word, return_full_path=True
+            )[0]
+            baseline_cnn_path = g.get_sub_files(
+                os.path.join(epoch_folder, "baseline"),
+                key_word=".pt",
+                return_full_path=True,
+            )[0]
+
+            # load and print hyper
             self.__load_hyper(
                 hyper=hyper,
                 baseline_cnn_path=baseline_cnn_path,
@@ -751,18 +737,18 @@ class IDLTraining(SharedTraining):
             self.__print_hyper(hyper)
 
             # create idl result folder
-            idl_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id)
-            g.create_folder(idl_folder)
+            idl_gtvt_folder = os.path.join(epoch_folder, "idl_gtvt", idl_gtvt_id)
+            g.create_folder(idl_gtvt_folder)
 
             # save hyper before training
-            hyper_save_path = os.path.join(idl_folder, "hyper.json")
+            hyper_save_path = os.path.join(idl_gtvt_folder, "hyper.json")
             self.__save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
-                g.save_json(
-                    NestedDict(), os.path.join(idl_folder, "score_{}.json".format(gtv))
-                )
+            g.save_json(
+                NestedDict(),
+                os.path.join(idl_gtvt_folder, "score.json"),
+            )
 
             # training start time
             hyper["time.spent"]["total"] = datetime.now()
@@ -772,8 +758,8 @@ class IDLTraining(SharedTraining):
                 self.__training_cur_patient(
                     patient=patient,
                     hyper=hyper,
-                    baseline_epoch_folder=baseline_epoch_folder,
-                    idl_folder=idl_folder,
+                    epoch_folder=epoch_folder,
+                    idl_gtvt_folder=idl_gtvt_folder,
                 )
 
                 # reset cnn/optimizer/scheduler before next patient
@@ -798,26 +784,25 @@ class IDLTraining(SharedTraining):
 
             self.__save_hyper(hyper, hyper_save_path)
 
-            self.__record_avg_score(idl_folder)
+            self.__record_median_score(idl_gtvt_folder)
 
-    def __record_avg_score(self, idl_folder: str):
-        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
-            score_json_path = os.path.join(idl_folder, "score_{}.json".format(gtv))
-            score = g.load_json(score_json_path)
-            avg = NestedDict()
+    def __record_median_score(self, idl_gtvt_folder: str):
+        score_json_path = os.path.join(idl_gtvt_folder, "score.json")
+        score = g.load_json(score_json_path)
+        median = NestedDict()
 
-            # add all patients score in to a list
-            for patient in score:
-                for metric in g.METRICS_LIST:
-                    for cur_round in score[patient][metric]:
-                        if avg[metric][cur_round] == {}:
-                            avg[metric][cur_round] = []
-                        avg[metric][cur_round].append(score[patient][metric][cur_round])
-
-            # calculate avg score
+        # add all patients score in to a list
+        for patient in score:
             for metric in g.METRICS_LIST:
-                for cur_round in avg[metric]:
-                    score["avg"][metric][cur_round] = g.get_avg_value(
-                        avg[metric][cur_round]
-                    )
-            g.save_json(data=score, path=os.path.join(score_json_path))
+                for cur_round in score[patient][metric]:
+                    if median[metric][cur_round] == {}:
+                        median[metric][cur_round] = []
+                    median[metric][cur_round].append(score[patient][metric][cur_round])
+
+        # calculate median score
+        for metric in g.METRICS_LIST:
+            for cur_round in median[metric]:
+                score["median"][metric][cur_round] = statistics.median(
+                    median[metric][cur_round]
+                )
+        g.save_json(data=score, path=os.path.join(score_json_path))

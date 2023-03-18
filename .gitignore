@@ -1,10 +1,6 @@
 py_code/__pycache__/
-py_code/surface_distance/__pycache__/
 debug/
 train_results/
-baseline_tensorboard/
-idl_tensorboard/
-idl_figs/
 py_code/debug.py
 py_code/main.py
-idl_hyper.txt
+idl_gtvt_hyper.txt
