@@ -19,7 +19,6 @@ from Ui_main_window import Ui_MainWindow
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.setupUi(self)
         self._status_bar.hide()
         self._menu_bar.hide()
@@ -29,26 +28,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__init_color()
 
         self.__init_img_data()
-        self.__refresh_title()  # after __init_img_data
+        self.__refresh_title()  # after __init_img_data()
 
-        # comes after self.__init_img_data(), because function connection needed
+        # after self.__init_img_data(), because function connection needed
         self.__init_side_bar()
 
         # resize
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
-        # self.setWindowState(Qt.WindowMaximized)
 
         # load first baseline result
         self.__choose_baseline()
 
     def __init_zoomin(self):
         self.__zoomin = NestedDict()
-        self.__zoomin["rubber_band"] = QRubberBand(QRubberBand.Rectangle, self)
+        self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
         self.__reset_zoomin()
 
     def __reset_zoomin(self):
-        self.__zoomin["rubber_band"].hide()
+        self.__zoomin["rubber.band"].hide()
         self.__zoomin["img"] = None
         self.__zoomin["start"] = None
         self.__zoomin["end"] = None
@@ -58,10 +56,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # loop 4 img frames
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            left = self.__img_frames[i].x()
-            top = self.__img_frames[i].y()
-            width = self.__img_frames[i].width()
-            height = self.__img_frames[i].height()
+            left = self.__display_frame[i].x()
+            top = self.__display_frame[i].y()
+            width = self.__display_frame[i].width()
+            height = self.__display_frame[i].height()
             # if start pos is in current img frame
             if (
                 event.x() >= left
@@ -79,31 +77,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.__zoomin["img"] = i
                     self.__zoomin["start"] = event.pos()
                     rect = QRect(event.pos(), event.pos())
-                    self.__zoomin["rubber_band"].setGeometry(rect.normalized())
-                    self.__zoomin["rubber_band"].show()
+                    self.__zoomin["rubber.band"].setGeometry(rect.normalized())
+                    self.__zoomin["rubber.band"].show()
                     return
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
-        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber_band"] is None:
+        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
             return
         self.__mouse_move_event(event)
 
     def __mouse_move_event(self, event):
         # limit zoomin frame in img frame
-        img_frame = self.__img_frames[self.__zoomin["img"]]
-        img_frame_right = img_frame.x() + img_frame.width() - 1
-        if event.x() < img_frame.x():
-            event_x = img_frame.x()
-        elif event.x() > img_frame_right:
-            event_x = img_frame_right
+        display_frame = self.__display_frame[self.__zoomin["img"]]
+        display_frame_right = display_frame.x() + display_frame.width() - 1
+        if event.x() < display_frame.x():
+            event_x = display_frame.x()
+        elif event.x() > display_frame_right:
+            event_x = display_frame_right
         else:
             event_x = event.x()
-        img_frame_buttom = img_frame.y() + img_frame.height() - 1
-        if event.y() < img_frame.y():
-            event_y = img_frame.y()
-        elif event.y() > img_frame_buttom:
-            event_y = img_frame_buttom
+        display_frame_buttom = display_frame.y() + display_frame.height() - 1
+        if event.y() < display_frame.y():
+            event_y = display_frame.y()
+        elif event.y() > display_frame_buttom:
+            event_y = display_frame_buttom
         else:
             event_y = event.y()
         # resize zoomin frame
@@ -112,20 +110,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__zoomin["start"],
             self.__zoomin["end"],
         )
-        self.__zoomin["rubber_band"].setGeometry(rect.normalized())
+        self.__zoomin["rubber.band"].setGeometry(rect.normalized())
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
 
         # not zoomed in
-        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber_band"] is None:
+        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
             return
         self.__mouse_move_event(event)
-        self.__zoomin["rubber_band"].hide()
-        # self.__zoomin["rubber_band"] = None
+        self.__zoomin["rubber.band"].hide()
+        # self.__zoomin["rubber.band"] = None
 
         # no data loaded
-        if self.__img_data["ct"] is None:
+        if self.__img_data["pt"] is None:
             self.__reset_zoomin()
             return
 
@@ -153,13 +151,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             y = start_y
             start_y = end_y
             end_y = y
-        # get img_frame related position
-        img_frame_left = self.__img_frames[self.__zoomin["img"]].x()
-        img_frame_top = self.__img_frames[self.__zoomin["img"]].y()
-        start_x -= img_frame_left
-        end_x -= img_frame_left
-        start_y -= img_frame_top
-        end_y -= img_frame_top
+        # get display_frame related position
+        display_frame_left = self.__display_frame[self.__zoomin["img"]].x()
+        display_frame_top = self.__display_frame[self.__zoomin["img"]].y()
+        start_x -= display_frame_left
+        end_x -= display_frame_left
+        start_y -= display_frame_top
+        end_y -= display_frame_top
 
         # get actual_img_area related position
         resize_pos = self.__resize_pos[self.__zoomin["img"]]
@@ -190,16 +188,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # get actual zoom position
         if self.__img_plane == "sagittal":
-            origin_width = self.__img_data["ct"].shape[1]
-            origin_height = self.__img_data["ct"].shape[0]
+            origin_width = self.__img_data["pt"].shape[1]
+            origin_height = self.__img_data["pt"].shape[0]
             origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[1])
         elif self.__img_plane == "coronal":
-            origin_width = self.__img_data["ct"].shape[2]
-            origin_height = self.__img_data["ct"].shape[0]
+            origin_width = self.__img_data["pt"].shape[2]
+            origin_height = self.__img_data["pt"].shape[0]
             origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[0])
         else:
-            origin_width = self.__img_data["ct"].shape[2]
-            origin_height = self.__img_data["ct"].shape[1]
+            origin_width = self.__img_data["pt"].shape[2]
+            origin_height = self.__img_data["pt"].shape[1]
 
         start_x = round(start_x * origin_width / resize_pos["width"])
         end_x = round(end_x * origin_width / resize_pos["width"])
@@ -210,8 +208,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__zoomin["end"] = QPoint(end_x, end_y)
         self.__refresh_imgs()
 
-    def __fit_img_frame(self, img, img_frame: QtWidgets.QLabel):
-        err_msg = "MainWindow.__fit_img_frame(), img.shape should == 2 or 3"
+    def __fit_display_frame(self, img, display_frame: QtWidgets.QLabel):
+        err_msg = "MainWindow.__fit_display_frame(), img.shape should == 2 or 3"
 
         # image spacing resize
         if self.__img_plane == "sagittal":
@@ -257,8 +255,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         resize_pos = NestedDict()
         resize_pos["x"], resize_pos["y"] = None, None
         resize_pos["width"], resize_pos["height"] = None, None
-        final_width = img_frame.width()
-        final_height = img_frame.height()
+        final_width = display_frame.width()
+        final_height = display_frame.height()
 
         # border on left and right side
         if origin_height * final_width > final_height * origin_width:
@@ -316,56 +314,56 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__color["score.text"] = self.__color["annotation.gtvt"]
 
     def __init_ui_names(self):
-        self.__img_frames = NestedDict()
-        self.__img_frames["ct"] = self._img_frame_ct
-        self.__img_frames["pt"] = self._img_frame_pt
-        self.__img_frames["mrt1"] = self._img_frame_mrt1
-        self.__img_frames["mrt2"] = self._img_frame_mrt2
+        self.__display_frame = NestedDict()
+        self.__display_frame["ct"] = self._display_frame_ct
+        self.__display_frame["pt"] = self._display_frame_pt
+        self.__display_frame["mrt1"] = self._display_frame_mrt1
+        self.__display_frame["mrt2"] = self._display_frame_mrt2
 
-        self.__text_labels = NestedDict()
-        self.__text_labels["baseline"] = self._text_label_baseline
-        self.__text_labels["idl.gtvt"] = self._text_label_idl_gtvt
-        self.__text_labels["idl.gtvn"] = self._text_label_idl_gtvn
-        self.__text_labels["patient"] = self._text_label_patient
-        self.__text_labels["round"] = self._text_label_round
-        self.__text_labels["bright"] = self._text_label_bright
-        self.__text_labels["contrast"] = self._text_label_contrast
+        self.__text_label = NestedDict()
+        self.__text_label["baseline"] = self._text_label_baseline
+        self.__text_label["idl.gtvt"] = self._text_label_idl_gtvt
+        self.__text_label["idl.gtvn"] = self._text_label_idl_gtvn
+        self.__text_label["patient"] = self._text_label_patient
+        self.__text_label["round"] = self._text_label_round
+        self.__text_label["bright"] = self._text_label_bright
+        self.__text_label["contrast"] = self._text_label_contrast
 
-        self.__comboxes = NestedDict()
-        self.__comboxes["baseline"] = self._combox_baseline
-        self.__comboxes["idl.gtvt"] = self._combox_idl_gtvt
-        self.__comboxes["idl.gtvn"] = self._combox_idl_gtvn
-        self.__comboxes["patient"] = self._combox_patient
-        self.__comboxes["round"] = self._combox_round
+        self.__combox = NestedDict()
+        self.__combox["baseline"] = self._combox_baseline
+        self.__combox["idl.gtvt"] = self._combox_idl_gtvt
+        self.__combox["idl.gtvn"] = self._combox_idl_gtvn
+        self.__combox["patient"] = self._combox_patient
+        self.__combox["round"] = self._combox_round
 
-        self.__btns = NestedDict()
-        self.__btns["prev.baseline"] = self._btn_prev_baseline
-        self.__btns["next.baseline"] = self._btn_next_baseline
-        self.__btns["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
-        self.__btns["next.idl.gtvt"] = self._btn_next_idl_gtvt
-        self.__btns["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
-        self.__btns["next.idl.gtvn"] = self._btn_next_idl_gtvn
-        self.__btns["prev.patient"] = self._btn_prev_patient
-        self.__btns["next.patient"] = self._btn_next_patient
-        self.__btns["prev.round"] = self._btn_prev_round
-        self.__btns["next.round"] = self._btn_next_round
+        self.__arrow_btn = NestedDict()
+        self.__arrow_btn["prev.baseline"] = self._btn_prev_baseline
+        self.__arrow_btn["next.baseline"] = self._btn_next_baseline
+        self.__arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
+        self.__arrow_btn["next.idl.gtvt"] = self._btn_next_idl_gtvt
+        self.__arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
+        self.__arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
+        self.__arrow_btn["prev.patient"] = self._btn_prev_patient
+        self.__arrow_btn["next.patient"] = self._btn_next_patient
+        self.__arrow_btn["prev.round"] = self._btn_prev_round
+        self.__arrow_btn["next.round"] = self._btn_next_round
 
-        self.__radio_btns = NestedDict()
-        self.__radio_btns["transverse"] = self._radio_btn_transverse
-        self.__radio_btns["coronal"] = self._radio_btn_coronal
-        self.__radio_btns["sagittal"] = self._radio_btn_sagittal
+        self.__radio_btn = NestedDict()
+        self.__radio_btn["transverse"] = self._radio_btn_transverse
+        self.__radio_btn["coronal"] = self._radio_btn_coronal
+        self.__radio_btn["sagittal"] = self._radio_btn_sagittal
 
-        self.__sliders = NestedDict()
-        self.__sliders["bright"] = self._slider_bright
-        self.__sliders["contrast"] = self._slider_contrast
+        self.__slider = NestedDict()
+        self.__slider["bright"] = self._slider_bright
+        self.__slider["contrast"] = self._slider_contrast
 
         # set label background black
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self.__img_frames[i].setObjectName("")
-            self.__img_frames[i].setAutoFillBackground(True)
-            self.__img_frames[i].setPalette(pal)
+            self.__display_frame[i].setObjectName("")
+            self.__display_frame[i].setAutoFillBackground(True)
+            self.__display_frame[i].setPalette(pal)
 
     def __load_img(self, img_path: str):
         img = g.load_nii(img_path, binary=False)
@@ -381,7 +379,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init_img_data(self):
         self.__patient = None
         self.__round = None
-        self.__slice_id = None  # starts from 0
+        self.__slice = None  # starts from 0
         self.__score = NestedDict()
         self.__img_data = NestedDict()
         self.__resize_pos = NestedDict()
@@ -390,6 +388,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __clear_img_data(self):
         self.__baseline_folder = None
         self.__idl_gtvt_folder = None
+        self.__idl_gtvn_folder = None
         self.__score["dsc"] = None
         self.__score["msd"] = None
         self.__score["hd95"] = None
@@ -406,30 +405,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ]:
             self.__img_data[i] = None
 
-        # resize position of ct/pt/mr1/mr2
+        # resize position of ct/pt/mrt1/mrt2
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             self.__resize_pos[i] = None
 
-        # transverse/coronal/sagittal
+        # set image plane
         for i in ["transverse", "coronal", "sagittal"]:
-            if self.__radio_btns[i].isChecked():
+            if self.__radio_btn[i].isChecked():
                 self.__img_plane = i
 
     def __init_side_bar(self):
         # set text
-        self.__text_labels["baseline"].setText("Choose Baseline Result")
-        self.__text_labels["idl.gtvt"].setText("Choose iDL GTVt Result")
-        self.__text_labels["idl.gtvn"].setText("Choose iDL GTVn Result")
-        self.__text_labels["patient"].setText("Choose Patient")
-        self.__text_labels["round"].setText("Choose Update Round")
-        self.__text_labels["bright"].setText("Brightness")
-        self.__text_labels["contrast"].setText("Contrast")
-        self.__radio_btns["transverse"].setText("Transverse")
-        self.__radio_btns["coronal"].setText("Coronal")
-        self.__radio_btns["sagittal"].setText("Sagittal")
+        self.__text_label["baseline"].setText("Choose Baseline Result")
+        self.__text_label["idl.gtvt"].setText("Choose iDL GTVt Result")
+        self.__text_label["idl.gtvn"].setText("Choose iDL GTVn Result")
+        self.__text_label["patient"].setText("Choose Patient")
+        self.__text_label["round"].setText("Choose Update Round")
+        self.__text_label["bright"].setText("Brightness")
+        self.__text_label["contrast"].setText("Contrast")
+        self.__radio_btn["transverse"].setText("Transverse")
+        self.__radio_btn["coronal"].setText("Coronal")
+        self.__radio_btn["sagittal"].setText("Sagittal")
 
         # set font
-        font = self.__text_labels["baseline"].font()
+        font = self.__text_label["baseline"].font()
         font.setPointSize(8)
         font.setBold(True)
         for i in [
@@ -441,16 +440,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "bright",
             "contrast",
         ]:
-            self.__text_labels[i].setFont(font)
+            self.__text_label[i].setFont(font)
         for i in ["transverse", "coronal", "sagittal"]:
-            self.__radio_btns[i].setFont(font)
+            self.__radio_btn[i].setFont(font)
         font.setBold(False)
         for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__comboxes[i].setFont(font)
+            self.__combox[i].setFont(font)
 
         # set combobox dropdown width: 700px
         for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
-            self.__comboxes[i].setStyleSheet(
+            self.__combox[i].setStyleSheet(
                 """*
                 QComboBox QAbstractItemView
                 {
@@ -465,101 +464,115 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if "epoch=" in Path(i).name:
                 # format "baseline_id/fold=12/epoch=123"
                 epoch_folders.append(i[len(g.TRAIN_RESULTS_FOLDER) + 1 :])
-        self.__comboxes["baseline"].addItems(epoch_folders)
+        self.__combox["baseline"].addItems(epoch_folders)
 
         # connect ui to functions
-        self.__comboxes["baseline"].activated.connect(self.__choose_baseline)
-        self.__btns["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
-        self.__btns["next.baseline"].clicked.connect(self.__choose_next_baseline)
-        self.__comboxes["idl.gtvt"].activated.connect(self.__choose_idl_gtvt)
-        self.__comboxes["patient"].activated.connect(self.__choose_patient)
-        self.__comboxes["round"].activated.connect(self.__choose_round)
-        self.__btns["prev.round"].clicked.connect(self.__choose_prev_round)
-        self.__btns["next.round"].clicked.connect(self.__choose_next_round)
+        self.__combox["baseline"].activated.connect(self.__choose_baseline)
+        self.__arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
+        self.__arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
+
+        self.__combox["idl.gtvt"].activated.connect(self.__choose_idl_gtvt)
+        self.__arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
+        self.__arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
+
+        self.__combox["patient"].activated.connect(self.__choose_patient)
+        self.__arrow_btn["prev.patient"].clicked.connect(self.__choose_prev_patient)
+        self.__arrow_btn["next.patient"].clicked.connect(self.__choose_next_patient)
+
+        self.__combox["round"].activated.connect(self.__choose_round)
+        self.__arrow_btn["prev.round"].clicked.connect(self.__choose_prev_round)
+        self.__arrow_btn["next.round"].clicked.connect(self.__choose_next_round)
 
         for i in ["bright", "contrast"]:
-            self.__sliders[i].valueChanged.connect(self.__refresh_imgs)
+            self.__slider[i].valueChanged.connect(self.__refresh_imgs)
         for i in ["transverse", "coronal", "sagittal"]:
-            self.__radio_btns[i].toggled.connect(self.__set_img_plane)
+            self.__radio_btn[i].toggled.connect(self.__set_img_plane)
 
         # set initial state
         for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__btns["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
-            self.__btns["next.{}".format(i)].setArrowType(Qt.RightArrow)
+            self.__arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
+            self.__arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
 
         for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__comboxes[i].setEnabled(False)
-            self.__btns["prev.{}".format(i)].setEnabled(False)
-            self.__btns["next.{}".format(i)].setEnabled(False)
+            self.__combox[i].setEnabled(False)
+            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        self.__radio_btns["transverse"].setChecked(True)
-        self.__radio_btns["coronal"].setChecked(False)
-        self.__radio_btns["sagittal"].setChecked(False)
+        self.__radio_btn["transverse"].setChecked(True)
+        self.__radio_btn["coronal"].setChecked(False)
+        self.__radio_btn["sagittal"].setChecked(False)
 
         # set slider range and default value
-        self.__sliders["bright"].setMinimum(-128)
-        self.__sliders["bright"].setMaximum(128)
-        self.__sliders["bright"].setValue(0)
-        self.__sliders["contrast"].setMinimum(0)
-        self.__sliders["contrast"].setMaximum(200)
-        self.__sliders["contrast"].setValue(100)
+        self.__slider["bright"].setMinimum(-128)
+        self.__slider["bright"].setMaximum(128)
+        self.__slider["bright"].setValue(0)
+        self.__slider["contrast"].setMinimum(0)
+        self.__slider["contrast"].setMaximum(200)
+        self.__slider["contrast"].setValue(100)
 
     def __set_img_plane(self):
         for i in ["transverse", "coronal", "sagittal"]:
-            if self.__radio_btns[i].isChecked():
+            if self.__radio_btn[i].isChecked():
                 self.__img_plane = i
 
                 # update and check slice_id (starts from 0)
                 img_depth = self.__get_img_depth()
                 if img_depth is not None:
-                    self.__slice_id = round(img_depth / 2) - 1
-                    self.__slice_id = g.check_limit(self.__slice_id, 0, img_depth - 1)
+                    self.__slice = round(img_depth / 2) - 1
+                    self.__slice = g.check_limit(self.__slice, 0, img_depth - 1)
 
                 self.__reset_zoomin()
                 self.__refresh_imgs()
                 self.__refresh_title()
 
-    def __clear_img_frames(self):
+    def __clear_display_frames(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            width = self.__img_frames[i].width()
-            height = self.__img_frames[i].height()
+            width = self.__display_frame[i].width()
+            height = self.__display_frame[i].height()
             black_img = np.zeros([width, height, 3])
             qt_image = QImage(
                 black_img,
-                self.__img_frames[i].width(),
-                self.__img_frames[i].height(),
-                self.__img_frames[i].width() * 3,
+                self.__display_frame[i].width(),
+                self.__display_frame[i].height(),
+                self.__display_frame[i].width() * 3,
                 QImage.Format_RGB888,
             )
-            self.__img_frames[i].setPixmap(QPixmap.fromImage(qt_image))
+            self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def __enable_prev_next_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
-        idx = self.__comboxes[combox_name].currentIndex()
+        idx = self.__combox[combox_name].currentIndex()
         if idx == 0:
-            self.__btns["prev.{}".format(combox_name)].setEnabled(False)
+            self.__arrow_btn["prev.{}".format(combox_name)].setEnabled(False)
         else:
-            self.__btns["prev.{}".format(combox_name)].setEnabled(True)
+            self.__arrow_btn["prev.{}".format(combox_name)].setEnabled(True)
 
-        if idx == (self.__comboxes[combox_name].count() - 1):
-            self.__btns["next.{}".format(combox_name)].setEnabled(False)
+        if idx == (self.__combox[combox_name].count() - 1):
+            self.__arrow_btn["next.{}".format(combox_name)].setEnabled(False)
         else:
-            self.__btns["next.{}".format(combox_name)].setEnabled(True)
+            self.__arrow_btn["next.{}".format(combox_name)].setEnabled(True)
+
+    def __get_combox_content(self, combox: QtWidgets.QComboBox):
+        content_list = []
+        for i in range(combox.count()):
+            content_list.append(combox.itemText(i))
+        return content_list
 
     def __choose_baseline(self):
         self.__reset_zoomin()
         self.__clear_img_data()
 
-        # reset ui
-        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__comboxes[i].clear()
-            self.__comboxes[i].setEnabled(False)
-            self.__btns["prev.{}".format(i)].setEnabled(False)
-            self.__btns["next.{}".format(i)].setEnabled(False)
-
+        # run this after baseline combox current text is decided
         self.__enable_prev_next_btns("baseline")
 
-        epoch_folder = self.__comboxes["baseline"].currentText()
+        # reset ui
+        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
+            self.__combox[i].clear()
+            self.__combox[i].setEnabled(False)
+            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
+
+        epoch_folder = self.__combox["baseline"].currentText()
         if g.TRAIN_RESULTS_FOLDER.endswith("/"):
             epoch_folder = g.TRAIN_RESULTS_FOLDER + epoch_folder
         else:
@@ -571,17 +584,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if os.path.exists(idl_gtvt_folders):
             idl_gtvt_folders = g.get_sub_folders(idl_gtvt_folders)
             if idl_gtvt_folders != []:
-                self.__comboxes["idl.gtvt"].addItems(idl_gtvt_folders)
-                self.__comboxes["idl.gtvt"].setEnabled(True)
-                self.__btns["prev.idl.gtvt"].setEnabled(True)
-                self.__btns["next.idl.gtvt"].setEnabled(True)
+                self.__combox["idl.gtvt"].addItems(idl_gtvt_folders)
+                self.__combox["idl.gtvt"].setEnabled(True)
                 self.__choose_idl_gtvt()
 
     def __choose_idl_gtvt(self):
-        # self.__reset_zoomin()
-        # self.__clear_img_data()
+        # run this after idl gtvt combox current text is decided
+        self.__enable_prev_next_btns("idl.gtvt")
 
-        idl_gtvt_id = self.__comboxes["idl.gtvt"].currentText()
+        # reset ui
+        for i in ["patient", "round"]:
+            self.__combox[i].clear()
+            self.__combox[i].setEnabled(False)
+            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
+
+        idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
         self.__idl_gtvt_folder = os.path.join(
             Path(self.__baseline_folder).parent, "idl_gtvt", idl_gtvt_id
         )
@@ -593,28 +611,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in range(len(patient_list)):
             patient_list[i] = patient_list[i][len("patient=") :]
 
-        self.__comboxes["patient"].addItems(patient_list)
-        self.__comboxes["patient"].setEnabled(True)
+        self.__combox["patient"].addItems(patient_list)
+        self.__combox["patient"].setEnabled(True)
 
-        # dont reset patient when train id changed
-        self.__choose_patient(reset_patient=False)
-
-    def __choose_patient(self, reset_patient: bool = True):
-        self.__reset_zoomin()
-
-        # triggered by idl_id combox changed
-        if reset_patient is False:
-            # see if cur_patient_id is in patient_combobox
-            patient_list = g.get_combox_content(self.__comboxes["patient"])
-            if self.__patient not in patient_list:
-                self.__patient = self.__comboxes["patient"].currentText()
-            else:
-                self.__comboxes["patient"].setCurrentText(self.__patient)
-        # triggered by patient combox changed
+        # try not to reset patient when idl_gtvt_id is changed
+        if self.__patient not in patient_list:
+            reset_patient = True
         else:
-            self.__patient = self.__comboxes["patient"].currentText()
+            reset_patient = False
+        self.__choose_patient(idx=None, reset_patient=reset_patient)
 
-        # load imgs and label
+    def __choose_patient(self, idx: int, reset_patient: bool = True):
+        # triggered by:
+        # (1) patient combox update
+        # (2) idl_gtvt combox update, but can not find cur patient in new idl folder
+        if reset_patient is True:
+            self.__patient = self.__combox["patient"].currentText()
+            self.__reset_zoomin()
+
+        # triggered by idl_gtvt combox update, and find cur patient in new idl folder
+        else:
+            self.__combox["patient"].setCurrentText(self.__patient)
+
+        # run this after patient combox current text is decided
+        self.__enable_prev_next_btns("patient")
+
+        # load imgs
         self.__img_data["ct"] = self.__load_img(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(self.__patient))
         )
@@ -627,11 +649,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__img_data["mrt2"] = self.__load_img(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
-        # "GTVt"
+
+        # load label-gtvt
         self.__img_data["label.gtvt"] = self.__load_img(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(self.__patient))
         )
-        #  "GTVn"
+
+        # load label-gtvn
         gtvn_path = os.path.join(
             g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(self.__patient)
         )
@@ -645,9 +669,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             self.__img_data["label.gtvn"] = gtvs_img - self.__img_data["label.gtvt"]
 
-        # load round combobox
-        self.__comboxes["round"].clear()
-        self.__comboxes["round"].addItem("00")
+        # initialize round combobox
+        self.__combox["round"].clear()
+        self.__arrow_btn["prev.round"].setEnabled(False)
+        self.__arrow_btn["next.round"].setEnabled(False)
+
         round_list = g.get_sub_folders(
             os.path.join(
                 self.__idl_gtvt_folder,
@@ -659,43 +685,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # change round_list from "round=01" to "01"
         for i in range(len(round_list)):
             round_list[i] = round_list[i][len("round=") :]
-        self.__comboxes["round"].addItems(round_list)
-        self.__comboxes["round"].setEnabled(True)
 
-        # update slice id
-        # if this is first time after initialization, slice_is=None,
-        # show the middle slice of whole 3d img
-        # otherwise try to keep slice_id unchanged
+        round_list = ["00"] + round_list
+        self.__combox["round"].addItems(round_list)
+        self.__combox["round"].setEnabled(True)
+
+        # get slice id
         img_depth = self.__get_img_depth()
         if img_depth is not None:
-            if self.__slice_id is None:
-                self.__slice_id = round(img_depth / 2) - 1
-            # check slice_id (starts from 0)
-            self.__slice_id = g.check_limit(self.__slice_id, 0, img_depth - 1)
+            # try to keep slice id unchanged
+            # if slice is None, show the middle slice of whole 3D img,
+            if self.__slice is None:
+                self.__slice = round(img_depth / 2) - 1
+            # check slice_id range from [0, img_depth-1]
+            self.__slice = g.check_limit(self.__slice, 0, img_depth - 1)
 
-        # automatically choose round
-        self.__choose_round(reset_round=False)
-
-    def __choose_round(self, reset_round: bool = True):
-        round_list = g.get_combox_content(self.__comboxes["round"])
-        if reset_round is False:
-            # this happens when
+        # try not to reset round when patient is changed
+        if self.__round not in round_list:
+            # this happens when:
             # (1) current idl training has less round than prev idl training
             # (2) the first time loading a idl training
-            if self.__round not in round_list:
-                self.__round = self.__comboxes["round"].currentText()
-            else:
-                self.__comboxes["round"].setCurrentText(self.__round)
+            reset_round = True
         else:
-            self.__round = self.__comboxes["round"].currentText()
+            reset_round = False
+        self.__choose_round(idx=None, reset_round=reset_round)
+
+    def __choose_round(self, idx: int, reset_round: bool = True):
+        if reset_round is True:
+            self.__round = self.__combox["round"].currentText()
+        else:
+            self.__combox["round"].setCurrentText(self.__round)
+
+        # run this after "round" combox current text is decided
+        self.__enable_prev_next_btns("round")
 
         # load pred
         pred_path = NestedDict()
 
-        # load pred gtvt
+        # load pred-gtvt
         if self.__round == "00":
             pred_gtvt_folder = os.path.join(
-                self.__baseline_folder, "patients", "patient={}".format(self.__patient)
+                self.__baseline_folder,
+                "patients",
+                "patient={}".format(self.__patient),
             )
         else:
             pred_gtvt_folder = os.path.join(
@@ -712,56 +744,85 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = self.__load_img(pred_path[i])
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
-        # load dsc/msd/hd95 scores
-        score_path = os.path.join(self.__idl_gtvt_folder, "score.json")
-        score_dict = g.load_json(score_path)
+        # load score
+        gtvt_score = g.load_json(os.path.join(self.__idl_gtvt_folder, "score.json"))
 
         for metric in g.METRICS:
-            self.__score[metric] = score_dict["patient={}".format(self.__patient)][
+            self.__score[metric] = gtvt_score["patient={}".format(self.__patient)][
                 metric
             ]["round={}".format(self.__round)]
-
-        self.__enable_prev_next_btns("round")
 
         # update ui
         self.__refresh_imgs()
         self.__refresh_title()
 
     def __choose_prev_baseline(self):
-        idx = self.__comboxes["baseline"].currentIndex() - 1
+        idx = self.__combox["baseline"].currentIndex() - 1
         if idx < 0:
             return
-        prev_baseline = self.__comboxes["baseline"].itemText(idx)
-        self.__comboxes["baseline"].setCurrentText(prev_baseline)
+        prev_baseline = self.__combox["baseline"].itemText(idx)
+        self.__combox["baseline"].setCurrentText(prev_baseline)
         self.__choose_baseline()
 
     def __choose_next_baseline(self):
-        idx = self.__comboxes["baseline"].currentIndex() + 1
-        if idx > self.__comboxes["baseline"].count() - 1:
+        idx = self.__combox["baseline"].currentIndex() + 1
+        if idx > self.__combox["baseline"].count() - 1:
             return
-        next_baseline = self.__comboxes["baseline"].itemText(idx)
-        self.__comboxes["baseline"].setCurrentText(next_baseline)
+        next_baseline = self.__combox["baseline"].itemText(idx)
+        self.__combox["baseline"].setCurrentText(next_baseline)
         self.__choose_baseline()
 
-    def __choose_prev_round(self):
-        idx = self.__comboxes["round"].currentIndex() - 1
+    def __choose_prev_idl_gtvt(self):
+        idx = self.__combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
             return
-        prev_round = self.__comboxes["round"].itemText(idx)
-        self.__comboxes["round"].setCurrentText(prev_round)
-        self.__choose_round(reset_round=True)
+        prev_idl_gtvt = self.__combox["idl.gtvt"].itemText(idx)
+        self.__combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
+        self.__choose_idl_gtvt()
+
+    def __choose_next_idl_gtvt(self):
+        idx = self.__combox["idl.gtvt"].currentIndex() + 1
+        if idx > self.__combox["idl.gtvt"].count() - 1:
+            return
+        next_idl_gtvt = self.__combox["idl.gtvt"].itemText(idx)
+        self.__combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
+        self.__choose_idl_gtvt()
+
+    def __choose_prev_patient(self):
+        idx = self.__combox["patient"].currentIndex() - 1
+        if idx < 0:
+            return
+        prev_patient = self.__combox["patient"].itemText(idx)
+        self.__combox["patient"].setCurrentText(prev_patient)
+        self.__choose_patient(idx=None, reset_patient=True)
+
+    def __choose_next_patient(self):
+        idx = self.__combox["patient"].currentIndex() + 1
+        if idx > self.__combox["patient"].count() - 1:
+            return
+        next_patient = self.__combox["patient"].itemText(idx)
+        self.__combox["patient"].setCurrentText(next_patient)
+        self.__choose_patient(idx=None, reset_patient=True)
+
+    def __choose_prev_round(self):
+        idx = self.__combox["round"].currentIndex() - 1
+        if idx < 0:
+            return
+        prev_round = self.__combox["round"].itemText(idx)
+        self.__combox["round"].setCurrentText(prev_round)
+        self.__choose_round(idx=None, reset_round=True)
 
     def __choose_next_round(self):
-        idx = self.__comboxes["round"].currentIndex() + 1
-        if idx > self.__comboxes["round"].count() - 1:
+        idx = self.__combox["round"].currentIndex() + 1
+        if idx > self.__combox["round"].count() - 1:
             return
-        next_round = self.__comboxes["round"].itemText(idx)
-        self.__comboxes["round"].setCurrentText(next_round)
-        self.__choose_round(reset_round=True)
+        next_round = self.__combox["round"].itemText(idx)
+        self.__combox["round"].setCurrentText(next_round)
+        self.__choose_round(idx=None, reset_round=True)
 
     def __refresh_imgs(self):
         # no img data loaded
-        if self.__img_data["ct"] is None:
+        if self.__img_data["pt"] is None:
             return
 
         # check if cur slice is annotated
@@ -782,14 +843,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
             if self.__img_plane == "sagittal":
-                rgb_img = self.__img_data[i][:, :, self.__slice_id]
+                rgb_img = self.__img_data[i][:, :, self.__slice]
             elif self.__img_plane == "coronal":
-                rgb_img = self.__img_data[i][:, self.__slice_id, :]
+                rgb_img = self.__img_data[i][:, self.__slice, :]
             else:  # img_plane == "transverse":
                 # for transverse plane, img is upside down,
                 # true slice id is: img_depth - 1 - slice_id
                 rgb_img = self.__img_data[i][
-                    (self.__get_img_depth() - 1 - self.__slice_id), :, :
+                    (self.__get_img_depth() - 1 - self.__slice), :, :
                 ]
 
             rgb_img = np.uint8((rgb_img - rgb_img.min()) / rgb_img.ptp() * 255.0)
@@ -797,8 +858,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_GRAY2RGB)
 
             # brightness and contrast
-            bright = self.__sliders["bright"].value()
-            contrast = self.__sliders["contrast"].value() / 100
+            bright = self.__slider["bright"].value()
+            contrast = self.__slider["contrast"].value() / 100
             blank = np.zeros_like(rgb_img)
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
             rgb_img = cv2.addWeighted(rgb_img, contrast, blank, 0, bright)
@@ -808,23 +869,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             total_slices_num = NestedDict()
             if self.__img_plane == "transverse":
                 annotated_slices["horizontal"] = self.__get_annotated_slices("coronal")
-                total_slices_num["horizontal"] = self.__img_data["ct"].shape[1]
+                total_slices_num["horizontal"] = self.__img_data["pt"].shape[1]
                 annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
-                total_slices_num["vertical"] = self.__img_data["ct"].shape[2]
+                total_slices_num["vertical"] = self.__img_data["pt"].shape[2]
             elif self.__img_plane == "coronal":
                 annotated_slices["horizontal"] = self.__get_annotated_slices(
                     "transverse"
                 )
-                total_slices_num["horizontal"] = self.__img_data["ct"].shape[0]
+                total_slices_num["horizontal"] = self.__img_data["pt"].shape[0]
                 annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
-                total_slices_num["vertical"] = self.__img_data["ct"].shape[2]
+                total_slices_num["vertical"] = self.__img_data["pt"].shape[2]
             elif self.__img_plane == "sagittal":
                 annotated_slices["horizontal"] = self.__get_annotated_slices(
                     "transverse"
                 )
-                total_slices_num["horizontal"] = self.__img_data["ct"].shape[0]
+                total_slices_num["horizontal"] = self.__img_data["pt"].shape[0]
                 annotated_slices["vertical"] = self.__get_annotated_slices("coronal")
-                total_slices_num["vertical"] = self.__img_data["ct"].shape[1]
+                total_slices_num["vertical"] = self.__img_data["pt"].shape[1]
 
             rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
 
@@ -872,28 +933,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 )
 
             # resize and fit img frame
-            rgb_img, self.__resize_pos[i] = self.__fit_img_frame(
-                rgb_img, self.__img_frames[i]
+            rgb_img, self.__resize_pos[i] = self.__fit_display_frame(
+                rgb_img, self.__display_frame[i]
             )
-            # blur after __fit_img_frame will gain better effect
+            # blur after __fit_display_frame will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
             # for k in ["label.gtvt", "pred.gtvt", "label.gtvn", "pred.gtvn"]:
             for k in ["label.gtvt", "pred.gtvt"]:
                 if self.__img_plane == "sagittal":
-                    contour = self.__img_data[k][:, :, self.__slice_id].astype(np.uint8)
+                    contour = self.__img_data[k][:, :, self.__slice].astype(np.uint8)
                 elif self.__img_plane == "coronal":
-                    contour = self.__img_data[k][:, self.__slice_id, :].astype(np.uint8)
+                    contour = self.__img_data[k][:, self.__slice, :].astype(np.uint8)
                 else:  # img_plane == "transverse":
                     # for transverse plane, img is upside down,
                     # true slice id is: img_depth - 1 - slice_id
                     contour = self.__img_data[k][
-                        (self.__get_img_depth() - 1 - self.__slice_id), :, :
+                        (self.__get_img_depth() - 1 - self.__slice), :, :
                     ].astype(np.uint8)
 
-                contour, _ = self.__fit_img_frame(contour, self.__img_frames[i])
-                # blur after __fit_img_frame will gain better effect
+                contour, _ = self.__fit_display_frame(contour, self.__display_frame[i])
+                # blur after __fit_display_frame will gain better effect
                 contour = cv2.GaussianBlur(contour, (7, 7), cv2.BORDER_DEFAULT)
                 contour, _ = cv2.findContours(
                     contour, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
@@ -929,8 +990,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
             # add text label gtvt
-            text_pos_y = height - 88
-            # text_pos_y = height - 46
+            # text_pos_y = height - 88
+            text_pos_y = height - 46
             text_pos_gap = 20
 
             cv_text = "LABEL - GTVt"
@@ -983,7 +1044,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 width * channel,
                 QImage.Format_RGB888,
             )
-            self.__img_frames[i].setPixmap(QPixmap.fromImage(qt_image))
+            self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def __get_annotated_slices(self, plane) -> list:
         # get current round
@@ -1016,10 +1077,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return annotated_slices_list
 
     def __is_annotated(self) -> bool:
-        if self.__img_data["ct"] is None:
+        if self.__img_data["pt"] is None:
             return False
 
-        if int(self.__slice_id) in self.__get_annotated_slices(self.__img_plane):
+        if int(self.__slice) in self.__get_annotated_slices(self.__img_plane):
             return True
         else:
             return False
@@ -1047,50 +1108,44 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
     def wheelEvent(self, event):
-        if self.__slice_id is not None:
+        if self.__slice is not None:
             img_depth = self.__get_img_depth()
             if img_depth is None:
                 return
             slice_delta = event.angleDelta().y() // 120
             if self.__img_plane == "coronal":
                 slice_delta = -slice_delta
-            self.__slice_id -= slice_delta
+            self.__slice -= slice_delta
             # limite slice_id in range(0,img_depth)
-            self.__slice_id %= img_depth
+            self.__slice %= img_depth
             self.__refresh_imgs()
             self.__refresh_title()
 
     def __get_img_depth(self):
-        if (self.__img_data["ct"] is None) or (self.__img_plane is None):
+        if (self.__img_data["pt"] is None) or (self.__img_plane is None):
             return None
         if self.__img_plane == "sagittal":
-            img_depth = self.__img_data["ct"].shape[2]
+            img_depth = self.__img_data["pt"].shape[2]
         elif self.__img_plane == "coronal":
-            img_depth = self.__img_data["ct"].shape[1]
+            img_depth = self.__img_data["pt"].shape[1]
         else:  # img_plane == "transverse"
-            img_depth = self.__img_data["ct"].shape[0]
+            img_depth = self.__img_data["pt"].shape[0]
         return img_depth
 
     def __refresh_title(self):
         win_tital = "iDL.Tool "
-        # if self.__baseline_id is not None:
-        #     win_tital += "   Baseline.ID=" + self.__baseline_id
-        # if self.__baseline_id is not None:
-        #     win_tital += "   iDL.ID=" + self.__idl_id
-        # if self.__patient is not None:
-        #     win_tital += "   Patient=" + self.__patient[len("patient=") :]
         if self.__round is not None:
             win_tital += "   Num.of.Annotated.Slices="
             win_tital += str(len(self.__get_annotated_slices(self.__img_plane)))
-        if self.__slice_id is not None:
+        if self.__slice is not None:
             img_depth = self.__get_img_depth()
             if img_depth is not None:
-                win_tital += "   Slice={}/{}".format(self.__slice_id + 1, img_depth)
+                win_tital += "   Slice={}/{}".format(self.__slice + 1, img_depth)
         self.setWindowTitle(win_tital)
 
     def resizeEvent(self, event):
         side_bar_width = 300
-        self.__refresh_img_frames_size(side_bar_width)
+        self.__resize_display_frames(side_bar_width)
         self.__refresh_side_bar(side_bar_width)
         self.__refresh_imgs()
         QMainWindow.resizeEvent(self, event)
@@ -1121,44 +1176,44 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # text label
             top += gap
             rect = QRect(left, top, width, text_label_height)
-            self.__text_labels[i].setGeometry(rect)
+            self.__text_label[i].setGeometry(rect)
             top += text_label_height
 
             # btn prev
             tmp_left = left
             rect = QRect(tmp_left, top, arrow_btn_width, combox_height)
-            self.__btns["prev.{}".format(i)].setGeometry(rect)
+            self.__arrow_btn["prev.{}".format(i)].setGeometry(rect)
 
             # combox
             tmp_left += arrow_btn_width
             rect = QRect(
                 tmp_left + 1, top, width - arrow_btn_width * 2 - 2, combox_height
             )
-            self.__comboxes[i].setGeometry(rect)
+            self.__combox[i].setGeometry(rect)
 
             # btn next
             tmp_left += width - arrow_btn_width * 2
             rect = QRect(tmp_left, top, arrow_btn_width, combox_height)
-            self.__btns["next.{}".format(i)].setGeometry(rect)
+            self.__arrow_btn["next.{}".format(i)].setGeometry(rect)
 
         # brightness and contrast
         top += gap * 0.55
         for i in ["bright", "contrast"]:
             top += gap
             rect = QRect(left, top, width, text_label_height)
-            self.__text_labels[i].setGeometry(rect)
+            self.__text_label[i].setGeometry(rect)
             top += text_label_height
             rect = QRect(left, top, width, combox_height)
-            self.__sliders[i].setGeometry(rect)
+            self.__slider[i].setGeometry(rect)
 
         # img plane
         top += gap * 1.55
         for i in ["transverse", "coronal", "sagittal"]:
             rect = QRect(left, top, width, radio_btn_height)
-            self.__radio_btns[i].setGeometry(rect)
+            self.__radio_btn[i].setGeometry(rect)
             top += radio_btn_height
 
-    def __refresh_img_frames_size(self, side_bar_width: int):
+    def __resize_display_frames(self, side_bar_width: int):
         gap = 1
         size = NestedDict()
         size["x"] = self.geometry().width() - side_bar_width
@@ -1176,16 +1231,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pos[i][0] = gap
             pos[i][1] = size[i][0] + gap * 2
 
-        self.__img_frames["ct"].setGeometry(
+        self.__display_frame["ct"].setGeometry(
             QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
         )
-        self.__img_frames["pt"].setGeometry(
+        self.__display_frame["pt"].setGeometry(
             QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
         )
-        self.__img_frames["mrt1"].setGeometry(
+        self.__display_frame["mrt1"].setGeometry(
             QRect(pos["x"][0], pos["y"][1], size["x"][0], size["y"][1])
         )
-        self.__img_frames["mrt2"].setGeometry(
+        self.__display_frame["mrt2"].setGeometry(
             QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
         )
 

@@ -72,7 +72,7 @@ class IDLGTVtDataSet:
                 os.path.join(pred_folder, "pred_gtv{}.nii".format(gtv)), binary=True
             )
 
-        # load ct/pt/mr1/mt2
+        # load ct/pt/mrt1/mt2
         self.__origin["ct"] = g.load_nii(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
         )

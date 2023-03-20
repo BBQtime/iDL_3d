@@ -150,7 +150,7 @@ class UNet(nn.Module):
 
         return output_data
 
-    # in_channels=4 (ct/pt/mr1/mr2)
+    # in_channels=4 (ct/pt/mrt1/mrt2)
     def __init__(
         self,
         in_channels: int = 4,

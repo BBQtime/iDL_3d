@@ -16,7 +16,6 @@ import imgaug as ia
 from nested_dict import NestedDict
 from numpy import ndarray
 from torch import Tensor
-from PyQt5 import QtWidgets
 from typing import Union
 from natsort import natsorted
 
@@ -519,13 +518,6 @@ def clear_linux_trash():
     if platform.system().lower() == "linux":
         clear_folder("/home/alan/.local/share/Trash/files/")
         clear_folder("/home/alan/.local/share/Trash/info/")
-
-
-def get_combox_content(combox: QtWidgets.QComboBox):
-    content_list = []
-    for i in range(combox.count()):
-        content_list.append(combox.itemText(i))
-    return content_list
 
 
 def normalize_img(img: ndarray) -> ndarray:

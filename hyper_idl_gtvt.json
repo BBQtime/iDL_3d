@@ -35,7 +35,42 @@
     "weight": [
         {
             "background": 0.2,
-            "distance.step": 5,
+            "distance.step": 1,
+            "fp.fn": 3.0,
+            "prev.round.decay": 0.5,
+            "slice": 1.0
+        },
+        {
+            "background": 0.2,
+            "distance.step": 2,
+            "fp.fn": 3.0,
+            "prev.round.decay": 0.5,
+            "slice": 1.0
+        },
+        {
+            "background": 0.2,
+            "distance.step": 3,
+            "fp.fn": 3.0,
+            "prev.round.decay": 0.5,
+            "slice": 1.0
+        },
+        {
+            "background": 0.2,
+            "distance.step": 4,
+            "fp.fn": 3.0,
+            "prev.round.decay": 0.5,
+            "slice": 1.0
+        },
+        {
+            "background": 0.2,
+            "distance.step": 6,
+            "fp.fn": 3.0,
+            "prev.round.decay": 0.5,
+            "slice": 1.0
+        },
+        {
+            "background": 0.2,
+            "distance.step": 7,
             "fp.fn": 3.0,
             "prev.round.decay": 0.5,
             "slice": 1.0
