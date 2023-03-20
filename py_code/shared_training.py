@@ -26,8 +26,8 @@ class SharedTraining:
     def _load_hyper(self, hyper: dict, exist_cnn_path: str = ""):
         # segmentation metrics
         hyper["metrics"] = NestedDict()
-        for metric_type in g.METRICS_LIST:
-            hyper["metrics"][metric_type] = SegmentationMetrics(metric_type).to(
+        for metric in g.METRICS:
+            hyper["metrics"][metric] = SegmentationMetrics(metric).to(
                 g.DEVICE
             )
 
@@ -277,26 +277,39 @@ class SharedTraining:
             hyper["batch.size"]["actual"] = dataset_len
 
     def _inference_single_patient(
-        self, patient: str, hyper: NestedDict, unetpp_output: int = 3
+        self,
+        patient: str,
+        hyper: NestedDict,
+        gtvt_only: bool,
+        unetpp_output: int = 3,
     ) -> NestedDict:
-        # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
+
+        # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
         result = NestedDict()
 
         dataset = BaselineDataSet(patient_list=[patient])
-
         origin = NestedDict()
-        # load gtvt gtvs
-        for i in ["s", "t"]:
-            origin["gtv" + i] = g.load_nii(
-                os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTV{}.nii".format(patient, i)),
+
+        # load gtvt
+        origin["gtvt"] = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            binary=True,
+        )
+
+        if not gtvt_only:
+            # load gtvs
+            origin["gtvs"] = g.load_nii(
+                os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
                 binary=True,
             )
-        # load gtvn
-        gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
-        if os.path.exists(gtvn_path):
-            origin["gtvn"] = g.load_nii(gtvn_path, binary=True)
-        else:
-            origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
+            # load gtvn
+            gtvn_path = os.path.join(
+                g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient)
+            )
+            if os.path.exists(gtvn_path):
+                origin["gtvn"] = g.load_nii(gtvn_path, binary=True)
+            else:
+                origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
 
         hyper["cnn"].eval()  # disable dropout / batch nomalize
         with torch.no_grad():
@@ -309,20 +322,27 @@ class SharedTraining:
 
             # get gtvt/gtvn/gtvs img
             result["gtvt"]["pred"] = outputs[1]
-            result["gtvn"]["pred"] = outputs[2]
-            result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
+            if not gtvt_only:
+                result["gtvn"]["pred"] = outputs[2]
+                result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
 
             # pad and crop to original size
-            for i in ["gtvs", "gtvt", "gtvn"]:
-                result[i]["pred"] = g.central_pad(result[i]["pred"], origin[i].shape)
-                result[i]["pred"] = g.central_crop(result[i]["pred"], origin[i].shape)
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
+                if gtv == "gtvt" or not gtvt_only:
+                    result[gtv]["pred"] = g.central_pad(
+                        result[gtv]["pred"], origin[gtv].shape
+                    )
+                    result[gtv]["pred"] = g.central_crop(
+                        result[gtv]["pred"], origin[gtv].shape
+                    )
 
         # calculate segment scores
-        for i in ["gtvs", "gtvt", "gtvn"]:
-            for metric_type in g.METRICS_LIST:
-                result[i][metric_type] = hyper["metrics"][metric_type](
-                    result[i]["pred"], origin[i]
-                )
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            if gtv == "gtvt" or not gtvt_only:
+                for metric in g.METRICS:
+                    result[gtv][metric] = hyper["metrics"][metric](
+                        result[gtv]["pred"], origin[gtv]
+                    )
         return result
 
     # protected function

@@ -1,5 +1,8 @@
 import numpy as np
-from medpy import metric
+from medpy.metric import asd
+from medpy.metric import assd
+from medpy.metric import hd
+from medpy.metric import hd95
 import torch.nn as nn
 from torch import Tensor
 from numpy import ndarray
@@ -413,7 +416,7 @@ def hausdorff_distance(
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
-    return metric.hd(test, reference, voxel_spacing, connectivity)
+    return hd(test, reference, voxel_spacing, connectivity)
 
 
 def hausdorff_distance_95(
@@ -444,7 +447,7 @@ def hausdorff_distance_95(
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
-    return metric.hd95(test, reference, voxel_spacing, connectivity)
+    return hd95(test, reference, voxel_spacing, connectivity)
 
 
 def avg_surface_distance(
@@ -475,7 +478,7 @@ def avg_surface_distance(
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
-    return metric.asd(test, reference, voxel_spacing, connectivity)
+    return asd(test, reference, voxel_spacing, connectivity)
 
 
 def avg_surface_distance_symmetric(
@@ -506,7 +509,7 @@ def avg_surface_distance_symmetric(
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
-    return metric.assd(test, reference, voxel_spacing, connectivity)
+    return assd(test, reference, voxel_spacing, connectivity)
 
 
 ALL_METRICS = {
@@ -536,10 +539,10 @@ ALL_METRICS = {
 class SegmentationMetrics(nn.Module):
     def __init__(
         self,
-        metric_type: str,
+        metric: str,
     ):
         super().__init__()
-        self.__metric_type = metric_type
+        self.__metric = metric
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
 
@@ -556,14 +559,14 @@ class SegmentationMetrics(nn.Module):
         if isinstance(labels, Tensor):
             labels = labels.cpu().numpy()
 
-        if self.__metric_type == "dsc":
+        if self.__metric == "dsc":
             return dice(
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=False,
             )
 
-        if self.__metric_type == "msd":
+        if self.__metric == "msd":
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
@@ -571,7 +574,7 @@ class SegmentationMetrics(nn.Module):
                 voxel_spacing=g.NII_SPACING,
             )
 
-        if self.__metric_type == "hd95":
+        if self.__metric == "hd95":
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,

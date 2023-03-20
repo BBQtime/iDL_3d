@@ -22,18 +22,11 @@
         "min": 1e-06,
         "reset": true
     },
-    "select.scenario": [
-        {
-            "coronal": "equal.divide",
-            "sagittal": "equal.divide",
-            "transverse": "equal.divide"
-        },
-        {
-            "coronal": "gravity.center",
-            "sagittal": "gravity.center",
-            "transverse": "gravity.center"
-        }
-    ],
+    "select.scenario": {
+        "coronal": "gravity.center",
+        "sagittal": "gravity.center",
+        "transverse": "gravity.center"
+    },
     "select.step": {
         "coronal": "1",
         "sagittal": "1",
@@ -41,11 +34,11 @@
     },
     "weight": [
         {
-            "annotation": 3.0,
             "background": 0.2,
             "distance.step": 5,
+            "fp.fn": 3.0,
             "prev.round.decay": 0.5,
-            "slice": 2.0
+            "slice": 1.0
         }
     ]
 }

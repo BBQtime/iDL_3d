@@ -33,8 +33,8 @@ def patients_overview(
             key_word="round=",
         )
         # initialize score_dict of cur patient
-        for metric_type in g.METRICS_LIST:
-            score_dict[cur_patient_folder][metric_type] = []
+        for metric in g.METRICS:
+            score_dict[cur_patient_folder][metric] = []
         # iterate through round folders
         for cur_round_folder in round_folder_list:
             iter_json_list = g.get_sub_files(
@@ -50,9 +50,9 @@ def patients_overview(
                     best_iter_json,
                 )
             )
-            for metric_type in g.METRICS_LIST:
-                cur_score = best_score_dict[metric_type]["3d"]
-                score_dict[cur_patient_folder][metric_type].append(cur_score)
+            for metric in g.METRICS:
+                cur_score = best_score_dict[metric]["3d"]
+                score_dict[cur_patient_folder][metric].append(cur_score)
 
         # get tumor size of current patient
         label_nii_path = os.path.join(
@@ -89,22 +89,22 @@ def patients_overview(
     #     line_colors.append((cur_color, cur_color, 1))
 
     # draw line chart
-    for metric_type in g.METRICS_LIST:
-        print("draw " + metric_type + " plt:")
+    for metric in g.METRICS:
+        print("draw " + metric + " plt:")
         plt.figure(figsize=(10, 5))
         fig_title = "Performance of iDL ("
 
-        if metric_type == "dsc":
+        if metric == "dsc":
             plt.ylim(top=1.0)
             plt.ylabel("DSC")
             fig_title += "Dice similarity coefficient)"
 
-        elif metric_type == "msd":
+        elif metric == "msd":
             # plt.ylim(bottom=0)
             plt.ylabel("MSD (mm)")
             fig_title += "Mean surface distance)"
 
-        elif metric_type == "hd95":
+        elif metric == "hd95":
             # plt.ylim(bottom=0)
             plt.ylabel("HD95 (mm)")
             fig_title += "95% Hausdorff distance)"
@@ -125,8 +125,8 @@ def patients_overview(
             green = 1 - color_value
             blue = 0
             plt.plot(
-                range(len(score_dict[cur_patient_folder][metric_type])),
-                score_dict[cur_patient_folder][metric_type],
+                range(len(score_dict[cur_patient_folder][metric])),
+                score_dict[cur_patient_folder][metric],
                 "-o",
                 color=(red, green, blue),  # line_colors[color_idx],
             )
@@ -139,7 +139,7 @@ def patients_overview(
 
         # plt.plot(x1,y1,'ro-',x2,y2,'g+-',x3,y3,'b^-')
 
-        if metric_type == "dsc":
+        if metric == "dsc":
             plt.text(
                 x=0,
                 y=0.08,
@@ -147,7 +147,7 @@ def patients_overview(
                 fontsize=FIGURE_IDX_FONT_SIZE,
                 weight="bold",
             )
-        elif metric_type == "msd":
+        elif metric == "msd":
             plt.text(
                 x=2.9,
                 y=18.85,
@@ -160,7 +160,7 @@ def patients_overview(
             os.path.join(
                 g.PROJ_PATH,
                 "idl_figs",
-                "patients.overview." + metric_type + ".png",
+                "patients.overview." + metric + ".png",
             )
         )
 
@@ -199,14 +199,14 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
         select_step = g.str_to_list(hyper_dict["select.step"])
 
         # after all patients data recorded
-        for metric_type in g.METRICS_LIST:
+        for metric in g.METRICS:
 
             # transfer avg scores from dict to list
             score_list = []
 
-            for cur_round in avg_score_dict[cur_idl_id][metric_type]:
+            for cur_round in avg_score_dict[cur_idl_id][metric]:
 
-                cur_round_score = avg_score_dict[cur_idl_id][metric_type][cur_round][
+                cur_round_score = avg_score_dict[cur_idl_id][metric][cur_round][
                     "full.slices"
                 ]
 
@@ -227,23 +227,23 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 else:
                     score_list.append(cur_round_score)
 
-            avg_score_dict[cur_idl_id][metric_type] = score_list
+            avg_score_dict[cur_idl_id][metric] = score_list
 
-    for metric_type in g.METRICS_LIST:
+    for metric in g.METRICS:
         plt.figure(figsize=(10, 5))
         fig_title = "Performance of iDL ("
 
-        if metric_type == "dsc":
+        if metric == "dsc":
             plt.ylim(DSC_LOW_LIMIT, 1.0)
             plt.ylabel("DSC")
             fig_title += "Dice similarity coefficient)"
 
-        elif metric_type == "msd":
+        elif metric == "msd":
             plt.ylim(0.0, 6)
             plt.ylabel("MSD (mm)")
             fig_title += "Mean surface distance)"
 
-        elif metric_type == "hd95":
+        elif metric == "hd95":
             plt.ylim(0.0, 50)
             plt.ylabel("HD95 (mm)")
             fig_title += "95% Hausdorff distance)"
@@ -292,8 +292,8 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 plt_label = str(avg_score_dict[cur_idl_id][key_hyper])
 
             plt.plot(
-                range(len(avg_score_dict[cur_idl_id][metric_type])),  # x axis: round
-                avg_score_dict[cur_idl_id][metric_type],  # y axis: value
+                range(len(avg_score_dict[cur_idl_id][metric])),  # x axis: round
+                avg_score_dict[cur_idl_id][metric],  # y axis: value
                 color=line_colors[color_idx],
                 label=plt_label,
             )
@@ -305,7 +305,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
 
         plt.grid()
 
-        if metric_type == "dsc":
+        if metric == "dsc":
             plt.text(
                 x=0,
                 y=DSC_LOW_LIMIT + 0.03,
@@ -314,7 +314,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 weight="bold",
             )
             plt.legend(loc="lower right")
-        elif metric_type == "msd":
+        elif metric == "msd":
             plt.text(
                 x=0,
                 y=0.4,
@@ -323,12 +323,12 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 weight="bold",
             )
             plt.legend(loc="upper right")
-        elif metric_type == "hd95":
+        elif metric == "hd95":
             plt.legend(loc="upper right")
 
         img_path = g.create_folder(os.path.join(g.PROJ_PATH, "idl_figs"))
         img_path = os.path.join(
             img_path,
-            key_hyper + "." + metric_type + ".png",
+            key_hyper + "." + metric + ".png",
         )  # ".svg",
         plt.savefig(img_path)

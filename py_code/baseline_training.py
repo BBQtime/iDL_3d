@@ -328,12 +328,12 @@ class BaselineTraining(SharedTraining):
         train_remark: str = "",
         debug_mode: bool = False,
     ):
-        for hyper in self._load_group_hyper(g.HYPER_JSON_BASELINE):
+        for cur_hyper in self._load_group_hyper(g.HYPER_JSON_BASELINE):
 
             baseline_id = "baseline_" + self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=g.HYPER_JSON_BASELINE,
-                hyper=hyper,
+                hyper=cur_hyper,
                 debug_mode=debug_mode,
             )
             g.print_line()
@@ -349,14 +349,14 @@ class BaselineTraining(SharedTraining):
                 g.create_folder(cur_fold_folder)
 
                 self.__load_hyper(
-                    hyper=hyper,
+                    hyper=cur_hyper,
                     fold=cur_fold,
                     exist_cnn_path="",
                     debug_mode=debug_mode,
                 )
                 if cur_fold == 1:
                     g.print_line()
-                    self.__print_hyper(hyper)
+                    self.__print_hyper(cur_hyper)
 
                 g.print_line()
                 print("cross validation fold: {}".format(cur_fold))
@@ -370,22 +370,22 @@ class BaselineTraining(SharedTraining):
 
                 # save hyper before training
                 hyper_save_path = os.path.join(cur_hyper_folder, "hyper.json")
-                self.__save_hyper(hyper, hyper_save_path)
+                self.__save_hyper(cur_hyper, hyper_save_path)
 
                 # start training
-                hyper["time.spent"] = datetime.now()
-                self.__training(hyper, cur_fold_folder)
-                hyper["time.spent"] = datetime.now() - hyper["time.spent"]
-                hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
+                cur_hyper["time.spent"] = datetime.now()
+                self.__training(cur_hyper, cur_fold_folder)
+                cur_hyper["time.spent"] = datetime.now() - cur_hyper["time.spent"]
+                cur_hyper["time.spent"] = str(cur_hyper["time.spent"]).split(".", 2)[0]
 
                 # save hyper after training
-                self.__save_hyper(hyper, hyper_save_path)
+                self.__save_hyper(cur_hyper, hyper_save_path)
 
                 # clear time spent before next training
-                hyper.pop("time.spent")
+                cur_hyper.pop("time.spent")
 
                 # stop if no cross validation
-                if hyper["dataset"]["cross.valid"] is False:
+                if cur_hyper["dataset"]["cross.valid"] is False:
                     break
 
             # inference
@@ -420,7 +420,9 @@ class BaselineTraining(SharedTraining):
             cur_fold_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, cur_fold_folder
             )
-            hyper = g.load_json(os.path.join(cur_fold_folder, "hyper", "hyper.json"))
+            cur_hyper = g.load_json(
+                os.path.join(cur_fold_folder, "hyper", "hyper.json")
+            )
 
             for cur_epoch_folder in g.get_sub_folders(
                 cur_fold_folder, key_word="epoch="
@@ -436,25 +438,25 @@ class BaselineTraining(SharedTraining):
 
                 # load and print hyper
                 self.__load_hyper(
-                    hyper=hyper,
+                    hyper=cur_hyper,
                     fold=cur_fold,
                     exist_cnn_path=exist_cnn_path,
                     debug_mode=debug_mode,
                 )
                 if print_hyper:
                     g.print_line()
-                    self.__print_hyper(hyper)
+                    self.__print_hyper(cur_hyper)
                     g.print_line()
 
                 cur_score = NestedDict()
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric_type in g.METRICS_LIST:
-                        cur_score["median"][gtv][metric_type] = []
+                    for metric in g.METRICS:
+                        cur_score["median"][gtv][metric] = []
 
                 if dataset == "test":
-                    patient_list = hyper["test.loader"].dataset.patient_list
+                    patient_list = cur_hyper["test.loader"].dataset.patient_list
                 else:
-                    patient_list = hyper["valid.loader"].dataset.patient_list
+                    patient_list = cur_hyper["valid.loader"].dataset.patient_list
 
                 for cur_patient in tqdm(patient_list):
                     # if testset, create folder to save cur patient preds
@@ -467,23 +469,25 @@ class BaselineTraining(SharedTraining):
                         )
                         g.create_folder(cur_patient_folder)
 
-                    # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
+                    # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                     cur_patient_result = self._inference_single_patient(
-                        patient=cur_patient, hyper=hyper
+                        patient=cur_patient,
+                        hyper=cur_hyper,
+                        gtvt_only=False,
                     )
 
                     # save score of cur patient
                     for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        for metric_type in g.METRICS_LIST:
+                        for metric in g.METRICS:
                             # add cur patient result in avg_list
-                            cur_score["median"][gtv][metric_type].append(
-                                cur_patient_result[gtv][metric_type]
+                            cur_score["median"][gtv][metric].append(
+                                cur_patient_result[gtv][metric]
                             )
                             # record cur patient result if on test test
                             if dataset == "test":
                                 cur_score["patient={}".format(cur_patient)][gtv][
-                                    metric_type
-                                ] = cur_patient_result[gtv][metric_type]
+                                    metric
+                                ] = cur_patient_result[gtv][metric]
 
                     # save pred of cur patient
                     if dataset == "test":
@@ -505,11 +509,9 @@ class BaselineTraining(SharedTraining):
 
                 # get median score
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric_type in g.METRICS_LIST:
-                        median = cur_score["median"][gtv][metric_type]
-                        cur_score["median"][gtv][metric_type] = statistics.median(
-                            median
-                        )
+                    for metric in g.METRICS:
+                        median = cur_score["median"][gtv][metric]
+                        cur_score["median"][gtv][metric] = statistics.median(median)
 
                 # save score (test set)
                 if dataset == "test":

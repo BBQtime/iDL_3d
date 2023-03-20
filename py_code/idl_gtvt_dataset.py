@@ -166,17 +166,26 @@ class IDLGTVtDataSet:
                 os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
             )
 
-        # get annotation (keep weight=1 before distance map)
+        # get fp&fn (keep weight=1 before distance map)
         label_gtvs = np.maximum(
             self.__origin["label.gtvt"], self.__origin["label.gtvn"]
         )
         pred_gtvs = np.maximum(self.__origin["pred.gtvt"], self.__origin["pred.gtvn"])
-        fp = pred_gtvs * (1 - label_gtvs)
-        fn = (1 - pred_gtvs) * label_gtvs
-        annotation = (fp + fn) * np.where(slice_mask > 0, 1, 0)
-        annotation = annotation.astype(np.float32)
+        fp_fn = pred_gtvs * (1 - label_gtvs) + (1 - pred_gtvs) * label_gtvs
+        fp_fn = fp_fn * np.where(slice_mask > 0, 1, 0)
+        fp_fn = fp_fn.astype(np.float32)
+
+        if 1:
+            annotation = np.maximum(pred_gtvs, label_gtvs)
+            annotation = annotation * np.where(slice_mask > 0, 1, 0)
+            annotation = annotation.astype(np.float32)
+            if DEBUG_SAVE_IMG:
+                g.save_nii(
+                    annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii")
+                )
 
         # distance map
+        # distance_map = distance_transform_edt(np.logical_not(fp_fn))
         distance_map = distance_transform_edt(np.logical_not(annotation))
         distance_map = distance_map.astype(np.float32)
         distance_map = np.where(
@@ -196,13 +205,13 @@ class IDLGTVtDataSet:
                 distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii")
             )
 
-        # weighted annotation
-        annotation = annotation * slice_mask * (weight["annotation"] / weight["slice"])
+        # weighted fp&fn (after weight map)
+        fp_fn = fp_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
         if DEBUG_SAVE_IMG:
-            g.save_nii(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
+            g.save_nii(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
 
         # final_weight_map
-        weight_map = np.maximum(np.maximum(distance_map, slice_mask), annotation)
+        weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_fn)
         if DEBUG_SAVE_IMG:
             g.save_nii(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
 
@@ -357,7 +366,7 @@ class IDLGTVtDataSet:
 # # for testing
 # if 0:
 #     weight = dict()
-#     weight["annotation"] = 3
+#     weight["fp.fn"] = 3
 #     weight["distance.step"] = 10
 #     weight["slice"] = 2
 #     weight["prev.round.decay"] = 0.5

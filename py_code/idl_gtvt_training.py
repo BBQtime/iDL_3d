@@ -154,9 +154,9 @@ class IDLGTVtTraining(SharedTraining):
         if hyper["weight"]["slice"] < hyper["weight"]["background"]:
             hyper["weight"]["slice"] = hyper["weight"]["background"]
 
-        hyper["weight"]["annotation"] = float(hyper["weight"]["annotation"])
-        if hyper["weight"]["annotation"] < hyper["weight"]["slice"]:
-            hyper["weight"]["annotation"] = hyper["weight"]["slice"]
+        hyper["weight"]["fp.fn"] = float(hyper["weight"]["fp.fn"])
+        if hyper["weight"]["fp.fn"] < hyper["weight"]["slice"]:
+            hyper["weight"]["fp.fn"] = hyper["weight"]["slice"]
 
         hyper["weight"]["distance.step"] = int(hyper["weight"]["distance.step"])
         if hyper["weight"]["distance.step"] < 1:
@@ -417,21 +417,21 @@ class IDLGTVtTraining(SharedTraining):
 
         patient = Path(cur_round_folder).parent.name
 
-        # result structure: gtvs/gtvt/gvtn → pred/dsc/msd/hd95
+        # result structure: gtvt: {pred, dsc, msd, hd95}
         patient_result = self._inference_single_patient(
-            patient=patient[len("patient=") :], hyper=hyper
+            patient=patient[len("patient=") :], hyper=hyper, gtvt_only=True
         )
 
         # save score of cur patient
         idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
         score_json_path = os.path.join(idl_gtvt_folder, "score.json")
         score = g.load_json(score_json_path)
-        for metric_type in g.METRICS_LIST:
-            score[patient][metric_type][cur_round] = patient_result["gtvt"][metric_type]
+        for metric in g.METRICS:
+            score[patient][metric][cur_round] = patient_result["gtvt"][metric]
         g.save_json(score, score_json_path)
 
         # save pred of cur patient
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
+        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
             g.save_nii(
                 img=patient_result[gtv]["pred"],
                 save_path=os.path.join(cur_round_folder, "pred_{}.nii".format(gtv)),
@@ -578,10 +578,10 @@ class IDLGTVtTraining(SharedTraining):
         )
         idl_gtvt_score_path = os.path.join(idl_gtvt_folder, "score.json")
         idl_gtvt_score = g.load_json(idl_gtvt_score_path)
-        for metric_type in g.METRICS_LIST:
-            idl_gtvt_score["patient={}".format(patient)][metric_type][
+        for metric in g.METRICS:
+            idl_gtvt_score["patient={}".format(patient)][metric][
                 "round=00"
-            ] = baseline_score["patient={}".format(patient)]["gtvt"][metric_type]
+            ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
         g.save_json(idl_gtvt_score, idl_gtvt_score_path)
 
         g.print_line()
@@ -793,14 +793,14 @@ class IDLGTVtTraining(SharedTraining):
 
         # add all patients score in to a list
         for patient in score:
-            for metric in g.METRICS_LIST:
+            for metric in g.METRICS:
                 for cur_round in score[patient][metric]:
                     if median[metric][cur_round] == {}:
                         median[metric][cur_round] = []
                     median[metric][cur_round].append(score[patient][metric][cur_round])
 
         # calculate median score
-        for metric in g.METRICS_LIST:
+        for metric in g.METRICS:
             for cur_round in median[metric]:
                 score["median"][metric][cur_round] = statistics.median(
                     median[metric][cur_round]

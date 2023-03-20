@@ -256,7 +256,7 @@ def to_pct(input_num: float):
     return output_str
 
 
-def shuffle_list(input_list: list, seed: int):
+def shuffle_list(input_list: list, seed: int) -> list:
     # sort before shuffle, make sure to get same list using same seed
     input_list = natsorted(input_list)
     if seed is not None:
@@ -276,7 +276,7 @@ def __get_sub_items(
     shuffle: bool,
     seed: int,
     select: str,
-):
+) -> list:
     if not os.path.exists(folder_path):
         exit_app('input folder path "{}" does not exist'.format(folder_path))
 
@@ -315,7 +315,7 @@ def get_sub_items(
     return_full_path: bool = False,
     shuffle: bool = False,
     seed: int = None,
-):
+) -> list:
     sub_list = __get_sub_items(
         folder_path=folder_path,
         return_full_path=return_full_path,
@@ -333,7 +333,7 @@ def get_sub_files(
     return_full_path: bool = False,
     shuffle: bool = False,
     seed: int = None,
-):
+) -> list:
     sub_list = __get_sub_items(
         folder_path=folder_path,
         return_full_path=return_full_path,
@@ -607,6 +607,7 @@ def walk_sub_folders(folder_path: str, key_word: str = ""):
 def delete_debug_results():
     for cur_folder in walk_sub_folders(TRAIN_RESULTS_FOLDER, key_word="delete.this"):
         delete_folder(cur_folder)
+    clear_folder(os.path.join(PROJ_PATH, "debug"))
 
 
 PROJ_PATH = None
@@ -622,7 +623,7 @@ HYPER_JSON_BASELINE = None
 HYPER_JSON_IDL_GTVT = None
 HYPER_JSON_IDL_GTVN = None
 TRAIN_RESULTS_FOLDER = None
-METRICS_LIST = None
+METRICS = None
 
 
 def __global_init():
@@ -639,7 +640,7 @@ def __global_init():
     global HYPER_JSON_IDL_GTVT
     global HYPER_JSON_IDL_GTVN
     global TRAIN_RESULTS_FOLDER
-    global METRICS_LIST
+    global METRICS
 
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
     __json_data = load_json(os.path.join(PROJ_PATH, "settings.json"))
@@ -700,7 +701,7 @@ def __global_init():
     HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvn"])
     TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
 
-    METRICS_LIST = ["dsc", "msd", "hd95"]
+    METRICS = ["dsc", "msd", "hd95"]
 
 
 __global_init()
