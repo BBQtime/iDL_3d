@@ -50,7 +50,7 @@ class IDLGTVtTraining(SharedTraining):
     # reset cnn/optimizer/scheduler before next patient
     def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
         # reload cnn
-        super()._load_cnn(hyper, baseline_cnn_path)
+        super()._load_cnn(hyper=hyper, cnn_path=baseline_cnn_path)
 
         # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(
@@ -70,7 +70,7 @@ class IDLGTVtTraining(SharedTraining):
             min_lr=hyper["lr"]["min"],
         )
 
-    def __load_hyper(
+    def _load_hyper(
         self, hyper: dict, baseline_cnn_path: str, debug_mode: bool = False
     ):
         if debug_mode:
@@ -170,12 +170,9 @@ class IDLGTVtTraining(SharedTraining):
         hyper["patients"] = self.__load_dataset(debug_mode)
 
         # load shared hyper
-        super()._load_hyper(
-            hyper=hyper,
-            exist_cnn_path=baseline_cnn_path,
-        )
+        super()._load_hyper(hyper=hyper, cnn_path=baseline_cnn_path)
 
-        # run this after shared hyper loaded, loss parameters are needed
+        # run this after shared hyper loaded, because loss parameters are needed
         hyper["loss"]["func"] = UnifiedFocalLoss(
             asym=hyper["loss"]["asym"],
             weight=hyper["loss"]["weight"],
@@ -191,6 +188,7 @@ class IDLGTVtTraining(SharedTraining):
         # debug mode, only 1 or 2 patients
         if debug_mode:
             test_patients = test_patients[:1]
+
         return test_patients
 
     def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
@@ -252,7 +250,7 @@ class IDLGTVtTraining(SharedTraining):
     #             hyper[i] = idl_hyper_dict[i]
 
     #     # load and print hyper
-    #     self.__load_hyper(
+    #     self._load_hyper(
     #         hyper=hyper,
     #         baseline_cnn_path=baseline_cnn_path,
     #         debug_mode=debug_mode,
@@ -431,19 +429,11 @@ class IDLGTVtTraining(SharedTraining):
         g.save_json(score, score_json_path)
 
         # save pred of cur patient
-        for gtv in ["gtvt"]:  # ["gtvs", "gtvt", "gtvn"]:
-            g.save_nii(
-                img=patient_result[gtv]["pred"],
-                save_path=os.path.join(cur_round_folder, "pred_{}.nii".format(gtv)),
-                spacing=g.NII_SPACING,
-            )
-            # g.save_nii(
-            #     img=g.binarize_img(patient_result[gtv]["pred"]),
-            #     save_path=os.path.join(
-            #         cur_round_folder, "pred_{}_binary.nii".format(gtv)
-            #     ),
-            #     spacing=g.NII_SPACING,
-            # )
+        g.save_nii(
+            img=patient_result["gtvt"]["pred"],
+            save_path=os.path.join(cur_round_folder, "pred_gtvt.nii"),
+            spacing=g.NII_SPACING,
+        )
 
     def __training_cur_round(
         self,
@@ -542,7 +532,12 @@ class IDLGTVtTraining(SharedTraining):
                 g.save_json(loss_dict, loss_json_path)
                 self.__draw_loss_fig(idl_gtvt_folder)
 
-        # current round finished
+        # current round idl finished
+        cnn_save_path = os.path.join(
+            cur_round_folder, Path(cur_round_folder).name + ".pt"
+        )
+        self._save_cnn(hyper, cnn_save_path)
+
         # inference
         self.__inference_cur_round(cur_round_folder=cur_round_folder, hyper=hyper)
 
@@ -652,8 +647,14 @@ class IDLGTVtTraining(SharedTraining):
             ),
         )
 
-    def draw_loss_fig(self, baseline_id: str, idl_gtvt_id: str):
-        idl_gtvt_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_gtvt_id)
+    def draw_loss_fig(self, idl_gtvt_id: str):
+        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id):
+            # remove "/" if str endswith it
+            if i.endswith("/"):
+                i = i[:-1]
+            if i.endswith(idl_gtvt_id):
+                idl_gtvt_folder = i
+                break
         self.__draw_loss_fig(idl_gtvt_folder)
 
     def __draw_loss_fig(self, idl_gtvt_folder: str):
@@ -728,10 +729,8 @@ class IDLGTVtTraining(SharedTraining):
             )[0]
 
             # load and print hyper
-            self.__load_hyper(
-                hyper=hyper,
-                baseline_cnn_path=baseline_cnn_path,
-                debug_mode=debug_mode,
+            self._load_hyper(
+                hyper=hyper, baseline_cnn_path=baseline_cnn_path, debug_mode=debug_mode
             )
             g.print_line()
             self.__print_hyper(hyper)
@@ -764,10 +763,7 @@ class IDLGTVtTraining(SharedTraining):
 
                 # reset cnn/optimizer/scheduler before next patient
                 if patient != hyper["patients"][-1]:
-                    self.__reset_cnn(
-                        hyper=hyper,
-                        baseline_cnn_path=baseline_cnn_path,
-                    )
+                    self.__reset_cnn(hyper=hyper, baseline_cnn_path=baseline_cnn_path)
 
             # record total time spent
             hyper["time.spent"]["total"] = datetime.now() - hyper["time.spent"]["total"]
@@ -784,9 +780,9 @@ class IDLGTVtTraining(SharedTraining):
 
             self.__save_hyper(hyper, hyper_save_path)
 
-            self.__record_median_score(idl_gtvt_folder)
+            self.__calculate_median_score(idl_gtvt_folder)
 
-    def __record_median_score(self, idl_gtvt_folder: str):
+    def __calculate_median_score(self, idl_gtvt_folder: str):
         score_json_path = os.path.join(idl_gtvt_folder, "score.json")
         score = g.load_json(score_json_path)
         median = NestedDict()
@@ -806,3 +802,42 @@ class IDLGTVtTraining(SharedTraining):
                     median[metric][cur_round]
                 )
         g.save_json(data=score, path=os.path.join(score_json_path))
+
+    def inference(self, idl_gtvt_id: str):
+        g.print_line()
+        print("inference: {}".format(idl_gtvt_id))
+
+        # find idl gtvt folder
+        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id):
+            # remove "/" if str endswith it
+            if i.endswith("/"):
+                i = i[:-1]
+            if i.endswith(idl_gtvt_id):
+                idl_gtvt_folder = i
+                break
+
+        # loop through patients folder
+        patient_list = g.get_sub_folders(
+            os.path.join(idl_gtvt_folder, "patients"),
+            key_word="patient=",
+        )
+        for cur_patient in tqdm(patient_list):
+            cur_patient_folder = os.path.join(idl_gtvt_folder, "patients", cur_patient)
+
+            # loop through each round
+            for cur_round_folder in g.get_sub_folders(
+                cur_patient_folder, key_word="round=", return_full_path=True
+            ):
+                # load current round cnn
+                cur_round_cnn_path = g.get_sub_files(
+                    cur_round_folder, key_word=".pt", return_full_path=True
+                )
+                cur_round_cnn_path = cur_round_cnn_path[0]
+                hyper = NestedDict()
+                self._load_cnn(hyper=hyper, cnn_path=cur_round_cnn_path)
+
+                self.__inference_cur_round(
+                    cur_round_folder=cur_round_folder, hyper=hyper
+                )
+
+        self.__calculate_median_score(idl_gtvt_folder)

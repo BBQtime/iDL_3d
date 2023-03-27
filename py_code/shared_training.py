@@ -19,17 +19,16 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 class SharedTraining:
+    def __init__(self):
+        # segmentation metrics
+        self._metrics = NestedDict()
+        for metric in g.METRICS:
+            self._metrics[metric] = SegmentationMetrics(metric).to(g.DEVICE)
 
     # new hyper are loaded from group of new json files
     # baseline hyper are loaded from exist json file together with exist cnn
     # baseline hyper (cnn/dataset_pct/dataset_seed) only used for iDL
-    def _load_hyper(self, hyper: dict, exist_cnn_path: str = ""):
-        # segmentation metrics
-        hyper["metrics"] = NestedDict()
-        for metric in g.METRICS:
-            hyper["metrics"][metric] = SegmentationMetrics(metric).to(
-                g.DEVICE
-            )
+    def _load_hyper(self, hyper: dict, cnn_path: str = "") -> None:
 
         # device name
         if torch.cuda.device_count() < 1:
@@ -95,7 +94,7 @@ class SharedTraining:
         hyper["loss"]["asym"] = bool(hyper["loss"]["asym"])
 
         # load cnn
-        self._load_cnn(hyper, exist_cnn_path)
+        self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
         # optimizer (no need to move to cuda)
         if isinstance(hyper["lr"]["actual"], list):
@@ -118,9 +117,9 @@ class SharedTraining:
         )
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_cnn(self, hyper: NestedDict, exist_cnn_path: str = ""):
+    def _load_cnn(self, hyper: NestedDict, cnn_path: str = ""):
         # new model
-        if exist_cnn_path == "":
+        if cnn_path == "" or cnn_path is None:
             hyper["cnn"] = UNetPPSlim(
                 in_chan=4, out_chan=3, dropout=hyper["dropout"]
             ).to(g.DEVICE)
@@ -132,11 +131,11 @@ class SharedTraining:
                 hyper["cnn"] = UNetPPSlim(
                     in_chan=4, out_chan=3, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
-                hyper["cnn"].load_state_dict(torch.load(exist_cnn_path))
+                hyper["cnn"].load_state_dict(torch.load(cnn_path))
 
             # load entire cnn
             else:
-                hyper["cnn"] = torch.load(exist_cnn_path).to(g.DEVICE)
+                hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
 
         # set multi-GPU
         if g.used_gpu_count() > 1:
@@ -340,7 +339,7 @@ class SharedTraining:
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             if gtv == "gtvt" or not gtvt_only:
                 for metric in g.METRICS:
-                    result[gtv][metric] = hyper["metrics"][metric](
+                    result[gtv][metric] = self._metrics[metric](
                         result[gtv]["pred"], origin[gtv]
                     )
         return result

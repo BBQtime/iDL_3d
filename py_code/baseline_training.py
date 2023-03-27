@@ -38,11 +38,11 @@ class BaselineTraining(SharedTraining):
 
         return train_patients, valid_patients, test_patients
 
-    def __load_hyper(
+    def _load_hyper(
         self,
         hyper: NestedDict,
         fold: int,
-        exist_cnn_path: str = "",
+        cnn_path: str = "",  # make cnn_path == "" will load a new cnn
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # cross valid folds
@@ -100,10 +100,7 @@ class BaselineTraining(SharedTraining):
         hyper["augment"]["pct"] = g.check_limit(hyper["augment"]["pct"], 0, 1)
 
         # load shared hyper parameters
-        super()._load_hyper(
-            hyper=hyper,
-            exist_cnn_path=exist_cnn_path,
-        )
+        super()._load_hyper(hyper=hyper, cnn_path=cnn_path)
 
         # run this after shared hyper loaded, loss parameters are needed
         hyper["loss"]["func"] = UnifiedFocalLoss(
@@ -348,10 +345,10 @@ class BaselineTraining(SharedTraining):
                 )
                 g.create_folder(cur_fold_folder)
 
-                self.__load_hyper(
+                self._load_hyper(
                     hyper=cur_hyper,
                     fold=cur_fold,
-                    exist_cnn_path="",
+                    cnn_path="",  # cnn_path="" will create a new cnn
                     debug_mode=debug_mode,
                 )
                 if cur_fold == 1:
@@ -430,17 +427,17 @@ class BaselineTraining(SharedTraining):
                 cur_epoch = int(cur_epoch_folder[len("epoch=") :])
                 print("current epoch: ", cur_epoch)
                 cur_epoch_folder = os.path.join(cur_fold_folder, cur_epoch_folder)
-                exist_cnn_path = g.get_sub_files(
+                cur_cnn_path = g.get_sub_files(
                     os.path.join(cur_epoch_folder, "baseline"),
                     key_word=".pt",
                     return_full_path=True,
                 )[0]
 
                 # load and print hyper
-                self.__load_hyper(
+                self._load_hyper(
                     hyper=cur_hyper,
                     fold=cur_fold,
-                    exist_cnn_path=exist_cnn_path,
+                    cnn_path=cur_cnn_path,
                     debug_mode=debug_mode,
                 )
                 if print_hyper:
@@ -499,15 +496,8 @@ class BaselineTraining(SharedTraining):
                                 ),
                                 spacing=g.NII_SPACING,
                             )
-                            # g.save_nii(
-                            #     img=g.binarize_img(cur_patient_result[gtv]["pred"]),
-                            #     save_path=os.path.join(
-                            #         cur_patient_folder, "pred_{}_binary.nii".format(gtv)
-                            #     ),
-                            #     spacing=g.NII_SPACING,
-                            # )
 
-                # get median score
+                # calculate median score
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in g.METRICS:
                         median = cur_score["median"][gtv][metric]
