@@ -5,7 +5,6 @@
         "times": 4,
         "up.limit": 3
     },
-    "batch.size": 2,
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,

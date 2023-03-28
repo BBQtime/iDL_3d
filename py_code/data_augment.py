@@ -1,26 +1,29 @@
 import imgaug as ia
+import global_elems as g
 from imgaug import augmenters as iaa
 from numpy import ndarray
+from custom import Dict
 
 
 class DataAugmentation:
-    def __init__(
-        self,
-        methods: list = [],  # list of str
-        pct: float = 0,
-        low_limit: int = 0,
-        up_limit: int = 0,
-    ):
+    def __init__(self, param: Dict = {}):
+
+        # = None means no data augmentation
         self.__transform = None
 
-        if pct <= 0 or methods == []:
+        # no augmentation parameter
+        if len(param) == 0:
             return
-        if up_limit < low_limit:
-            up_limit = low_limit
-        if pct > 1:
-            pct = 1
 
-        augment_dict = dict()
+        # no augmentation needed
+        if param["pct"] <= 0 or param["methods"] == []:
+            return
+
+        # augmentation needed
+        # convert self.__transform to list to save values
+        self.__transform = []
+
+        augment_dict = Dict()
         # iaa.ElasticTransformation():
         # alpha controls the strength of the displacement:
         # higher alpha mean that pixels are moved further.
@@ -37,16 +40,14 @@ class DataAugmentation:
         augment_dict["flip.lr"] = iaa.Fliplr(1.0)
         augment_dict["flip.ud"] = iaa.Flipud(1.0)
 
-        for i in ["elastic", "scale", "translate", "rotate", "flip.lr", "flip.ud"]:
-            if i in methods:
-                if self.__transform is None:
-                    self.__transform = []
+        for i in g.get_dict_keys(augment_dict):
+            if i in param["methods"]:
                 self.__transform.append(augment_dict[i])
 
         self.__transform = iaa.SomeOf(
-            (low_limit, up_limit), self.__transform, random_order=True
+            (param["low.limit"], param["up.limit"]), self.__transform, random_order=True
         )
-        self.__transform = iaa.Sometimes(pct, self.__transform)
+        self.__transform = iaa.Sometimes(param["pct"], self.__transform)
 
     def transform(self, input_data: ndarray, seed: int) -> ndarray:
         if self.__transform is None:

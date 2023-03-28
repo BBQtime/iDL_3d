@@ -3,7 +3,7 @@ from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import global_elems as g
-from nested_dict import NestedDict
+from custom import Dict
 
 FIGURE_IDX_FONT_SIZE = 20
 DSC_LOW_LIMIT = 0.6
@@ -14,11 +14,11 @@ def patients_overview(
 ):
     train_result_folder = os.path.join(g.IDL_RESULTS_FOLDER, idl_id)
 
-    score_dict = NestedDict()
+    score_dict = Dict()
 
     # plt.style.use("bmh")  # put this line before drawing figure
 
-    patient_tumor_size_dict = NestedDict()
+    patient_tumor_size_dict = Dict()
     for cur_patient_folder in g.get_sub_folders(
         train_result_folder, key_word="patient="
     ):
@@ -185,7 +185,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
     g.print_line()
 
     # save avg 3d score of dsc/msd/hd95
-    avg_score_dict = NestedDict()
+    avg_score_dict = Dict()
 
     for cur_idl_id in tqdm(idl_id_list):
 

@@ -13,7 +13,7 @@ from idl_gtvt_dataset import IDLGTVtDataSet
 from typing import Union
 from unet_pp_slim import UNetPPSlim
 from datetime import datetime
-from nested_dict import NestedDict
+from custom import Dict
 from baseline_dataset import BaselineDataSet
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -21,14 +21,14 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 class SharedTraining:
     def __init__(self):
         # segmentation metrics
-        self._metrics = NestedDict()
+        self._metrics = Dict()
         for metric in g.METRICS:
             self._metrics[metric] = SegmentationMetrics(metric).to(g.DEVICE)
 
     # new hyper are loaded from group of new json files
     # baseline hyper are loaded from exist json file together with exist cnn
     # baseline hyper (cnn/dataset_pct/dataset_seed) only used for iDL
-    def _load_hyper(self, hyper: dict, cnn_path: str = "") -> None:
+    def _load_hyper(self, hyper: Dict, cnn_path: str = "") -> None:
 
         # device name
         if torch.cuda.device_count() < 1:
@@ -37,71 +37,38 @@ class SharedTraining:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper["dropout"] = float(hyper["dropout"])
-        hyper["dropout"] = g.check_limit(hyper["dropout"], 0, 0.9)
-
+        hyper["dropout"].set_range(0, 0.9)
         # batch size
-        # new training, hyper["batch.size"] is a number
-        # inference, hyper["batch.size"] is a dict
-        if not isinstance(hyper["batch.size"], dict):
-            hyper["batch.size"] = {"init": int(hyper["batch.size"])}
-        hyper["batch.size"]["init"] = g.check_limit(
-            hyper["batch.size"]["init"], 1, None
-        )
-
-        # actual batch size
+        hyper["batch.size"] = g.MAX_BATCH_SIZE_PER_GPU
         if g.used_gpu_count() > 1:
-            hyper["batch.size"]["actual"] = int(
-                hyper["batch.size"]["init"] * g.used_gpu_count()
-            )
-        else:
-            hyper["batch.size"]["actual"] = int(hyper["batch.size"]["init"])
+            hyper["batch.size"] *= g.used_gpu_count()
 
-        # lr decay factor
-        hyper["lr"]["decay.factor"] = float(hyper["lr"]["decay.factor"])
         # lr_decay_factor=1 will cause error
-        hyper["lr"]["decay.factor"] = g.check_limit(
-            hyper["lr"]["decay.factor"], 0.01, 0.9999999999
-        )
+        hyper["lr"]["decay.factor"].set_range(g.EPS, 1 - g.EPS)
 
         # augment methods
-        hyper["augment"]["methods"] = str(hyper["augment"]["methods"]).lower()
-        if hyper["augment"]["methods"] == "":
-            hyper["augment"]["methods"] = []
-        else:
-            hyper["augment"]["methods"] = g.str_to_list(hyper["augment"]["methods"])
+        hyper["augment"]["methods"] = g.str_to_list(hyper["augment"]["methods"])
 
         # augment lower/upper limit
-        hyper["augment"]["low.limit"] = int(hyper["augment"]["low.limit"])
-        hyper["augment"]["low.limit"] = g.check_limit(
-            hyper["augment"]["low.limit"], 1, 4
-        )
-
-        hyper["augment"]["up.limit"] = int(hyper["augment"]["up.limit"])
-        hyper["augment"]["up.limit"] = g.check_limit(
-            hyper["augment"]["up.limit"], hyper["augment"]["low.limit"], 4
-        )
+        hyper["augment"]["up.limit"].set_range(1, len(hyper["augment"]["methods"]))
+        hyper["augment"]["low.limit"].set_range(1, hyper["augment"]["up.limit"])
 
         # loss function parameters
-        hyper["loss"]["weight"] = float(hyper["loss"]["weight"])
-        hyper["loss"]["weight"] = g.check_limit(hyper["loss"]["weight"], 0, 1)
+        hyper["loss"]["weight"].set_range(0, 1)
+        hyper["loss"]["delta"].set_range(0, 1)
 
-        hyper["loss"]["delta"] = float(hyper["loss"]["delta"])
-        hyper["loss"]["delta"] = g.check_limit(hyper["loss"]["delta"], 0, 1)
-
-        hyper["loss"]["gamma"] = float(hyper["loss"]["gamma"])
-
-        hyper["loss"]["asym"] = bool(hyper["loss"]["asym"])
+        # Change Int/Float/Str/List into int/float/str/list
+        hyper.revert_data_type()
 
         # load cnn
         self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
         # optimizer (no need to move to cuda)
         if isinstance(hyper["lr"]["actual"], list):
-            actual_lr = hyper["lr"]["actual"][0]
+            lr = hyper["lr"]["actual"][0]
         else:
-            actual_lr = hyper["lr"]["actual"]
-        hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=actual_lr)
+            lr = hyper["lr"]["actual"]
+        hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=lr)
 
         # scheduler
         # (1) mode = min(default): lr will reduce when the watched parameter stops decreasing
@@ -117,7 +84,7 @@ class SharedTraining:
         )
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_cnn(self, hyper: NestedDict, cnn_path: str = ""):
+    def _load_cnn(self, hyper: Dict, cnn_path: str = ""):
         # new model
         if cnn_path == "" or cnn_path is None:
             hyper["cnn"] = UNetPPSlim(
@@ -141,8 +108,8 @@ class SharedTraining:
         if g.used_gpu_count() > 1:
             hyper["cnn"] = nn.DataParallel(hyper["cnn"]).to(g.DEVICE)
 
-    def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
-        simple_hyper = NestedDict()
+    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+        simple_hyper = Dict()
         for i in hyper:
             if i == "metrics":
                 pass
@@ -176,22 +143,22 @@ class SharedTraining:
 
         return simple_hyper
 
-    def _print_hyper(self, hyper: NestedDict):
+    def _print_hyper(self, hyper: Dict):
         simple_hyper = self.__get_simple_hyper(hyper)
         for key, value in simple_hyper.items():
             print(key + ":", value)
 
-    def _save_hyper(self, hyper: NestedDict, json_path: str):
+    def _save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self.__get_simple_hyper(hyper)
         g.save_json(data=simple_hyper, path=json_path)
 
     # split dataset and save result into json file
-    def _split_dataset(self) -> dict:
-        dataset_split = g.load_json(g.DATASET_SPLITTING_JSON)
+    def _split_dataset(self) -> Dict:
+        dataset_split = g.load_json(g.DATASET_SPLIT_JSON)
         train_patients = []
 
         for fold in g.get_dict_keys(dataset_split):
-            if fold != "test.patients":
+            if fold != "test.set":
                 train_patients += g.str_to_list(dataset_split[fold])
                 dataset_split.pop(fold)
 
@@ -207,10 +174,10 @@ class SharedTraining:
                 )
                 train_patients = train_patients[fold_len:]
 
-        g.save_json(dataset_split, g.DATASET_SPLITTING_JSON)
+        g.save_json(dataset_split, g.DATASET_SPLIT_JSON)
         return dataset_split
 
-    def _save_cnn(self, hyper: NestedDict, save_path: str):
+    def _save_cnn(self, hyper: Dict, save_path: str):
         if not save_path.endswith(".pt"):
             save_path += ".pt"
 
@@ -233,7 +200,7 @@ class SharedTraining:
         self,
         train_remark: str,
         hyper_json_path: str,
-        hyper: NestedDict,
+        hyper: Dict,
         debug_mode: bool,
     ) -> str:
 
@@ -265,29 +232,29 @@ class SharedTraining:
         return train_id
 
     def _optimize_batch_size(
-        self, hyper: NestedDict, dataset: Union[BaselineDataSet, IDLGTVtDataSet]
+        self, hyper: Dict, dataset: Union[BaselineDataSet, IDLGTVtDataSet]
     ):
         dataset_len = dataset.__len__()
-        if dataset_len > hyper["batch.size"]["actual"]:
-            hyper["batch.size"]["actual"] = math.ceil(
-                dataset_len / (math.ceil(dataset_len / hyper["batch.size"]["actual"]))
+        if dataset_len > hyper["batch.size"]:
+            hyper["batch.size"] = math.ceil(
+                dataset_len / (math.ceil(dataset_len / hyper["batch.size"]))
             )
         else:
-            hyper["batch.size"]["actual"] = dataset_len
+            hyper["batch.size"] = dataset_len
 
     def _inference_single_patient(
         self,
         patient: str,
-        hyper: NestedDict,
+        hyper: Dict,
         gtvt_only: bool,
         unetpp_output: int = 3,
-    ) -> NestedDict:
+    ) -> Dict:
 
         # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-        result = NestedDict()
+        result = Dict()
 
         dataset = BaselineDataSet(patient_list=[patient])
-        origin = NestedDict()
+        origin = Dict()
 
         # load gtvt
         origin["gtvt"] = g.load_nii(
@@ -365,7 +332,7 @@ class SharedTraining:
         # get all cartesian products of hyper dict values
         for cur_values in product(*origin_hyper_dict.values()):
             # create current hyper param combination
-            cur_hyper = NestedDict()
+            cur_hyper = Dict()
             for i in range(len(cur_values)):
                 # copy the value if it is a dict, avoid using same memory
                 if isinstance(cur_values[i], dict):

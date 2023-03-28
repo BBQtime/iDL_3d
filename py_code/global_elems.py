@@ -1,4 +1,5 @@
 import os
+import sys
 import warnings
 import shutil
 import torch
@@ -12,8 +13,7 @@ import cv2
 import cc3d
 import numpy as np
 import SimpleITK as sitk
-import imgaug as ia
-from nested_dict import NestedDict
+from custom import Dict
 from numpy import ndarray
 from torch import Tensor
 from typing import Union
@@ -114,13 +114,17 @@ def save_json(data: dict, path: str):
 
 
 # after json loaded, key(int) will become string
-def load_json(path: str) -> dict:
+def load_json(path: str) -> Dict:
     with open(path, mode="r") as json_file:
         data = json.load(json_file)
-    data = NestedDict(data)
+    data = Dict(data)
     # call "save_json" to sort data by key
     save_json(data=data, path=path)
     return data
+
+
+def find_identical_elem(list_1: list, list_2: list):
+    return set(list_1) & set(list_2)
 
 
 # [1,2,3,4] -> "1,2,3,4"
@@ -370,20 +374,6 @@ def clear_gpu_cache():
         return False
 
 
-def check_limit(
-    input_value: Union[float, int],
-    low_limit: Union[float, int] = None,
-    up_limit: Union[float, int] = None,
-):
-    if low_limit is not None:
-        if input_value < low_limit:
-            input_value = low_limit
-    if up_limit is not None:
-        if input_value > up_limit:
-            input_value = up_limit
-    return input_value
-
-
 def list_remove_duplicates(input_list: list):
     return list(dict.fromkeys(input_list))
 
@@ -434,10 +424,10 @@ def load_nii(
 
 # max size: 89 283 280
 def central_crop(img: ndarray, shape: tuple) -> ndarray:
-    in_shape = NestedDict()
+    in_shape = Dict()
     in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
-    out_shape = NestedDict()
+    out_shape = Dict()
     out_shape["d"] = shape[0]
     out_shape["h"] = shape[1]
     out_shape["w"] = shape[2]
@@ -447,7 +437,7 @@ def central_crop(img: ndarray, shape: tuple) -> ndarray:
         or in_shape["h"] > out_shape["h"]
         or in_shape["w"] > out_shape["w"]
     ):
-        start_point = NestedDict()
+        start_point = Dict()
 
         for i in ["w", "h", "d"]:
             if in_shape[i] > out_shape[i]:
@@ -466,15 +456,15 @@ def central_crop(img: ndarray, shape: tuple) -> ndarray:
 
 
 def central_pad(img: ndarray, shape: tuple) -> ndarray:
-    in_shape = NestedDict()
+    in_shape = Dict()
     in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
-    out_shape = NestedDict()
+    out_shape = Dict()
     out_shape["d"] = shape[0]
     out_shape["h"] = shape[1]
     out_shape["w"] = shape[2]
 
-    pad = NestedDict()
+    pad = Dict()
     for i in ["w", "h", "d"]:
         pad[i][0] = 0
         pad[i][1] = 0
@@ -603,13 +593,15 @@ def delete_debug_results():
 
 
 PROJ_PATH = None
+EPS = None
 DEVICE = None
 NUM_WORKERS = None
+MAX_BATCH_SIZE_PER_GPU = None
 IMG_SHAPE = None
 NII_SPACING = None
 CNN_STATE_DICT_ONLY = None
 DATASET_FOLDER = None
-DATASET_SPLITTING_JSON = None
+DATASET_SPLIT_JSON = None
 DATASET_K_FOLDS = None
 HYPER_JSON_BASELINE = None
 HYPER_JSON_IDL_GTVT = None
@@ -620,13 +612,15 @@ METRICS = None
 
 def __global_init():
     global PROJ_PATH
+    global EPS
     global DEVICE
     global NUM_WORKERS
+    global MAX_BATCH_SIZE_PER_GPU
     global IMG_SHAPE
     global NII_SPACING
     global CNN_STATE_DICT_ONLY
     global DATASET_FOLDER
-    global DATASET_SPLITTING_JSON
+    global DATASET_SPLIT_JSON
     global DATASET_K_FOLDS
     global HYPER_JSON_BASELINE
     global HYPER_JSON_IDL_GTVT
@@ -636,6 +630,8 @@ def __global_init():
 
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
     __json_data = load_json(os.path.join(PROJ_PATH, "settings.json"))
+
+    EPS = sys.float_info.epsilon
 
     # use CPU
     if __json_data["use.gpu"] is False:
@@ -663,14 +659,16 @@ def __global_init():
 
     # Windows or Linux
     if platform.system().lower() == "windows":
+        DATASET_FOLDER = __json_data["dataset.folder.win"]
         NUM_WORKERS = 0
 
     elif platform.system().lower() == "linux":
+        DATASET_FOLDER = __json_data["dataset.folder.linux"]
         NUM_WORKERS = __json_data["num.workers"]
 
     # img size
     IMG_SHAPE = []
-    for i in str_to_list(__json_data["img.size"]):
+    for i in str_to_list(__json_data["img.shape"]):
         # str_to_list will return a list of str
         # change all items to int
         IMG_SHAPE.append(int(i))
@@ -684,10 +682,9 @@ def __global_init():
 
     # Pytorch save/load entire cnn or weight only
     CNN_STATE_DICT_ONLY = __json_data["cnn.state.dict.only"]
-
-    DATASET_FOLDER = __json_data["dataset.folder"]
-    DATASET_SPLITTING_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
+    MAX_BATCH_SIZE_PER_GPU = __json_data["max.batch.size.per.gpu"]
     DATASET_K_FOLDS = __json_data["dataset.k.folds"]
+    DATASET_SPLIT_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
     HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __json_data["hyper.json.baseline"])
     HYPER_JSON_IDL_GTVT = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvt"])
     HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvn"])

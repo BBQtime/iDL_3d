@@ -5,7 +5,7 @@ import math
 import statistics
 from tqdm import tqdm
 from datetime import datetime
-from nested_dict import NestedDict
+from custom import Dict
 from torch.utils.data import DataLoader
 from shared_training import SharedTraining
 from matplotlib import pyplot as plt
@@ -14,95 +14,84 @@ from loss_func import UnifiedFocalLoss
 
 
 class BaselineTraining(SharedTraining):
-    def __load_dataset(self, hyper: NestedDict, fold: int, debug_mode: bool = False):
-        json_data = g.load_json(g.DATASET_SPLITTING_JSON)
+    def __load_dataset(self, fold: int, debug_mode: bool = False):
+        json_data = g.load_json(g.DATASET_SPLIT_JSON)
 
         if len(json_data) - 1 != g.DATASET_K_FOLDS:
             json_data = super()._split_dataset()
 
-        test_patients = g.str_to_list(json_data["test.patients"])
+        test_patients = g.str_to_list(json_data["test.set"])
         valid_patients = g.str_to_list(json_data["fold.{}".format(fold)])
 
         train_patients = []
         for i in json_data:
-            if i != "test.patients" and i != "fold.{}".format(fold):
+            if i != "test.set" and i != "fold.{}".format(fold):
                 train_patients += g.str_to_list(json_data[i])
 
-        # if 1:
-        #     print(set(train_patients) & set(valid_patients))
-
         if debug_mode:
-            train_patients = train_patients[: hyper["batch.size"]["actual"]]
-            valid_patients = valid_patients[: hyper["batch.size"]["actual"]]
-            test_patients = test_patients[: hyper["batch.size"]["actual"]]
+            batch_size = g.MAX_BATCH_SIZE_PER_GPU
+            if g.used_gpu_count() > 1:
+                batch_size *= g.used_gpu_count()
+
+            train_patients = train_patients[:batch_size]
+            valid_patients = valid_patients[:batch_size]
+            test_patients = test_patients[:batch_size]
 
         return train_patients, valid_patients, test_patients
 
     def _load_hyper(
         self,
-        hyper: NestedDict,
+        hyper: Dict,
         fold: int,
         cnn_path: str = "",  # make cnn_path == "" will load a new cnn
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
+        # Change int/float/str/list into Int/Float/Str/List
+        hyper.convert_data_type()
+
         # cross valid folds
         hyper["dataset"]["k.folds"] = g.DATASET_K_FOLDS
 
         # use cross validation or not
-        hyper["dataset"]["cross.valid"] = bool(hyper["cross.valid"])
+        hyper["dataset"]["cross.valid"] = hyper["cross.valid"]
         hyper.pop("cross.valid")
 
-        # epochs
+        # at least 2 epochs to compare loss difference
         if debug_mode:
-            # at least 2 epochs to compare difference in loss
             hyper["epoch"]["init"] = 2
         else:
-            hyper["epoch"]["init"] = int(hyper["epoch"]["init"])
-            hyper["epoch"]["init"] = g.check_limit(hyper["epoch"]["init"], 1, None)
+            hyper["epoch"]["init"].set_range(1, None)
 
         # record actual epochs because of early stop
         hyper["epoch"]["actual"] = 0
 
         # early stop, based on epoch
-        hyper["epoch"]["early.stop"] = int(hyper["epoch"]["early.stop"])
-        hyper["epoch"]["early.stop"] = g.check_limit(
-            hyper["epoch"]["early.stop"], 1, hyper["epoch"]["init"]
-        )
+        hyper["epoch"]["early.stop"].set_range(1, hyper["epoch"]["init"])
 
         # lr
-        hyper["lr"]["init"] = float(hyper["lr"]["init"])
-        hyper["lr"]["init"] = g.check_limit(hyper["lr"]["init"], 1e-10, None)
+        hyper["lr"]["init"].set_range(g.EPS, 1)
 
         # actual lr
+        hyper["lr"]["actual"] = hyper["lr"]["init"]
         if g.used_gpu_count() > 1:
-            hyper["lr"]["actual"] = hyper["lr"]["init"] * g.used_gpu_count()
-        else:
-            hyper["lr"]["actual"] = hyper["lr"]["init"]
+            hyper["lr"]["actual"] *= g.used_gpu_count()
 
         # min lr
-        hyper["lr"]["min"] = float(hyper["lr"]["min"])
-        hyper["lr"]["min"] = g.check_limit(hyper["lr"]["min"], 0, hyper["lr"]["init"])
+        hyper["lr"]["min"].set_range(g.EPS, hyper["lr"]["init"])
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr"]["decay.patience"] = int(hyper["lr"]["decay.patience"])
-        hyper["lr"]["decay.patience"] = g.check_limit(
-            hyper["lr"]["decay.patience"], 1, hyper["epoch"]["init"]
-        )
+        hyper["lr"]["decay.patience"].set_range(1, hyper["epoch"]["init"])
 
         # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"] = int(hyper["keep.best.cnn.num"])
-        hyper["keep.best.cnn.num"] = g.check_limit(
-            hyper["keep.best.cnn.num"], 1, hyper["epoch"]["init"]
-        )
+        hyper["keep.best.cnn.num"].set_range(1, hyper["epoch"]["init"])
 
-        # augmentation percent
-        hyper["augment"]["pct"] = float(hyper["augment"]["pct"])
-        hyper["augment"]["pct"] = g.check_limit(hyper["augment"]["pct"], 0, 1)
+        # augment percent
+        hyper["augment"]["pct"].set_range(0, 1)
 
         # load shared hyper parameters
         super()._load_hyper(hyper=hyper, cnn_path=cnn_path)
 
-        # run this after shared hyper loaded, loss parameters are needed
+        # run this after shared hyper loaded, because loss parameters are needed
         hyper["loss"]["func"] = UnifiedFocalLoss(
             asym=hyper["loss"]["asym"],
             weight=hyper["loss"]["weight"],
@@ -111,12 +100,12 @@ class BaselineTraining(SharedTraining):
             gtvt_only=False,
         ).to(g.DEVICE)
 
-        # run this after shared hyper loaded, actual batch size is needed
+        # load patients
         (
             train_patients,
             valid_patients,
             test_patients,
-        ) = self.__load_dataset(hyper=hyper, fold=fold, debug_mode=debug_mode)
+        ) = self.__load_dataset(fold=fold, debug_mode=debug_mode)
 
         hyper["dataset"]["train.len"] = train_patients.__len__()
         hyper["dataset"]["valid.len"] = valid_patients.__len__()
@@ -127,7 +116,8 @@ class BaselineTraining(SharedTraining):
             + test_patients.__len__()
         )
 
-        # create dataset
+        # create datasets
+        # run this after shared hyper loaded, because hyper["augment"] is needed
         train_set = BaselineDataSet(
             patient_list=train_patients, augment=hyper["augment"]
         )
@@ -137,25 +127,25 @@ class BaselineTraining(SharedTraining):
         # dataloader
         hyper["train.loader"] = DataLoader(
             dataset=train_set,
-            batch_size=hyper["batch.size"]["actual"],
+            batch_size=hyper["batch.size"],
             shuffle=True,  # only shuffle train loader
             num_workers=g.NUM_WORKERS,
         )
         hyper["valid.loader"] = DataLoader(
             dataset=valid_set,
-            batch_size=hyper["batch.size"]["actual"],
+            batch_size=hyper["batch.size"],
             shuffle=False,
             num_workers=g.NUM_WORKERS,
         )
         hyper["test.loader"] = DataLoader(
             dataset=test_set,
-            batch_size=hyper["batch.size"]["actual"],
+            batch_size=hyper["batch.size"],
             shuffle=False,
             num_workers=g.NUM_WORKERS,
         )
 
-    def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
-        simple_hyper = NestedDict()
+    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+        simple_hyper = Dict()
         for i in hyper:
             if i == "train.loader" or i == "valid.loader" or i == "test.loader":
                 pass
@@ -167,11 +157,11 @@ class BaselineTraining(SharedTraining):
 
         return simple_hyper
 
-    def __print_hyper(self, hyper: NestedDict):
+    def __print_hyper(self, hyper: Dict):
         simple_hyper = self.__get_simple_hyper(hyper)
         super()._print_hyper(simple_hyper)
 
-    def __save_hyper(self, hyper: NestedDict, json_path: str):
+    def __save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self.__get_simple_hyper(hyper)
         super()._save_hyper(simple_hyper, json_path)
 
@@ -216,8 +206,8 @@ class BaselineTraining(SharedTraining):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def __training(self, hyper: NestedDict, cur_fold_folder: str):
-        best_loss_dict = NestedDict()
+    def __training(self, hyper: Dict, cur_fold_folder: str):
+        best_loss_dict = Dict()
         loss_save_path = os.path.join(cur_fold_folder, "hyper", "loss.json")
         lr_save_path = os.path.join(cur_fold_folder, "hyper", "lr.json")
         patience_count = 0
@@ -263,7 +253,7 @@ class BaselineTraining(SharedTraining):
 
             # save loss in json
             loss_dict = g.load_json(loss_save_path)
-            cur_epoch_loss = NestedDict()
+            cur_epoch_loss = Dict()
             cur_epoch_loss["train"] = train_loss
             cur_epoch_loss["valid"] = valid_loss
             loss_dict["epoch={:03d}".format(hyper["epoch"]["actual"])] = cur_epoch_loss
@@ -361,9 +351,9 @@ class BaselineTraining(SharedTraining):
                 cur_hyper_folder = os.path.join(cur_fold_folder, "hyper")
                 g.create_folder(cur_hyper_folder)
                 # save an empty loss.json
-                g.save_json(NestedDict(), os.path.join(cur_hyper_folder, "loss.json"))
+                g.save_json(Dict(), os.path.join(cur_hyper_folder, "loss.json"))
                 # save an empty lr.json
-                g.save_json(NestedDict(), os.path.join(cur_hyper_folder, "lr.json"))
+                g.save_json(Dict(), os.path.join(cur_hyper_folder, "lr.json"))
 
                 # save hyper before training
                 hyper_save_path = os.path.join(cur_hyper_folder, "hyper.json")
@@ -390,7 +380,6 @@ class BaselineTraining(SharedTraining):
                 self.inference(
                     baseline_id=baseline_id,
                     dataset=dataset,
-                    print_hyper=False,
                     debug_mode=debug_mode,
                 )
 
@@ -398,7 +387,6 @@ class BaselineTraining(SharedTraining):
         self,
         baseline_id: str,
         dataset: str = "test",
-        print_hyper: bool = True,
         debug_mode: bool = False,
     ):
         g.print_line()
@@ -407,53 +395,47 @@ class BaselineTraining(SharedTraining):
         baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
 
         if dataset == "valid":
-            best_scores = NestedDict()
+            best_scores = Dict()
 
+        # loop through fold folders
         for cur_fold_folder in g.get_sub_folders(baseline_folder, key_word="fold="):
-
             cur_fold = int(cur_fold_folder[len("fold=") :])
             g.print_line()
             print("current fold: ", cur_fold)
             cur_fold_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, cur_fold_folder
             )
-            cur_hyper = g.load_json(
-                os.path.join(cur_fold_folder, "hyper", "hyper.json")
-            )
 
+            # loop through epoch folders
             for cur_epoch_folder in g.get_sub_folders(
                 cur_fold_folder, key_word="epoch="
             ):
                 cur_epoch = int(cur_epoch_folder[len("epoch=") :])
                 print("current epoch: ", cur_epoch)
                 cur_epoch_folder = os.path.join(cur_fold_folder, cur_epoch_folder)
+
+                # initialize median score
+                cur_score = Dict()
+                for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    for metric in g.METRICS:
+                        cur_score["median"][gtv][metric] = []
+
+                # load cnn
                 cur_cnn_path = g.get_sub_files(
                     os.path.join(cur_epoch_folder, "baseline"),
                     key_word=".pt",
                     return_full_path=True,
                 )[0]
+                # create an empty hyper dict to save cnn
+                cur_hyper = Dict()
+                self._load_cnn(hyper=cur_hyper, cnn_path=cur_cnn_path)
 
-                # load and print hyper
-                self._load_hyper(
-                    hyper=cur_hyper,
-                    fold=cur_fold,
-                    cnn_path=cur_cnn_path,
-                    debug_mode=debug_mode,
-                )
-                if print_hyper:
-                    g.print_line()
-                    self.__print_hyper(cur_hyper)
-                    g.print_line()
-
-                cur_score = NestedDict()
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in g.METRICS:
-                        cur_score["median"][gtv][metric] = []
-
+                # load dataset
+                patient_list = self.__load_dataset(fold=cur_fold, debug_mode=debug_mode)
                 if dataset == "test":
-                    patient_list = cur_hyper["test.loader"].dataset.patient_list
+                    patient_list = patient_list[2]
                 else:
-                    patient_list = cur_hyper["valid.loader"].dataset.patient_list
+                    patient_list = patient_list[1]
 
                 for cur_patient in tqdm(patient_list):
                     # if testset, create folder to save cur patient preds

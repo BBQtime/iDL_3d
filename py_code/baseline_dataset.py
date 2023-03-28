@@ -7,22 +7,13 @@ from numpy import ndarray
 from torch import Tensor
 from data_augment import DataAugmentation
 from typing import Tuple
+from custom import Dict
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
-    def __init__(self, patient_list: list, augment: dict = {}):
-
+    def __init__(self, patient_list: list, augment: Dict = {}):
         self.patient_list = patient_list  # make patient_list public
-
-        if len(augment) == 0:
-            self.__augment = DataAugmentation()
-        else:
-            self.__augment = DataAugmentation(
-                methods=augment["methods"],
-                pct=augment["pct"],
-                low_limit=augment["low.limit"],
-                up_limit=augment["up.limit"],
-            )
+        self.__augment = DataAugmentation(augment)
 
     # must be overrided
     def __len__(self):

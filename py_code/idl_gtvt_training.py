@@ -11,13 +11,15 @@ import matplotlib.pyplot as plt
 import global_elems as g
 from idl_gtvt_dataset import IDLGTVtDataSet
 from shared_training import SharedTraining
-from nested_dict import NestedDict
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.ndimage import measurements
+from custom import Dict
+from custom import Int
+from custom import Float
 
 
 class IDLGTVtTraining(SharedTraining):
-    def __load_next_round_lr(self, next_round: int, hyper: NestedDict):
+    def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"]["init"] is a list of lr of each round
         if next_round > len(hyper["lr"]["init"]):
             next_round = len(hyper["lr"]["init"])
@@ -71,34 +73,30 @@ class IDLGTVtTraining(SharedTraining):
         )
 
     def _load_hyper(
-        self, hyper: dict, baseline_cnn_path: str, debug_mode: bool = False
+        self, hyper: Dict, baseline_cnn_path: str, debug_mode: bool = False
     ):
+        # Change int/float/str/list into Int/Float/Str/List
+        hyper.convert_data_type()
+
+        # iterations
         if debug_mode:
-            # iter = 2 to compare difference
+            # at least 2 iters to compare loss difference
             hyper["iter"] = 2
         else:
-            hyper["iter"] = int(hyper["iter"])
-            g.check_limit(hyper["iter"], 1, None)
+            hyper["iter"].set_range(1, None)
 
-        # reset lr before next round or not
-        hyper["lr"]["reset"] = bool(hyper["lr"]["reset"])
-
-        # min lr (before init lr)
-        hyper["lr"]["min"] = float(hyper["lr"]["min"])
-
-        # lr (list)
-        # the list of lr is saved in json file as a string, not a list, because:
-        # (1) string is easier to read the json file (only one line)
-        # (2) a "list" will be recognized as multiple hyper parameters
+        # lr
+        # lr is saved in json file as a string, not a list, because:
+        # (1) string is easier to read than list in json file (only one line)
+        # (2) a "list" will be recognized as multiple trainings
         hyper["lr"]["init"] = g.str_to_list(hyper["lr"]["init"])
         for i in range(len(hyper["lr"]["init"])):
-            hyper["lr"]["init"][i] = float(hyper["lr"]["init"][i])
-            hyper["lr"]["init"][i] = g.check_limit(hyper["lr"]["init"][i], 1e-10, None)
+            hyper["lr"]["init"][i] = Float(hyper["lr"]["init"][i])
+            hyper["lr"]["init"][i].set_range(g.EPS, 1)
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr"]["min"] = g.check_limit(
-                hyper["lr"]["min"], 0, hyper["lr"]["init"][i]
-            )
+            hyper["lr"]["min"].set_range(g.EPS, hyper["lr"]["init"][i])
 
+        # actual lr
         hyper["lr"]["actual"] = []
         if g.used_gpu_count() > 1:
             hyper["lr"]["actual"].append(hyper["lr"]["init"][0] * g.used_gpu_count())
@@ -106,38 +104,29 @@ class IDLGTVtTraining(SharedTraining):
             hyper["lr"]["actual"].append(hyper["lr"]["init"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr"]["decay.patience"] = int(hyper["lr"]["decay.patience"])
-        g.check_limit(hyper["lr"]["decay.patience"], 1, hyper["iter"])
+        hyper["lr"]["decay.patience"].set_range(1, hyper["iter"])
 
         # augmentation times
-        hyper["augment"]["times"] = int(hyper["augment"]["times"])
-        hyper["augment"]["times"] = g.check_limit(hyper["augment"]["times"], 1, None)
+        hyper["augment"]["times"].set_range(1, None)
 
         # augmentation percent (based on augment_times)
         hyper["augment"]["pct"] = hyper["augment"]["times"] / (
             hyper["augment"]["times"] + 1
         )
+        hyper["augment"]["pct"] = Float(hyper["augment"]["pct"])
 
-        # freeze layers
-        hyper["layer.freezing"] = bool(hyper["layer.freezing"])
-
+        # select step
         # select.step is saved in json file as a string, not a list, because:
-        # (1) it's easier to read the json file (only one line)
-        # (2) a "list" will be recognized as multiple hyper parameters,
-        # then start multiple training
+        # (1) string is easier to read than list in json file (only one line)
+        # (2) a "list" will be recognized as multiple trainings
         for plane in ["transverse", "coronal", "sagittal"]:
             hyper["select.step"][plane] = g.str_to_list(hyper["select.step"][plane])
             for i in range(len(hyper["select.step"][plane])):
-                hyper["select.step"][plane][i] = int(hyper["select.step"][plane][i])
-                hyper["select.step"][plane][i] = g.check_limit(
-                    hyper["select.step"][plane][i], 0, None
-                )
+                hyper["select.step"][plane][i] = Int(hyper["select.step"][plane][i])
+                hyper["select.step"][plane][i].set_range(0, None)
 
         # select scenario
         for plane in ["transverse", "coronal", "sagittal"]:
-            hyper["select.scenario"][plane] = str(
-                hyper["select.scenario"][plane]
-            ).lower()
             if (
                 hyper["select.scenario"][plane] != "largest"
                 and hyper["select.scenario"][plane] != "gravity.center"
@@ -146,25 +135,11 @@ class IDLGTVtTraining(SharedTraining):
                 hyper["select.scenario"][plane] = "random"
 
         # weight map parameters
-        hyper["weight"]["background"] = float(hyper["weight"]["background"])
-        if hyper["weight"]["background"] > 1:
-            hyper["weight"]["background"] = 1
-
-        hyper["weight"]["slice"] = float(hyper["weight"]["slice"])
-        if hyper["weight"]["slice"] < hyper["weight"]["background"]:
-            hyper["weight"]["slice"] = hyper["weight"]["background"]
-
-        hyper["weight"]["fp.fn"] = float(hyper["weight"]["fp.fn"])
-        if hyper["weight"]["fp.fn"] < hyper["weight"]["slice"]:
-            hyper["weight"]["fp.fn"] = hyper["weight"]["slice"]
-
-        hyper["weight"]["distance.step"] = int(hyper["weight"]["distance.step"])
-        if hyper["weight"]["distance.step"] < 1:
-            hyper["weight"]["distance.step"] = 1
-
-        hyper["weight"]["prev.round.decay"] = float(hyper["weight"]["prev.round.decay"])
-        if hyper["weight"]["prev.round.decay"] > 1:
-            hyper["weight"]["prev.round.decay"] = 1.0
+        hyper["weight"]["background"].set_range(0, 1)
+        hyper["weight"]["slice"].set_range(hyper["weight"]["background"], None)
+        hyper["weight"]["fp.fn"].set_range(hyper["weight"]["slice"], None)
+        hyper["weight"]["distance.step"].set_range(1, None)
+        hyper["weight"]["prev.round.decay"].set_range(0, 1)
 
         # load patients
         hyper["patients"] = self.__load_dataset(debug_mode)
@@ -182,8 +157,8 @@ class IDLGTVtTraining(SharedTraining):
         ).to(g.DEVICE)
 
     def __load_dataset(self, debug_mode: bool = False):
-        json_data = g.load_json(g.DATASET_SPLITTING_JSON)
-        test_patients = g.str_to_list(json_data["test.patients"])
+        json_data = g.load_json(g.DATASET_SPLIT_JSON)
+        test_patients = g.str_to_list(json_data["test.set"])
 
         # debug mode, only 1 or 2 patients
         if debug_mode:
@@ -191,8 +166,8 @@ class IDLGTVtTraining(SharedTraining):
 
         return test_patients
 
-    def __get_simple_hyper(self, hyper: NestedDict) -> NestedDict:
-        simple_hyper = NestedDict()
+    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+        simple_hyper = Dict()
         for i in hyper:
             if i == "lr":
                 simple_hyper[i] = hyper[i].copy()
@@ -214,11 +189,11 @@ class IDLGTVtTraining(SharedTraining):
 
         return simple_hyper
 
-    def __print_hyper(self, hyper: NestedDict):
+    def __print_hyper(self, hyper: Dict):
         simple_hyper = self.__get_simple_hyper(hyper)
         super()._print_hyper(simple_hyper)
 
-    def __save_hyper(self, hyper: NestedDict, json_path: str):
+    def __save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self.__get_simple_hyper(hyper)
         super()._save_hyper(simple_hyper, json_path)
 
@@ -242,7 +217,7 @@ class IDLGTVtTraining(SharedTraining):
     #     baseline_hyper_dict = g.load_json(baseline_hyper_path)
 
     #     # make sure all hypers are unique, no arrangement
-    #     hyper = NestedDict()
+    #     hyper = Dict()
     #     for i in idl_hyper_dict:
     #         if isinstance(idl_hyper_dict[i], list):
     #             hyper[i] = idl_hyper_dict[i][0]
@@ -263,8 +238,8 @@ class IDLGTVtTraining(SharedTraining):
     #         g.exit_app("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
 
     #     # create json file to save train loss
-    #     train_loss_dict = NestedDict()
-    #     train_loss_dict["iter"] = NestedDict()
+    #     train_loss_dict = Dict()
+    #     train_loss_dict["iter"] = Dict()
     #     g.save_json(
     #         train_loss_dict,
     #         os.path.join(
@@ -278,7 +253,7 @@ class IDLGTVtTraining(SharedTraining):
     #         "patient={}".format(cur_patient),
     #         "round={:02d}".format(cur_round),
     #     )
-    #     annotated_slices = NestedDict()
+    #     annotated_slices = Dict()
     #     annotated_slices["round=01"] = []  # doesn't matter what the dict key is
     #     for file_name in g.get_sub_files(cur_round_folder, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
@@ -303,12 +278,12 @@ class IDLGTVtTraining(SharedTraining):
     # in this function, cur round slices have not been added into annotated_slices
     def __select_cur_round_slices(
         self,
-        annotated_slices: dict,
-        hyper: NestedDict,
+        annotated_slices: Dict,
+        hyper: Dict,
         patient_folder: str,
     ) -> list:  # return a list of int
 
-        cur_round_slices = NestedDict()
+        cur_round_slices = Dict()
         for plane in ["transverse", "coronal", "sagittal"]:
             cur_round_slices[plane] = []
 
@@ -382,8 +357,8 @@ class IDLGTVtTraining(SharedTraining):
                 candidate_slices = g.get_dict_keys(candidate_slices)
                 for part in range(1, divided_parts):
                     idx = len(candidate_slices) * part / divided_parts
-                    idx = round(idx)
-                    idx = g.check_limit(idx, 1, len(candidate_slices))
+                    idx = Int(idx)
+                    idx.set_range(1, len(candidate_slices))
                     cur_round_slices[plane].append(candidate_slices[idx - 1])
 
             # (1) "random"
@@ -410,7 +385,7 @@ class IDLGTVtTraining(SharedTraining):
 
         return cur_round_slices
 
-    def __inference_cur_round(self, cur_round_folder: str, hyper: NestedDict):
+    def __inference_cur_round(self, cur_round_folder: str, hyper: Dict):
         cur_round = Path(cur_round_folder).name
 
         patient = Path(cur_round_folder).parent.name
@@ -440,8 +415,8 @@ class IDLGTVtTraining(SharedTraining):
         cur_round_folder: str,
         epoch_folder: str,
         label_folder: str,
-        hyper: NestedDict,
-        annotated_slices: dict,
+        hyper: Dict,
+        annotated_slices: Dict,
     ):
         g.create_folder(cur_round_folder)
 
@@ -483,7 +458,7 @@ class IDLGTVtTraining(SharedTraining):
         # idl gtvt dataloader
         idl_gtvt_loader = DataLoader(
             dataset=idl_gtvt_dataset,
-            batch_size=hyper["batch.size"]["actual"],
+            batch_size=hyper["batch.size"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,
         )
@@ -557,7 +532,7 @@ class IDLGTVtTraining(SharedTraining):
         patient: str,
         epoch_folder: str,
         idl_gtvt_folder: str,
-        hyper: NestedDict,
+        hyper: Dict,
     ):
         # create current patient folder
         patient_folder = os.path.join(
@@ -565,7 +540,7 @@ class IDLGTVtTraining(SharedTraining):
         )
         g.create_folder(patient_folder)
         # create an empty loss.json
-        g.save_json(NestedDict(), os.path.join(patient_folder, "loss.json"))
+        g.save_json(Dict(), os.path.join(patient_folder, "loss.json"))
 
         # initialize idl score (copy from baseline)
         baseline_score = g.load_json(
@@ -582,7 +557,7 @@ class IDLGTVtTraining(SharedTraining):
         g.print_line()
         print("patient:", patient)
 
-        annotated_slices = NestedDict()
+        annotated_slices = Dict()
 
         # loop through each round
         max_round = max(
@@ -659,7 +634,7 @@ class IDLGTVtTraining(SharedTraining):
 
     def __draw_loss_fig(self, idl_gtvt_folder: str):
         # avg loss dict
-        avg_loss = NestedDict()
+        avg_loss = Dict()
         for cur_patient_folder in g.get_sub_folders(
             os.path.join(idl_gtvt_folder, "patients"), return_full_path=True
         ):
@@ -744,10 +719,7 @@ class IDLGTVtTraining(SharedTraining):
             self.__save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            g.save_json(
-                NestedDict(),
-                os.path.join(idl_gtvt_folder, "score.json"),
-            )
+            g.save_json(Dict(), os.path.join(idl_gtvt_folder, "score.json"))
 
             # training start time
             hyper["time.spent"]["total"] = datetime.now()
@@ -785,7 +757,7 @@ class IDLGTVtTraining(SharedTraining):
     def __calculate_median_score(self, idl_gtvt_folder: str):
         score_json_path = os.path.join(idl_gtvt_folder, "score.json")
         score = g.load_json(score_json_path)
-        median = NestedDict()
+        median = Dict()
 
         # add all patients score in to a list
         for patient in score:
@@ -833,7 +805,7 @@ class IDLGTVtTraining(SharedTraining):
                     cur_round_folder, key_word=".pt", return_full_path=True
                 )
                 cur_round_cnn_path = cur_round_cnn_path[0]
-                hyper = NestedDict()
+                hyper = Dict()
                 self._load_cnn(hyper=hyper, cnn_path=cur_round_cnn_path)
 
                 self.__inference_cur_round(

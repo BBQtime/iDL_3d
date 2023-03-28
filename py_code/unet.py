@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import global_elems as g
 from torch import Tensor
-from nested_dict import NestedDict
+from custom import Dict
 
 
 class UNet(nn.Module):
@@ -136,7 +136,7 @@ class UNet(nn.Module):
     # Pytorch: forward function must return the output value
     def forward(self, input_data: Tensor) -> Tensor:
         # encoder (contracting path)
-        encoder_data = NestedDict()
+        encoder_data = Dict()
         encoder_data[0] = self.__encoder_blocks["0"](input_data)
         for i in range(5):  # i = [0:4]
             encoder_data[i + 1] = self.__encoder_blocks[str(i + 1)](encoder_data[i])

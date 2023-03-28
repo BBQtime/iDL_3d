@@ -7,7 +7,7 @@ from typing import Tuple
 import random
 from data_augment import DataAugmentation
 from numpy import ndarray
-from nested_dict import NestedDict
+from custom import Dict
 from scipy.ndimage import distance_transform_edt
 
 DEBUG_SAVE_IMG = 0
@@ -17,27 +17,18 @@ class IDLGTVtDataSet:
     def __init__(
         self,
         patient: str,
-        annotated_slices: dict,
+        annotated_slices: Dict,
         label_folder: str,
         pred_folder: str,
-        augment: dict,
-        weight: dict,
+        augment: Dict,
+        weight: Dict,
     ):
         self.patient = patient  # make this public
-
-        if len(augment) == 0:
-            self.__augment = DataAugmentation()
-        else:
-            self.__augment = DataAugmentation(
-                methods=augment["methods"],
-                pct=augment["pct"],
-                low_limit=augment["low.limit"],
-                up_limit=augment["up.limit"],
-            )
+        self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
         # save origin images
-        self.__origin = NestedDict()
+        self.__origin = Dict()
 
         # load label
         # (1) simulated iDL
@@ -116,9 +107,9 @@ class IDLGTVtDataSet:
                 os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
             )
 
-    def __load_weight_map(self, annotated_slices: dict, weight: dict) -> dict:
+    def __load_weight_map(self, annotated_slices: Dict, weight: Dict):
         # annotated slice mask
-        slice_mask = NestedDict()
+        slice_mask = Dict()
         max_round = max(
             len(annotated_slices["transverse"]),
             len(annotated_slices["coronal"]),
@@ -261,8 +252,8 @@ class IDLGTVtDataSet:
     # must be overrided
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
 
-        final = NestedDict()
-        tmp = NestedDict()
+        final = Dict()
+        tmp = Dict()
 
         origin_label_pred_sum = (
             self.__origin["label.gtvt"].sum()

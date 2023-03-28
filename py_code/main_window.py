@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from typing import Tuple
-from nested_dict import NestedDict
+from custom import Dict
 from tkinter import Tk
 from tkinter import filedialog
 from PyQt5 import QtWidgets
@@ -14,6 +14,7 @@ from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QPalette, QImage, QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QRubberBand
 from Ui_main_window import Ui_MainWindow
+from custom import Int
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -41,7 +42,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__choose_baseline()
 
     def __init_zoomin(self):
-        self.__zoomin = NestedDict()
+        self.__zoomin = Dict()
         self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
         self.__reset_zoomin()
 
@@ -252,7 +253,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # resize to fit image frame
         origin_height = img.shape[0]
         origin_width = img.shape[1]
-        resize_pos = NestedDict()
+        resize_pos = Dict()
         resize_pos["x"], resize_pos["y"] = None, None
         resize_pos["width"], resize_pos["height"] = None, None
         final_width = display_frame.width()
@@ -304,7 +305,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return img, resize_pos
 
     def __init_color(self):
-        self.__color = NestedDict()
+        self.__color = Dict()
         self.__color["label.gtvt"] = (0, 255, 255)  # light blue
         self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
         self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
@@ -314,13 +315,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__color["score.text"] = self.__color["annotation.gtvt"]
 
     def __init_ui_names(self):
-        self.__display_frame = NestedDict()
+        self.__display_frame = Dict()
         self.__display_frame["ct"] = self._display_frame_ct
         self.__display_frame["pt"] = self._display_frame_pt
         self.__display_frame["mrt1"] = self._display_frame_mrt1
         self.__display_frame["mrt2"] = self._display_frame_mrt2
 
-        self.__text_label = NestedDict()
+        self.__text_label = Dict()
         self.__text_label["baseline"] = self._text_label_baseline
         self.__text_label["idl.gtvt"] = self._text_label_idl_gtvt
         self.__text_label["idl.gtvn"] = self._text_label_idl_gtvn
@@ -329,14 +330,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__text_label["bright"] = self._text_label_bright
         self.__text_label["contrast"] = self._text_label_contrast
 
-        self.__combox = NestedDict()
+        self.__combox = Dict()
         self.__combox["baseline"] = self._combox_baseline
         self.__combox["idl.gtvt"] = self._combox_idl_gtvt
         self.__combox["idl.gtvn"] = self._combox_idl_gtvn
         self.__combox["patient"] = self._combox_patient
         self.__combox["round"] = self._combox_round
 
-        self.__arrow_btn = NestedDict()
+        self.__arrow_btn = Dict()
         self.__arrow_btn["prev.baseline"] = self._btn_prev_baseline
         self.__arrow_btn["next.baseline"] = self._btn_next_baseline
         self.__arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
@@ -348,12 +349,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__arrow_btn["prev.round"] = self._btn_prev_round
         self.__arrow_btn["next.round"] = self._btn_next_round
 
-        self.__radio_btn = NestedDict()
+        self.__radio_btn = Dict()
         self.__radio_btn["transverse"] = self._radio_btn_transverse
         self.__radio_btn["coronal"] = self._radio_btn_coronal
         self.__radio_btn["sagittal"] = self._radio_btn_sagittal
 
-        self.__slider = NestedDict()
+        self.__slider = Dict()
         self.__slider["bright"] = self._slider_bright
         self.__slider["contrast"] = self._slider_contrast
 
@@ -380,9 +381,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__patient = None
         self.__round = None
         self.__slice = None  # starts from 0
-        self.__score = NestedDict()
-        self.__img_data = NestedDict()
-        self.__resize_pos = NestedDict()
+        self.__score = Dict()
+        self.__img_data = Dict()
+        self.__resize_pos = Dict()
         self.__clear_img_data()
 
     def __clear_img_data(self):
@@ -518,8 +519,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # update and check slice_id (starts from 0)
                 img_depth = self.__get_img_depth()
                 if img_depth is not None:
-                    self.__slice = round(img_depth / 2) - 1
-                    self.__slice = g.check_limit(self.__slice, 0, img_depth - 1)
+                    self.__slice = Int(img_depth / 2) - 1
+                    self.__slice.set_range(0, img_depth - 1)
 
                 self.__reset_zoomin()
                 self.__refresh_imgs()
@@ -696,9 +697,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # try to keep slice id unchanged
             # if slice is None, show the middle slice of whole 3D img,
             if self.__slice is None:
-                self.__slice = round(img_depth / 2) - 1
+                self.__slice = Int(img_depth / 2) - 1
             # check slice_id range from [0, img_depth-1]
-            self.__slice = g.check_limit(self.__slice, 0, img_depth - 1)
+            self.__slice.set_range(0, img_depth - 1)
 
         # try not to reset round when patient is changed
         if self.__round not in round_list:
@@ -720,7 +721,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__enable_prev_next_btns("round")
 
         # load pred
-        pred_path = NestedDict()
+        pred_path = Dict()
 
         # load pred-gtvt
         if self.__round == "00":
@@ -829,7 +830,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         is_annotated = self.__is_annotated()
 
         # set contour color
-        color = NestedDict()
+        color = Dict()
         color["label.gtvt"] = self.__color["label.gtvt"]
         color["label.gtvn"] = self.__color["label.gtvn"]
 
@@ -865,8 +866,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             rgb_img = cv2.addWeighted(rgb_img, contrast, blank, 0, bright)
 
             # add mask to annotated slices
-            annotated_slices = NestedDict()
-            total_slices_num = NestedDict()
+            annotated_slices = Dict()
+            total_slices_num = Dict()
             if self.__img_plane == "transverse":
                 annotated_slices["horizontal"] = self.__get_annotated_slices("coronal")
                 total_slices_num["horizontal"] = self.__img_data["pt"].shape[1]
@@ -1215,7 +1216,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __resize_display_frames(self, side_bar_width: int):
         gap = 1
-        size = NestedDict()
+        size = Dict()
         size["x"] = self.geometry().width() - side_bar_width
         size["y"] = self.geometry().height() - self._menu_bar.height()
         for i in ["x", "y"]:
@@ -1226,7 +1227,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if double_size % 2 != 0:
                 size[i][0] += 1
 
-        pos = NestedDict()
+        pos = Dict()
         for i in ["x", "y"]:
             pos[i][0] = gap
             pos[i][1] = size[i][0] + gap * 2
