@@ -3,13 +3,14 @@ import torch.nn as nn
 import global_elems as g
 from torch import Tensor
 from torch import tensor
+from custom import Dict
 
 EPSILON = torch.finfo(torch.float32).eps
 
 
 def split_channels(input_imgs: Tensor, gtvt_only: bool) -> dict:
 
-    output_imgs = dict()
+    output_imgs = Dict()
 
     # dimension: [batch, channel, depth, height, width]
     output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
@@ -29,7 +30,7 @@ def focal_loss(
 ):
     def loss_function(pred: dict, label: dict, weight_map: Tensor = None) -> Tensor:
 
-        loss = dict()
+        loss = Dict()
 
         # calculate loss through each channel
         for i in pred.keys():
@@ -75,10 +76,10 @@ def focal_tversky_loss(
 
     def loss_function(pred: dict, label: dict, weight_map: Tensor = None) -> Tensor:
 
-        tp = dict()
-        fn = dict()
-        fp = dict()
-        loss = dict()
+        tp = Dict()
+        fn = Dict()
+        fp = Dict()
+        loss = Dict()
 
         # calculate loss through each channel
         for i in pred.keys():

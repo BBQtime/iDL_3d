@@ -284,8 +284,8 @@ class IDLGTVtDataSet:
             # target volume is not big enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
 
-                # nothing in "final" dict
-                if len(final) == 0:
+                # if nothing in "final" dict
+                if final == {}:
                     for i in [
                         "label.gtvt",
                         "label.gtvn",
@@ -356,21 +356,21 @@ class IDLGTVtDataSet:
 
 # # for testing
 # if 0:
-#     weight = dict()
+#     weight = Dict()
 #     weight["fp.fn"] = 3
 #     weight["distance.step"] = 10
 #     weight["slice"] = 2
 #     weight["prev.round.decay"] = 0.5
 #     weight["background"] = 0.2
 
-#     augment = dict()
+#     augment = Dict()
 #     augment["methods"] = ["translate"]
 #     augment["pct"] = 1
 #     augment["low.limit"] = 1
 #     augment["up.limit"] = 1
 #     augment["times"] = 1
 
-#     annotated_slices = dict()
+#     annotated_slices = Dict()
 #     annotated_slices["round=00"] = [20, 40]
 #     annotated_slices["round=01"] = [30]
 

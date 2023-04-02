@@ -3,6 +3,7 @@ import global_elems as g
 from imgaug import augmenters as iaa
 from numpy import ndarray
 from custom import Dict
+from custom import List
 
 
 class DataAugmentation:
@@ -12,7 +13,7 @@ class DataAugmentation:
         self.__transform = None
 
         # no augmentation parameter
-        if len(param) == 0:
+        if param == {}:
             return
 
         # no augmentation needed
@@ -21,7 +22,7 @@ class DataAugmentation:
 
         # augmentation needed
         # convert self.__transform to list to save values
-        self.__transform = []
+        self.__transform = List()
 
         augment_dict = Dict()
         # iaa.ElasticTransformation():
@@ -40,7 +41,7 @@ class DataAugmentation:
         augment_dict["flip.lr"] = iaa.Fliplr(1.0)
         augment_dict["flip.ud"] = iaa.Flipud(1.0)
 
-        for i in g.get_dict_keys(augment_dict):
+        for i in augment_dict.keys():
             if i in param["methods"]:
                 self.__transform.append(augment_dict[i])
 

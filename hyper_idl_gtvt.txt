@@ -3,4 +3,4 @@
 3.must use weight map
 4.voxel-wised tversky loss + weight map doesn't work
 5.elastic augmentation works
-6.compare weigiht.distance.step:3/4/5
+6.best weigiht.distance.step: 3

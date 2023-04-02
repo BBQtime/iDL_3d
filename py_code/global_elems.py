@@ -13,11 +13,12 @@ import cv2
 import cc3d
 import numpy as np
 import SimpleITK as sitk
-from custom import Dict
 from numpy import ndarray
 from torch import Tensor
 from typing import Union
-from natsort import natsorted
+from custom import Dict
+from custom import Json
+from custom import List
 
 
 def exit_app(msg: str = ""):
@@ -99,68 +100,9 @@ def save_nii(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = ()):
     return save_path
 
 
-def save_json(data: dict, path: str):
-    with open(path, mode="w", encoding="utf-8") as json_file:
-        # ensure_ascii == false, non-ASCII characters is available
-        # skipkeys=True keys are not str will be skipped
-        json.dump(
-            data,
-            json_file,
-            ensure_ascii=False,
-            indent=4,
-            sort_keys=True,
-            skipkeys=False,
-        )
-
-
-# after json loaded, key(int) will become string
-def load_json(path: str) -> Dict:
-    with open(path, mode="r") as json_file:
-        data = json.load(json_file)
-    data = Dict(data)
-    # call "save_json" to sort data by key
-    save_json(data=data, path=path)
-    return data
-
-
-def find_identical_elem(list_1: list, list_2: list):
-    return set(list_1) & set(list_2)
-
-
-# [1,2,3,4] -> "1,2,3,4"
-def list_to_str(input_list: list, split_symbol: str = ",") -> str:
-    if isinstance(input_list, str):
-        return input_list
-    else:
-        split_symbol = str(split_symbol)
-        return split_symbol.join(str(i) for i in input_list)
-
-
-# "1,2,3,4" -> ["1","2","3","4"]
-def str_to_list(input_str: str, split_symbol: str = ",") -> list:
-    if input_str == "":
-        return []
-    else:
-        input_str = str(input_str)
-        split_symbol = str(split_symbol)
-        return input_str.split(",")
-
-
-def get_dict_keys(input_dict: dict):
-    return list(input_dict.keys())
-
-
-def get_dict_key_max(input_dict: dict):
-    return max(input_dict.keys(), key=(lambda k: input_dict[k]))
-
-
-def get_dict_key_min(input_dict: dict):
-    return min(input_dict.keys(), key=(lambda k: input_dict[k]))
-
-
 # {"0": [a, b], "1": [c, d], "2": [e]} -> [a, b, c, d, e]
 def dict_to_list(input_dict: dict):
-    output_list = []
+    output_list = List()
     for cur_key in input_dict:
         if isinstance(input_dict[cur_key], list):
             for cur_value in input_dict[cur_key]:
@@ -238,7 +180,7 @@ def get_file_sha1(file_path: str):
         return file_sha1
 
 
-def keep_decimal(input_num: Union[float, str], keep_dec_num: int = 0):
+def keep_decimal(input_num: str, keep_dec_num: int = 0):
     output_num = str(input_num)
     keep_range = output_num.find(".")
     if keep_range > -1:
@@ -259,19 +201,6 @@ def to_pct(input_num: float):
     return output_str
 
 
-def shuffle_list(input_list: list, seed: int) -> list:
-    # sort before shuffle, make sure to get same list using same seed
-    input_list = natsorted(input_list)
-    if seed is not None:
-        random_state = random.getstate()
-        random.seed(seed)
-        random.shuffle(input_list)
-        random.setstate(random_state)
-    else:
-        random.shuffle(input_list)
-    return input_list
-
-
 def __get_sub_items(
     folder_path: str,
     return_full_path: bool,
@@ -283,7 +212,7 @@ def __get_sub_items(
     if not os.path.exists(folder_path):
         exit_app('input folder path "{}" does not exist'.format(folder_path))
 
-    sub_list = os.listdir(folder_path)
+    sub_list = List(os.listdir(folder_path))
 
     if select != "both":
         for sub_name in sub_list.copy():
@@ -295,10 +224,9 @@ def __get_sub_items(
                     sub_list.remove(sub_name)
 
     if shuffle:
-        # shuffle_list() includes natsorted()
-        sub_list = shuffle_list(sub_list, seed)
+        sub_list.shuffle(seed)
     else:
-        sub_list = natsorted(sub_list)
+        sub_list.sort()
 
     if key_word != "":
         for i in sub_list.copy():
@@ -521,7 +449,7 @@ def normalize_img(img: ndarray) -> ndarray:
 def get_connected_components(img: ndarray) -> list:
     img = binarize_img(img)
     all_cc, num_cc = cc3d.connected_components(img, connectivity=18, return_N=True)
-    output_cc_list = []
+    output_cc_list = List()
     for segid in range(1, num_cc + 1):
         cur_cc = all_cc * (all_cc == segid)
         # batch normalize
@@ -579,7 +507,7 @@ def __walk_sub_folders(folder_path: str) -> list:
 
 
 def walk_sub_folders(folder_path: str, key_word: str = ""):
-    sub_folders = []
+    sub_folders = List()
     for i in __walk_sub_folders(folder_path):
         if key_word == "" or key_word in i:
             sub_folders.append(i)
@@ -629,18 +557,19 @@ def __global_init():
     global METRICS
 
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
-    __json_data = load_json(os.path.join(PROJ_PATH, "settings.json"))
-
     EPS = sys.float_info.epsilon
+    METRICS = ["dsc", "msd", "hd95"]
+
+    __settings = Json.load(os.path.join(PROJ_PATH, "settings.json"))
 
     # use CPU
-    if __json_data["use.gpu"] is False:
+    if __settings["use.gpu"] is False:
         DEVICE = torch.device("cpu")
     # use GPU
     else:
         # choose GPU (must come first before any code related to cuda/gpu)
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = __json_data["cuda.visible.devices"]
+        os.environ["CUDA_VISIBLE_DEVICES"] = __settings["cuda.visible.devices"]
 
         # set main device cuda:0, for multiple GPU to avoid following error:
         # RuntimeError: module must have its parameters and buffers on
@@ -659,38 +588,30 @@ def __global_init():
 
     # Windows or Linux
     if platform.system().lower() == "windows":
-        DATASET_FOLDER = __json_data["dataset.folder.win"]
-        NUM_WORKERS = 0
+        DATASET_FOLDER = __settings["dataset.folder.win"]
+        NUM_WORKERS = 0  # window doesn't support pytorch multi-thread
 
     elif platform.system().lower() == "linux":
-        DATASET_FOLDER = __json_data["dataset.folder.linux"]
-        NUM_WORKERS = __json_data["num.workers"]
+        DATASET_FOLDER = __settings["dataset.folder.linux"]
+        NUM_WORKERS = __settings["num.workers"]
 
-    # img size
-    IMG_SHAPE = []
-    for i in str_to_list(__json_data["img.shape"]):
-        # str_to_list will return a list of str
-        # change all items to int
-        IMG_SHAPE.append(int(i))
-    IMG_SHAPE = tuple(IMG_SHAPE)
+    # Depth, Height, Width
+    IMG_SHAPE = List(__settings["img.shape"])
+    IMG_SHAPE = tuple(int(i) for i in IMG_SHAPE)
 
-    # make sure all elements in NII_SPACING are numbers
-    NII_SPACING = []
-    for i in str_to_list(__json_data["nii.spacing"]):
-        NII_SPACING.append(float(i))
-    NII_SPACING = tuple(NII_SPACING)
+    # Width, Height, Depth
+    NII_SPACING = List(__settings["nii.spacing"])
+    NII_SPACING = tuple(float(i) for i in NII_SPACING)
 
     # Pytorch save/load entire cnn or weight only
-    CNN_STATE_DICT_ONLY = __json_data["cnn.state.dict.only"]
-    MAX_BATCH_SIZE_PER_GPU = __json_data["max.batch.size.per.gpu"]
-    DATASET_K_FOLDS = __json_data["dataset.k.folds"]
-    DATASET_SPLIT_JSON = os.path.join(PROJ_PATH, __json_data["dataset.split.json"])
-    HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __json_data["hyper.json.baseline"])
-    HYPER_JSON_IDL_GTVT = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvt"])
-    HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __json_data["hyper.json.idl.gtvn"])
-    TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __json_data["train.results.folder"])
-
-    METRICS = ["dsc", "msd", "hd95"]
+    CNN_STATE_DICT_ONLY = __settings["cnn.state.dict.only"]
+    MAX_BATCH_SIZE_PER_GPU = __settings["max.batch.size.per.gpu"]
+    DATASET_K_FOLDS = __settings["dataset.k.folds"]
+    DATASET_SPLIT_JSON = os.path.join(PROJ_PATH, __settings["dataset.split.json"])
+    HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __settings["hyper.json.baseline"])
+    HYPER_JSON_IDL_GTVT = os.path.join(PROJ_PATH, __settings["hyper.json.idl.gtvt"])
+    HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __settings["hyper.json.idl.gtvn"])
+    TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __settings["train.results.folder"])
 
 
 __global_init()

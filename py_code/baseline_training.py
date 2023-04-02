@@ -7,26 +7,29 @@ from tqdm import tqdm
 from datetime import datetime
 from custom import Dict
 from torch.utils.data import DataLoader
-from shared_training import SharedTraining
+from training import Training
 from matplotlib import pyplot as plt
 from baseline_dataset import BaselineDataSet
 from loss_func import UnifiedFocalLoss
+from custom import Json
+from custom import List
+from custom import set_range
 
 
-class BaselineTraining(SharedTraining):
+class BaselineTraining(Training):
     def __load_dataset(self, fold: int, debug_mode: bool = False):
-        json_data = g.load_json(g.DATASET_SPLIT_JSON)
+        dataset_split = Json.load(g.DATASET_SPLIT_JSON)
 
-        if len(json_data) - 1 != g.DATASET_K_FOLDS:
-            json_data = super()._split_dataset()
+        if len(dataset_split) - 1 != g.DATASET_K_FOLDS:
+            dataset_split = super()._split_dataset()
 
-        test_patients = g.str_to_list(json_data["test.set"])
-        valid_patients = g.str_to_list(json_data["fold.{}".format(fold)])
+        test_patients = List(dataset_split["test.set"])
+        valid_patients = List(dataset_split["fold.{}".format(fold)])
 
-        train_patients = []
-        for i in json_data:
+        train_patients = List()
+        for i in dataset_split:
             if i != "test.set" and i != "fold.{}".format(fold):
-                train_patients += g.str_to_list(json_data[i])
+                train_patients += List(dataset_split[i])
 
         if debug_mode:
             batch_size = g.MAX_BATCH_SIZE_PER_GPU
@@ -34,8 +37,8 @@ class BaselineTraining(SharedTraining):
                 batch_size *= g.used_gpu_count()
 
             train_patients = train_patients[:batch_size]
-            valid_patients = valid_patients[:batch_size]
-            test_patients = test_patients[:batch_size]
+            valid_patients = valid_patients[:1]
+            test_patients = test_patients[:1]
 
         return train_patients, valid_patients, test_patients
 
@@ -46,9 +49,6 @@ class BaselineTraining(SharedTraining):
         cnn_path: str = "",  # make cnn_path == "" will load a new cnn
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
-        # Change int/float/str/list into Int/Float/Str/List
-        hyper.convert_data_type()
-
         # cross valid folds
         hyper["dataset"]["k.folds"] = g.DATASET_K_FOLDS
 
@@ -56,20 +56,23 @@ class BaselineTraining(SharedTraining):
         hyper["dataset"]["cross.valid"] = hyper["cross.valid"]
         hyper.pop("cross.valid")
 
-        # at least 2 epochs to compare loss difference
+        # epochs
         if debug_mode:
+            # at least 2 epochs to compare loss difference
             hyper["epoch"]["init"] = 2
         else:
-            hyper["epoch"]["init"].set_range(1, None)
+            hyper["epoch"]["init"] = set_range(hyper["epoch"]["init"], (1, None))
 
         # record actual epochs because of early stop
         hyper["epoch"]["actual"] = 0
 
         # early stop, based on epoch
-        hyper["epoch"]["early.stop"].set_range(1, hyper["epoch"]["init"])
+        hyper["epoch"]["early.stop"] = set_range(
+            hyper["epoch"]["early.stop"], (1, hyper["epoch"]["init"])
+        )
 
         # lr
-        hyper["lr"]["init"].set_range(g.EPS, 1)
+        hyper["lr"]["init"] = set_range(hyper["lr"]["init"], (g.EPS, 1.0))
 
         # actual lr
         hyper["lr"]["actual"] = hyper["lr"]["init"]
@@ -77,16 +80,20 @@ class BaselineTraining(SharedTraining):
             hyper["lr"]["actual"] *= g.used_gpu_count()
 
         # min lr
-        hyper["lr"]["min"].set_range(g.EPS, hyper["lr"]["init"])
+        hyper["lr"]["min"] = set_range(hyper["lr"]["min"], (g.EPS, hyper["lr"]["init"]))
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr"]["decay.patience"].set_range(1, hyper["epoch"]["init"])
+        hyper["lr"]["decay.patience"] = set_range(
+            hyper["lr"]["decay.patience"], (1, hyper["epoch"]["init"])
+        )
 
         # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"].set_range(1, hyper["epoch"]["init"])
+        hyper["keep.best.cnn.num"] = set_range(
+            hyper["keep.best.cnn.num"], (1, hyper["epoch"]["init"])
+        )
 
         # augment percent
-        hyper["augment"]["pct"].set_range(0, 1)
+        hyper["augment"]["pct"] = set_range(hyper["augment"]["pct"], (0.0, 1.0))
 
         # load shared hyper parameters
         super()._load_hyper(hyper=hyper, cnn_path=cnn_path)
@@ -174,8 +181,8 @@ class BaselineTraining(SharedTraining):
     def __draw_lr_fig(self, lr_json_path: str):
         plt.figure().clear()
 
-        lr_dict = g.load_json(lr_json_path)
-        lr_list = []
+        lr_dict = Json.load(lr_json_path)
+        lr_list = List()
         for i in lr_dict:
             lr_list.append(lr_dict[i])
 
@@ -190,9 +197,9 @@ class BaselineTraining(SharedTraining):
         self.__draw_loss_fig(loss_json_path)
 
     def __draw_loss_fig(self, loss_json_path: str):
-        loss_dict = g.load_json(loss_json_path)
-        train_loss = []
-        valid_loss = []
+        loss_dict = Json.load(loss_json_path)
+        train_loss = List()
+        valid_loss = List()
 
         for i in loss_dict:
             train_loss.append(loss_dict[i]["train"])
@@ -252,21 +259,21 @@ class BaselineTraining(SharedTraining):
             hyper["epoch"]["actual"] = cur_epoch
 
             # save loss in json
-            loss_dict = g.load_json(loss_save_path)
+            loss_dict = Json.load(loss_save_path)
             cur_epoch_loss = Dict()
             cur_epoch_loss["train"] = train_loss
             cur_epoch_loss["valid"] = valid_loss
             loss_dict["epoch={:03d}".format(hyper["epoch"]["actual"])] = cur_epoch_loss
-            g.save_json(loss_dict, loss_save_path)
+            Json.save(loss_dict, loss_save_path)
             # draw loss figure
             self.__draw_loss_fig(loss_save_path)
 
             # save lr in json
-            lr_dict = g.load_json(lr_save_path)
+            lr_dict = Json.load(lr_save_path)
             for param_group in hyper["optim"].param_groups:
                 cur_epoch_lr = param_group["lr"]
             lr_dict["epoch={:03d}".format(hyper["epoch"]["actual"])] = cur_epoch_lr
-            g.save_json(lr_dict, lr_save_path)
+            Json.save(lr_dict, lr_save_path)
             # draw lr figure
             self.__draw_lr_fig(lr_save_path)
 
@@ -284,7 +291,7 @@ class BaselineTraining(SharedTraining):
                 )
                 self._save_cnn(hyper, cnn_save_path)
             else:
-                worst_epoch = g.get_dict_key_max(best_loss_dict)
+                worst_epoch = best_loss_dict.key_with_max_value()
                 worst_loss = best_loss_dict[worst_epoch]
                 if valid_loss < worst_loss:
                     g.delete_folder(
@@ -351,9 +358,9 @@ class BaselineTraining(SharedTraining):
                 cur_hyper_folder = os.path.join(cur_fold_folder, "hyper")
                 g.create_folder(cur_hyper_folder)
                 # save an empty loss.json
-                g.save_json(Dict(), os.path.join(cur_hyper_folder, "loss.json"))
+                Json.save(Dict(), os.path.join(cur_hyper_folder, "loss.json"))
                 # save an empty lr.json
-                g.save_json(Dict(), os.path.join(cur_hyper_folder, "lr.json"))
+                Json.save(Dict(), os.path.join(cur_hyper_folder, "lr.json"))
 
                 # save hyper before training
                 hyper_save_path = os.path.join(cur_hyper_folder, "hyper.json")
@@ -418,7 +425,7 @@ class BaselineTraining(SharedTraining):
                 cur_score = Dict()
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in g.METRICS:
-                        cur_score["median"][gtv][metric] = []
+                        cur_score["median"][gtv][metric] = List()
 
                 # load cnn
                 cur_cnn_path = g.get_sub_files(
@@ -487,7 +494,7 @@ class BaselineTraining(SharedTraining):
 
                 # save score (test set)
                 if dataset == "test":
-                    g.save_json(
+                    Json.save(
                         data=cur_score,
                         path=os.path.join(
                             cur_epoch_folder, "baseline", "score_test.json"
@@ -502,13 +509,13 @@ class BaselineTraining(SharedTraining):
                     g.delete_folder(cur_epoch_folder)
                     continue
 
-                if len(best_scores) == 0:
+                if best_scores == {}:
                     save_cur_score = True
                 else:
                     save_cur_score = None
                     # loop through best_scores
-                    for fold in g.get_dict_keys(best_scores):
-                        for epoch in g.get_dict_keys(best_scores[fold]):
+                    for fold in best_scores.keys():
+                        for epoch in best_scores[fold].keys():
                             # cur_score is worse than best_score, dont save
                             if (
                                 cur_score["median"]["gtvs"]["dsc"]
@@ -553,7 +560,7 @@ class BaselineTraining(SharedTraining):
                 # save cur avg score
                 if save_cur_score:
                     best_scores[cur_fold][cur_epoch] = cur_score["median"]["gtvs"]
-                    g.save_json(
+                    Json.save(
                         data=cur_score,
                         path=os.path.join(
                             cur_epoch_folder, "baseline", "score_valid.json"

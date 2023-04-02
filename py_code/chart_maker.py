@@ -4,6 +4,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import global_elems as g
 from custom import Dict
+from custom import Json
+from custom import List
 
 FIGURE_IDX_FONT_SIZE = 20
 DSC_LOW_LIMIT = 0.6
@@ -25,7 +27,7 @@ def patients_overview(
         patient_tumor_size_dict[cur_patient_folder] = 0
 
     # iterate through patients folders
-    for cur_patient_folder in g.get_dict_keys(patient_tumor_size_dict):
+    for cur_patient_folder in patient_tumor_size_dict.keys():
         # create list of round folders
         round_folder_list = ["baseline"]
         round_folder_list += g.get_sub_folders(
@@ -34,7 +36,7 @@ def patients_overview(
         )
         # initialize score_dict of cur patient
         for metric in g.METRICS:
-            score_dict[cur_patient_folder][metric] = []
+            score_dict[cur_patient_folder][metric] = List()
         # iterate through round folders
         for cur_round_folder in round_folder_list:
             iter_json_list = g.get_sub_files(
@@ -42,7 +44,7 @@ def patients_overview(
                 key_word=".json",
             )
             best_iter_json = iter_json_list[-1]
-            best_score_dict = g.load_json(
+            best_score_dict = Json.load(
                 os.path.join(
                     train_result_folder,
                     cur_patient_folder,
@@ -78,7 +80,7 @@ def patients_overview(
     plt.clf()
 
     # # init colors
-    # line_colors = []
+    # line_colors = List()
     # color_low_limit = 0.2
     # color_gap = (1 - color_low_limit) / (len(patient_tumor_size_dict) - 1)
     # for i in range(len(patient_tumor_size_dict)):
@@ -116,7 +118,7 @@ def patients_overview(
         # plt.yticks(rotation=45)
         # color_idx = 0
 
-        for cur_patient_folder in tqdm(g.get_dict_keys(patient_tumor_size_dict)):
+        for cur_patient_folder in tqdm(patient_tumor_size_dict.keys()):
             cur_label_size = patient_tumor_size_dict[cur_patient_folder]
             color_value = (int(cur_label_size) - min_label_size) / (
                 max_label_size - min_label_size
@@ -189,20 +191,20 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
 
     for cur_idl_id in tqdm(idl_id_list):
 
-        hyper_dict = g.load_json(
+        hyper_dict = Json.load(
             os.path.join(g.IDL_RESULTS_FOLDER, cur_idl_id, "hyper.json")
         )
-        avg_score_dict[cur_idl_id] = g.load_json(
+        avg_score_dict[cur_idl_id] = Json.load(
             os.path.join(g.IDL_RESULTS_FOLDER, cur_idl_id, "avg_score.json")
         )
         avg_score_dict[cur_idl_id][key_hyper] = hyper_dict[key_hyper]
-        select_step = g.str_to_list(hyper_dict["select.step"])
+        select_step = List(hyper_dict["select.step"])
 
         # after all patients data recorded
         for metric in g.METRICS:
 
             # transfer avg scores from dict to list
-            score_list = []
+            score_list = List()
 
             for cur_round in avg_score_dict[cur_idl_id][metric]:
 

@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 from pathlib import Path
 from typing import Tuple
-from custom import Dict
 from tkinter import Tk
 from tkinter import filedialog
 from PyQt5 import QtWidgets
@@ -14,7 +13,10 @@ from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QPalette, QImage, QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QRubberBand
 from Ui_main_window import Ui_MainWindow
-from custom import Int
+from custom import Json
+from custom import List
+from custom import Dict
+from custom import set_range
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -460,7 +462,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
         # fill the baseline combobox
-        epoch_folders = []
+        epoch_folders = List()
         for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word="epoch="):
             if "epoch=" in Path(i).name:
                 # format "baseline_id/fold=12/epoch=123"
@@ -519,8 +521,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # update and check slice_id (starts from 0)
                 img_depth = self.__get_img_depth()
                 if img_depth is not None:
-                    self.__slice = Int(img_depth / 2) - 1
-                    self.__slice.set_range(0, img_depth - 1)
+                    self.__slice = round(img_depth / 2) - 1
+                    self.__slice = set_range(self.__slice, (0, img_depth - 1))
 
                 self.__reset_zoomin()
                 self.__refresh_imgs()
@@ -554,7 +556,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["next.{}".format(combox_name)].setEnabled(True)
 
     def __get_combox_content(self, combox: QtWidgets.QComboBox):
-        content_list = []
+        content_list = List()
         for i in range(combox.count()):
             content_list.append(combox.itemText(i))
         return content_list
@@ -697,9 +699,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # try to keep slice id unchanged
             # if slice is None, show the middle slice of whole 3D img,
             if self.__slice is None:
-                self.__slice = Int(img_depth / 2) - 1
+                self.__slice = round(img_depth / 2) - 1
             # check slice_id range from [0, img_depth-1]
-            self.__slice.set_range(0, img_depth - 1)
+            self.__slice = set_range(self.__slice, (0, img_depth - 1))
 
         # try not to reset round when patient is changed
         if self.__round not in round_list:
@@ -746,7 +748,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = g.binarize_img(self.__img_data[i])
 
         # load score
-        gtvt_score = g.load_json(os.path.join(self.__idl_gtvt_folder, "score.json"))
+        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_folder, "score.json"))
 
         for metric in g.METRICS:
             self.__score[metric] = gtvt_score["patient={}".format(self.__patient)][
@@ -1063,11 +1065,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not os.path.exists(json_path):
             return []
 
-        annotated_slices_dict = g.load_json(json_path)[plane]
-        annotated_slices_list = []
+        annotated_slices_dict = Json.load(json_path)[plane]
+        annotated_slices_list = List()
 
         for cur_round in annotated_slices_dict:
-            annotated_slices_list += g.str_to_list(annotated_slices_dict[cur_round])
+            annotated_slices_list += List(annotated_slices_dict[cur_round])
 
             if (cur_round[len("round=") :]) == self.__round:
                 break

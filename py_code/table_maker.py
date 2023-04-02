@@ -1,6 +1,8 @@
 import csv
 import os
 import global_elems as g
+from custom import Json
+from custom import List
 
 
 def compare_idls_in_table(
@@ -13,14 +15,14 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             fields.append("{}_{}".format(metric, i + 1))
 
-    patient_list = g.load_json(
+    patient_list = Json.load(
         os.path.join(
             g.TRAIN_RESULTS_FOLDER, baseline_id, idl_results_list[0], "score_gtvt.json"
         )
     )
-    patient_list = g.get_dict_keys(patient_list)
+    patient_list = patient_list.keys()
 
-    score = []
+    score = List()
 
     for patient in patient_list:
         cur_patient_score = {}
@@ -28,10 +30,8 @@ def compare_idls_in_table(
 
         for i in range(len(idl_results_list)):
             idl_id = idl_results_list[i]
-            gtvt_score = g.load_json(
-                os.path.join(
-                    g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id, "score.json"
-                )
+            gtvt_score = Json.load(
+                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id, "score.json")
             )
             for metric in ["DSC", "MSD", "HD95"]:
                 cur_patient_score["{}_{}".format(metric, i + 1)] = gtvt_score[patient][

@@ -10,15 +10,16 @@ from torch import optim
 import matplotlib.pyplot as plt
 import global_elems as g
 from idl_gtvt_dataset import IDLGTVtDataSet
-from shared_training import SharedTraining
+from training import Training
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.ndimage import measurements
 from custom import Dict
-from custom import Int
-from custom import Float
+from custom import List
+from custom import Json
+from custom import set_range
 
 
-class IDLGTVtTraining(SharedTraining):
+class IDLGTVtTraining(Training):
     def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"]["init"] is a list of lr of each round
         if next_round > len(hyper["lr"]["init"]):
@@ -75,55 +76,57 @@ class IDLGTVtTraining(SharedTraining):
     def _load_hyper(
         self, hyper: Dict, baseline_cnn_path: str, debug_mode: bool = False
     ):
-        # Change int/float/str/list into Int/Float/Str/List
-        hyper.convert_data_type()
-
-        # iterations
+        # iter
         if debug_mode:
             # at least 2 iters to compare loss difference
             hyper["iter"] = 2
         else:
-            hyper["iter"].set_range(1, None)
+            hyper["iter"] = set_range(hyper["iter"], (1, None))
 
         # lr
         # lr is saved in json file as a string, not a list, because:
         # (1) string is easier to read than list in json file (only one line)
         # (2) a "list" will be recognized as multiple trainings
-        hyper["lr"]["init"] = g.str_to_list(hyper["lr"]["init"])
+        hyper["lr"]["init"] = List(hyper["lr"]["init"])
         for i in range(len(hyper["lr"]["init"])):
-            hyper["lr"]["init"][i] = Float(hyper["lr"]["init"][i])
-            hyper["lr"]["init"][i].set_range(g.EPS, 1)
+            hyper["lr"]["init"][i] = float(hyper["lr"]["init"][i])
+            hyper["lr"]["init"][i] = set_range(hyper["lr"]["init"][i], (g.EPS, 1))
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr"]["min"].set_range(g.EPS, hyper["lr"]["init"][i])
+            hyper["lr"]["min"] = set_range(
+                hyper["lr"]["min"], (g.EPS, hyper["lr"]["init"][i])
+            )
 
         # actual lr
-        hyper["lr"]["actual"] = []
+        hyper["lr"]["actual"] = List()
         if g.used_gpu_count() > 1:
             hyper["lr"]["actual"].append(hyper["lr"]["init"][0] * g.used_gpu_count())
         else:
             hyper["lr"]["actual"].append(hyper["lr"]["init"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr"]["decay.patience"].set_range(1, hyper["iter"])
+        hyper["lr"]["decay.patience"] = set_range(
+            hyper["lr"]["decay.patience"], (1, hyper["iter"])
+        )
 
         # augmentation times
-        hyper["augment"]["times"].set_range(1, None)
+        hyper["augment"]["times"] = set_range(hyper["augment"]["times"], (1, None))
 
         # augmentation percent (based on augment_times)
         hyper["augment"]["pct"] = hyper["augment"]["times"] / (
             hyper["augment"]["times"] + 1
         )
-        hyper["augment"]["pct"] = Float(hyper["augment"]["pct"])
 
         # select step
         # select.step is saved in json file as a string, not a list, because:
         # (1) string is easier to read than list in json file (only one line)
         # (2) a "list" will be recognized as multiple trainings
         for plane in ["transverse", "coronal", "sagittal"]:
-            hyper["select.step"][plane] = g.str_to_list(hyper["select.step"][plane])
+            hyper["select.step"][plane] = List(hyper["select.step"][plane])
             for i in range(len(hyper["select.step"][plane])):
-                hyper["select.step"][plane][i] = Int(hyper["select.step"][plane][i])
-                hyper["select.step"][plane][i].set_range(0, None)
+                hyper["select.step"][plane][i] = int(hyper["select.step"][plane][i])
+                hyper["select.step"][plane][i] = set_range(
+                    hyper["select.step"][plane][i], (0, None)
+                )
 
         # select scenario
         for plane in ["transverse", "coronal", "sagittal"]:
@@ -135,11 +138,21 @@ class IDLGTVtTraining(SharedTraining):
                 hyper["select.scenario"][plane] = "random"
 
         # weight map parameters
-        hyper["weight"]["background"].set_range(0, 1)
-        hyper["weight"]["slice"].set_range(hyper["weight"]["background"], None)
-        hyper["weight"]["fp.fn"].set_range(hyper["weight"]["slice"], None)
-        hyper["weight"]["distance.step"].set_range(1, None)
-        hyper["weight"]["prev.round.decay"].set_range(0, 1)
+        hyper["weight"]["background"] = set_range(
+            hyper["weight"]["background"], (0.0, 1.0)
+        )
+        hyper["weight"]["slice"] = set_range(
+            hyper["weight"]["slice"], (hyper["weight"]["background"], None)
+        )
+        hyper["weight"]["fp.fn"] = set_range(
+            hyper["weight"]["fp.fn"], (hyper["weight"]["slice"], None)
+        )
+        hyper["weight"]["distance.step"] = set_range(
+            hyper["weight"]["distance.step"], (1, None)
+        )
+        hyper["weight"]["prev.round.decay"] = set_range(
+            hyper["weight"]["prev.round.decay"], (0.0, 1.0)
+        )
 
         # load patients
         hyper["patients"] = self.__load_dataset(debug_mode)
@@ -157,12 +170,12 @@ class IDLGTVtTraining(SharedTraining):
         ).to(g.DEVICE)
 
     def __load_dataset(self, debug_mode: bool = False):
-        json_data = g.load_json(g.DATASET_SPLIT_JSON)
-        test_patients = g.str_to_list(json_data["test.set"])
+        json_data = Json.load(g.DATASET_SPLIT_JSON)
+        test_patients = List(json_data["test.set"])
 
         # debug mode, only 1 or 2 patients
         if debug_mode:
-            test_patients = test_patients[:1]
+            test_patients = test_patients[:2]
 
         return test_patients
 
@@ -172,7 +185,7 @@ class IDLGTVtTraining(SharedTraining):
             if i == "lr":
                 simple_hyper[i] = hyper[i].copy()
                 for k in ["init", "actual"]:
-                    simple_hyper[i][k] = g.list_to_str(simple_hyper[i][k])
+                    simple_hyper[i][k] = simple_hyper[i][k].to_str()
 
             elif i == "patients":
                 simple_hyper[i] = len(hyper[i])
@@ -180,7 +193,7 @@ class IDLGTVtTraining(SharedTraining):
             elif i == "select.step":
                 simple_hyper[i] = hyper[i].copy()
                 for plane in simple_hyper[i]:
-                    simple_hyper[i][plane] = g.list_to_str(simple_hyper[i][plane])
+                    simple_hyper[i][plane] = simple_hyper[i][plane].to_str()
 
             elif isinstance(hyper[i], list) or isinstance(hyper[i], dict):
                 simple_hyper[i] = hyper[i].copy()
@@ -213,8 +226,8 @@ class IDLGTVtTraining(SharedTraining):
     #     g.print_line()
     #     print(baseline_cnn_path)
     #     # load hypers
-    #     idl_hyper_dict = g.load_json(g.HYPER_JSON_IDL_GTVT)
-    #     baseline_hyper_dict = g.load_json(baseline_hyper_path)
+    #     idl_hyper_dict = Json.load(g.HYPER_JSON_IDL_GTVT)
+    #     baseline_hyper_dict = Json.load(baseline_hyper_path)
 
     #     # make sure all hypers are unique, no arrangement
     #     hyper = Dict()
@@ -240,7 +253,7 @@ class IDLGTVtTraining(SharedTraining):
     #     # create json file to save train loss
     #     train_loss_dict = Dict()
     #     train_loss_dict["iter"] = Dict()
-    #     g.save_json(
+    #     Json.save(
     #         train_loss_dict,
     #         os.path.join(
     #             cur_result_folder, "patient={}".format(cur_patient), "train_loss.json"
@@ -254,7 +267,7 @@ class IDLGTVtTraining(SharedTraining):
     #         "round={:02d}".format(cur_round),
     #     )
     #     annotated_slices = Dict()
-    #     annotated_slices["round=01"] = []  # doesn't matter what the dict key is
+    #     annotated_slices["round=01"] = List()  # doesn't matter what the dict key is
     #     for file_name in g.get_sub_files(cur_round_folder, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
     #         slice_id = slice_id.zfill(3)
@@ -285,7 +298,7 @@ class IDLGTVtTraining(SharedTraining):
 
         cur_round_slices = Dict()
         for plane in ["transverse", "coronal", "sagittal"]:
-            cur_round_slices[plane] = []
+            cur_round_slices[plane] = List()
 
         cur_round = max(
             len(annotated_slices["transverse"]),
@@ -310,7 +323,7 @@ class IDLGTVtTraining(SharedTraining):
             if len(hyper["select.step"][plane]) < cur_round:
                 continue
 
-            candidate_slices = dict()
+            candidate_slices = Dict()
             cur_plane_annotated_slices = g.dict_to_list(annotated_slices[plane])
 
             # go through pred and record tumor size
@@ -340,7 +353,7 @@ class IDLGTVtTraining(SharedTraining):
             if hyper["select.scenario"][plane] == "largest":
                 # descrease sort the dict (return a list of tuple)
                 candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
-                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
+                cur_round_slices[plane] = candidate_slices.keys()
 
             # "gravity.center", round =1
             elif hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
@@ -354,18 +367,18 @@ class IDLGTVtTraining(SharedTraining):
             # "equal.divide", round = 1
             elif hyper["select.scenario"][plane] == "equal.divide" and cur_round == 1:
                 divided_parts = hyper["select.step"][plane][0] + 1
-                candidate_slices = g.get_dict_keys(candidate_slices)
+                candidate_slices = candidate_slices.keys()
                 for part in range(1, divided_parts):
                     idx = len(candidate_slices) * part / divided_parts
-                    idx = Int(idx)
-                    idx.set_range(1, len(candidate_slices))
+                    idx = round(idx)
+                    idx = set_range(idx, (1, len(candidate_slices)))
                     cur_round_slices[plane].append(candidate_slices[idx - 1])
 
             # (1) "random"
             # (2) "gravity.center", round >= 2
             # (3) "equal.divide", round >= 2
             else:
-                cur_round_slices[plane] = g.get_dict_keys(candidate_slices)
+                cur_round_slices[plane] = candidate_slices.keys()
                 random.shuffle(cur_round_slices[plane])
 
             # narrow cur_round_slices based on select.step
@@ -398,10 +411,10 @@ class IDLGTVtTraining(SharedTraining):
         # save score of cur patient
         idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
         score_json_path = os.path.join(idl_gtvt_folder, "score.json")
-        score = g.load_json(score_json_path)
+        score = Json.load(score_json_path)
         for metric in g.METRICS:
             score[patient][metric][cur_round] = patient_result["gtvt"][metric]
-        g.save_json(score, score_json_path)
+        Json.save(score, score_json_path)
 
         # save pred of cur patient
         g.save_nii(
@@ -428,7 +441,7 @@ class IDLGTVtTraining(SharedTraining):
 
         idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
         loss_json_path = os.path.join(Path(cur_round_folder).parent, "loss.json")
-        loss_dict = g.load_json(loss_json_path)
+        loss_dict = Json.load(loss_json_path)
 
         if cur_round == 1:
             pred_folder = os.path.join(
@@ -504,7 +517,7 @@ class IDLGTVtTraining(SharedTraining):
                 os.path.join(idl_gtvt_folder, "patients")
             )
             if len(patient_folder_list) <= 1:
-                g.save_json(loss_dict, loss_json_path)
+                Json.save(loss_dict, loss_json_path)
                 self.__draw_loss_fig(idl_gtvt_folder)
 
         # current round idl finished
@@ -525,7 +538,7 @@ class IDLGTVtTraining(SharedTraining):
             hyper["time.spent"]["avg"][round_str] += cur_round_time_spent
 
         # save loss
-        g.save_json(loss_dict, loss_json_path)
+        Json.save(loss_dict, loss_json_path)
 
     def __training_cur_patient(
         self,
@@ -540,19 +553,19 @@ class IDLGTVtTraining(SharedTraining):
         )
         g.create_folder(patient_folder)
         # create an empty loss.json
-        g.save_json(Dict(), os.path.join(patient_folder, "loss.json"))
+        Json.save(Dict(), os.path.join(patient_folder, "loss.json"))
 
         # initialize idl score (copy from baseline)
-        baseline_score = g.load_json(
+        baseline_score = Json.load(
             os.path.join(epoch_folder, "baseline", "score_test.json")
         )
         idl_gtvt_score_path = os.path.join(idl_gtvt_folder, "score.json")
-        idl_gtvt_score = g.load_json(idl_gtvt_score_path)
+        idl_gtvt_score = Json.load(idl_gtvt_score_path)
         for metric in g.METRICS:
             idl_gtvt_score["patient={}".format(patient)][metric][
                 "round=00"
             ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
-        g.save_json(idl_gtvt_score, idl_gtvt_score_path)
+        Json.save(idl_gtvt_score, idl_gtvt_score_path)
 
         g.print_line()
         print("patient:", patient)
@@ -609,10 +622,11 @@ class IDLGTVtTraining(SharedTraining):
         # save annotated slices in cur patient folder
         for plane in ["transverse", "coronal", "sagittal"]:
             for cur_round in annotated_slices[plane]:
-                annotated_slices[plane][cur_round] = g.list_to_str(
-                    annotated_slices[plane][cur_round]
-                )
-        g.save_json(
+                annotated_slices[plane][cur_round] = annotated_slices[plane][
+                    cur_round
+                ].to_str()
+
+        Json.save(
             data=annotated_slices,
             path=os.path.join(
                 idl_gtvt_folder,
@@ -638,10 +652,8 @@ class IDLGTVtTraining(SharedTraining):
         for cur_patient_folder in g.get_sub_folders(
             os.path.join(idl_gtvt_folder, "patients"), return_full_path=True
         ):
-            cur_patient_loss = g.load_json(
-                os.path.join(cur_patient_folder, "loss.json")
-            )
-            if len(avg_loss) == 0:
+            cur_patient_loss = Json.load(os.path.join(cur_patient_folder, "loss.json"))
+            if avg_loss == {}:
                 for i in cur_patient_loss:
                     avg_loss[i] = [cur_patient_loss[i]]
             else:
@@ -719,7 +731,7 @@ class IDLGTVtTraining(SharedTraining):
             self.__save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            g.save_json(Dict(), os.path.join(idl_gtvt_folder, "score.json"))
+            Json.save(Dict(), os.path.join(idl_gtvt_folder, "score.json"))
 
             # training start time
             hyper["time.spent"]["total"] = datetime.now()
@@ -756,7 +768,7 @@ class IDLGTVtTraining(SharedTraining):
 
     def __calculate_median_score(self, idl_gtvt_folder: str):
         score_json_path = os.path.join(idl_gtvt_folder, "score.json")
-        score = g.load_json(score_json_path)
+        score = Json.load(score_json_path)
         median = Dict()
 
         # add all patients score in to a list
@@ -764,7 +776,7 @@ class IDLGTVtTraining(SharedTraining):
             for metric in g.METRICS:
                 for cur_round in score[patient][metric]:
                     if median[metric][cur_round] == {}:
-                        median[metric][cur_round] = []
+                        median[metric][cur_round] = List()
                     median[metric][cur_round].append(score[patient][metric][cur_round])
 
         # calculate median score
@@ -773,7 +785,7 @@ class IDLGTVtTraining(SharedTraining):
                 score["median"][metric][cur_round] = statistics.median(
                     median[metric][cur_round]
                 )
-        g.save_json(data=score, path=os.path.join(score_json_path))
+        Json.save(data=score, path=os.path.join(score_json_path))
 
     def inference(self, idl_gtvt_id: str):
         g.print_line()

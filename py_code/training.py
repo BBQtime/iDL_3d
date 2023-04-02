@@ -13,12 +13,15 @@ from idl_gtvt_dataset import IDLGTVtDataSet
 from typing import Union
 from unet_pp_slim import UNetPPSlim
 from datetime import datetime
-from custom import Dict
 from baseline_dataset import BaselineDataSet
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from custom import Json
+from custom import Dict
+from custom import List
+from custom import set_range
 
 
-class SharedTraining:
+class Training:
     def __init__(self):
         # segmentation metrics
         self._metrics = Dict()
@@ -37,28 +40,31 @@ class SharedTraining:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper["dropout"].set_range(0, 0.9)
+        hyper["dropout"] = set_range(hyper["dropout"], (0.0, 1.0))
         # batch size
         hyper["batch.size"] = g.MAX_BATCH_SIZE_PER_GPU
         if g.used_gpu_count() > 1:
             hyper["batch.size"] *= g.used_gpu_count()
 
-        # lr_decay_factor=1 will cause error
-        hyper["lr"]["decay.factor"].set_range(g.EPS, 1 - g.EPS)
+        # = 1 will cause error
+        hyper["lr"]["decay.factor"] = set_range(
+            hyper["lr"]["decay.factor"], (g.EPS, 1 - g.EPS)
+        )
 
         # augment methods
-        hyper["augment"]["methods"] = g.str_to_list(hyper["augment"]["methods"])
+        hyper["augment"]["methods"] = List(hyper["augment"]["methods"])
 
         # augment lower/upper limit
-        hyper["augment"]["up.limit"].set_range(1, len(hyper["augment"]["methods"]))
-        hyper["augment"]["low.limit"].set_range(1, hyper["augment"]["up.limit"])
+        hyper["augment"]["up.limit"] = set_range(
+            hyper["augment"]["up.limit"], (1, len(hyper["augment"]["methods"]))
+        )
+        hyper["augment"]["low.limit"] = set_range(
+            hyper["augment"]["low.limit"], (1, hyper["augment"]["up.limit"])
+        )
 
         # loss function parameters
-        hyper["loss"]["weight"].set_range(0, 1)
-        hyper["loss"]["delta"].set_range(0, 1)
-
-        # Change Int/Float/Str/List into int/float/str/list
-        hyper.revert_data_type()
+        hyper["loss"]["weight"] = set_range(hyper["loss"]["weight"], (0.0, 1.0))
+        hyper["loss"]["delta"] = set_range(hyper["loss"]["delta"], (0.0, 1.0))
 
         # load cnn
         self._load_cnn(hyper=hyper, cnn_path=cnn_path)
@@ -116,7 +122,7 @@ class SharedTraining:
 
             elif i == "augment":
                 simple_hyper[i] = hyper[i].copy()
-                simple_hyper[i]["methods"] = g.list_to_str(simple_hyper[i]["methods"])
+                simple_hyper[i]["methods"] = simple_hyper[i]["methods"].to_str()
 
             elif i == "loss":
                 simple_hyper[i] = hyper[i].copy()
@@ -150,16 +156,16 @@ class SharedTraining:
 
     def _save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self.__get_simple_hyper(hyper)
-        g.save_json(data=simple_hyper, path=json_path)
+        Json.save(data=simple_hyper, path=json_path)
 
     # split dataset and save result into json file
     def _split_dataset(self) -> Dict:
-        dataset_split = g.load_json(g.DATASET_SPLIT_JSON)
-        train_patients = []
+        dataset_split = Json.load(g.DATASET_SPLIT_JSON)
+        train_patients = List()
 
-        for fold in g.get_dict_keys(dataset_split):
+        for fold in dataset_split.keys():
             if fold != "test.set":
-                train_patients += g.str_to_list(dataset_split[fold])
+                train_patients += List(dataset_split[fold])
                 dataset_split.pop(fold)
 
         random.shuffle(train_patients)
@@ -167,14 +173,14 @@ class SharedTraining:
         fold_len = round(len(train_patients) / g.DATASET_K_FOLDS)
         for fold in range(1, g.DATASET_K_FOLDS + 1):
             if fold == g.DATASET_K_FOLDS:
-                dataset_split["fold.{}".format(fold)] = g.list_to_str(train_patients)
+                dataset_split["fold.{}".format(fold)] = train_patients.to_str()
             else:
-                dataset_split["fold.{}".format(fold)] = g.list_to_str(
-                    train_patients[:fold_len]
-                )
+                dataset_split["fold.{}".format(fold)] = train_patients[
+                    :fold_len
+                ].to_str()
                 train_patients = train_patients[fold_len:]
 
-        g.save_json(dataset_split, g.DATASET_SPLIT_JSON)
+        Json.save(dataset_split, g.DATASET_SPLIT_JSON)
         return dataset_split
 
     def _save_cnn(self, hyper: Dict, save_path: str):
@@ -217,7 +223,7 @@ class SharedTraining:
             train_id += "_" + train_remark
 
         # add important hyper param (that need to be compared) to train_id
-        origin_hyper_dict = g.load_json(hyper_json_path)
+        origin_hyper_dict = Json.load(hyper_json_path)
         # make sure all values of hyper dict are "list" type
         for i in origin_hyper_dict:
             if not isinstance(origin_hyper_dict[i], list):
@@ -320,9 +326,9 @@ class SharedTraining:
         return start_time
 
     def _load_group_hyper(self, json_path: str) -> dict:
-        group_hyper = []
-        origin_hyper_dict = g.load_json(json_path)
-        hyper_keys = g.get_dict_keys(origin_hyper_dict)
+        group_hyper = List()
+        origin_hyper_dict = Json.load(json_path)
+        hyper_keys = origin_hyper_dict.keys()
 
         # make sure all values of hyper dict are "list" type
         for i in origin_hyper_dict:
