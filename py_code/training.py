@@ -3,8 +3,9 @@ import os
 import torch
 import math
 import random
-import numpy as np
 import torch.nn as nn
+import numpy as np
+from numpy import ndarray
 from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
@@ -254,6 +255,7 @@ class Training:
         hyper: Dict,
         gtvt_only: bool,
         unetpp_output: int = 3,
+        masked_label: ndarray = None,
     ) -> Dict:
 
         # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
@@ -292,21 +294,29 @@ class Training:
             # squeeze batch
             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
-            # get gtvt/gtvn/gtvs img
-            result["gtvt"]["pred"] = outputs[1]
-            if not gtvt_only:
-                result["gtvn"]["pred"] = outputs[2]
-                result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
+        # get gtvt/gtvn/gtvs img
+        result["gtvt"]["pred"] = outputs[1]
+        if not gtvt_only:
+            result["gtvn"]["pred"] = outputs[2]
+            result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
 
-            # pad and crop to original size
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
-                if gtv == "gtvt" or not gtvt_only:
-                    result[gtv]["pred"] = g.central_pad(
-                        result[gtv]["pred"], origin[gtv].shape
-                    )
-                    result[gtv]["pred"] = g.central_crop(
-                        result[gtv]["pred"], origin[gtv].shape
-                    )
+        # pad and crop to original size
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            if gtv == "gtvt" or not gtvt_only:
+                result[gtv]["pred"] = g.central_pad(
+                    result[gtv]["pred"], origin[gtv].shape
+                )
+                result[gtv]["pred"] = g.central_crop(
+                    result[gtv]["pred"], origin[gtv].shape
+                )
+
+        # idl post processing
+        if masked_label is not None and gtvt_only:
+            cc_list = g.get_connected_components(result["gtvt"]["pred"])
+            result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
+            for cur_cc in cc_list:
+                if (cur_cc * masked_label).sum() > 0:
+                    result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
 
         # calculate segment scores
         for gtv in ["gtvs", "gtvt", "gtvn"]:

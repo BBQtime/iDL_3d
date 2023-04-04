@@ -1074,6 +1074,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if (cur_round[len("round=") :]) == self.__round:
                 break
 
+        # change annotated slice from str to int
         for i in range(len(annotated_slices_list)):
             annotated_slices_list[i] = int(annotated_slices_list[i])
 

@@ -10,6 +10,7 @@ from numpy import ndarray
 from custom import Dict
 from scipy.ndimage import distance_transform_edt
 
+
 DEBUG_SAVE_IMG = 0
 
 
@@ -50,6 +51,7 @@ class IDLGTVtDataSet:
                     binary=True,
                 )
                 self.__origin["label.gtvn"] = label_gtvs - self.__origin["label.gtvt"]
+
         # (2) real iDL
         else:
             for gtv in ["t", "n"]:
@@ -121,13 +123,12 @@ class IDLGTVtDataSet:
             slice_mask[plane] = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
 
             for cur_round in annotated_slices[plane]:
-                # dont change weight["annotate.slice"], use another variable
+                # do NOT change weight["annotate.slice"], use another variable
                 slice_weight = weight["slice"]
                 cur_round_int = int(cur_round[len("round=") :])
                 slice_weight *= pow(
                     weight["prev.round.decay"], (max_round - cur_round_int)
                 )
-
                 if slice_weight < weight["background"]:
                     slice_weight = weight["background"]
 
@@ -146,7 +147,7 @@ class IDLGTVtDataSet:
                             np.ones_like(slice_mask[plane][:, :, 0]) * slice_weight
                         )
 
-        # get max value of each plane
+        # combine slice_mask on 3 planes
         slice_mask = np.maximum(
             np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
             slice_mask["sagittal"],
@@ -157,17 +158,18 @@ class IDLGTVtDataSet:
                 os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
             )
 
-        # get fp&fn (keep weight=1 before distance map)
-        label_gtvs = np.maximum(
-            self.__origin["label.gtvt"], self.__origin["label.gtvn"]
-        )
-        pred_gtvs = np.maximum(self.__origin["pred.gtvt"], self.__origin["pred.gtvn"])
-        fp_fn = pred_gtvs * (1 - label_gtvs) + (1 - pred_gtvs) * label_gtvs
+        # get fp&fn (keep weight=1 before creating distance map)
+        fp = self.__origin["pred.gtvt"] * (1 - self.__origin["label.gtvt"])
+        fn = (1 - self.__origin["pred.gtvt"]) * self.__origin["label.gtvt"]
+        fp_fn = fp + fn
         fp_fn = fp_fn * np.where(slice_mask > 0, 1, 0)
         fp_fn = fp_fn.astype(np.float32)
 
+        # annotation (pred + label)
         if 1:
-            annotation = np.maximum(pred_gtvs, label_gtvs)
+            annotation = np.maximum(
+                self.__origin["pred.gtvt"], self.__origin["label.gtvt"]
+            )
             annotation = annotation * np.where(slice_mask > 0, 1, 0)
             annotation = annotation.astype(np.float32)
             if DEBUG_SAVE_IMG:
@@ -176,8 +178,10 @@ class IDLGTVtDataSet:
                 )
 
         # distance map
-        # distance_map = distance_transform_edt(np.logical_not(fp_fn))
-        distance_map = distance_transform_edt(np.logical_not(annotation))
+        if 1:
+            distance_map = distance_transform_edt(np.logical_not(annotation))
+        else:
+            distance_map = distance_transform_edt(np.logical_not(fp_fn))
         distance_map = distance_map.astype(np.float32)
         distance_map = np.where(
             distance_map >= 2 * weight["distance.step"],

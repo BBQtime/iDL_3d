@@ -1,6 +1,7 @@
 import os
 import random
 import statistics
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 from loss_func import UnifiedFocalLoss
@@ -398,14 +399,87 @@ class IDLGTVtTraining(Training):
 
         return cur_round_slices
 
+    def __get_masked_label(self, cur_round_folder: str):
+        cur_round = Path(cur_round_folder).name
+        patient_folder = Path(cur_round_folder).parent
+        patient = patient_folder.name
+        # change "patient=123" into "123"
+        patient = patient[len("patient=") :]
+
+        label = g.load_nii(
+            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            binary=True,
+        )
+
+        annotated_slices = Json.load(
+            os.path.join(patient_folder, "annotated_slices.json")
+        )
+
+        # annotated slice mask
+        slice_mask = Dict()
+
+        # loop through each plane
+        for plane in ["transverse", "coronal", "sagittal"]:
+            slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
+
+            # loop through each round
+            for cur_round in annotated_slices[plane]:
+
+                # str to list
+                annotated_slices[plane][cur_round] = List(
+                    annotated_slices[plane][cur_round]
+                )
+                # current step
+                for cur_slice in annotated_slices[plane][cur_round]:
+                    # change slice id from str into int
+                    cur_slice = int(cur_slice)
+                    if plane == "transverse":
+                        slice_mask[plane][cur_slice, :, :] = np.ones_like(
+                            slice_mask[plane][0, :, :]
+                        )
+                    elif plane == "coronal":
+                        slice_mask[plane][:, cur_slice, :] = np.ones_like(
+                            slice_mask[plane][:, 0, :]
+                        )
+                    elif plane == "sagittal":
+                        slice_mask[plane][:, :, cur_slice] = np.ones_like(
+                            slice_mask[plane][:, :, 0]
+                        )
+
+        # combine slice_mask on 3 planes
+        slice_mask = np.maximum(
+            np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
+            slice_mask["sagittal"],
+        )
+        if 0:
+            g.save_nii(
+                slice_mask,
+                os.path.join(g.PROJ_PATH, "debug", "slice_mask_post_processing.nii"),
+            )
+
+        label *= slice_mask
+        if 0:
+            g.save_nii(
+                label,
+                os.path.join(g.PROJ_PATH, "debug", "label_post_processing.nii"),
+            )
+
+        return label
+
     def __inference_cur_round(self, cur_round_folder: str, hyper: Dict):
         cur_round = Path(cur_round_folder).name
 
         patient = Path(cur_round_folder).parent.name
 
+        # get annotation for post processing
+        masked_label = self.__get_masked_label(cur_round_folder)
+
         # result structure: gtvt: {pred, dsc, msd, hd95}
         patient_result = self._inference_single_patient(
-            patient=patient[len("patient=") :], hyper=hyper, gtvt_only=True
+            patient=patient[len("patient=") :],
+            hyper=hyper,
+            gtvt_only=True,
+            masked_label=masked_label,
         )
 
         # save score of cur patient
@@ -436,11 +510,11 @@ class IDLGTVtTraining(Training):
         cur_round = Path(cur_round_folder).name
         cur_round = int(cur_round[len("round=") :])
 
-        patient = Path(cur_round_folder).parent.name
-        patient = patient[len("patient=") :]
+        patient_folder = Path(cur_round_folder).parent
+        patient = patient_folder.name[len("patient=") :]
 
-        idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
-        loss_json_path = os.path.join(Path(cur_round_folder).parent, "loss.json")
+        idl_gtvt_folder = patient_folder.parent.parent
+        loss_json_path = os.path.join(patient_folder, "loss.json")
         loss_dict = Json.load(loss_json_path)
 
         if cur_round == 1:
@@ -449,7 +523,7 @@ class IDLGTVtTraining(Training):
             )
         else:
             pred_folder = os.path.join(
-                Path(cur_round_folder).parent, "round={:02d}".format(cur_round - 1)
+                patient_folder, "round={:02d}".format(cur_round - 1)
             )
 
         # record current round time spent
@@ -521,10 +595,24 @@ class IDLGTVtTraining(Training):
                 self.__draw_loss_fig(idl_gtvt_folder)
 
         # current round idl finished
+        # save cnn
         cnn_save_path = os.path.join(
             cur_round_folder, Path(cur_round_folder).name + ".pt"
         )
         self._save_cnn(hyper, cnn_save_path)
+
+        # save annotated_slices dict before inference, because masked_label needs it
+        # copy a new dict to avoid changing origin annotated_slices dict
+        annotated_slices_copy = annotated_slices.copy()
+        for plane in ["transverse", "coronal", "sagittal"]:
+            for round_key in annotated_slices_copy[plane]:
+                annotated_slices_copy[plane][round_key] = annotated_slices_copy[plane][
+                    round_key
+                ].to_str()
+        Json.save(
+            data=annotated_slices_copy,
+            path=os.path.join(patient_folder, "annotated_slices.json"),
+        )
 
         # inference
         self.__inference_cur_round(cur_round_folder=cur_round_folder, hyper=hyper)
@@ -618,23 +706,6 @@ class IDLGTVtTraining(Training):
 
         # draw avg loss of all trained patients
         self.__draw_loss_fig(idl_gtvt_folder)
-
-        # save annotated slices in cur patient folder
-        for plane in ["transverse", "coronal", "sagittal"]:
-            for cur_round in annotated_slices[plane]:
-                annotated_slices[plane][cur_round] = annotated_slices[plane][
-                    cur_round
-                ].to_str()
-
-        Json.save(
-            data=annotated_slices,
-            path=os.path.join(
-                idl_gtvt_folder,
-                "patients",
-                "patient={}".format(patient),
-                "annotated_slices.json",
-            ),
-        )
 
     def draw_loss_fig(self, idl_gtvt_id: str):
         for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id):
@@ -773,6 +844,8 @@ class IDLGTVtTraining(Training):
 
         # add all patients score in to a list
         for patient in score:
+            if patient == "median":
+                continue
             for metric in g.METRICS:
                 for cur_round in score[patient][metric]:
                     if median[metric][cur_round] == {}:
@@ -805,6 +878,9 @@ class IDLGTVtTraining(Training):
             os.path.join(idl_gtvt_folder, "patients"),
             key_word="patient=",
         )
+        if 0:
+            patient_list = ["patient=239", "patient=260", "patient=313", "patient=180"]
+
         for cur_patient in tqdm(patient_list):
             cur_patient_folder = os.path.join(idl_gtvt_folder, "patients", cur_patient)
 
