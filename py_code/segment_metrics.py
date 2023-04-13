@@ -7,7 +7,8 @@ import torch.nn as nn
 from torch import Tensor
 from numpy import ndarray
 from typing import Union
-import global_elems as g
+from custom import Global as g
+from custom import Img
 
 
 def assert_shape(test, reference):
@@ -551,8 +552,8 @@ class SegmentationMetrics(nn.Module):
         if len(labels.shape) == 4:
             labels = labels.squeeze()
 
-        preds = g.binarize_img(preds)
-        labels = g.binarize_img(labels)
+        preds = Img.binarize(preds)
+        labels = Img.binarize(labels)
 
         if isinstance(preds, Tensor):
             preds = preds.cpu().numpy()

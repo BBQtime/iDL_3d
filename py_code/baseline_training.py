@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import os
 import torch
 import math
@@ -13,7 +13,11 @@ from baseline_dataset import BaselineDataSet
 from loss_func import UnifiedFocalLoss
 from custom import Json
 from custom import List
-from custom import set_range
+from custom import Nii
+from custom import Folder
+from custom import GPU
+from custom import Value
+from custom import Explorer
 
 
 class BaselineTraining(Training):
@@ -33,8 +37,8 @@ class BaselineTraining(Training):
 
         if debug_mode:
             batch_size = g.MAX_BATCH_SIZE_PER_GPU
-            if g.used_gpu_count() > 1:
-                batch_size *= g.used_gpu_count()
+            if GPU.used_count() > 1:
+                batch_size *= GPU.used_count()
 
             train_patients = train_patients[:batch_size]
             valid_patients = valid_patients[:1]
@@ -61,39 +65,39 @@ class BaselineTraining(Training):
             # at least 2 epochs to compare loss difference
             hyper["epoch"]["init"] = 2
         else:
-            hyper["epoch"]["init"] = set_range(hyper["epoch"]["init"], (1, None))
+            hyper["epoch"]["init"] = Value.limit_range(hyper["epoch"]["init"], (1, None))
 
         # record actual epochs because of early stop
         hyper["epoch"]["actual"] = 0
 
         # early stop, based on epoch
-        hyper["epoch"]["early.stop"] = set_range(
+        hyper["epoch"]["early.stop"] = Value.limit_range(
             hyper["epoch"]["early.stop"], (1, hyper["epoch"]["init"])
         )
 
         # lr
-        hyper["lr"]["init"] = set_range(hyper["lr"]["init"], (g.EPS, 1.0))
+        hyper["lr"]["init"] = Value.limit_range(hyper["lr"]["init"], (g.EPS, 1.0))
 
         # actual lr
         hyper["lr"]["actual"] = hyper["lr"]["init"]
-        if g.used_gpu_count() > 1:
-            hyper["lr"]["actual"] *= g.used_gpu_count()
+        if GPU.used_count() > 1:
+            hyper["lr"]["actual"] *= GPU.used_count()
 
         # min lr
-        hyper["lr"]["min"] = set_range(hyper["lr"]["min"], (g.EPS, hyper["lr"]["init"]))
+        hyper["lr"]["min"] = Value.limit_range(hyper["lr"]["min"], (g.EPS, hyper["lr"]["init"]))
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr"]["decay.patience"] = set_range(
+        hyper["lr"]["decay.patience"] = Value.limit_range(
             hyper["lr"]["decay.patience"], (1, hyper["epoch"]["init"])
         )
 
         # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"] = set_range(
+        hyper["keep.best.cnn.num"] = Value.limit_range(
             hyper["keep.best.cnn.num"], (1, hyper["epoch"]["init"])
         )
 
         # augment percent
-        hyper["augment"]["pct"] = set_range(hyper["augment"]["pct"], (0.0, 1.0))
+        hyper["augment"]["pct"] = Value.limit_range(hyper["augment"]["pct"], (0.0, 1.0))
 
         # load shared hyper parameters
         super()._load_hyper(hyper=hyper, cnn_path=cnn_path)
@@ -220,7 +224,7 @@ class BaselineTraining(Training):
         patience_count = 0
 
         for cur_epoch in range(1, hyper["epoch"]["init"] + 1):
-            g.print_line()
+            print("")
             print("epoch: {}".format(cur_epoch))
             print("training:")
             hyper["cnn"].train()
@@ -283,7 +287,7 @@ class BaselineTraining(Training):
                 cur_epoch_folder = os.path.join(
                     cur_fold_folder, "epoch={:03d}".format(cur_epoch)
                 )
-                g.create_folder(os.path.join(cur_epoch_folder, "baseline"))
+                Folder.create(os.path.join(cur_epoch_folder, "baseline"))
                 cnn_save_path = os.path.join(
                     cur_epoch_folder,
                     "baseline",
@@ -294,7 +298,7 @@ class BaselineTraining(Training):
                 worst_epoch = best_loss_dict.key_with_max_value()
                 worst_loss = best_loss_dict[worst_epoch]
                 if valid_loss < worst_loss:
-                    g.delete_folder(
+                    Folder.delete(
                         os.path.join(
                             cur_fold_folder, "epoch={:03d}".format(worst_epoch)
                         )
@@ -304,7 +308,7 @@ class BaselineTraining(Training):
                     cur_epoch_folder = os.path.join(
                         cur_fold_folder, "epoch={:03d}".format(cur_epoch)
                     )
-                    g.create_folder(os.path.join(cur_epoch_folder, "baseline"))
+                    Folder.create(os.path.join(cur_epoch_folder, "baseline"))
                     cnn_save_path = os.path.join(
                         cur_epoch_folder,
                         "baseline",
@@ -330,17 +334,17 @@ class BaselineTraining(Training):
                 hyper=cur_hyper,
                 debug_mode=debug_mode,
             )
-            g.print_line()
+            print("")
             print(baseline_id)
 
             baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
-            g.create_folder(baseline_folder)
+            Folder.create(baseline_folder)
 
             for cur_fold in range(1, g.DATASET_K_FOLDS + 1):
                 cur_fold_folder = os.path.join(
                     baseline_folder, "fold={:02d}".format(cur_fold)
                 )
-                g.create_folder(cur_fold_folder)
+                Folder.create(cur_fold_folder)
 
                 self._load_hyper(
                     hyper=cur_hyper,
@@ -349,14 +353,14 @@ class BaselineTraining(Training):
                     debug_mode=debug_mode,
                 )
                 if cur_fold == 1:
-                    g.print_line()
+                    print("")
                     self.__print_hyper(cur_hyper)
 
-                g.print_line()
+                print("")
                 print("cross validation fold: {}".format(cur_fold))
 
                 cur_hyper_folder = os.path.join(cur_fold_folder, "hyper")
-                g.create_folder(cur_hyper_folder)
+                Folder.create(cur_hyper_folder)
                 # save an empty loss.json
                 Json.save(Dict(), os.path.join(cur_hyper_folder, "loss.json"))
                 # save an empty lr.json
@@ -396,7 +400,7 @@ class BaselineTraining(Training):
         dataset: str = "test",
         debug_mode: bool = False,
     ):
-        g.print_line()
+        print("")
         print("inference on {} set: {}".format(dataset, baseline_id))
 
         baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
@@ -405,16 +409,16 @@ class BaselineTraining(Training):
             best_scores = Dict()
 
         # loop through fold folders
-        for cur_fold_folder in g.get_sub_folders(baseline_folder, key_word="fold="):
+        for cur_fold_folder in Explorer.get_sub_folders(baseline_folder, key_word="fold="):
             cur_fold = int(cur_fold_folder[len("fold=") :])
-            g.print_line()
+            print("")
             print("current fold: ", cur_fold)
             cur_fold_folder = os.path.join(
                 g.TRAIN_RESULTS_FOLDER, baseline_id, cur_fold_folder
             )
 
             # loop through epoch folders
-            for cur_epoch_folder in g.get_sub_folders(
+            for cur_epoch_folder in Explorer.get_sub_folders(
                 cur_fold_folder, key_word="epoch="
             ):
                 cur_epoch = int(cur_epoch_folder[len("epoch=") :])
@@ -428,7 +432,7 @@ class BaselineTraining(Training):
                         cur_score["median"][gtv][metric] = List()
 
                 # load cnn
-                cur_cnn_path = g.get_sub_files(
+                cur_cnn_path = Explorer.get_sub_files(
                     os.path.join(cur_epoch_folder, "baseline"),
                     key_word=".pt",
                     return_full_path=True,
@@ -453,7 +457,7 @@ class BaselineTraining(Training):
                             "patients",
                             "patient={}".format(cur_patient),
                         )
-                        g.create_folder(cur_patient_folder)
+                        Folder.create(cur_patient_folder)
 
                     # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                     cur_patient_result = self._inference_single_patient(
@@ -477,8 +481,8 @@ class BaselineTraining(Training):
 
                     # save pred of cur patient
                     if dataset == "test":
-                        for gtv in ["gtvt", "gtvn", "gtvs"]:
-                            g.save_nii(
+                        for gtv in ["gtvt", "gtvn"]:  # , "gtvs"]:
+                            Nii.save(
                                 img=cur_patient_result[gtv]["pred"],
                                 save_path=os.path.join(
                                     cur_patient_folder, "pred_{}.nii".format(gtv)
@@ -506,7 +510,7 @@ class BaselineTraining(Training):
                 if math.isnan(cur_score["median"]["gtvs"]["msd"]) or math.isnan(
                     cur_score["median"]["gtvs"]["hd95"]
                 ):
-                    g.delete_folder(cur_epoch_folder)
+                    Folder.delete(cur_epoch_folder)
                     continue
 
                 if best_scores == {}:
@@ -547,7 +551,7 @@ class BaselineTraining(Training):
                                 and best_scores[fold][epoch]["hd95"]
                                 > cur_score["median"]["gtvs"]["hd95"]
                             ):
-                                g.delete_folder(
+                                Folder.delete(
                                     os.path.join(
                                         baseline_folder,
                                         "fold={:02d}".format(fold),
@@ -567,4 +571,4 @@ class BaselineTraining(Training):
                         ),
                     )
                 else:
-                    g.delete_folder(cur_epoch_folder)
+                    Folder.delete(cur_epoch_folder)

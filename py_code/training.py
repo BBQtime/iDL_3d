@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import os
 import torch
 import math
@@ -19,7 +19,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from custom import Json
 from custom import Dict
 from custom import List
-from custom import set_range
+from custom import GPU
+from custom import Img
+from custom import Nii
+from custom import Value
 
 
 class Training:
@@ -41,14 +44,14 @@ class Training:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper["dropout"] = set_range(hyper["dropout"], (0.0, 1.0))
+        hyper["dropout"] = Value.limit_range(hyper["dropout"], (0.0, 1.0))
         # batch size
         hyper["batch.size"] = g.MAX_BATCH_SIZE_PER_GPU
-        if g.used_gpu_count() > 1:
-            hyper["batch.size"] *= g.used_gpu_count()
+        if GPU.used_count() > 1:
+            hyper["batch.size"] *= GPU.used_count()
 
         # = 1 will cause error
-        hyper["lr"]["decay.factor"] = set_range(
+        hyper["lr"]["decay.factor"] = Value.limit_range(
             hyper["lr"]["decay.factor"], (g.EPS, 1 - g.EPS)
         )
 
@@ -56,16 +59,16 @@ class Training:
         hyper["augment"]["methods"] = List(hyper["augment"]["methods"])
 
         # augment lower/upper limit
-        hyper["augment"]["up.limit"] = set_range(
+        hyper["augment"]["up.limit"] = Value.limit_range(
             hyper["augment"]["up.limit"], (1, len(hyper["augment"]["methods"]))
         )
-        hyper["augment"]["low.limit"] = set_range(
+        hyper["augment"]["low.limit"] = Value.limit_range(
             hyper["augment"]["low.limit"], (1, hyper["augment"]["up.limit"])
         )
 
         # loss function parameters
-        hyper["loss"]["weight"] = set_range(hyper["loss"]["weight"], (0.0, 1.0))
-        hyper["loss"]["delta"] = set_range(hyper["loss"]["delta"], (0.0, 1.0))
+        hyper["loss"]["weight"] = Value.limit_range(hyper["loss"]["weight"], (0.0, 1.0))
+        hyper["loss"]["delta"] = Value.limit_range(hyper["loss"]["delta"], (0.0, 1.0))
 
         # load cnn
         self._load_cnn(hyper=hyper, cnn_path=cnn_path)
@@ -112,7 +115,7 @@ class Training:
                 hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
 
         # set multi-GPU
-        if g.used_gpu_count() > 1:
+        if GPU.used_count() > 1:
             hyper["cnn"] = nn.DataParallel(hyper["cnn"]).to(g.DEVICE)
 
     def __get_simple_hyper(self, hyper: Dict) -> Dict:
@@ -190,14 +193,14 @@ class Training:
 
         # save state dict only
         if g.CNN_STATE_DICT_ONLY:
-            if g.used_gpu_count() > 1:
+            if GPU.used_count() > 1:
                 torch.save(hyper["cnn"].module.state_dict(), save_path)
             else:
                 torch.save(hyper["cnn"].state_dict(), save_path)
 
         # save entire cnn
         else:
-            if g.used_gpu_count() > 1:
+            if GPU.used_count() > 1:
                 torch.save(hyper["cnn"].module, save_path)
             else:
                 torch.save(hyper["cnn"], save_path)
@@ -265,14 +268,14 @@ class Training:
         origin = Dict()
 
         # load gtvt
-        origin["gtvt"] = g.load_nii(
+        origin["gtvt"] = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
 
         if not gtvt_only:
             # load gtvs
-            origin["gtvs"] = g.load_nii(
+            origin["gtvs"] = Nii.load(
                 os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
                 binary=True,
             )
@@ -281,7 +284,7 @@ class Training:
                 g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient)
             )
             if os.path.exists(gtvn_path):
-                origin["gtvn"] = g.load_nii(gtvn_path, binary=True)
+                origin["gtvn"] = Nii.load(gtvn_path, binary=True)
             else:
                 origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
 
@@ -303,16 +306,16 @@ class Training:
         # pad and crop to original size
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             if gtv == "gtvt" or not gtvt_only:
-                result[gtv]["pred"] = g.central_pad(
+                result[gtv]["pred"] = Img.central_pad(
                     result[gtv]["pred"], origin[gtv].shape
                 )
-                result[gtv]["pred"] = g.central_crop(
+                result[gtv]["pred"] = Img.central_crop(
                     result[gtv]["pred"], origin[gtv].shape
                 )
 
         # idl post processing
         if masked_label is not None and gtvt_only:
-            cc_list = g.get_connected_components(result["gtvt"]["pred"])
+            cc_list = Img.connected_components(result["gtvt"]["pred"])
             result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
             for cur_cc in cc_list:
                 if (cur_cc * masked_label).sum() > 0:

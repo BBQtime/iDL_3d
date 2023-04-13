@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import platform
 import os
 import sys
@@ -16,7 +16,10 @@ from Ui_main_window import Ui_MainWindow
 from custom import Json
 from custom import List
 from custom import Dict
-from custom import set_range
+from custom import Value
+from custom import Nii
+from custom import Img
+from custom import Explorer
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -369,11 +372,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__display_frame[i].setPalette(pal)
 
     def __load_img(self, img_path: str):
-        img = g.load_nii(img_path, binary=False)
+        img = Nii.load(img_path, binary=False)
         # ct windowing before normalization
         if "CT" in img_path:
-            img = g.ct_windowing(img)
-        img = g.normalize_img(img)
+            img = Img.ct_windowing(img)
+        img = Img.normalize(img)
         # turn upside down
         img = np.flip(m=img, axis=0)
         # img = np.rot90(m=img, k=2, axes=(0, 1))
@@ -463,7 +466,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # fill the baseline combobox
         epoch_folders = List()
-        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word="epoch="):
+        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word="epoch="):
             if "epoch=" in Path(i).name:
                 # format "baseline_id/fold=12/epoch=123"
                 epoch_folders.append(i[len(g.TRAIN_RESULTS_FOLDER) + 1 :])
@@ -522,7 +525,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img_depth = self.__get_img_depth()
                 if img_depth is not None:
                     self.__slice = round(img_depth / 2) - 1
-                    self.__slice = set_range(self.__slice, (0, img_depth - 1))
+                    self.__slice = Value.limit_range(self.__slice, (0, img_depth - 1))
 
                 self.__reset_zoomin()
                 self.__refresh_imgs()
@@ -585,7 +588,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # fill idl.gtvt combox
         idl_gtvt_folders = os.path.join(epoch_folder, "idl_gtvt")
         if os.path.exists(idl_gtvt_folders):
-            idl_gtvt_folders = g.get_sub_folders(idl_gtvt_folders)
+            idl_gtvt_folders = Explorer.get_sub_folders(idl_gtvt_folders)
             if idl_gtvt_folders != []:
                 self.__combox["idl.gtvt"].addItems(idl_gtvt_folders)
                 self.__combox["idl.gtvt"].setEnabled(True)
@@ -606,7 +609,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__idl_gtvt_folder = os.path.join(
             Path(self.__baseline_folder).parent, "idl_gtvt", idl_gtvt_id
         )
-        patient_list = g.get_sub_folders(
+        patient_list = Explorer.get_sub_folders(
             os.path.join(self.__idl_gtvt_folder, "patients")
         )
 
@@ -677,7 +680,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__arrow_btn["prev.round"].setEnabled(False)
         self.__arrow_btn["next.round"].setEnabled(False)
 
-        round_list = g.get_sub_folders(
+        round_list = Explorer.get_sub_folders(
             os.path.join(
                 self.__idl_gtvt_folder,
                 "patients",
@@ -701,7 +704,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.__slice is None:
                 self.__slice = round(img_depth / 2) - 1
             # check slice_id range from [0, img_depth-1]
-            self.__slice = set_range(self.__slice, (0, img_depth - 1))
+            self.__slice = Value.limit_range(self.__slice, (0, img_depth - 1))
 
         # try not to reset round when patient is changed
         if self.__round not in round_list:
@@ -745,7 +748,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         for i in ["pred.gtvt"]:  # , "pred.gtvn"]:
             self.__img_data[i] = self.__load_img(pred_path[i])
-            self.__img_data[i] = g.binarize_img(self.__img_data[i])
+            self.__img_data[i] = Img.binarize(self.__img_data[i])
 
         # load score
         gtvt_score = Json.load(os.path.join(self.__idl_gtvt_folder, "score.json"))
@@ -979,7 +982,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             text_pos_y = 10
 
             for metric in g.METRICS:
-                if g.is_number(self.__score[metric]):
+                if Value.is_number(self.__score[metric]):
                     cv_text += metric.upper() + ": {:.3f}".format(self.__score[metric])
                 else:
                     cv_text += metric.upper() + ": N/A"

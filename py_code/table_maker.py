@@ -1,6 +1,6 @@
 import csv
 import os
-import global_elems as g
+from custom import Global as g
 from custom import Json
 from custom import List
 

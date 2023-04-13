@@ -1,5 +1,4 @@
 import imgaug as ia
-import global_elems as g
 from imgaug import augmenters as iaa
 from numpy import ndarray
 from custom import Dict

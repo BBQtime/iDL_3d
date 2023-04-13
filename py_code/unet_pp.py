@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import torch
 import torch.nn as nn
 from torch import Tensor

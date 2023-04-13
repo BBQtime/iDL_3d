@@ -31,62 +31,11 @@
         "sagittal": "1",
         "transverse": "1"
     },
-    "weight": [
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 3.0,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 1.5,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 2.0,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 2.5,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 3.5,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 4.0,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 4.5,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        },
-        {
-            "background": 0.2,
-            "distance.step": 3,
-            "fp.fn": 5.0,
-            "prev.round.decay": 0.5,
-            "slice": 1.0
-        }
-    ]
+    "weight": {
+        "background": 0.2,
+        "distance.step": 3,
+        "fp.fn": 4.0,
+        "prev.round.decay": 0.5,
+        "slice": 1.0
+    }
 }

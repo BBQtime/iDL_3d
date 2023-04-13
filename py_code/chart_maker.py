@@ -2,10 +2,13 @@ import os
 from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import global_elems as g
+from custom import Global as g
 from custom import Dict
 from custom import Json
 from custom import List
+from custom import Nii
+from custom import Explorer
+from custom import Folder
 
 FIGURE_IDX_FONT_SIZE = 20
 DSC_LOW_LIMIT = 0.6
@@ -14,14 +17,14 @@ DSC_LOW_LIMIT = 0.6
 def patients_overview(
     idl_id,
 ):
-    train_result_folder = os.path.join(g.IDL_RESULTS_FOLDER, idl_id)
+    train_result_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, idl_id)
 
     score_dict = Dict()
 
     # plt.style.use("bmh")  # put this line before drawing figure
 
     patient_tumor_size_dict = Dict()
-    for cur_patient_folder in g.get_sub_folders(
+    for cur_patient_folder in Explorer.get_sub_folders(
         train_result_folder, key_word="patient="
     ):
         patient_tumor_size_dict[cur_patient_folder] = 0
@@ -30,7 +33,7 @@ def patients_overview(
     for cur_patient_folder in patient_tumor_size_dict.keys():
         # create list of round folders
         round_folder_list = ["baseline"]
-        round_folder_list += g.get_sub_folders(
+        round_folder_list += Explorer.get_sub_folders(
             os.path.join(train_result_folder, cur_patient_folder),
             key_word="round=",
         )
@@ -39,7 +42,7 @@ def patients_overview(
             score_dict[cur_patient_folder][metric] = List()
         # iterate through round folders
         for cur_round_folder in round_folder_list:
-            iter_json_list = g.get_sub_files(
+            iter_json_list = Explorer.get_sub_files(
                 os.path.join(train_result_folder, cur_patient_folder, cur_round_folder),
                 key_word=".json",
             )
@@ -60,14 +63,14 @@ def patients_overview(
         label_nii_path = os.path.join(
             train_result_folder, cur_patient_folder, "baseline", "label.nii"
         )
-        label_data = g.load_nii(label_nii_path, binary=True)
+        label_data = Nii.load(label_nii_path, binary=True)
         label_size = label_data.sum()
         label_size *= g.NII_SPACING[0] * g.NII_SPACING[1] * g.NII_SPACING[2]
         label_size *= 0.001  # mm3 to cm3
         patient_tumor_size_dict[cur_patient_folder] = label_size
 
     # sort by tumor size increment
-    patient_tumor_size_dict = g.sort_dict_by_value(patient_tumor_size_dict)
+    patient_tumor_size_dict = patient_tumor_size_dict.sort_by_value()
 
     max_label_size = int(max(patient_tumor_size_dict.values()))
     min_label_size = int(min(patient_tumor_size_dict.values()))
@@ -184,7 +187,7 @@ def patients_overview(
 
 
 def compare_idl_results(key_hyper: str, idl_id_list: list):
-    g.print_line()
+    print("")
 
     # save avg 3d score of dsc/msd/hd95
     avg_score_dict = Dict()
@@ -328,7 +331,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
         elif metric == "hd95":
             plt.legend(loc="upper right")
 
-        img_path = g.create_folder(os.path.join(g.PROJ_PATH, "idl_figs"))
+        img_path = Folder.create(os.path.join(g.PROJ_PATH, "idl_figs"))
         img_path = os.path.join(
             img_path,
             key_hyper + "." + metric + ".png",

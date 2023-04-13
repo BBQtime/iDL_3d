@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -246,10 +246,10 @@ class UNetPPSlim(nn.Module):
 #     batch_size = 4
 #     in_chan = 4
 #     out_chan = 3
-#     g.clear_gpu_cache()
+
 
 #     cnn = UNetPPSlim(in_chan, out_chan)
-#     if g.used_gpu_count() > 1:
+#     if GPU.used_count() > 1:
 #         cnn = nn.DataParallel(cnn)
 #     cnn = cnn.to(g.DEVICE)
 

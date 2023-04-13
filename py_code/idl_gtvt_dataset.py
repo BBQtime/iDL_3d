@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import os
 import torch
 import numpy as np
@@ -8,6 +8,8 @@ import random
 from data_augment import DataAugmentation
 from numpy import ndarray
 from custom import Dict
+from custom import Nii
+from custom import Img
 from scipy.ndimage import distance_transform_edt
 
 
@@ -34,77 +36,59 @@ class IDLGTVtDataSet:
         # load label
         # (1) simulated iDL
         if label_folder == g.DATASET_FOLDER:
-            # gtvs / gtvt
-            self.__origin["label.gtvt"] = g.load_nii(
+            self.__origin["label.gtvt"] = Nii.load(
                 os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
                 binary=True,
             )
-            # gtvn
-            label_gtvn_path = os.path.join(
-                label_folder, "HNCDL_{}_GTVn.nii".format(patient)
-            )
-            if os.path.exists(label_gtvn_path):
-                self.__origin["label.gtvn"] = g.load_nii(label_gtvn_path, binary=True)
-            else:
-                label_gtvs = g.load_nii(
-                    os.path.join(label_folder, "HNCDL_{}_GTVs.nii".format(patient)),
-                    binary=True,
-                )
-                self.__origin["label.gtvn"] = label_gtvs - self.__origin["label.gtvt"]
 
         # (2) real iDL
         else:
-            for gtv in ["t", "n"]:
-                self.__origin["label.gtv{}".format(gtv)] = g.load_nii(
-                    os.path.join(label_folder, "pred_gtv{}".format(gtv)), binary=True
-                )
-
-        # load pred
-        for gtv in ["t", "n"]:
-            self.__origin["pred.gtv{}".format(gtv)] = g.load_nii(
-                os.path.join(pred_folder, "pred_gtv{}.nii".format(gtv)), binary=True
+            self.__origin["label.gtvt"] = Nii.load(
+                os.path.join(label_folder, "pred_gtvt.nii"), binary=True
             )
 
+        # load pred
+        self.__origin["pred.gtvt"] = Nii.load(
+            os.path.join(pred_folder, "pred_gtvt.nii"), binary=True
+        )
+
         # load ct/pt/mrt1/mt2
-        self.__origin["ct"] = g.load_nii(
+        self.__origin["ct"] = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
         )
         # ct windowing before normalization
-        self.__origin["ct"] = g.ct_windowing(self.__origin["ct"])
-        self.__origin["pt"] = g.load_nii(
+        self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
+        self.__origin["pt"] = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(patient))
         )
-        self.__origin["mrt1"] = g.load_nii(
+        self.__origin["mrt1"] = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T1dr.nii".format(patient))
         )
-        self.__origin["mrt2"] = g.load_nii(
+        self.__origin["mrt2"] = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(patient))
         )
 
-        # weight map
+        # load weight map
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
             annotated_slices, weight
         )
 
-        # overwrite pred to label on non-annotated slices
+        # save origin label and pred
         if DEBUG_SAVE_IMG:
-            g.save_nii(
+            Nii.save(
                 self.__origin["label.gtvt"],
                 os.path.join(g.PROJ_PATH, "debug", "origin_label.nii"),
             )
-            g.save_nii(
+            Nii.save(
                 self.__origin["pred.gtvt"],
                 os.path.join(g.PROJ_PATH, "debug", "pred.nii"),
             )
-
-        for gtv in ["t", "n"]:
-            self.__origin["label.gtv{}".format(gtv)] *= slice_mask
-            self.__origin["label.gtv{}".format(gtv)] += self.__origin[
-                "pred.gtv{}".format(gtv)
-            ] * (1 - slice_mask)
-
+        # overwrite pred to label on non-annotated slices
+        self.__origin["label.gtvt"] *= slice_mask
+        self.__origin["label.gtvt"] += self.__origin["pred.gtvt"] * (1 - slice_mask)
+        # save overwrite label
         if DEBUG_SAVE_IMG:
-            g.save_nii(
+            Nii.save(
                 self.__origin["label.gtvt"],
                 os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
             )
@@ -153,7 +137,7 @@ class IDLGTVtDataSet:
             slice_mask["sagittal"],
         )
         if DEBUG_SAVE_IMG:
-            g.save_nii(
+            Nii.save(
                 slice_mask,
                 os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
             )
@@ -173,7 +157,7 @@ class IDLGTVtDataSet:
             annotation = annotation * np.where(slice_mask > 0, 1, 0)
             annotation = annotation.astype(np.float32)
             if DEBUG_SAVE_IMG:
-                g.save_nii(
+                Nii.save(
                     annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii")
                 )
 
@@ -196,19 +180,19 @@ class IDLGTVtDataSet:
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
         if DEBUG_SAVE_IMG:
-            g.save_nii(
+            Nii.save(
                 distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii")
             )
 
         # weighted fp&fn (after weight map)
         fp_fn = fp_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
         if DEBUG_SAVE_IMG:
-            g.save_nii(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
+            Nii.save(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
 
         # final_weight_map
         weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_fn)
         if DEBUG_SAVE_IMG:
-            g.save_nii(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
+            Nii.save(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
 
         # return slice_mask to overwrite pred to label on non-annotated slices
         slice_mask = np.where(slice_mask > 0, 1, 0)
@@ -231,7 +215,7 @@ class IDLGTVtDataSet:
 
         # normalize before augmentation
         if normalize and (not img.max() == img.min() == 0):
-            img = g.normalize_img(img)
+            img = Img.normalize(img)
 
         # data augmentation
         img = self.__augment.transform(input_data=img, seed=augment_seed)
@@ -241,8 +225,8 @@ class IDLGTVtDataSet:
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = g.central_pad(img, g.IMG_SHAPE)
-        img = g.central_crop(img, g.IMG_SHAPE)
+        img = Img.central_pad(img, g.IMG_SHAPE)
+        img = Img.central_crop(img, g.IMG_SHAPE)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)
@@ -260,10 +244,7 @@ class IDLGTVtDataSet:
         tmp = Dict()
 
         origin_label_pred_sum = (
-            self.__origin["label.gtvt"].sum()
-            + self.__origin["label.gtvn"].sum()
-            + self.__origin["pred.gtvt"].sum()
-            + self.__origin["pred.gtvn"].sum()
+            self.__origin["label.gtvt"].sum() + self.__origin["pred.gtvt"].sum()
         )
 
         # loop until target volume is big enough
@@ -274,15 +255,15 @@ class IDLGTVtDataSet:
             tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            for i in ["label.gtvt", "label.gtvn", "pred.gtvt", "pred.gtvn"]:
+            for i in ["label.gtvt", "pred.gtvt"]:
                 tmp[i] = self.__preprocess(self.__origin[i], tmp["augment.seed"])
-                tmp[i] = g.binarize_img(tmp[i])
+                tmp[i] = Img.binarize(tmp[i])
 
             tmp_label_pred_sum = (
                 tmp["label.gtvt"].sum()
-                + tmp["label.gtvn"].sum()
+                # + tmp["label.gtvn"].sum()
                 + tmp["pred.gtvt"].sum()
-                + tmp["pred.gtvn"].sum()
+                # + tmp["pred.gtvn"].sum()
             )
 
             # target volume is not big enough
@@ -290,51 +271,28 @@ class IDLGTVtDataSet:
 
                 # if nothing in "final" dict
                 if final == {}:
-                    for i in [
-                        "label.gtvt",
-                        "label.gtvn",
-                        "pred.gtvt",
-                        "pred.gtvn",
-                        "augment.seed",
-                    ]:
+                    for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
                         final[i] = tmp[i]
 
                 # keep the gtvt/gtvn/seed with largest target volume
                 final_label_pred_sum = (
-                    final["label.gtvt"].sum()
-                    + final["label.gtvn"].sum()
-                    + final["pred.gtvt"].sum()
-                    + final["pred.gtvn"].sum()
+                    final["label.gtvt"].sum() + final["pred.gtvt"].sum()
                 )
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in [
-                        "label.gtvt",
-                        "label.gtvn",
-                        "pred.gtvt",
-                        "pred.gtvn",
-                        "augment.seed",
-                    ]:
+                    for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in [
-                    "label.gtvt",
-                    "label.gtvn",
-                    "pred.gtvt",
-                    "pred.gtvn",
-                    "augment.seed",
-                ]:
+                for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
                     final[i] = tmp[i]
                 break
 
         # background
-        background = 1 - torch.maximum(final["label.gtvt"], final["label.gtvn"])
+        background = 1 - final["label.gtvt"]
         # !!! background FIRST !!!
-        labels = torch.cat(
-            [background, final["label.gtvt"], final["label.gtvn"]], dim=0
-        )
+        labels = torch.cat([background, final["label.gtvt"]], dim=0)
 
         # multi model imgs
         multi_model_imgs = None

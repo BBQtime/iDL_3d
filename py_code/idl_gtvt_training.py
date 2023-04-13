@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
 import matplotlib.pyplot as plt
-import global_elems as g
+from custom import Global as g
 from idl_gtvt_dataset import IDLGTVtDataSet
 from training import Training
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -17,7 +17,11 @@ from scipy.ndimage import measurements
 from custom import Dict
 from custom import List
 from custom import Json
-from custom import set_range
+from custom import GPU
+from custom import Nii
+from custom import Folder
+from custom import Value
+from custom import Explorer
 
 
 class IDLGTVtTraining(Training):
@@ -26,9 +30,9 @@ class IDLGTVtTraining(Training):
         if next_round > len(hyper["lr"]["init"]):
             next_round = len(hyper["lr"]["init"])
 
-        if g.used_gpu_count() > 1:
+        if GPU.used_count() > 1:
             hyper["lr"]["actual"].append(
-                hyper["lr"]["init"][next_round - 1] * g.used_gpu_count()
+                hyper["lr"]["init"][next_round - 1] * GPU.used_count()
             )
         else:
             hyper["lr"]["actual"].append(hyper["lr"]["init"][next_round - 1])
@@ -82,7 +86,7 @@ class IDLGTVtTraining(Training):
             # at least 2 iters to compare loss difference
             hyper["iter"] = 2
         else:
-            hyper["iter"] = set_range(hyper["iter"], (1, None))
+            hyper["iter"] = Value.limit_range(hyper["iter"], (1, None))
 
         # lr
         # lr is saved in json file as a string, not a list, because:
@@ -91,26 +95,30 @@ class IDLGTVtTraining(Training):
         hyper["lr"]["init"] = List(hyper["lr"]["init"])
         for i in range(len(hyper["lr"]["init"])):
             hyper["lr"]["init"][i] = float(hyper["lr"]["init"][i])
-            hyper["lr"]["init"][i] = set_range(hyper["lr"]["init"][i], (g.EPS, 1))
+            hyper["lr"]["init"][i] = Value.limit_range(
+                hyper["lr"]["init"][i], (g.EPS, 1)
+            )
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr"]["min"] = set_range(
+            hyper["lr"]["min"] = Value.limit_range(
                 hyper["lr"]["min"], (g.EPS, hyper["lr"]["init"][i])
             )
 
         # actual lr
         hyper["lr"]["actual"] = List()
-        if g.used_gpu_count() > 1:
-            hyper["lr"]["actual"].append(hyper["lr"]["init"][0] * g.used_gpu_count())
+        if GPU.used_count() > 1:
+            hyper["lr"]["actual"].append(hyper["lr"]["init"][0] * GPU.used_count())
         else:
             hyper["lr"]["actual"].append(hyper["lr"]["init"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr"]["decay.patience"] = set_range(
+        hyper["lr"]["decay.patience"] = Value.limit_range(
             hyper["lr"]["decay.patience"], (1, hyper["iter"])
         )
 
         # augmentation times
-        hyper["augment"]["times"] = set_range(hyper["augment"]["times"], (1, None))
+        hyper["augment"]["times"] = Value.limit_range(
+            hyper["augment"]["times"], (1, None)
+        )
 
         # augmentation percent (based on augment_times)
         hyper["augment"]["pct"] = hyper["augment"]["times"] / (
@@ -125,7 +133,7 @@ class IDLGTVtTraining(Training):
             hyper["select.step"][plane] = List(hyper["select.step"][plane])
             for i in range(len(hyper["select.step"][plane])):
                 hyper["select.step"][plane][i] = int(hyper["select.step"][plane][i])
-                hyper["select.step"][plane][i] = set_range(
+                hyper["select.step"][plane][i] = Value.limit_range(
                     hyper["select.step"][plane][i], (0, None)
                 )
 
@@ -139,19 +147,19 @@ class IDLGTVtTraining(Training):
                 hyper["select.scenario"][plane] = "random"
 
         # weight map parameters
-        hyper["weight"]["background"] = set_range(
+        hyper["weight"]["background"] = Value.limit_range(
             hyper["weight"]["background"], (0.0, 1.0)
         )
-        hyper["weight"]["slice"] = set_range(
+        hyper["weight"]["slice"] = Value.limit_range(
             hyper["weight"]["slice"], (hyper["weight"]["background"], None)
         )
-        hyper["weight"]["fp.fn"] = set_range(
+        hyper["weight"]["fp.fn"] = Value.limit_range(
             hyper["weight"]["fp.fn"], (hyper["weight"]["slice"], None)
         )
-        hyper["weight"]["distance.step"] = set_range(
+        hyper["weight"]["distance.step"] = Value.limit_range(
             hyper["weight"]["distance.step"], (1, None)
         )
-        hyper["weight"]["prev.round.decay"] = set_range(
+        hyper["weight"]["prev.round.decay"] = Value.limit_range(
             hyper["weight"]["prev.round.decay"], (0.0, 1.0)
         )
 
@@ -224,7 +232,7 @@ class IDLGTVtTraining(Training):
 
     #     # get baseline cnn and hyper path
     #     baseline_cnn_path, baseline_hyper_path = self.__get_baseline_paths(baseline_id)
-    #     g.print_line()
+    #     print("")
     #     print(baseline_cnn_path)
     #     # load hypers
     #     idl_hyper_dict = Json.load(g.HYPER_JSON_IDL_GTVT)
@@ -249,7 +257,7 @@ class IDLGTVtTraining(Training):
     #     # check if result folder exist
     #     cur_result_folder = os.path.join(idl_results_folder, self._idl_id)
     #     if not os.path.exists(cur_result_folder):
-    #         g.exit_app("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
+    #         print("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
 
     #     # create json file to save train loss
     #     train_loss_dict = Dict()
@@ -269,7 +277,7 @@ class IDLGTVtTraining(Training):
     #     )
     #     annotated_slices = Dict()
     #     annotated_slices["round=01"] = List()  # doesn't matter what the dict key is
-    #     for file_name in g.get_sub_files(cur_round_folder, key_word="_label.npy"):
+    #     for file_name in Explorer.get_sub_files(cur_round_folder, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
     #         slice_id = slice_id.zfill(3)
     #         annotated_slices["round=01"].append(slice_id)
@@ -311,7 +319,7 @@ class IDLGTVtTraining(Training):
         patient = Path(patient_folder).name
         patient = patient[len("patient=") :]
 
-        label = g.load_nii(
+        label = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
@@ -325,7 +333,7 @@ class IDLGTVtTraining(Training):
                 continue
 
             candidate_slices = Dict()
-            cur_plane_annotated_slices = g.dict_to_list(annotated_slices[plane])
+            cur_plane_annotated_slices = annotated_slices[plane].to_list()
 
             # go through pred and record tumor size
             if plane == "transverse":
@@ -353,10 +361,10 @@ class IDLGTVtTraining(Training):
             # "largest"
             if hyper["select.scenario"][plane] == "largest":
                 # descrease sort the dict (return a list of tuple)
-                candidate_slices = g.sort_dict_by_value(candidate_slices, reverse=True)
+                candidate_slices = candidate_slices.sort_by_value(reverse=True)
                 cur_round_slices[plane] = candidate_slices.keys()
 
-            # "gravity.center", round =1
+            # "gravity.center", round = 1
             elif hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
                 if plane == "transverse":
                     cur_round_slices[plane].append(round(label_center[0]))
@@ -372,7 +380,7 @@ class IDLGTVtTraining(Training):
                 for part in range(1, divided_parts):
                     idx = len(candidate_slices) * part / divided_parts
                     idx = round(idx)
-                    idx = set_range(idx, (1, len(candidate_slices)))
+                    idx = Value.limit_range(idx, (1, len(candidate_slices)))
                     cur_round_slices[plane].append(candidate_slices[idx - 1])
 
             # (1) "random"
@@ -380,7 +388,7 @@ class IDLGTVtTraining(Training):
             # (3) "equal.divide", round >= 2
             else:
                 cur_round_slices[plane] = candidate_slices.keys()
-                random.shuffle(cur_round_slices[plane])
+                cur_round_slices[plane].shuffle()
 
             # narrow cur_round_slices based on select.step
             if hyper["select.scenario"][plane] == "gravity.center" and cur_round == 1:
@@ -406,7 +414,7 @@ class IDLGTVtTraining(Training):
         # change "patient=123" into "123"
         patient = patient[len("patient=") :]
 
-        label = g.load_nii(
+        label = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
@@ -452,14 +460,14 @@ class IDLGTVtTraining(Training):
             slice_mask["sagittal"],
         )
         if 0:
-            g.save_nii(
+            Nii.save(
                 slice_mask,
                 os.path.join(g.PROJ_PATH, "debug", "slice_mask_post_processing.nii"),
             )
 
         label *= slice_mask
         if 0:
-            g.save_nii(
+            Nii.save(
                 label,
                 os.path.join(g.PROJ_PATH, "debug", "label_post_processing.nii"),
             )
@@ -491,7 +499,7 @@ class IDLGTVtTraining(Training):
         Json.save(score, score_json_path)
 
         # save pred of cur patient
-        g.save_nii(
+        Nii.save(
             img=patient_result["gtvt"]["pred"],
             save_path=os.path.join(cur_round_folder, "pred_gtvt.nii"),
             spacing=g.NII_SPACING,
@@ -505,7 +513,7 @@ class IDLGTVtTraining(Training):
         hyper: Dict,
         annotated_slices: Dict,
     ):
-        g.create_folder(cur_round_folder)
+        Folder.create(cur_round_folder)
 
         cur_round = Path(cur_round_folder).name
         cur_round = int(cur_round[len("round=") :])
@@ -558,20 +566,21 @@ class IDLGTVtTraining(Training):
 
             # freeze layers before iDL
             if hyper["layer.freezing"]:
-                if g.used_gpu_count() > 1:
+                if GPU.used_count() > 1:
                     # here, hyper["cnn"] is DataParallel, not network itself
                     hyper["cnn"].module.freeze_top()
                 else:
                     hyper["cnn"].freeze_top()
 
-            for inputs, labels, weight_map in idl_gtvt_loader:
+            # here, labels only have 2 channels: background and gtvt, No gtvn
+            for multi_model_imgs, labels, weight_map in idl_gtvt_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
-                inputs = inputs.to(g.DEVICE)
+                multi_model_imgs = multi_model_imgs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
-                outputs = hyper["cnn"](inputs)[3]
-                loss = hyper["loss"]["func"](outputs, labels, weight_map)
+                preds = hyper["cnn"](multi_model_imgs)[3]
+                loss = hyper["loss"]["func"](preds, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
@@ -587,7 +596,7 @@ class IDLGTVtTraining(Training):
                 "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
-            patient_folder_list = g.get_sub_folders(
+            patient_folder_list = Explorer.get_sub_folders(
                 os.path.join(idl_gtvt_folder, "patients")
             )
             if len(patient_folder_list) <= 1:
@@ -639,7 +648,7 @@ class IDLGTVtTraining(Training):
         patient_folder = os.path.join(
             idl_gtvt_folder, "patients", "patient={}".format(patient)
         )
-        g.create_folder(patient_folder)
+        Folder.create(patient_folder)
         # create an empty loss.json
         Json.save(Dict(), os.path.join(patient_folder, "loss.json"))
 
@@ -655,7 +664,7 @@ class IDLGTVtTraining(Training):
             ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
         Json.save(idl_gtvt_score, idl_gtvt_score_path)
 
-        g.print_line()
+        print("")
         print("patient:", patient)
 
         annotated_slices = Dict()
@@ -708,7 +717,9 @@ class IDLGTVtTraining(Training):
         self.__draw_loss_fig(idl_gtvt_folder)
 
     def draw_loss_fig(self, idl_gtvt_id: str):
-        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id):
+        for i in Explorer.walk_sub_folders(
+            g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id
+        ):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
@@ -720,7 +731,7 @@ class IDLGTVtTraining(Training):
     def __draw_loss_fig(self, idl_gtvt_folder: str):
         # avg loss dict
         avg_loss = Dict()
-        for cur_patient_folder in g.get_sub_folders(
+        for cur_patient_folder in Explorer.get_sub_folders(
             os.path.join(idl_gtvt_folder, "patients"), return_full_path=True
         ):
             cur_patient_loss = Json.load(os.path.join(cur_patient_folder, "loss.json"))
@@ -732,9 +743,9 @@ class IDLGTVtTraining(Training):
                     avg_loss[i].append(cur_patient_loss[i])
 
         for i in avg_loss:
-            avg_loss[i] = g.get_avg_value(avg_loss[i])
+            avg_loss[i] = Value.get_avg(avg_loss[i])
 
-        avg_loss = g.dict_to_list(avg_loss)
+        avg_loss = avg_loss.to_list()
 
         # draw figure
         plt.figure().clear()
@@ -758,7 +769,7 @@ class IDLGTVtTraining(Training):
                 hyper_json_path=g.HYPER_JSON_IDL_GTVT,
                 hyper=hyper,
             )
-            g.print_line()
+            print("")
             print(idl_gtvt_id)
 
             # find fold folder
@@ -766,7 +777,7 @@ class IDLGTVtTraining(Training):
                 key_word = "fold="
             else:
                 key_word = "fold={:02d}".format(fold)
-            fold_folder = g.get_sub_folders(
+            fold_folder = Explorer.get_sub_folders(
                 os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id),
                 key_word=key_word,
                 return_full_path=True,
@@ -777,10 +788,10 @@ class IDLGTVtTraining(Training):
                 key_word = "epoch="
             else:
                 key_word = "epoch={:03d}".format(epoch)
-            epoch_folder = g.get_sub_folders(
+            epoch_folder = Explorer.get_sub_folders(
                 fold_folder, key_word=key_word, return_full_path=True
             )[0]
-            baseline_cnn_path = g.get_sub_files(
+            baseline_cnn_path = Explorer.get_sub_files(
                 os.path.join(epoch_folder, "baseline"),
                 key_word=".pt",
                 return_full_path=True,
@@ -790,12 +801,12 @@ class IDLGTVtTraining(Training):
             self._load_hyper(
                 hyper=hyper, baseline_cnn_path=baseline_cnn_path, debug_mode=debug_mode
             )
-            g.print_line()
+            print("")
             self.__print_hyper(hyper)
 
             # create idl result folder
             idl_gtvt_folder = os.path.join(epoch_folder, "idl_gtvt", idl_gtvt_id)
-            g.create_folder(idl_gtvt_folder)
+            Folder.create(idl_gtvt_folder)
 
             # save hyper before training
             hyper_save_path = os.path.join(idl_gtvt_folder, "hyper.json")
@@ -861,11 +872,13 @@ class IDLGTVtTraining(Training):
         Json.save(data=score, path=os.path.join(score_json_path))
 
     def inference(self, idl_gtvt_id: str):
-        g.print_line()
+        print("")
         print("inference: {}".format(idl_gtvt_id))
 
         # find idl gtvt folder
-        for i in g.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id):
+        for i in Explorer.walk_sub_folders(
+            g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id
+        ):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
@@ -874,7 +887,7 @@ class IDLGTVtTraining(Training):
                 break
 
         # loop through patients folder
-        patient_list = g.get_sub_folders(
+        patient_list = Explorer.get_sub_folders(
             os.path.join(idl_gtvt_folder, "patients"),
             key_word="patient=",
         )
@@ -885,11 +898,11 @@ class IDLGTVtTraining(Training):
             cur_patient_folder = os.path.join(idl_gtvt_folder, "patients", cur_patient)
 
             # loop through each round
-            for cur_round_folder in g.get_sub_folders(
+            for cur_round_folder in Explorer.get_sub_folders(
                 cur_patient_folder, key_word="round=", return_full_path=True
             ):
                 # load current round cnn
-                cur_round_cnn_path = g.get_sub_files(
+                cur_round_cnn_path = Explorer.get_sub_files(
                     cur_round_folder, key_word=".pt", return_full_path=True
                 )
                 cur_round_cnn_path = cur_round_cnn_path[0]

@@ -5,7 +5,7 @@
         "pct": 0.8,
         "up.limit": 3
     },
-    "cross.valid": false,
+    "cross.valid": true,
     "dropout": 0.3,
     "epoch": {
         "early.stop": 30,

@@ -1,4 +1,4 @@
-import global_elems as g
+from custom import Global as g
 import os
 import random
 import torch
@@ -8,6 +8,8 @@ from torch import Tensor
 from data_augment import DataAugmentation
 from typing import Tuple
 from custom import Dict
+from custom import Nii
+from custom import Img
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
@@ -25,7 +27,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # normalize before augmentation
         if not img.max() == img.min() == 0:
-            img = g.normalize_img(img)
+            img = Img.normalize(img)
 
         # data augmentation
         img = self.__augment.transform(input_data=img, seed=augment_seed)
@@ -35,8 +37,8 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = g.central_pad(img, g.IMG_SHAPE)
-        img = g.central_crop(img, g.IMG_SHAPE)
+        img = Img.central_pad(img, g.IMG_SHAPE)
+        img = Img.central_crop(img, g.IMG_SHAPE)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)
@@ -49,7 +51,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
 
-        origin_gtvs = g.load_nii(
+        origin_gtvs = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
             binary=True,
         )
@@ -66,7 +68,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
             # load gtvs
             tmp_gtvs = self.__preprocess(origin_gtvs, tmp_augment_seed)
-            tmp_gtvs = g.binarize_img(tmp_gtvs)
+            tmp_gtvs = Img.binarize(tmp_gtvs)
 
             # target volume is not big enough
             if tmp_gtvs.sum() < origin_gtvs.sum() * 0.999:
@@ -82,21 +84,21 @@ class BaselineDataSet(torch.utils.data.Dataset):
                 break
 
         # load gtvt
-        origin_gtvt = g.load_nii(
+        origin_gtvt = Nii.load(
             os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
         final_gtvt = self.__preprocess(origin_gtvt, final_augment_seed)
-        final_gtvt = g.binarize_img(final_gtvt)
+        final_gtvt = Img.binarize(final_gtvt)
 
         # load gtvn
         gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
         if os.path.exists(gtvn_path):
-            origin_gtvn = g.load_nii(gtvn_path, binary=True)
+            origin_gtvn = Nii.load(gtvn_path, binary=True)
         else:
             origin_gtvn = origin_gtvs - origin_gtvt
         final_gtvn = self.__preprocess(origin_gtvn, final_augment_seed)
-        final_gtvn = g.binarize_img(final_gtvn)
+        final_gtvn = Img.binarize(final_gtvn)
 
         # load background
         background = 1 - torch.maximum(final_gtvt, final_gtvn)
@@ -108,11 +110,11 @@ class BaselineDataSet(torch.utils.data.Dataset):
             img_path = os.path.join(
                 g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
             )
-            img = g.load_nii(img_path)
+            img = Nii.load(img_path)
 
             # ct windowing before normalization
             if i == "CT":
-                img = g.ct_windowing(img)
+                img = Img.ct_windowing(img)
 
             img = self.__preprocess(img, final_augment_seed)
 

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import global_elems as g
+from custom import Global as g
 from torch import Tensor
 from custom import Dict
 
@@ -196,11 +196,8 @@ if 1:
     in_channels = 4
     out_channels = 2
     img_size = 256
-    g.clear_gpu_cache()
     cnn = UNet(in_channels, out_channels).to(g.DEVICE)
     input_data = torch.rand(batch_size, in_channels, 512, 512).to(g.DEVICE)
     print(input_data.shape)
-    # g.show_img(input_data.cpu())
     output_data = cnn.forward(input_data)
     print(output_data.shape)
-    # g.show_img(output_data.cpu())
