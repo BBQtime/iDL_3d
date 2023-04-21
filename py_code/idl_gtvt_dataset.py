@@ -13,10 +13,7 @@ from custom import Img
 from scipy.ndimage import distance_transform_edt
 
 
-DEBUG_SAVE_IMG = 0
-
-
-class IDLGTVtDataSet:
+class IDLGTVtDataSet(torch.utils.data.Dataset):
     def __init__(
         self,
         patient: str,
@@ -26,29 +23,28 @@ class IDLGTVtDataSet:
         augment: Dict,
         weight: Dict,
     ):
-        self.patient = patient  # make this public
         self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
-        # save origin images
+        # origin images
         self.__origin = Dict()
 
         # load label
         # (1) simulated iDL
         if label_folder == g.DATASET_FOLDER:
-            self.__origin["label.gtvt"] = Nii.load(
+            self.__origin["label"] = Nii.load(
                 os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
                 binary=True,
             )
 
         # (2) real iDL
         else:
-            self.__origin["label.gtvt"] = Nii.load(
+            self.__origin["label"] = Nii.load(
                 os.path.join(label_folder, "pred_gtvt.nii"), binary=True
             )
 
         # load pred
-        self.__origin["pred.gtvt"] = Nii.load(
+        self.__origin["pred"] = Nii.load(
             os.path.join(pred_folder, "pred_gtvt.nii"), binary=True
         )
 
@@ -74,24 +70,23 @@ class IDLGTVtDataSet:
         )
 
         # save origin label and pred
-        if DEBUG_SAVE_IMG:
-            Nii.save(
-                self.__origin["label.gtvt"],
-                os.path.join(g.PROJ_PATH, "debug", "origin_label.nii"),
-            )
-            Nii.save(
-                self.__origin["pred.gtvt"],
-                os.path.join(g.PROJ_PATH, "debug", "pred.nii"),
-            )
+        # Nii.save(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_PATH, "debug", "origin_label.nii"),
+        # )
+        # Nii.save(
+        #     self.__origin["pred"], os.path.join(g.PROJ_PATH, "debug", "pred.nii")
+        # )
+
         # overwrite pred to label on non-annotated slices
-        self.__origin["label.gtvt"] *= slice_mask
-        self.__origin["label.gtvt"] += self.__origin["pred.gtvt"] * (1 - slice_mask)
-        # save overwrite label
-        if DEBUG_SAVE_IMG:
-            Nii.save(
-                self.__origin["label.gtvt"],
-                os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
-            )
+        self.__origin["label"] *= slice_mask
+        self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
+
+        # save overwrited label
+        # Nii.save(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
+        # )
 
     def __load_weight_map(self, annotated_slices: Dict, weight: Dict):
         # annotated slice mask
@@ -136,30 +131,21 @@ class IDLGTVtDataSet:
             np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
             slice_mask["sagittal"],
         )
-        if DEBUG_SAVE_IMG:
-            Nii.save(
-                slice_mask,
-                os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"),
-            )
+        # Nii.save(slice_mask, os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"))
 
         # get fp&fn (keep weight=1 before creating distance map)
-        fp = self.__origin["pred.gtvt"] * (1 - self.__origin["label.gtvt"])
-        fn = (1 - self.__origin["pred.gtvt"]) * self.__origin["label.gtvt"]
+        fp = self.__origin["pred"] * (1 - self.__origin["label"])
+        fn = (1 - self.__origin["pred"]) * self.__origin["label"]
         fp_fn = fp + fn
         fp_fn = fp_fn * np.where(slice_mask > 0, 1, 0)
         fp_fn = fp_fn.astype(np.float32)
 
         # annotation (pred + label)
         if 1:
-            annotation = np.maximum(
-                self.__origin["pred.gtvt"], self.__origin["label.gtvt"]
-            )
+            annotation = np.maximum(self.__origin["pred"], self.__origin["label"])
             annotation = annotation * np.where(slice_mask > 0, 1, 0)
             annotation = annotation.astype(np.float32)
-            if DEBUG_SAVE_IMG:
-                Nii.save(
-                    annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii")
-                )
+            # Nii.save(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
 
         # distance map
         if 1:
@@ -179,20 +165,15 @@ class IDLGTVtDataSet:
         )
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
-        if DEBUG_SAVE_IMG:
-            Nii.save(
-                distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii")
-            )
+        # Nii.save(distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii"))
 
         # weighted fp&fn (after weight map)
         fp_fn = fp_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
-        if DEBUG_SAVE_IMG:
-            Nii.save(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
+        # Nii.save(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
 
         # final_weight_map
         weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_fn)
-        if DEBUG_SAVE_IMG:
-            Nii.save(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
+        # Nii.save(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
 
         # return slice_mask to overwrite pred to label on non-annotated slices
         slice_mask = np.where(slice_mask > 0, 1, 0)
@@ -238,13 +219,13 @@ class IDLGTVtDataSet:
         return img
 
     # must be overrided
-    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor, Tensor]:
 
         final = Dict()
         tmp = Dict()
 
         origin_label_pred_sum = (
-            self.__origin["label.gtvt"].sum() + self.__origin["pred.gtvt"].sum()
+            self.__origin["label"].sum() + self.__origin["pred"].sum()
         )
 
         # loop until target volume is big enough
@@ -252,52 +233,47 @@ class IDLGTVtDataSet:
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["augment.seed"] = random.randint(0, 2**16)
+            tmp["seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            for i in ["label.gtvt", "pred.gtvt"]:
-                tmp[i] = self.__preprocess(self.__origin[i], tmp["augment.seed"])
+            for i in ["label", "pred"]:
+                tmp[i] = self.__preprocess(
+                    img=self.__origin[i], augment_seed=tmp["seed"]
+                )
                 tmp[i] = Img.binarize(tmp[i])
 
-            tmp_label_pred_sum = (
-                tmp["label.gtvt"].sum()
-                # + tmp["label.gtvn"].sum()
-                + tmp["pred.gtvt"].sum()
-                # + tmp["pred.gtvn"].sum()
-            )
+            tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
 
-            # target volume is not big enough
+            # target volume is not large enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
 
-                # if nothing in "final" dict
+                # if "final" dict is empty
                 if final == {}:
-                    for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
+                    for i in ["label", "pred", "seed"]:
                         final[i] = tmp[i]
 
-                # keep the gtvt/gtvn/seed with largest target volume
-                final_label_pred_sum = (
-                    final["label.gtvt"].sum() + final["pred.gtvt"].sum()
-                )
+                # keep the seed/label/pred with largest target volume
+                final_label_pred_sum = final["label"].sum() + final["pred"].sum()
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
+                    for i in ["label", "pred", "seed"]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label.gtvt", "pred.gtvt", "augment.seed"]:
+                for i in ["label", "pred", "seed"]:
                     final[i] = tmp[i]
                 break
 
         # background
-        background = 1 - final["label.gtvt"]
+        background = 1 - final["label"]
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["label.gtvt"]], dim=0)
+        labels = torch.cat([background, final["label"]], dim=0)
 
         # multi model imgs
         multi_model_imgs = None
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            img = self.__preprocess(self.__origin[i], final["augment.seed"])
+            img = self.__preprocess(self.__origin[i], final["seed"])
 
             # concat multi-model img
             if multi_model_imgs is None:
@@ -308,7 +284,7 @@ class IDLGTVtDataSet:
         # weight map
         weight_map = self.__preprocess(
             img=self.__origin["weight.map"],
-            augment_seed=final["augment.seed"],
+            augment_seed=final["seed"],
             normalize=False,
             clip_up_limit=self.__origin["weight.map"].max(),
         )
@@ -317,41 +293,40 @@ class IDLGTVtDataSet:
 
 
 # # for testing
-# if 0:
-#     weight = Dict()
-#     weight["fp.fn"] = 3
-#     weight["distance.step"] = 10
-#     weight["slice"] = 2
-#     weight["prev.round.decay"] = 0.5
-#     weight["background"] = 0.2
+# weight = Dict()
+# weight["fp.fn"] = 3
+# weight["distance.step"] = 10
+# weight["slice"] = 2
+# weight["prev.round.decay"] = 0.5
+# weight["background"] = 0.2
 
-#     augment = Dict()
-#     augment["methods"] = ["translate"]
-#     augment["pct"] = 1
-#     augment["low.limit"] = 1
-#     augment["up.limit"] = 1
-#     augment["times"] = 1
+# augment = Dict()
+# augment["methods"] = ["translate"]
+# augment["pct"] = 1
+# augment["min"] = 1
+# augment["max"] = 1
+# augment["times"] = 1
 
-#     annotated_slices = Dict()
-#     annotated_slices["round=00"] = [20, 40]
-#     annotated_slices["round=01"] = [30]
+# annotated_slices = Dict()
+# annotated_slices["round=00"] = [20, 40]
+# annotated_slices["round=01"] = [30]
 
-#     pred_folder = os.path.join(
-#         g.TRAIN_RESULTS_FOLDER,
-#         "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
-#         "baseline",
-#         "fold=01",
-#         "epoch=171",
-#         "patients",
-#         "patient=336",
-#     )
-#     # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
-#     tmp_dataset = IDLGTVtDataSet(
-#         patient="336",
-#         annotated_slices=annotated_slices,
-#         label_folder=g.DATASET_FOLDER,
-#         pred_folder=pred_folder,
-#         augment=augment,
-#         weight=weight,
-#     )
-#     tmp_dataset.__getitem__(2)
+# pred_folder = os.path.join(
+#     g.TRAIN_RESULTS_FOLDER,
+#     "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
+#     "baseline",
+#     "fold=01",
+#     "epoch=171",
+#     "patients",
+#     "patient=336",
+# )
+# # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
+# tmp_dataset = IDLGTVtDataSet(
+#     patient="336",
+#     annotated_slices=annotated_slices,
+#     label_folder=g.DATASET_FOLDER,
+#     pred_folder=pred_folder,
+#     augment=augment,
+#     weight=weight,
+# )
+# tmp_dataset.__getitem__(2)

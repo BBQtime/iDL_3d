@@ -8,25 +8,30 @@ from custom import Dict
 EPSILON = torch.finfo(torch.float32).eps
 
 
-def split_channels(input_imgs: Tensor, gtvt_only: bool) -> dict:
+def split_channels(input_imgs: Tensor, training: str) -> dict:
+    # dimension: [batch, channel, depth, height, width]
     output_imgs = Dict()
 
-    # dimension: [batch, channel, depth, height, width]
-    output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
+    # baseline
+    if training == "baseline":
+        output_imgs["back"] = input_imgs[:, 0, :, :, :]
+        output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
+        output_imgs["gtvn"] = input_imgs[:, 2, :, :, :]
 
     # idl gtvt
-    if gtvt_only:
+    elif training == "idl_gtvt":
         # preds have 3 channels, background = background + gtvn
         if input_imgs.shape[1] == 3:
             output_imgs["back"] = input_imgs[:, 0, :, :, :] + input_imgs[:, 2, :, :, :]
         # labels have 2 channels, background = background
         elif input_imgs.shape[1] == 2:
             output_imgs["back"] = input_imgs[:, 0, :, :, :]
+        output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
 
-    # baseline
-    else:
+    # idl gtvn
+    elif training == "idl_gtvn":
         output_imgs["back"] = input_imgs[:, 0, :, :, :]
-        output_imgs["gtvn"] = input_imgs[:, 2, :, :, :]
+        output_imgs["gtvn"] = input_imgs[:, 1, :, :, :]
 
     return output_imgs
 
@@ -128,14 +133,14 @@ def unified_focal_loss(
     weight: float,  # lambda parameter, controls weight given to Focal Tversky loss and Focal loss
     delta: float,  # controls weight given to each class
     gamma: float,  # focal parameter controls the degree of background suppression and foreground enhancement
-    gtvt_only: bool,
+    training: str,
 ):
     def loss_function(
         preds: Tensor, labels: Tensor, weight_map: Tensor = None
     ) -> Tensor:
 
-        preds = split_channels(preds, gtvt_only)
-        labels = split_channels(labels, gtvt_only)
+        preds = split_channels(preds, training)
+        labels = split_channels(labels, training)
 
         if weight_map is not None:
             # weight_map: [b,c,d,h,w] -> [b,d,h,w]
@@ -172,7 +177,7 @@ class UnifiedFocalLoss(nn.Module):
         weight: float,
         delta: float,
         gamma: float,
-        gtvt_only: bool,
+        training: str,
     ):
         super().__init__()
         self.__loss_func = unified_focal_loss(
@@ -180,10 +185,10 @@ class UnifiedFocalLoss(nn.Module):
             weight=weight,
             delta=delta,
             gamma=gamma,
-            gtvt_only=gtvt_only,
+            training=training,
         )
 
-    def forward(self, preds, labels, weight_map):
+    def forward(self, preds, labels, weight_map=None):
         # if preds.shape != labels.shape:
         #     raise ValueError("preds.shape != labels.shape")
 

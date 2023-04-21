@@ -6,13 +6,13 @@ from custom import List
 
 
 class DataAugmentation:
-    def __init__(self, param: Dict = {}):
+    def __init__(self, param: Dict = None):
 
         # = None means no data augmentation
         self.__transform = None
 
         # no augmentation parameter
-        if param == {}:
+        if param is None:
             return
 
         # no augmentation needed
@@ -45,7 +45,7 @@ class DataAugmentation:
                 self.__transform.append(augment_dict[i])
 
         self.__transform = iaa.SomeOf(
-            (param["low.limit"], param["up.limit"]), self.__transform, random_order=True
+            (param["min"], param["max"]), self.__transform, random_order=True
         )
         self.__transform = iaa.Sometimes(param["pct"], self.__transform)
 

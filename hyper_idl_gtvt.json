@@ -1,41 +1,29 @@
 {
-    "augment": {
-        "low.limit": 2,
-        "methods": "elastic,rotate,flip.lr,flip.ud",
-        "times": 4,
-        "up.limit": 3
-    },
+    "augment.max": 3,
+    "augment.methods": "elastic,rotate,flip.lr,flip.ud",
+    "augment.min": 2,
+    "augment.times": 4,
+    "batch.size": 2,
+    "cnn": "unet.pp.slim",
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,
-    "loss": {
-        "asym": true,
-        "delta": 0.5,
-        "gamma": 0.3,
-        "weight": 0.1
-    },
-    "lr": {
-        "decay.factor": 0.5,
-        "decay.patience": 3,
-        "init": "8e-05,8e-05",
-        "min": 1e-06,
-        "reset": true
-    },
-    "select.scenario": {
-        "coronal": "gravity.center",
-        "sagittal": "gravity.center",
-        "transverse": "gravity.center"
-    },
-    "select.step": {
-        "coronal": "1",
-        "sagittal": "1",
-        "transverse": "1"
-    },
-    "weight": {
-        "background": 0.2,
-        "distance.step": 3,
-        "fp.fn": 4.0,
-        "prev.round.decay": 0.5,
-        "slice": 1.0
-    }
+    "loss.asym": true,
+    "loss.delta": 0.5,
+    "loss.gamma": 0.3,
+    "loss.weight": 0.1,
+    "lr": "8e-05,8e-05",
+    "lr.decay.factor": 0.5,
+    "lr.decay.patience": 3,
+    "lr.min": 1e-06,
+    "lr.reset": true,
+    "select.scenario": "gravity.center",
+    "select.step.coronal": "1",
+    "select.step.sagittal": "1",
+    "select.step.transverse": "1",
+    "weight.background": 0.2,
+    "weight.distance.step": 3,
+    "weight.fp.fn": 4.0,
+    "weight.prev.round.decay": 0.5,
+    "weight.slice": 1.0
 }

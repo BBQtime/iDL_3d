@@ -466,7 +466,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # fill the baseline combobox
         epoch_folders = List()
-        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word="epoch="):
+        for i in Explorer.walk_sub_folders(
+            g.TRAIN_RESULTS_FOLDER, key_word="epoch=", suffle=False
+        ):
             if "epoch=" in Path(i).name:
                 # format "baseline_id/fold=12/epoch=123"
                 epoch_folders.append(i[len(g.TRAIN_RESULTS_FOLDER) + 1 :])

@@ -13,13 +13,13 @@ from custom import Img
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
-    def __init__(self, patient_list: list, augment: Dict = {}):
-        self.patient_list = patient_list  # make patient_list public
+    def __init__(self, patient_list: list, augment: Dict = None):
+        self.__patient_list = patient_list
         self.__augment = DataAugmentation(augment)
 
     # must be overrided
     def __len__(self):
-        return len(self.patient_list)
+        return len(self.__patient_list)
 
     def __preprocess(self, img: ndarray, augment_seed: int):
         # DO NOT alter origin img
@@ -129,19 +129,18 @@ class BaselineDataSet(torch.utils.data.Dataset):
     # must be overrided
     # this function is only for training, not for inference
     def __getitem__(self, idx: int):
-        patient = self.patient_list[idx]
+        patient = self.__patient_list[idx]
         return self.get_item(patient)
 
 
 # # for testing
 # # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
 # # patients without GTVn: 257 192
-# if 1:
-#     tmp_dataset = BaselineDataSet(
-#         patient_list=["257"],
-#         augment_methods=["rotate"],
-#         augment_pct=1,
-#         augment_low_limit=1,
-#         augment_up_limit=1,
-#     )
-#     tmp_dataset.__getitem__(0)
+# tmp_dataset = BaselineDataSet(
+#     patient_list=["257"],
+#     augment_methods=["rotate"],
+#     augment_pct=1,
+#     augment_low_limit=1,
+#     augment_up_limit=1,
+# )
+# tmp_dataset.__getitem__(0)

@@ -556,11 +556,16 @@ class Explorer:
             sub_folders.extend(Explorer.__walk_sub_folders(folder_path))
         return sub_folders
 
-    def walk_sub_folders(folder_path: str, key_word: str = "") -> List:
+    def walk_sub_folders(folder_path: str, key_word: str = "", suffle=False) -> List:
         sub_folders = List()
         for i in Explorer.__walk_sub_folders(folder_path):
             if key_word == "" or key_word in i:
                 sub_folders.append(i)
+        sub_folders.remove_duplicates()
+        if suffle:
+            sub_folders.shuffle()
+        else:
+            sub_folders.sort()
         return sub_folders
 
 
@@ -592,6 +597,13 @@ class Cleaner:
             Folder.clear("/home/alan/.local/share/Trash/files/")
             Folder.clear("/home/alan/.local/share/Trash/info/")
 
+    def clean_gpu_cache():
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            return True
+        else:
+            return False
+
 
 class Global:
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
@@ -601,7 +613,7 @@ class Global:
     __settings = Json.load(os.path.join(PROJ_PATH, "settings.json"))
 
     # use CPU
-    if __settings["use.gpu"] is False:
+    if __settings["cuda.visible.devices"] == "":
         DEVICE = torch.device("cpu")
     # use GPU
     else:
@@ -642,8 +654,6 @@ class Global:
     NII_SPACING = tuple(float(i) for i in NII_SPACING)
 
     # Pytorch save/load entire cnn or weight only
-    CNN_STATE_DICT_ONLY = __settings["cnn.state.dict.only"]
-    MAX_BATCH_SIZE_PER_GPU = __settings["max.batch.size.per.gpu"]
     DATASET_K_FOLDS = __settings["dataset.k.folds"]
     DATASET_SPLIT_JSON = os.path.join(PROJ_PATH, __settings["dataset.split.json"])
     HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __settings["hyper.json.baseline"])

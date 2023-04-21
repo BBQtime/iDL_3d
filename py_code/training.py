@@ -10,9 +10,8 @@ from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
 from torch import optim
-from idl_gtvt_dataset import IDLGTVtDataSet
-from typing import Union
 from unet_pp_slim import UNetPPSlim
+from unet_slim import UNetSlim
 from datetime import datetime
 from baseline_dataset import BaselineDataSet
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -23,6 +22,7 @@ from custom import GPU
 from custom import Img
 from custom import Nii
 from custom import Value
+from custom import Explorer
 
 
 class Training:
@@ -35,7 +35,7 @@ class Training:
     # new hyper are loaded from group of new json files
     # baseline hyper are loaded from exist json file together with exist cnn
     # baseline hyper (cnn/dataset_pct/dataset_seed) only used for iDL
-    def _load_hyper(self, hyper: Dict, cnn_path: str = "") -> None:
+    def _load_hyper(self, hyper: Dict, cnn_path: str = None) -> None:
 
         # device name
         if torch.cuda.device_count() < 1:
@@ -45,39 +45,39 @@ class Training:
 
         # dropout
         hyper["dropout"] = Value.limit_range(hyper["dropout"], (0.0, 1.0))
+
         # batch size
-        hyper["batch.size"] = g.MAX_BATCH_SIZE_PER_GPU
-        if GPU.used_count() > 1:
-            hyper["batch.size"] *= GPU.used_count()
+        hyper["batch.size"] = Value.limit_range(hyper["batch.size"], (1, None))
+        hyper["batch.size.actual"] = hyper["batch.size"] * GPU.used_count()
 
         # = 1 will cause error
-        hyper["lr"]["decay.factor"] = Value.limit_range(
-            hyper["lr"]["decay.factor"], (g.EPS, 1 - g.EPS)
+        hyper["lr.decay.factor"] = Value.limit_range(
+            hyper["lr.decay.factor"], (g.EPS, 1 - g.EPS)
         )
 
         # augment methods
-        hyper["augment"]["methods"] = List(hyper["augment"]["methods"])
+        hyper["augment.methods"] = List(hyper["augment.methods"])
 
         # augment lower/upper limit
-        hyper["augment"]["up.limit"] = Value.limit_range(
-            hyper["augment"]["up.limit"], (1, len(hyper["augment"]["methods"]))
+        hyper["augment.max"] = Value.limit_range(
+            hyper["augment.max"], (1, len(hyper["augment.methods"]))
         )
-        hyper["augment"]["low.limit"] = Value.limit_range(
-            hyper["augment"]["low.limit"], (1, hyper["augment"]["up.limit"])
+        hyper["augment.min"] = Value.limit_range(
+            hyper["augment.min"], (1, hyper["augment.max"])
         )
 
         # loss function parameters
-        hyper["loss"]["weight"] = Value.limit_range(hyper["loss"]["weight"], (0.0, 1.0))
-        hyper["loss"]["delta"] = Value.limit_range(hyper["loss"]["delta"], (0.0, 1.0))
+        hyper["loss.weight"] = Value.limit_range(hyper["loss.weight"], (0.0, 1.0))
+        hyper["loss.delta"] = Value.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
         # load cnn
         self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
         # optimizer (no need to move to cuda)
-        if isinstance(hyper["lr"]["actual"], list):
-            lr = hyper["lr"]["actual"][0]
+        if isinstance(hyper["lr.actual"], list):
+            lr = hyper["lr.actual"][0]
         else:
-            lr = hyper["lr"]["actual"]
+            lr = hyper["lr.actual"]
         hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=lr)
 
         # scheduler
@@ -88,68 +88,59 @@ class Training:
         hyper["scheduler"] = ReduceLROnPlateau(
             optimizer=hyper["optim"],
             mode="min",
-            factor=hyper["lr"]["decay.factor"],  # "factor=1" will cause an error
-            patience=hyper["lr"]["decay.patience"],
-            min_lr=hyper["lr"]["min"],
+            factor=hyper["lr.decay.factor"],  # "factor=1" will cause an error
+            patience=hyper["lr.decay.patience"],
+            min_lr=hyper["lr.min"],
         )
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_cnn(self, hyper: Dict, cnn_path: str = ""):
+    def _load_cnn(self, hyper: Dict, cnn_path: str = None):
         # new model
         if cnn_path == "" or cnn_path is None:
-            hyper["cnn"] = UNetPPSlim(
-                in_chan=4, out_chan=3, dropout=hyper["dropout"]
-            ).to(g.DEVICE)
-
-        # exist cnn
-        else:
-            # load state dict only
-            if g.CNN_STATE_DICT_ONLY:
+            if hyper["cnn"] == "unet.pp.slim" or isinstance(hyper["cnn"], UNetPPSlim):
                 hyper["cnn"] = UNetPPSlim(
                     in_chan=4, out_chan=3, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
-                hyper["cnn"].load_state_dict(torch.load(cnn_path))
+            elif hyper["cnn"] == "unet.slim" or isinstance(hyper["cnn"], UNetSlim):
+                hyper["cnn"] = UNetSlim(
+                    in_chan=6, out_chan=2, dropout=hyper["dropout"]
+                ).to(g.DEVICE)
 
-            # load entire cnn
-            else:
-                hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
-
+        # exist cnn
+        else:
+            hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
         # set multi-GPU
         if GPU.used_count() > 1:
             hyper["cnn"] = nn.DataParallel(hyper["cnn"]).to(g.DEVICE)
 
     def __get_simple_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
-        for i in hyper:
-            if i == "metrics":
-                pass
+        for cur_key in hyper:
+            if cur_key == "augment.methods":
+                simple_hyper[cur_key] = hyper[cur_key].to_str()
 
-            elif i == "augment":
-                simple_hyper[i] = hyper[i].copy()
-                simple_hyper[i]["methods"] = simple_hyper[i]["methods"].to_str()
+            elif cur_key == "loss.func":
+                simple_hyper[cur_key] = "unified.focal.loss"
 
-            elif i == "loss":
-                simple_hyper[i] = hyper[i].copy()
-                simple_hyper[i]["func"] = "unified.focal.loss"
+            elif cur_key == "cnn":
+                if isinstance(hyper[cur_key], UNetPPSlim):
+                    simple_hyper[cur_key] = "unet.pp.slim"
+                elif isinstance(hyper[cur_key], UNetSlim):
+                    simple_hyper[cur_key] = "unet.slim"
 
-            elif i == "cnn":
-                simple_hyper[i] = "unet.pp.slim"
+            elif cur_key == "optim":
+                simple_hyper[cur_key] = "adam"
 
-            elif i == "optim":
-                simple_hyper[i] = "adam"
+            elif cur_key == "scheduler":
+                simple_hyper[cur_key] = "reduce.lr.on.plateau"
 
-            elif i == "scheduler":
-                simple_hyper[i] = "reduce.lr.on.plateau"
-
-            elif isinstance(hyper[i], list) or isinstance(hyper[i], dict):
-                simple_hyper[i] = hyper[i].copy()
             else:
-                simple_hyper[i] = hyper[i]
+                simple_hyper[cur_key] = hyper[cur_key]
 
-        simple_hyper = dict(OrderedDict(sorted(simple_hyper.items())))
-        for i in simple_hyper:
-            if isinstance(simple_hyper[i], dict):
-                simple_hyper[i] = dict(OrderedDict(sorted(simple_hyper[i].items())))
+        simple_hyper = Dict(OrderedDict(sorted(simple_hyper.items())))
+        # for i in simple_hyper:
+        #     if isinstance(simple_hyper[i], dict):
+        #         simple_hyper[i] = Dict(OrderedDict(sorted(simple_hyper[i].items())))
 
         return simple_hyper
 
@@ -190,20 +181,10 @@ class Training:
     def _save_cnn(self, hyper: Dict, save_path: str):
         if not save_path.endswith(".pt"):
             save_path += ".pt"
-
-        # save state dict only
-        if g.CNN_STATE_DICT_ONLY:
-            if GPU.used_count() > 1:
-                torch.save(hyper["cnn"].module.state_dict(), save_path)
-            else:
-                torch.save(hyper["cnn"].state_dict(), save_path)
-
-        # save entire cnn
+        if GPU.used_count() > 1:
+            torch.save(hyper["cnn"].module, save_path)
         else:
-            if GPU.used_count() > 1:
-                torch.save(hyper["cnn"].module, save_path)
-            else:
-                torch.save(hyper["cnn"], save_path)
+            torch.save(hyper["cnn"], save_path)
 
     # train_id = start_time + train_remark
     def _init_train_id(
@@ -241,16 +222,14 @@ class Training:
 
         return train_id
 
-    def _optimize_batch_size(
-        self, hyper: Dict, dataset: Union[BaselineDataSet, IDLGTVtDataSet]
-    ):
-        dataset_len = dataset.__len__()
-        if dataset_len > hyper["batch.size"]:
+    # evenly distribute the data into each batch
+    def _optimize_batch_size(self, dataset, hyper: Dict):
+        if dataset.__len__() > hyper["batch.size"]:
             hyper["batch.size"] = math.ceil(
-                dataset_len / (math.ceil(dataset_len / hyper["batch.size"]))
+                dataset.__len__() / (math.ceil(dataset.__len__() / hyper["batch.size"]))
             )
         else:
-            hyper["batch.size"] = dataset_len
+            hyper["batch.size"] = dataset.__len__()
 
     def _inference_single_patient(
         self,
@@ -361,3 +340,15 @@ class Training:
             group_hyper.append(cur_hyper)
 
         return group_hyper
+
+    def _find_result_folder(self, result_id: str) -> str:
+        # find result folder full path using result id
+        result_folder = None
+        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=result_id):
+            # remove "/" if str endswith it
+            if i.endswith("/"):
+                i = i[:-1]
+            if i.endswith(result_id):
+                result_folder = i
+                break
+        return result_folder

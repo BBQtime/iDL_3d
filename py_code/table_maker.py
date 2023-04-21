@@ -3,6 +3,7 @@ import os
 from custom import Global as g
 from custom import Json
 from custom import List
+from custom import Explorer
 
 
 def compare_idls_in_table(
@@ -15,10 +16,17 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             fields.append("{}_{}".format(metric, i + 1))
 
+    baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
+    fold_folder = Explorer.get_sub_folders(
+        baseline_folder, "fold=", return_full_path=True
+    )[0]
+    epoch_folder = Explorer.get_sub_folders(
+        fold_folder, "epoch=", return_full_path=True
+    )[0]
+    idl_gtvt_main_folder = os.path.join(epoch_folder, "idl_gtvt")
+
     patient_list = Json.load(
-        os.path.join(
-            g.TRAIN_RESULTS_FOLDER, baseline_id, idl_results_list[0], "score_gtvt.json"
-        )
+        os.path.join(idl_gtvt_main_folder, idl_results_list[0], "score.json")
     )
     patient_list = patient_list.keys()
 
@@ -31,7 +39,7 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             idl_id = idl_results_list[i]
             gtvt_score = Json.load(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, idl_id, "score.json")
+                os.path.join(idl_gtvt_main_folder, idl_id, "score.json")
             )
             for metric in ["DSC", "MSD", "HD95"]:
                 cur_patient_score["{}_{}".format(metric, i + 1)] = gtvt_score[patient][
@@ -40,7 +48,7 @@ def compare_idls_in_table(
 
         score.append(cur_patient_score)
 
-    table_path = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id, table_name + ".csv")
+    table_path = os.path.join(idl_gtvt_main_folder, table_name + ".csv")
 
     with open(table_path, "w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fields)
@@ -51,7 +59,7 @@ def compare_idls_in_table(
 compare_idls_in_table(
     baseline_id="baseline_2023.02.27.07.08.09_loss.delta=0.5_loss.gamma=0.5_optimal",
     idl_results_list=[
-        "idl_2023.03.14.23.28.32_select.scenario={'coronal':'equal.divide','sagittal':'equal.divide','transverse':'equal.divide'}",
-        "idl_2023.03.15.02.01.26_select.scenario={'coronal':'gravity.center','sagittal':'gravity.center','transverse':'gravity.center'}",
+        "idl_gtvt_2023.04.04.14.43.54_fp.fn:4.0_no.post.processing",
+        "idl_gtvt_2023.04.04.14.43.54_fp.fn:4.0",
     ],
 )

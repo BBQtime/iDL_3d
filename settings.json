@@ -1,6 +1,5 @@
 {
-    "cnn.state.dict.only": false,
-    "cuda.visible.devices": "0,1",
+    "cuda.visible.devices": "1",
     "dataset.folder.linux": "/mnt/faststorage/alan/Scans3mm/",
     "dataset.folder.win": "E:/Alan/Scans3mm",
     "dataset.k.folds": 5,
@@ -9,9 +8,7 @@
     "hyper.json.idl.gtvn": "hyper_idl_gtvn.json",
     "hyper.json.idl.gtvt": "hyper_idl_gtvt.json",
     "img.shape": "72,256,256",
-    "max.batch.size.per.gpu": 2,
     "nii.spacing": "1.171875,1.171875,3.0",
-    "num.workers": 32,
-    "train.results.folder": "train_results",
-    "use.gpu": true
+    "num.workers": 16,
+    "train.results.folder": "train_results"
 }
