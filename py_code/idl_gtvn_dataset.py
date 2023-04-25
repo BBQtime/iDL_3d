@@ -71,7 +71,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         )
 
         # load label
-        gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
+        gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
         if os.path.exists(gtvn_path):
             self.__origin["label"] = Nii.load(
                 gtvn_path,
@@ -82,18 +82,18 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 
         # load ct/pt/mrt1/mt2
         self.__origin["ct"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(patient))
         )
         # ct windowing before normalization
         self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
         self.__origin["pt"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
         )
         self.__origin["mrt1"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T1dr.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(patient))
         )
         self.__origin["mrt2"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(patient))
         )
 
         # simulate click annotation
@@ -221,7 +221,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 # augment["times"] = 1
 
 # pred_folder = os.path.join(
-#     g.TRAIN_RESULTS_FOLDER,
+#     g.TRAIN_RESULTS_DIR,
 #     "baseline_2023.02.27.07.08.09_loss.delta=0.5_loss.gamma=0.5_optimal",
 #     "fold=01",
 #     "epoch=205",

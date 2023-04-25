@@ -169,7 +169,7 @@ class IDLGTVtTraining(Training):
         ).to(g.DEVICE)
 
     def _load_dataset(self, debug_mode: bool = False):
-        json_data = Json.load(g.DATASET_SPLIT_JSON)
+        json_data = Json.load(g.DATASET_SPLIT_JSON_PATH)
         test_patients = List(json_data["test.set"])
 
         # debug mode, only 1 or 2 patients
@@ -218,7 +218,7 @@ class IDLGTVtTraining(Training):
     #     print("")
     #     print(baseline_cnn_path)
     #     # load hypers
-    #     idl_hyper_dict = Json.load(g.HYPER_JSON_IDL_GTVT)
+    #     idl_hyper_dict = Json.load(g.HYPER_JSON_PATH_IDL_GTVT)
     #     baseline_hyper_dict = Json.load(baseline_hyper_path)
 
     #     # make sure all hypers are unique, no arrangement
@@ -303,7 +303,7 @@ class IDLGTVtTraining(Training):
         patient = patient[len("patient=") :]
 
         label = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
         # label_center: (d,h,w)
@@ -401,7 +401,7 @@ class IDLGTVtTraining(Training):
         patient = patient[len("patient=") :]
 
         label = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
 
@@ -469,10 +469,10 @@ class IDLGTVtTraining(Training):
         masked_label = self.__get_masked_label(cur_round_folder)
 
         # result structure: gtvt: {pred, dsc, msd, hd95}
-        patient_result = self._inference_single_patient(
+        patient_result = self._patient_inference(
             patient=patient[len("patient=") :],
             hyper=hyper,
-            gtvt_only=True,
+            inference_type="idl_gtvt",
             masked_label=masked_label,
         )
 
@@ -487,7 +487,7 @@ class IDLGTVtTraining(Training):
         # save pred of cur patient
         Nii.save(
             img=patient_result["gtvt"]["pred"],
-            save_path=os.path.join(cur_round_folder, "pred_gtvt.nii"),
+            path=os.path.join(cur_round_folder, "pred_gtvt.nii"),
             spacing=g.NII_SPACING,
         )
 
@@ -563,7 +563,7 @@ class IDLGTVtTraining(Training):
         for cur_iter in tqdm(range(hyper["iter"])):
             hyper["cnn"].train()
             sum_loss = 0
-            batch_num = 0
+            num_batches = 0
 
             # freeze layers before iDL
             if hyper["layer.freezing"]:
@@ -574,22 +574,22 @@ class IDLGTVtTraining(Training):
                     hyper["cnn"].freeze_top()
 
             # here, labels only have 2 channels: background and gtvt, No gtvn
-            for multi_model_imgs, labels, weight_map in idl_gtvt_loader:
+            for multimodal_imgs, labels, weight_map in idl_gtvt_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
-                multi_model_imgs = multi_model_imgs.to(g.DEVICE)
+                multimodal_imgs = multimodal_imgs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
-                preds = hyper["cnn"](multi_model_imgs)[3]
+                preds = hyper["cnn"](multimodal_imgs)
                 loss = hyper["loss.func"](preds, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
-                batch_num += 1
+                num_batches += 1
 
             # cur iter finished
             # update scheduler
-            iter_loss = sum_loss / batch_num
+            iter_loss = sum_loss / num_batches
             hyper["scheduler"].step(iter_loss)
 
             # record loss
@@ -602,7 +602,7 @@ class IDLGTVtTraining(Training):
             )
             if len(patient_folder_list) <= 1:
                 Json.save(loss_dict, loss_json_path)
-                self._draw_loss_fig(idl_gtvt_folder)
+                self._plot_loss_fig(idl_gtvt_folder)
 
         # current round idl finished
         # save cnn
@@ -702,7 +702,7 @@ class IDLGTVtTraining(Training):
             self.__training_cur_round(
                 cur_round_folder=cur_round_folder,
                 baseline_epoch_folder=baseline_epoch_folder,
-                label_folder=g.DATASET_FOLDER,
+                label_folder=g.DATASET_DIR,
                 hyper=hyper,
                 annotated_slices=annotated_slices,
             )
@@ -715,11 +715,11 @@ class IDLGTVtTraining(Training):
                 self.__load_next_round_lr(cur_round + 1, hyper)
 
         # draw avg loss of all trained patients
-        self._draw_loss_fig(idl_gtvt_folder)
+        self._plot_loss_fig(idl_gtvt_folder)
 
-    def draw_loss_fig(self, idl_gtvt_id: str):
+    def plot_loss_fig(self, idl_gtvt_id: str):
         for i in Explorer.walk_sub_folders(
-            g.TRAIN_RESULTS_FOLDER, key_word=idl_gtvt_id
+            g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id
         ):
             # remove "/" if str endswith it
             if i.endswith("/"):
@@ -727,9 +727,9 @@ class IDLGTVtTraining(Training):
             if i.endswith(idl_gtvt_id):
                 idl_gtvt_folder = i
                 break
-        self._draw_loss_fig(idl_gtvt_folder)
+        self._plot_loss_fig(idl_gtvt_folder)
 
-    def _draw_loss_fig(self, idl_gtvt_folder: str):
+    def _plot_loss_fig(self, idl_gtvt_folder: str):
         # avg loss dict
         avg_loss = Dict()
         for cur_patient_folder in Explorer.get_sub_folders(
@@ -762,12 +762,12 @@ class IDLGTVtTraining(Training):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        for cur_hyper in self._load_group_hyper(g.HYPER_JSON_IDL_GTVT):
+        for cur_hyper in self._load_hyper_list_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
 
             idl_gtvt_id = "idl_gtvt_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
-                hyper_json_path=g.HYPER_JSON_IDL_GTVT,
+                hyper_json_path=g.HYPER_JSON_PATH_IDL_GTVT,
                 hyper=cur_hyper,
             )
             print("")
@@ -779,7 +779,7 @@ class IDLGTVtTraining(Training):
             else:
                 key_word = "fold={:02d}".format(baseline_fold)
             baseline_fold_folder = Explorer.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id),
+                os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
                 key_word=key_word,
                 return_full_path=True,
             )[0]

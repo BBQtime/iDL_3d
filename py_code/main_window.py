@@ -386,18 +386,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__patient = None
         self.__round = None
         self.__slice = None  # starts from 0
-        self.__score = Dict()
+        self.__scores = Dict()
         self.__img_data = Dict()
         self.__resize_pos = Dict()
         self.__clear_img_data()
 
     def __clear_img_data(self):
-        self.__baseline_folder = None
-        self.__idl_gtvt_folder = None
-        self.__idl_gtvn_folder = None
-        self.__score["dsc"] = None
-        self.__score["msd"] = None
-        self.__score["hd95"] = None
+        self.__baseline_dir = None
+        self.__idl_gtvt_dir = None
+        self.__idl_gtvn_dir = None
+        self.__scores["dsc"] = None
+        self.__scores["msd"] = None
+        self.__scores["hd95"] = None
 
         for i in [
             "ct",
@@ -464,15 +464,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 """
             )
 
-        # fill the baseline combobox
-        epoch_folders = List()
-        for i in Explorer.walk_sub_folders(
-            g.TRAIN_RESULTS_FOLDER, key_word="epoch=", suffle=False
+        # fill the baseline combobox, format "baseline_id/fold=12/epoch=123"
+        baseline_epoch_dirs = List()
+        for cur_dir in Explorer.walk_sub_folders(
+            g.TRAIN_RESULTS_DIR, key_word="epoch=", suffle=False
         ):
-            if "epoch=" in Path(i).name:
-                # format "baseline_id/fold=12/epoch=123"
-                epoch_folders.append(i[len(g.TRAIN_RESULTS_FOLDER) + 1 :])
-        self.__combox["baseline"].addItems(epoch_folders)
+            # "epoch=" in folder name and not a idl_gtvn result
+            if "epoch=" in Path(cur_dir).name and "idl_gtvn" not in cur_dir:
+                cur_dir = cur_dir[len(g.TRAIN_RESULTS_DIR) + 1 :]
+                baseline_epoch_dirs.append(cur_dir)
+        self.__combox["baseline"].addItems(baseline_epoch_dirs)
 
         # connect ui to functions
         self.__combox["baseline"].activated.connect(self.__choose_baseline)
@@ -580,19 +581,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        epoch_folder = self.__combox["baseline"].currentText()
-        if g.TRAIN_RESULTS_FOLDER.endswith("/"):
-            epoch_folder = g.TRAIN_RESULTS_FOLDER + epoch_folder
+        epoch_dir = self.__combox["baseline"].currentText()
+        if g.TRAIN_RESULTS_DIR.endswith("/"):
+            epoch_dir = g.TRAIN_RESULTS_DIR + epoch_dir
         else:
-            epoch_folder = g.TRAIN_RESULTS_FOLDER + "/" + epoch_folder
-        self.__baseline_folder = os.path.join(epoch_folder, "baseline")
+            epoch_dir = g.TRAIN_RESULTS_DIR + "/" + epoch_dir
+        self.__baseline_dir = os.path.join(epoch_dir, "baseline")
 
         # fill idl.gtvt combox
-        idl_gtvt_folders = os.path.join(epoch_folder, "idl_gtvt")
-        if os.path.exists(idl_gtvt_folders):
-            idl_gtvt_folders = Explorer.get_sub_folders(idl_gtvt_folders)
-            if idl_gtvt_folders != []:
-                self.__combox["idl.gtvt"].addItems(idl_gtvt_folders)
+        if os.path.exists(os.path.join(epoch_dir, "idl_gtvt")):
+            idl_gtvt_dirs = Explorer.get_sub_folders(
+                os.path.join(epoch_dir, "idl_gtvt")
+            )
+            if idl_gtvt_dirs != []:
+                self.__combox["idl.gtvt"].addItems(idl_gtvt_dirs)
                 self.__combox["idl.gtvt"].setEnabled(True)
                 self.__choose_idl_gtvt()
 
@@ -608,22 +610,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
         idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
-        self.__idl_gtvt_folder = os.path.join(
-            Path(self.__baseline_folder).parent, "idl_gtvt", idl_gtvt_id
-        )
-        patient_list = Explorer.get_sub_folders(
-            os.path.join(self.__idl_gtvt_folder, "patients")
+        self.__idl_gtvt_dir = os.path.join(
+            Path(self.__baseline_dir).parent, "idl_gtvt", idl_gtvt_id
         )
 
-        # change patient_list from "patient=123" to "123"
-        for i in range(len(patient_list)):
-            patient_list[i] = patient_list[i][len("patient=") :]
+        inference_patients = Explorer.get_sub_folders(
+            os.path.join(self.__idl_gtvt_dir, "patients")
+        )
+        # change inference_patients from "patient=123" to "123"
+        for i in range(len(inference_patients)):
+            inference_patients[i] = inference_patients[i][len("patient=") :]
 
-        self.__combox["patient"].addItems(patient_list)
+        test_patients = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.set"]
+        test_patients = List(test_patients)
+        test_patients.find_identical_items(inference_patients)
+
+        self.__combox["patient"].addItems(test_patients)
         self.__combox["patient"].setEnabled(True)
 
         # try not to reset patient when idl_gtvt_id is changed
-        if self.__patient not in patient_list:
+        if self.__patient not in test_patients:
             reset_patient = True
         else:
             reset_patient = False
@@ -646,34 +652,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load imgs
         self.__img_data["ct"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(self.__patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(self.__patient))
         )
         self.__img_data["pt"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(self.__patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(self.__patient))
         )
         self.__img_data["mrt1"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T1dr.nii".format(self.__patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(self.__patient))
         )
         self.__img_data["mrt2"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(self.__patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
 
         # load label-gtvt
         self.__img_data["label.gtvt"] = self.__load_img(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(self.__patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(self.__patient))
         )
 
         # load label-gtvn
         gtvn_path = os.path.join(
-            g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(self.__patient)
+            g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(self.__patient)
         )
         if os.path.exists(gtvn_path):
             self.__img_data["label.gtvn"] = self.__load_img(gtvn_path)
         else:
             gtvs_img = self.__load_img(
-                os.path.join(
-                    g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(self.__patient)
-                )
+                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(self.__patient))
             )
             self.__img_data["label.gtvn"] = gtvs_img - self.__img_data["label.gtvt"]
 
@@ -684,7 +688,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         round_list = Explorer.get_sub_folders(
             os.path.join(
-                self.__idl_gtvt_folder,
+                self.__idl_gtvt_dir,
                 "patients",
                 "patient={}".format(self.__patient),
             ),
@@ -732,19 +736,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load pred-gtvt
         if self.__round == "00":
-            pred_gtvt_folder = os.path.join(
-                self.__baseline_folder,
+            pred_gtvt_dir = os.path.join(
+                self.__baseline_dir,
                 "patients",
                 "patient={}".format(self.__patient),
             )
         else:
-            pred_gtvt_folder = os.path.join(
-                self.__idl_gtvt_folder,
+            pred_gtvt_dir = os.path.join(
+                self.__idl_gtvt_dir,
                 "patients",
                 "patient={}".format(self.__patient),
                 "round={}".format(self.__round),
             )
-        pred_path["pred.gtvt"] = os.path.join(pred_gtvt_folder, "pred_gtvt.nii")
+        pred_path["pred.gtvt"] = os.path.join(pred_gtvt_dir, "pred_gtvt.nii")
 
         # pred_path["pred.gtvn"] = os.path.join(pred_gtvn_folder, "pred_gtvn.nii")
 
@@ -753,10 +757,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__img_data[i] = Img.binarize(self.__img_data[i])
 
         # load score
-        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_folder, "score.json"))
+        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "score.json"))
 
         for metric in g.METRICS:
-            self.__score[metric] = gtvt_score["patient={}".format(self.__patient)][
+            self.__scores[metric] = gtvt_score["patient={}".format(self.__patient)][
                 metric
             ]["round={}".format(self.__round)]
 
@@ -984,8 +988,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             text_pos_y = 10
 
             for metric in g.METRICS:
-                if Value.is_number(self.__score[metric]):
-                    cv_text += metric.upper() + ": {:.3f}".format(self.__score[metric])
+                if Value.is_number(self.__scores[metric]):
+                    cv_text += metric.upper() + ": {:.3f}".format(self.__scores[metric])
                 else:
                     cv_text += metric.upper() + ": N/A"
                 cv_text += "\n"
@@ -1062,7 +1066,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load annotated slices
         json_path = os.path.join(
-            self.__idl_gtvt_folder,
+            self.__idl_gtvt_dir,
             "patients",
             "patient={}".format(self.__patient),
             "annotated_slices.json",

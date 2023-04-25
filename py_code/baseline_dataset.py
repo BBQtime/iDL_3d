@@ -13,13 +13,13 @@ from custom import Img
 
 
 class BaselineDataSet(torch.utils.data.Dataset):
-    def __init__(self, patient_list: list, augment: Dict = None):
-        self.__patient_list = patient_list
+    def __init__(self, patients: list, augment: Dict = None):
+        self.__patients = patients
         self.__augment = DataAugmentation(augment)
 
     # must be overrided
     def __len__(self):
-        return len(self.__patient_list)
+        return len(self.__patients)
 
     def __preprocess(self, img: ndarray, augment_seed: int):
         # DO NOT alter origin img
@@ -50,9 +50,8 @@ class BaselineDataSet(torch.utils.data.Dataset):
         return img
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
-
         origin_gtvs = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(patient)),
             binary=True,
         )
         final_gtvs = None
@@ -60,7 +59,6 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # loop until target volume is big enough
         for k in range(50):
-
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
@@ -85,14 +83,14 @@ class BaselineDataSet(torch.utils.data.Dataset):
 
         # load gtvt
         origin_gtvt = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
             binary=True,
         )
         final_gtvt = self.__preprocess(origin_gtvt, final_augment_seed)
         final_gtvt = Img.binarize(final_gtvt)
 
         # load gtvn
-        gtvn_path = os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient))
+        gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
         if os.path.exists(gtvn_path):
             origin_gtvn = Nii.load(gtvn_path, binary=True)
         else:
@@ -105,11 +103,9 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final_gtvt, final_gtvn], dim=0)
 
-        multi_model_imgs = None
+        multimodal_imgs = None
         for i in ["CT", "PT", "T1dr", "T2dr"]:
-            img_path = os.path.join(
-                g.DATASET_FOLDER, "HNCDL_{}_{}.nii".format(patient, i)
-            )
+            img_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_{}.nii".format(patient, i))
             img = Nii.load(img_path)
 
             # ct windowing before normalization
@@ -119,17 +115,17 @@ class BaselineDataSet(torch.utils.data.Dataset):
             img = self.__preprocess(img, final_augment_seed)
 
             # concat multi-model img
-            if multi_model_imgs is None:
-                multi_model_imgs = img
+            if multimodal_imgs is None:
+                multimodal_imgs = img
             else:
-                multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
+                multimodal_imgs = torch.cat([multimodal_imgs, img], dim=0)
 
-        return multi_model_imgs, labels
+        return multimodal_imgs, labels
 
     # must be overrided
     # this function is only for training, not for inference
     def __getitem__(self, idx: int):
-        patient = self.__patient_list[idx]
+        patient = self.__patients[idx]
         return self.get_item(patient)
 
 

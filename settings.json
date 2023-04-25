@@ -1,14 +1,14 @@
 {
     "cuda.visible.devices": "1",
-    "dataset.folder.linux": "/mnt/faststorage/alan/Scans3mm/",
-    "dataset.folder.win": "E:/Alan/Scans3mm",
+    "dataset.dir.linux": "/mnt/faststorage/alan/Scans3mm/",
+    "dataset.dir.windows": "E:/Alan/Scans3mm",
     "dataset.k.folds": 5,
-    "dataset.split.json": "dataset_split.json",
-    "hyper.json.baseline": "hyper_baseline.json",
-    "hyper.json.idl.gtvn": "hyper_idl_gtvn.json",
-    "hyper.json.idl.gtvt": "hyper_idl_gtvt.json",
+    "dataset.split.json.name": "dataset_split.json",
+    "hyper.json.name.baseline": "hyper_baseline.json",
+    "hyper.json.name.idl.gtvn": "hyper_idl_gtvn.json",
+    "hyper.json.name.idl.gtvt": "hyper_idl_gtvt.json",
     "img.shape": "72,256,256",
     "nii.spacing": "1.171875,1.171875,3.0",
     "num.workers": 16,
-    "train.results.folder": "train_results"
+    "train.results.dir": "train_results"
 }

@@ -9,6 +9,7 @@ from baseline_training import BaselineTraining
 from loss_func import UnifiedFocalLoss
 from idl_gtvn_dataset import IDLGTVnDataSet
 from torch.utils.data import DataLoader
+from pathlib import Path
 from custom import Json
 from custom import List
 from custom import Nii
@@ -34,16 +35,16 @@ class IDLGTVnTraining(BaselineTraining):
         # epochs
         if debug_mode:
             # at least 2 epochs to compare loss difference
-            hyper["epoch"] = 2
+            hyper["epochs"] = 2
         else:
-            hyper["epoch"] = Value.limit_range(hyper["epoch"], (1, None))
+            hyper["epochs"] = Value.limit_range(hyper["epochs"], (1, None))
 
         # record actual epochs because of early stop
-        hyper["epoch.actual"] = 0
+        hyper["epochs.actual"] = 0
 
         # early stop, based on epoch
-        hyper["early.stop"] = Value.limit_range(
-            hyper["early.stop"], (1, hyper["epoch"])
+        hyper["early.stop.epochs"] = Value.limit_range(
+            hyper["early.stop.epochs"], (1, hyper["epochs"])
         )
 
         # lr
@@ -60,12 +61,12 @@ class IDLGTVnTraining(BaselineTraining):
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
         hyper["lr.decay.patience"] = Value.limit_range(
-            hyper["lr.decay.patience"], (1, hyper["epoch"])
+            hyper["lr.decay.patience"], (1, hyper["epochs"])
         )
 
         # number of best valid loss cnn retained
         hyper["keep.best.cnn.num"] = Value.limit_range(
-            hyper["keep.best.cnn.num"], (1, hyper["epoch"])
+            hyper["keep.best.cnn.num"], (1, hyper["epochs"])
         )
 
         # augment percent
@@ -80,7 +81,7 @@ class IDLGTVnTraining(BaselineTraining):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-            training="idl_gtvn",
+            training_type="idl_gtvn",
         ).to(g.DEVICE)
 
         # load patients
@@ -135,15 +136,15 @@ class IDLGTVnTraining(BaselineTraining):
         best_loss_dict = Dict()
         loss_save_path = os.path.join(cur_fold_folder, "hyper", "loss.json")
         lr_save_path = os.path.join(cur_fold_folder, "hyper", "lr.json")
-        patience_count = 0
+        patience = 0
 
-        for cur_epoch in range(1, hyper["epoch"] + 1):
+        for cur_epoch in range(1, hyper["epochs"] + 1):
             print("")
             print("epoch: {}".format(cur_epoch))
             print("training:")
             hyper["cnn"].train()
             sum_loss = 0
-            batch_num = 0
+            num_batches = 0
             for inputs, labels in tqdm(hyper["train.loader"]):
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
@@ -154,46 +155,46 @@ class IDLGTVnTraining(BaselineTraining):
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 sum_loss += loss.item()
-                batch_num += 1
-            train_loss = sum_loss / batch_num
+                num_batches += 1
+            train_loss = sum_loss / num_batches
 
             # validation
             print("validation:")
             hyper["cnn"].eval()
             with torch.no_grad():
                 sum_loss = 0
-                batch_num = 0
+                num_batches = 0
                 for inputs, labels in tqdm(hyper["valid.loader"]):
                     inputs = inputs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
                     outputs = hyper["cnn"](inputs)
                     loss = hyper["loss.func"](outputs, labels)
                     sum_loss += loss.item()
-                    batch_num += 1
-            valid_loss = sum_loss / batch_num
+                    num_batches += 1
+            valid_loss = sum_loss / num_batches
             hyper["scheduler"].step(valid_loss)
 
             # current epoch finished
-            hyper["epoch.actual"] = cur_epoch
+            hyper["epochs.actual"] = cur_epoch
 
             # save loss in json
             loss_dict = Json.load(loss_save_path)
             cur_epoch_loss = Dict()
             cur_epoch_loss["train"] = train_loss
             cur_epoch_loss["valid"] = valid_loss
-            loss_dict["epoch={:03d}".format(hyper["epoch.actual"])] = cur_epoch_loss
+            loss_dict["epoch={:03d}".format(hyper["epochs.actual"])] = cur_epoch_loss
             Json.save(loss_dict, loss_save_path)
             # draw loss figure
-            self._draw_loss_fig(loss_save_path)
+            self._plot_loss_fig(loss_save_path)
 
             # save lr in json
             lr_dict = Json.load(lr_save_path)
             for param_group in hyper["optim"].param_groups:
                 cur_epoch_lr = param_group["lr"]
-            lr_dict["epoch={:03d}".format(hyper["epoch.actual"])] = cur_epoch_lr
+            lr_dict["epoch={:03d}".format(hyper["epochs.actual"])] = cur_epoch_lr
             Json.save(lr_dict, lr_save_path)
             # draw lr figure
-            self._draw_lr_fig(lr_save_path)
+            self._plot_lr_fig(lr_save_path)
 
             # save cnn
             if len(best_loss_dict) < hyper["keep.best.cnn.num"]:
@@ -221,19 +222,19 @@ class IDLGTVnTraining(BaselineTraining):
                     cur_epoch_folder = os.path.join(
                         cur_fold_folder, "epoch={:03d}".format(cur_epoch)
                     )
-                    Folder.create(os.path.join(cur_epoch_folder, "baseline"))
+                    Folder.create(cur_epoch_folder)
                     cnn_save_path = os.path.join(
                         cur_epoch_folder,
                         "epoch={:03d}.pt".format(cur_epoch),
                     )
                     self._save_cnn(hyper, cnn_save_path)
-                    patience_count = 0
+                    patience = 0
                 else:
-                    patience_count += 1
-                    if patience_count >= hyper["early.stop"]:
+                    patience += 1
+                    if patience >= hyper["early.stop.epochs"]:
                         break
 
-    def training(
+    def new_training(
         self,
         baseline_id: str,
         baseline_fold: int = None,
@@ -241,12 +242,12 @@ class IDLGTVnTraining(BaselineTraining):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        for cur_hyper in self._load_group_hyper(g.HYPER_JSON_IDL_GTVN):
+        for cur_hyper in self._load_hyper_list_from_json(g.HYPER_JSON_PATH_IDL_GTVN):
 
             idl_gtvn_id = "idl_gtvn_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
-                hyper_json_path=g.HYPER_JSON_IDL_GTVN,
+                hyper_json_path=g.HYPER_JSON_PATH_IDL_GTVN,
                 hyper=cur_hyper,
             )
             print("")
@@ -258,7 +259,7 @@ class IDLGTVnTraining(BaselineTraining):
             else:
                 key_word = "fold={:02d}".format(baseline_fold)
             baseline_fold_folder = Explorer.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id),
+                os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
                 key_word=key_word,
                 return_full_path=True,
             )[0]
@@ -331,38 +332,48 @@ class IDLGTVnTraining(BaselineTraining):
                 if debug_mode and cur_fold == 2:
                     break
 
-            # # inference
-            # for dataset in ["valid", "test"]:
-            #     self.inference(
-            #         baseline_id=baseline_id,
-            #         dataset=dataset,
-            #         debug_mode=debug_mode,
-            #     )
+            # inference
+            for dataset in ["valid", "test"]:
+                self.inference(
+                    idl_gtvn_id=idl_gtvn_id,
+                    dataset=dataset,
+                    debug_mode=debug_mode,
+                )
 
     def inference(
         self,
-        baseline_id: str,
+        idl_gtvn_id: str,
         dataset: str = "test",
         debug_mode: bool = False,
     ):
         print("")
-        print("inference on {} set: {}".format(dataset, baseline_id))
+        print("inference on {} set: {}".format(dataset, idl_gtvn_id))
 
-        baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
+        # find idl gtvt folder
+        idl_gtvn_folder = self._find_result_folder(idl_gtvn_id)
+        if idl_gtvn_folder is None:
+            print("idl_gtvn_id not found")
+            return
+
+        if dataset != "valid":
+            dataset = "test"
 
         if dataset == "valid":
             best_scores = Dict()
 
+        baseline_epoch_folder = str(Path(idl_gtvn_folder).parent.parent)
+        pred_main_folder = os.path.join(
+            baseline_epoch_folder, "baseline", "patients", dataset
+        )
+
         # loop through fold folders
         for cur_fold_folder in Explorer.get_sub_folders(
-            baseline_folder, key_word="fold="
+            idl_gtvn_folder, key_word="fold="
         ):
             cur_fold = int(cur_fold_folder[len("fold=") :])
             print("")
             print("current fold: ", cur_fold)
-            cur_fold_folder = os.path.join(
-                g.TRAIN_RESULTS_FOLDER, baseline_id, cur_fold_folder
-            )
+            cur_fold_folder = os.path.join(idl_gtvn_folder, cur_fold_folder)
 
             # loop through epoch folders
             for cur_epoch_folder in Explorer.get_sub_folders(
@@ -374,90 +385,103 @@ class IDLGTVnTraining(BaselineTraining):
 
                 # initialize median score
                 cur_score = Dict()
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in g.METRICS:
-                        cur_score["median"][gtv][metric] = List()
+                for metric in g.METRICS:
+                    cur_score["median"][metric] = List()
 
                 # load cnn
                 cur_cnn_path = Explorer.get_sub_files(
-                    os.path.join(cur_epoch_folder, "baseline"),
+                    cur_epoch_folder,
                     key_word=".pt",
                     return_full_path=True,
                 )[0]
-                # create an empty hyper dict to save cnn
-                cur_hyper = Dict()
+                cur_hyper = Dict()  # create an empty hyper dict to save cnn
                 self._load_cnn(hyper=cur_hyper, cnn_path=cur_cnn_path)
 
                 # load dataset
-                patient_list = self._load_dataset(fold=cur_fold, debug_mode=debug_mode)
+                _, valid_patients, test_patients = self._load_dataset(
+                    fold=cur_fold, debug_mode=debug_mode
+                )
                 if dataset == "test":
-                    patient_list = patient_list[2]
+                    patient_list = test_patients
                 else:
-                    patient_list = patient_list[1]
+                    patient_list = valid_patients
+
+                # copy baseline score
+                baseline_score = Json.load(
+                    os.path.join(
+                        baseline_epoch_folder,
+                        "baseline",
+                        "score_{}.json".format(dataset),
+                    )
+                )
+                idl_gtvn_score_path = os.path.join(
+                    cur_epoch_folder, "score_{}.json".format(dataset)
+                )
+                idl_gtvn_score = Dict()
+                for cur_patient in patient_list:
+                    for metric in g.METRICS:
+                        idl_gtvn_score["patient={}".format(cur_patient)][metric][
+                            "baseline"
+                        ] = baseline_score["patient={}".format(cur_patient)]["gtvn"][
+                            metric
+                        ]
+                    Json.save(idl_gtvn_score, idl_gtvn_score_path)
 
                 for cur_patient in tqdm(patient_list):
-                    # if testset, create folder to save cur patient preds
+                    # if on testset, create folder to save cur patient preds
                     if dataset == "test":
                         cur_patient_folder = os.path.join(
                             cur_epoch_folder,
-                            "baseline",
                             "patients",
                             "patient={}".format(cur_patient),
                         )
                         Folder.create(cur_patient_folder)
 
                     # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-                    cur_patient_result = self._inference_single_patient(
+                    cur_patient_result = self._patient_inference(
                         patient=cur_patient,
                         hyper=cur_hyper,
-                        gtvt_only=False,
+                        inference_type="idl_gtvn",
+                        pred_main_folder=pred_main_folder,
                     )
 
                     # save score of cur patient
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        for metric in g.METRICS:
-                            # add cur patient result in avg_list
-                            cur_score["median"][gtv][metric].append(
-                                cur_patient_result[gtv][metric]
-                            )
-                            # record cur patient result if on test test
-                            if dataset == "test":
-                                cur_score["patient={}".format(cur_patient)][gtv][
-                                    metric
-                                ] = cur_patient_result[gtv][metric]
+                    for metric in g.METRICS:
+                        # add cur patient result in avg_list
+                        cur_score["median"][metric].append(
+                            cur_patient_result["gtvn"][metric]
+                        )
+                        # record cur patient result if on test test
+                        if dataset == "test":
+                            cur_score["patient={}".format(cur_patient)][
+                                metric
+                            ] = cur_patient_result["gtvn"][metric]
 
                     # save pred of cur patient
                     if dataset == "test":
-                        for gtv in ["gtvt", "gtvn"]:
-                            Nii.save(
-                                img=cur_patient_result[gtv]["pred"],
-                                save_path=os.path.join(
-                                    cur_patient_folder, "pred_{}.nii".format(gtv)
-                                ),
-                                spacing=g.NII_SPACING,
-                            )
+                        Nii.save(
+                            img=cur_patient_result["gtvn"]["pred"],
+                            path=os.path.join(
+                                cur_patient_folder, "pred_{}.nii".format("gtvn")
+                            ),
+                            spacing=g.NII_SPACING,
+                        )
 
                 # calculate median score
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in g.METRICS:
-                        median = cur_score["median"][gtv][metric]
-                        cur_score["median"][gtv][metric] = statistics.median(median)
+                for metric in g.METRICS:
+                    median = cur_score["median"][metric]
+                    cur_score["median"][metric] = statistics.median(median)
 
                 # save score (test set)
                 if dataset == "test":
-                    Json.save(
-                        data=cur_score,
-                        path=os.path.join(
-                            cur_epoch_folder, "baseline", "score_test.json"
-                        ),
-                    )
+                    Json.save(data=cur_score, path=idl_gtvn_score_path)
                     continue
 
                 # valid set, delete non-optimal folds and epochs
-                if math.isnan(cur_score["median"]["gtvs"]["msd"]) or math.isnan(
-                    cur_score["median"]["gtvs"]["hd95"]
+                if math.isnan(cur_score["median"]["msd"]) or math.isnan(
+                    cur_score["median"]["hd95"]
                 ):
-                    Folder.delete(cur_epoch_folder)
+                    # Folder.delete(cur_epoch_folder)
                     continue
 
                 if best_scores == {}:
@@ -469,11 +493,11 @@ class IDLGTVnTraining(BaselineTraining):
                         for epoch in best_scores[fold].keys():
                             # cur_score is worse than best_score, dont save
                             if (
-                                cur_score["median"]["gtvs"]["dsc"]
+                                cur_score["median"]["dsc"]
                                 < best_scores[fold][epoch]["dsc"]
-                                and cur_score["median"]["gtvs"]["msd"]
+                                and cur_score["median"]["msd"]
                                 > best_scores[fold][epoch]["msd"]
-                                and cur_score["median"]["gtvs"]["hd95"]
+                                and cur_score["median"]["hd95"]
                                 > best_scores[fold][epoch]["hd95"]
                             ):
                                 save_cur_score = False
@@ -481,41 +505,38 @@ class IDLGTVnTraining(BaselineTraining):
                             # cur_score is better than best_score, save
                             # (at least one of dsc/msd/hd95 is better)
                             if (
-                                cur_score["median"]["gtvs"]["dsc"]
+                                cur_score["median"]["dsc"]
                                 > best_scores[fold][epoch]["dsc"]
-                                or cur_score["median"]["gtvs"]["msd"]
+                                or cur_score["median"]["msd"]
                                 < best_scores[fold][epoch]["msd"]
-                                or cur_score["median"]["gtvs"]["hd95"]
+                                or cur_score["median"]["hd95"]
                                 < best_scores[fold][epoch]["hd95"]
                             ):
                                 save_cur_score = True
                             # best_score is worse than cur score, delete best_score
                             if (
                                 best_scores[fold][epoch]["dsc"]
-                                < cur_score["median"]["gtvs"]["dsc"]
+                                < cur_score["median"]["dsc"]
                                 and best_scores[fold][epoch]["msd"]
-                                > cur_score["median"]["gtvs"]["msd"]
+                                > cur_score["median"]["msd"]
                                 and best_scores[fold][epoch]["hd95"]
-                                > cur_score["median"]["gtvs"]["hd95"]
+                                > cur_score["median"]["hd95"]
                             ):
-                                Folder.delete(
-                                    os.path.join(
-                                        baseline_folder,
-                                        "fold={:02d}".format(fold),
-                                        "epoch={:03d}".format(epoch),
-                                    )
-                                )
+                                pass
+                                # Folder.delete(
+                                #     os.path.join(
+                                #         idl_gtvn_folder,
+                                #         "fold={:02d}".format(fold),
+                                #         "epoch={:03d}".format(epoch),
+                                #     )
+                                # )
                         if save_cur_score is False:
                             break
 
                 # save cur avg score
                 if save_cur_score:
-                    best_scores[cur_fold][cur_epoch] = cur_score["median"]["gtvs"]
-                    Json.save(
-                        data=cur_score,
-                        path=os.path.join(
-                            cur_epoch_folder, "baseline", "score_valid.json"
-                        ),
-                    )
+                    best_scores[cur_fold][cur_epoch] = cur_score["median"]
+                    Json.save(data=cur_score, path=idl_gtvn_score_path)
                 else:
-                    Folder.delete(cur_epoch_folder)
+                    pass
+                    # Folder.delete(cur_epoch_folder)

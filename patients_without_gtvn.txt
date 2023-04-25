@@ -1,0 +1,5 @@
+The original dataset did not include gtvn.nii for the following patients
+257,192,311,276,323,168,220,175,174,194,229,327,309,204,315,152,239,261,138
+
+This issue has been resolved by generating empty gtvn.nii files for each of these patients.
+It is recommended to keep a list of these patients for future reference.

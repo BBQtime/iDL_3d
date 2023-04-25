@@ -17,7 +17,7 @@ DSC_LOW_LIMIT = 0.6
 def patients_overview(
     idl_id,
 ):
-    train_result_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, idl_id)
+    train_result_folder = os.path.join(g.TRAIN_RESULTS_DIR, idl_id)
 
     score_dict = Dict()
 

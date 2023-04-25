@@ -227,7 +227,7 @@ class UNetPPSlim(nn.Module):
         x04 = up["1"]["3"](x13)
         x04 = vgg["0"]["4"](torch.cat([x00, x01, x02, x03, x04], 1))
 
-        if 1:  # deep supervision:
+        if 0:  # deep supervision:
             output0 = self.final["0"](x01)
             output1 = self.final["1"](x02)
             output2 = self.final["2"](x03)
@@ -235,7 +235,7 @@ class UNetPPSlim(nn.Module):
             return [output0, output1, output2, output3]
 
         else:
-            output = self.final["4"](x04)
+            output = self.final["3"](x04)
             return output
 
 

@@ -347,7 +347,7 @@ class Nii:
                 img = np.squeeze(img, axis=0)
         return img
 
-    def save(img: Union[ndarray, Tensor], save_path: str, spacing: tuple = ()):
+    def save(img: Union[ndarray, Tensor], path: str, spacing: tuple = ()):
         if isinstance(img, Tensor):
             # detach: return a tensor share the same memory but without grad
             img = img.detach().cpu().numpy()
@@ -364,8 +364,8 @@ class Nii:
             itk_img.SetSpacing(Global.NII_SPACING)
         else:
             itk_img.SetSpacing(spacing)
-        sitk.WriteImage(itk_img, save_path)
-        return save_path
+        sitk.WriteImage(itk_img, path)
+        return path
 
 
 class Json:
@@ -587,7 +587,7 @@ class GPU:
 class Cleaner:
     def clean_debug_data():
         for cur_folder in Explorer.walk_sub_folders(
-            Global.TRAIN_RESULTS_FOLDER, key_word="delete.this"
+            Global.TRAIN_RESULTS_DIR, key_word="delete.this"
         ):
             Folder.delete(cur_folder)
         Folder.clear(os.path.join(Global.PROJ_PATH, "debug"))
@@ -638,11 +638,11 @@ class Global:
 
     # Windows or Linux
     if platform.system().lower() == "windows":
-        DATASET_FOLDER = __settings["dataset.folder.win"]
+        DATASET_DIR = __settings["dataset.dir.windows"]
         NUM_WORKERS = 0  # window doesn't support pytorch multi-thread
 
     elif platform.system().lower() == "linux":
-        DATASET_FOLDER = __settings["dataset.folder.linux"]
+        DATASET_DIR = __settings["dataset.dir.linux"]
         NUM_WORKERS = __settings["num.workers"]
 
     # Depth, Height, Width
@@ -655,8 +655,16 @@ class Global:
 
     # Pytorch save/load entire cnn or weight only
     DATASET_K_FOLDS = __settings["dataset.k.folds"]
-    DATASET_SPLIT_JSON = os.path.join(PROJ_PATH, __settings["dataset.split.json"])
-    HYPER_JSON_BASELINE = os.path.join(PROJ_PATH, __settings["hyper.json.baseline"])
-    HYPER_JSON_IDL_GTVT = os.path.join(PROJ_PATH, __settings["hyper.json.idl.gtvt"])
-    HYPER_JSON_IDL_GTVN = os.path.join(PROJ_PATH, __settings["hyper.json.idl.gtvn"])
-    TRAIN_RESULTS_FOLDER = os.path.join(PROJ_PATH, __settings["train.results.folder"])
+    DATASET_SPLIT_JSON_PATH = os.path.join(
+        PROJ_PATH, __settings["dataset.split.json.name"]
+    )
+    HYPER_JSON_PATH_BASELINE = os.path.join(
+        PROJ_PATH, __settings["hyper.json.name.baseline"]
+    )
+    HYPER_JSON_PATH_IDL_GTVT = os.path.join(
+        PROJ_PATH, __settings["hyper.json.name.idl.gtvt"]
+    )
+    HYPER_JSON_PATH_IDL_GTVN = os.path.join(
+        PROJ_PATH, __settings["hyper.json.name.idl.gtvn"]
+    )
+    TRAIN_RESULTS_DIR = os.path.join(PROJ_PATH, __settings["train.results.dir"])

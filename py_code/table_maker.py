@@ -16,7 +16,7 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             fields.append("{}_{}".format(metric, i + 1))
 
-    baseline_folder = os.path.join(g.TRAIN_RESULTS_FOLDER, baseline_id)
+    baseline_folder = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
     fold_folder = Explorer.get_sub_folders(
         baseline_folder, "fold=", return_full_path=True
     )[0]

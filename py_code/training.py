@@ -3,8 +3,8 @@ import os
 import torch
 import math
 import random
-import torch.nn as nn
 import numpy as np
+from torch.nn import DataParallel
 from numpy import ndarray
 from segment_metrics import SegmentationMetrics
 from itertools import product
@@ -14,6 +14,7 @@ from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
 from datetime import datetime
 from baseline_dataset import BaselineDataSet
+from idl_gtvn_dataset import IDLGTVnDataSet
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from custom import Json
 from custom import Dict
@@ -97,6 +98,9 @@ class Training:
     def _load_cnn(self, hyper: Dict, cnn_path: str = None):
         # new model
         if cnn_path == "" or cnn_path is None:
+            if isinstance(hyper["cnn"], DataParallel):
+                hyper["cnn"] = hyper["cnn"].module
+
             if hyper["cnn"] == "unet.pp.slim" or isinstance(hyper["cnn"], UNetPPSlim):
                 hyper["cnn"] = UNetPPSlim(
                     in_chan=4, out_chan=3, dropout=hyper["dropout"]
@@ -106,12 +110,13 @@ class Training:
                     in_chan=6, out_chan=2, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
 
-        # exist cnn
+        # existing model
         else:
             hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
+
         # set multi-GPU
         if GPU.used_count() > 1:
-            hyper["cnn"] = nn.DataParallel(hyper["cnn"]).to(g.DEVICE)
+            hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
 
     def __get_simple_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
@@ -155,7 +160,7 @@ class Training:
 
     # split dataset and save result into json file
     def _split_dataset(self) -> Dict:
-        dataset_split = Json.load(g.DATASET_SPLIT_JSON)
+        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
         train_patients = List()
 
         for fold in dataset_split.keys():
@@ -175,7 +180,7 @@ class Training:
                 ].to_str()
                 train_patients = train_patients[fold_len:]
 
-        Json.save(dataset_split, g.DATASET_SPLIT_JSON)
+        Json.save(dataset_split, g.DATASET_SPLIT_JSON_PATH)
         return dataset_split
 
     def _save_cnn(self, hyper: Dict, save_path: str):
@@ -231,69 +236,89 @@ class Training:
         else:
             hyper["batch.size"] = dataset.__len__()
 
-    def _inference_single_patient(
+    def _patient_inference(
         self,
         patient: str,
         hyper: Dict,
-        gtvt_only: bool,
-        unetpp_output: int = 3,
-        masked_label: ndarray = None,
+        inference_type: str,  # baseline/idl_gtvt/idl_gtvn
+        masked_label: ndarray = None,  # gtvt post processing
+        pred_main_folder: str = None,  # idl_gtvn dataset needs this
     ) -> Dict:
 
         # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
         result = Dict()
 
-        dataset = BaselineDataSet(patient_list=[patient])
         origin = Dict()
 
-        # load gtvt
-        origin["gtvt"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVt.nii".format(patient)),
-            binary=True,
-        )
+        if inference_type == "baseline" or inference_type == "idl_gtvt":
+            dataset = BaselineDataSet(patient_list=[patient])
+        else:
+            dataset = IDLGTVnDataSet(
+                patient_list=[patient], pred_main_folder=pred_main_folder
+            )
 
-        if not gtvt_only:
-            # load gtvs
+        # load gtvs
+        if inference_type == "baseline":
             origin["gtvs"] = Nii.load(
-                os.path.join(g.DATASET_FOLDER, "HNCDL_{}_GTVs.nii".format(patient)),
+                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(patient)),
                 binary=True,
             )
-            # load gtvn
-            gtvn_path = os.path.join(
-                g.DATASET_FOLDER, "HNCDL_{}_GTVn.nii".format(patient)
+
+        # load gtvt
+        if inference_type == "baseline" or inference_type == "idl_gtvt":
+            origin["gtvt"] = Nii.load(
+                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
+                binary=True,
             )
+
+        # load gtvn
+        if inference_type == "baseline" or inference_type == "idl_gtvn":
+            gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
             if os.path.exists(gtvn_path):
                 origin["gtvn"] = Nii.load(gtvn_path, binary=True)
             else:
-                origin["gtvn"] = origin["gtvs"] - origin["gtvt"]
+                # load gtvt and use np.zeros_like
+                origin["gtvn"] = Nii.load(
+                    os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
+                    binary=True,
+                )
+                origin["gtvn"] = np.zeros_like(origin["gtvn"])
 
+        # get pred
         hyper["cnn"].eval()  # disable dropout / batch nomalize
         with torch.no_grad():
             inputs, labels = dataset.get_item(patient=patient)
             inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
             labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            outputs = hyper["cnn"].forward(inputs)[unetpp_output]
+            outputs = hyper["cnn"].forward(inputs)
             # squeeze batch
             outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
 
-        # get gtvt/gtvn/gtvs img
-        result["gtvt"]["pred"] = outputs[1]
-        if not gtvt_only:
+        if inference_type == "baseline":
+            result["gtvt"]["pred"] = outputs[1]
             result["gtvn"]["pred"] = outputs[2]
             result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
+            gtv_list = ["gtvs", "gtvt", "gtvn"]
+
+        elif inference_type == "idl_gtvt":
+            result["gtvt"]["pred"] = outputs[1]
+            gtv_list = ["gtvt"]
+
+        elif inference_type == "idl_gtvn":
+            result["gtvn"]["pred"] = outputs[1]
+            gtv_list = ["gtvn"]
 
         # pad and crop to original size
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
-            if gtv == "gtvt" or not gtvt_only:
-                result[gtv]["pred"] = Img.central_pad(
-                    result[gtv]["pred"], origin[gtv].shape
-                )
-                result[gtv]["pred"] = Img.central_crop(
-                    result[gtv]["pred"], origin[gtv].shape
-                )
+        for gtv in gtv_list:
+            result[gtv]["pred"] = Img.central_pad(
+                result[gtv]["pred"], origin[gtv].shape
+            )
+            result[gtv]["pred"] = Img.central_crop(
+                result[gtv]["pred"], origin[gtv].shape
+            )
 
         # idl post processing
-        if masked_label is not None and gtvt_only:
+        if inference_type == "idl_gtvt" and masked_label is not None:
             cc_list = Img.connected_components(result["gtvt"]["pred"])
             result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
             for cur_cc in cc_list:
@@ -301,12 +326,11 @@ class Training:
                     result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
 
         # calculate segment scores
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
-            if gtv == "gtvt" or not gtvt_only:
-                for metric in g.METRICS:
-                    result[gtv][metric] = self._metrics[metric](
-                        result[gtv]["pred"], origin[gtv]
-                    )
+        for gtv in gtv_list:
+            for metric in g.METRICS:
+                result[gtv][metric] = self._metrics[metric](
+                    result[gtv]["pred"], origin[gtv]
+                )
         return result
 
     # protected function
@@ -317,7 +341,7 @@ class Training:
         start_time = start_time.replace(" ", ".")
         return start_time
 
-    def _load_group_hyper(self, json_path: str) -> dict:
+    def _load_hyper_list_from_json(self, json_path: str) -> List:
         group_hyper = List()
         origin_hyper_dict = Json.load(json_path)
         hyper_keys = origin_hyper_dict.keys()
@@ -344,7 +368,7 @@ class Training:
     def _find_result_folder(self, result_id: str) -> str:
         # find result folder full path using result id
         result_folder = None
-        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_FOLDER, key_word=result_id):
+        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_DIR, key_word=result_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]

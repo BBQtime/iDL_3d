@@ -31,7 +31,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 
         # load label
         # (1) simulated iDL
-        if label_folder == g.DATASET_FOLDER:
+        if label_folder == g.DATASET_DIR:
             self.__origin["label"] = Nii.load(
                 os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
                 binary=True,
@@ -50,18 +50,18 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 
         # load ct/pt/mrt1/mt2
         self.__origin["ct"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_CT.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(patient))
         )
         # ct windowing before normalization
         self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
         self.__origin["pt"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_PT.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
         )
         self.__origin["mrt1"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T1dr.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(patient))
         )
         self.__origin["mrt2"] = Nii.load(
-            os.path.join(g.DATASET_FOLDER, "HNCDL_{}_T2dr.nii".format(patient))
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(patient))
         )
 
         # load weight map
@@ -271,15 +271,15 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         labels = torch.cat([background, final["label"]], dim=0)
 
         # multi model imgs
-        multi_model_imgs = None
+        multimodal_imgs = None
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             img = self.__preprocess(self.__origin[i], final["seed"])
 
             # concat multi-model img
-            if multi_model_imgs is None:
-                multi_model_imgs = img
+            if multimodal_imgs is None:
+                multimodal_imgs = img
             else:
-                multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
+                multimodal_imgs = torch.cat([multimodal_imgs, img], dim=0)
 
         # weight map
         weight_map = self.__preprocess(
@@ -289,7 +289,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
             clip_up_limit=self.__origin["weight.map"].max(),
         )
 
-        return multi_model_imgs, labels, weight_map
+        return multimodal_imgs, labels, weight_map
 
 
 # # for testing
@@ -312,7 +312,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 # annotated_slices["round=01"] = [30]
 
 # pred_folder = os.path.join(
-#     g.TRAIN_RESULTS_FOLDER,
+#     g.TRAIN_RESULTS_DIR,
 #     "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
 #     "baseline",
 #     "fold=01",
@@ -324,7 +324,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 # tmp_dataset = IDLGTVtDataSet(
 #     patient="336",
 #     annotated_slices=annotated_slices,
-#     label_folder=g.DATASET_FOLDER,
+#     label_folder=g.DATASET_DIR,
 #     pred_folder=pred_folder,
 #     augment=augment,
 #     weight=weight,

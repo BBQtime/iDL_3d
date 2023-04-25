@@ -3,4 +3,4 @@ debug/
 train_results/
 py_code/debug.py
 py_code/main.py
-idl_gtvt_hyper.txt
+hyper_idl_gtvt.txt
