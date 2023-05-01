@@ -107,7 +107,7 @@ class Training:
                 ).to(g.DEVICE)
             elif hyper["cnn"] == "unet.slim" or isinstance(hyper["cnn"], UNetSlim):
                 hyper["cnn"] = UNetSlim(
-                    in_chan=6, out_chan=2, dropout=hyper["dropout"]
+                    in_chan=2, out_chan=2, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
 
         # existing model
@@ -241,20 +241,25 @@ class Training:
         patient: str,
         hyper: Dict,
         inference_type: str,  # baseline/idl_gtvt/idl_gtvn
-        masked_label: ndarray = None,  # gtvt post processing
-        pred_main_folder: str = None,  # idl_gtvn dataset needs this
+        idl_gtvt_masked_label: ndarray = None,  # gtvt post processing
+        idl_gtvn_baseline_epoch_dir: str = None,  # idl_gtvn dataset needs this
     ) -> Dict:
+
+        if inference_type != "idl_gtvt" and inference_type != "idl_gtvn":
+            inference_type = "baseline"
 
         # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
         result = Dict()
-
+        # original labels
         origin = Dict()
 
         if inference_type == "baseline" or inference_type == "idl_gtvt":
-            dataset = BaselineDataSet(patient_list=[patient])
+            dataset = BaselineDataSet(patients=[patient])
         else:
             dataset = IDLGTVnDataSet(
-                patient_list=[patient], pred_main_folder=pred_main_folder
+                patients=[patient],
+                baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
+                random_click=False,
             )
 
         # load gtvs
@@ -273,39 +278,36 @@ class Training:
 
         # load gtvn
         if inference_type == "baseline" or inference_type == "idl_gtvn":
-            gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
-            if os.path.exists(gtvn_path):
-                origin["gtvn"] = Nii.load(gtvn_path, binary=True)
-            else:
-                # load gtvt and use np.zeros_like
-                origin["gtvn"] = Nii.load(
-                    os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
-                    binary=True,
-                )
-                origin["gtvn"] = np.zeros_like(origin["gtvn"])
+            origin["gtvn"] = Nii.load(
+                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+                binary=True,
+            )
 
         # get pred
         hyper["cnn"].eval()  # disable dropout / batch nomalize
         with torch.no_grad():
-            inputs, labels = dataset.get_item(patient=patient)
-            inputs = torch.unsqueeze(inputs.to(g.DEVICE), dim=0)
+            input_imgs, labels = dataset.get_item(patient=patient)
+            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
             labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            outputs = hyper["cnn"].forward(inputs)
-            # squeeze batch
-            outputs = torch.squeeze(outputs, dim=0).cpu().numpy()
+            preds = hyper["cnn"].forward(input_imgs)
+            # squeeze "batch" channel
+            preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
         if inference_type == "baseline":
-            result["gtvt"]["pred"] = outputs[1]
-            result["gtvn"]["pred"] = outputs[2]
-            result["gtvs"]["pred"] = np.maximum(outputs[1], outputs[2])
+            result["gtvt"]["pred"] = preds[1]
+            result["gtvn"]["pred"] = preds[2]
+            result["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
             gtv_list = ["gtvs", "gtvt", "gtvn"]
 
         elif inference_type == "idl_gtvt":
-            result["gtvt"]["pred"] = outputs[1]
+            result["gtvt"]["pred"] = preds[1]
             gtv_list = ["gtvt"]
 
         elif inference_type == "idl_gtvn":
-            result["gtvn"]["pred"] = outputs[1]
+            result["gtvn"]["pred"] = preds[1]
+            result["gtvn"]["click"] = torch.squeeze(input_imgs, dim=0).cpu().numpy()
+            result["gtvn"]["click"] = result["gtvn"]["click"][1]
+            # result["gtvn"]["click"] = np.argwhere(result["gtvn"]["click"])
             gtv_list = ["gtvn"]
 
         # pad and crop to original size
@@ -317,15 +319,15 @@ class Training:
                 result[gtv]["pred"], origin[gtv].shape
             )
 
-        # idl post processing
-        if inference_type == "idl_gtvt" and masked_label is not None:
+        # idl post processing (before calculate scores)
+        if inference_type == "idl_gtvt" and idl_gtvt_masked_label is not None:
             cc_list = Img.connected_components(result["gtvt"]["pred"])
             result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
             for cur_cc in cc_list:
-                if (cur_cc * masked_label).sum() > 0:
+                if (cur_cc * idl_gtvt_masked_label).sum() > 0:
                     result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
 
-        # calculate segment scores
+        # calculate inference scores
         for gtv in gtv_list:
             for metric in g.METRICS:
                 result[gtv][metric] = self._metrics[metric](
@@ -341,9 +343,9 @@ class Training:
         start_time = start_time.replace(" ", ".")
         return start_time
 
-    def _load_hyper_list_from_json(self, json_path: str) -> List:
+    def _load_hyper_sets_from_json(self, path: str) -> List:
         group_hyper = List()
-        origin_hyper_dict = Json.load(json_path)
+        origin_hyper_dict = Json.load(path)
         hyper_keys = origin_hyper_dict.keys()
 
         # make sure all values of hyper dict are "list" type
@@ -365,7 +367,7 @@ class Training:
 
         return group_hyper
 
-    def _find_result_folder(self, result_id: str) -> str:
+    def _find_result_dir(self, result_id: str) -> str:
         # find result folder full path using result id
         result_folder = None
         for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_DIR, key_word=result_id):

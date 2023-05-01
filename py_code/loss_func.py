@@ -10,20 +10,20 @@ EPSILON = torch.finfo(torch.float32).eps
 
 def split_channels(
     input_imgs: Tensor,
-    training_type: str,  # baseline/idl_gtvt/idl_gtvn
+    train_type: str,  # baseline/idl_gtvt/idl_gtvn
 ) -> dict:
 
     # dimension: [batch, channel, depth, height, width]
     output_imgs = Dict()
 
     # baseline
-    if training_type == "baseline":
+    if train_type == "baseline":
         output_imgs["back"] = input_imgs[:, 0, :, :, :]
         output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
         output_imgs["gtvn"] = input_imgs[:, 2, :, :, :]
 
     # idl gtvt
-    elif training_type == "idl_gtvt":
+    elif train_type == "idl_gtvt":
         # preds have 3 channels, background = background + gtvn
         if input_imgs.shape[1] == 3:
             output_imgs["back"] = input_imgs[:, 0, :, :, :] + input_imgs[:, 2, :, :, :]
@@ -33,7 +33,7 @@ def split_channels(
         output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
 
     # idl gtvn
-    elif training_type == "idl_gtvn":
+    elif train_type == "idl_gtvn":
         output_imgs["back"] = input_imgs[:, 0, :, :, :]
         output_imgs["gtvn"] = input_imgs[:, 1, :, :, :]
 
@@ -137,14 +137,14 @@ def unified_focal_loss(
     weight: float,  # lambda parameter, controls weight given to Focal Tversky loss and Focal loss
     delta: float,  # controls weight given to each class
     gamma: float,  # focal parameter controls the degree of background suppression and foreground enhancement
-    training_type: str,  # baseline/idl_gtvt/idl_gtvn
+    train_type: str,  # baseline/idl_gtvt/idl_gtvn
 ):
     def loss_function(
         preds: Tensor, labels: Tensor, weight_map: Tensor = None
     ) -> Tensor:
 
-        preds = split_channels(preds, training_type)
-        labels = split_channels(labels, training_type)
+        preds = split_channels(preds, train_type)
+        labels = split_channels(labels, train_type)
 
         if weight_map is not None:
             # weight_map: [b,c,d,h,w] -> [b,d,h,w]
@@ -174,6 +174,7 @@ def unified_focal_loss(
 
 
 # only for training
+# dice loss: weight=1.0, delta=0.5
 class UnifiedFocalLoss(nn.Module):
     def __init__(
         self,
@@ -181,7 +182,7 @@ class UnifiedFocalLoss(nn.Module):
         weight: float,
         delta: float,
         gamma: float,
-        training_type: str,  # baseline/idl_gtvt/idl_gtvn
+        train_type: str,  # baseline/idl_gtvt/idl_gtvn
     ):
         super().__init__()
         self.__loss_func = unified_focal_loss(
@@ -189,7 +190,7 @@ class UnifiedFocalLoss(nn.Module):
             weight=weight,
             delta=delta,
             gamma=gamma,
-            training_type=training_type,
+            train_type=train_type,
         )
 
     def forward(self, preds, labels, weight_map=None):

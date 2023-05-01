@@ -165,7 +165,7 @@ class IDLGTVtTraining(Training):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-            training="idl_gtvt",
+            train_type="idl_gtvt",
         ).to(g.DEVICE)
 
     def _load_dataset(self, debug_mode: bool = False):
@@ -473,7 +473,7 @@ class IDLGTVtTraining(Training):
             patient=patient[len("patient=") :],
             hyper=hyper,
             inference_type="idl_gtvt",
-            masked_label=masked_label,
+            idl_gtvt_masked_label=masked_label,
         )
 
         # save score of cur patient
@@ -574,13 +574,13 @@ class IDLGTVtTraining(Training):
                     hyper["cnn"].freeze_top()
 
             # here, labels only have 2 channels: background and gtvt, No gtvn
-            for multimodal_imgs, labels, weight_map in idl_gtvt_loader:
+            for input_imgs, labels, weight_map in idl_gtvt_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
-                multimodal_imgs = multimodal_imgs.to(g.DEVICE)
+                input_imgs = input_imgs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 weight_map = weight_map.to(g.DEVICE)
-                preds = hyper["cnn"](multimodal_imgs)
+                preds = hyper["cnn"](input_imgs)
                 loss = hyper["loss.func"](preds, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
@@ -718,9 +718,7 @@ class IDLGTVtTraining(Training):
         self._plot_loss_fig(idl_gtvt_folder)
 
     def plot_loss_fig(self, idl_gtvt_id: str):
-        for i in Explorer.walk_sub_folders(
-            g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id
-        ):
+        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
@@ -762,7 +760,7 @@ class IDLGTVtTraining(Training):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        for cur_hyper in self._load_hyper_list_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
+        for cur_hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
 
             idl_gtvt_id = "idl_gtvt_" + self._init_train_id(
                 train_remark=train_remark,
@@ -857,7 +855,7 @@ class IDLGTVtTraining(Training):
             self.__calculate_median_score(idl_gtvt_folder)
 
     def calculate_median_score(self, idl_gtvt_id):
-        idl_gtvt_folder = self._find_result_folder(idl_gtvt_id)
+        idl_gtvt_folder = self._find_result_dir(idl_gtvt_id)
         if idl_gtvt_folder is None:
             print("idl_gtvt_id not found")
             return
@@ -891,7 +889,7 @@ class IDLGTVtTraining(Training):
         print("inference: {}".format(idl_gtvt_id))
 
         # find idl gtvt folder
-        idl_gtvt_folder = self._find_result_folder(idl_gtvt_id)
+        idl_gtvt_folder = self._find_result_dir(idl_gtvt_id)
         if idl_gtvt_folder is None:
             print("idl_gtvt_id not found")
             return

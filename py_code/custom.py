@@ -89,7 +89,8 @@ class List(list):
 
     def find_identical_items(self, other_list: list):
         identical_items = set(self) & set(other_list)
-        return List(identical_items)
+        self[:] = List(identical_items)
+        self.sort()
 
     def shuffle(self, seed: int = None):
         # sort before shuffle, ensure to get specific results using specific seed
@@ -283,6 +284,24 @@ class Img:
             output_cc_list.append(cur_cc)
         return output_cc_list
 
+    def find_random_point(binary_img) -> list:
+        binary_img = Img.binarize(binary_img)
+
+        # pos of all nonzero voxels in the img
+        # shape of pos:[nonzero_count, img_dim]
+        non_zero_pos = np.argwhere(binary_img)
+
+        # if no nonzero elements, return None
+        if non_zero_pos.size == 0:
+            return None
+
+        # select a random coordinate from the list of nonzero elements
+        random_idx = random.randint(0, non_zero_pos.shape[0] - 1)
+        random_pos = non_zero_pos[random_idx]
+
+        # Return the tuple (x, y, z) corresponding to the random coordinate
+        return random_pos
+
     # def show(
     #     img: Union[ndarray, Tensor], win_title: str = "", print_info: bool = False
     # ):
@@ -332,18 +351,14 @@ class Img:
 
 
 class Nii:
-    def load(
-        nii_path: str,
-        binary: bool = False,
-        out_dim: int = 3,
-    ) -> ndarray:
-        img = sitk.ReadImage(nii_path)
+    def load(path: str, binary: bool = False, dim: int = 3) -> ndarray:
+        img = sitk.ReadImage(path)
         img = sitk.GetArrayFromImage(img)
         img = img.astype(np.float32)
         if binary:
             img = Img.binarize(img)
-        if out_dim > 0 and len(img.shape) > out_dim:
-            for i in range(len(img.shape) - out_dim):
+        if dim > 0 and len(img.shape) > dim:
+            for i in range(len(img.shape) - dim):
                 img = np.squeeze(img, axis=0)
         return img
 

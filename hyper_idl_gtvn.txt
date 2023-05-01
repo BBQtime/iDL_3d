@@ -1,0 +1,2 @@
+1.dice loss without background
+2.remove pet img 

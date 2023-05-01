@@ -90,11 +90,10 @@ class BaselineDataSet(torch.utils.data.Dataset):
         final_gtvt = Img.binarize(final_gtvt)
 
         # load gtvn
-        gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
-        if os.path.exists(gtvn_path):
-            origin_gtvn = Nii.load(gtvn_path, binary=True)
-        else:
-            origin_gtvn = origin_gtvs - origin_gtvt
+        origin_gtvn = Nii.load(
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+            binary=True,
+        )
         final_gtvn = self.__preprocess(origin_gtvn, final_augment_seed)
         final_gtvn = Img.binarize(final_gtvn)
 
@@ -103,7 +102,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final_gtvt, final_gtvn], dim=0)
 
-        multimodal_imgs = None
+        input_imgs = None
         for i in ["CT", "PT", "T1dr", "T2dr"]:
             img_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_{}.nii".format(patient, i))
             img = Nii.load(img_path)
@@ -115,12 +114,12 @@ class BaselineDataSet(torch.utils.data.Dataset):
             img = self.__preprocess(img, final_augment_seed)
 
             # concat multi-model img
-            if multimodal_imgs is None:
-                multimodal_imgs = img
+            if input_imgs is None:
+                input_imgs = img
             else:
-                multimodal_imgs = torch.cat([multimodal_imgs, img], dim=0)
+                input_imgs = torch.cat([input_imgs, img], dim=0)
 
-        return multimodal_imgs, labels
+        return input_imgs, labels
 
     # must be overrided
     # this function is only for training, not for inference

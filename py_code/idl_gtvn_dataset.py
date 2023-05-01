@@ -17,17 +17,19 @@ from scipy.ndimage import distance_transform_edt
 class IDLGTVnDataSet(torch.utils.data.Dataset):
     def __init__(
         self,
-        patient_list: list,
-        pred_main_folder: str,
+        patients: list,
+        baseline_epoch_dir: str,
         augment: Dict = None,
+        random_click: bool = False,
     ):
-        self.__patient_list = patient_list
-        self.__pred_main_folder = pred_main_folder
+        self.__patients = patients
+        self.__baseline_epoch_dir = baseline_epoch_dir
         self.__augment = DataAugmentation(augment)
+        self.__random_click = random_click
 
     # must be overrided
     def __len__(self):
-        return len(self.__patient_list)
+        return len(self.__patients)
 
     def __preprocess(self, img: ndarray, augment_seed: int):
         # DO NOT alter origin img
@@ -65,76 +67,63 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         # load pred
         self.__origin["pred"] = Nii.load(
             os.path.join(
-                self.__pred_main_folder, "patient={}".format(patient), "pred_gtvn.nii"
+                self.__baseline_epoch_dir,
+                "baseline",
+                "patients",
+                "patient={}".format(patient),
+                "pred_gtvn.nii",
             ),
             binary=False,
         )
-
         # load label
-        gtvn_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient))
-        if os.path.exists(gtvn_path):
-            self.__origin["label"] = Nii.load(
-                gtvn_path,
-                binary=True,
-            )
-        else:
-            self.__origin["label"] = np.zeros_like(self.__origin["pred"])
-
-        # load ct/pt/mrt1/mt2
-        self.__origin["ct"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(patient))
+        self.__origin["label"] = Nii.load(
+            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+            binary=True,
         )
-        # ct windowing before normalization
-        self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
-        self.__origin["pt"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
-        )
-        self.__origin["mrt1"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(patient))
-        )
-        self.__origin["mrt2"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(patient))
-        )
-
-        # simulate click annotation
+        # # load pt
+        # self.__origin["pt"] = Nii.load(
+        #     os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
+        # )
+        # simulate click
         self.__origin["click"] = np.zeros(
             self.__origin["label"].shape, dtype=np.float32
         )
         # loop through each connected components
         for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
-            # label_center: (d,h,w)
-            label_center = list(measurements.center_of_mass(cur_gtvn_cc))
-            # float to int
-            for i in range(len(label_center)):
-                label_center[i] = round(label_center[i])
-            self.__origin["click"][label_center[0]][label_center[1]][
-                label_center[2]
-            ] = 1
-        # Nii.save(
-        #     self.__origin["click"], os.path.join(g.PROJ_PATH, "debug", "click.nii")
-        # )
-        # Nii.save(self.__origin["label"], os.path.join(g.PROJ_PATH, "debug", "gtvn.nii"))
-
-        if np.sum(self.__origin["label"]) > 0:
-            self.__origin["click"] = distance_transform_edt(
-                np.logical_not(self.__origin["click"])
-            ).astype(np.float32)
+            if self.__random_click:
+                # find a random point (d,h,w)
+                random_point = Img.find_random_point(cur_gtvn_cc)
+                self.__origin["click"][random_point[0]][random_point[1]][
+                    random_point[2]
+                ] = 1
+            else:
+                # gravity_center: (d,h,w)
+                gravity_center = list(measurements.center_of_mass(cur_gtvn_cc))
+                # float to int
+                for i in range(len(gravity_center)):
+                    gravity_center[i] = round(gravity_center[i])
+                self.__origin["click"][gravity_center[0]][gravity_center[1]][
+                    gravity_center[2]
+                ] = 1
+            # Nii.save(cur_gtvn_cc, os.path.join(g.PROJ_PATH, "debug", "cur_cc.nii"))
             # Nii.save(
-            #     self.__origin["click"],
-            #     os.path.join(g.PROJ_PATH, "debug", "distance_map.nii"),
+            #     self.__origin["click"], os.path.join(g.PROJ_PATH, "debug", "click.nii")
             # )
 
-            self.__origin["click"] = np.exp(-self.__origin["click"])
-            # Nii.save(
-            #     self.__origin["click"],
-            #     os.path.join(g.PROJ_PATH, "debug", "exp_distance_map.nii"),
-            # )
+        # # distance map
+        # if np.sum(self.__origin["label"]) > 0:
+        #     self.__origin["click"] = distance_transform_edt(
+        #         np.logical_not(self.__origin["click"])
+        #     ).astype(np.float32)
+        #     self.__origin["click"] = np.exp(-self.__origin["click"])
 
         final = Dict()
         tmp = Dict()
 
+        # origin_pred needs to be binarized (without changing original img)
+        # otherwise origin_label_pred_sum is too high
         origin_label_pred_sum = (
-            self.__origin["label"].sum() + self.__origin["pred"].sum()
+            self.__origin["label"].sum() + Img.binarize(self.__origin["pred"]).sum()
         )
 
         # loop until target volume is big enough
@@ -181,33 +170,21 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final["label"]], dim=0)
 
-        # baseline pred (no binarization)
-        # print(torch.median(final["pred"]))
-        final["pred"] = self.__preprocess(self.__origin["pred"], final["seed"])
-        # print(torch.median(final["pred"]))
+        # pred + click + pt
+        input_imgs = None
+        for i in ["pred", "click"]:  # , "pt"]:
+            final[i] = self.__preprocess(self.__origin[i], final["seed"])
+            if input_imgs is None:
+                input_imgs = final[i]
+            else:
+                input_imgs = torch.cat([input_imgs, final[i]], dim=0)
 
-        # click
-        # geodesic distance map + euclidean distance map
-        final["click"] = self.__preprocess(self.__origin["click"], final["seed"])
-
-        # # save final nii files for debugging
-        # for i in ["label", "pred", "click"]:
-        #     Nii.save(final[i], os.path.join(g.PROJ_PATH, "debug", i + ".nii"))
-
-        # multi model imgs
-        multi_model_imgs = torch.cat([final["pred"], final["click"]], dim=0)
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            img = self.__preprocess(self.__origin[i], final["seed"])
-
-            # concat multi-model img
-            multi_model_imgs = torch.cat([multi_model_imgs, img], dim=0)
-
-        return multi_model_imgs, labels
+        return input_imgs, labels
 
     # must be overrided
     # this function is only for training, not for inference
     def __getitem__(self, idx: int):
-        patient = self.__patient_list[idx]
+        patient = self.__patients[idx]
         return self.get_item(patient)
 
 
@@ -220,19 +197,16 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 # augment["max"] = 1
 # augment["times"] = 1
 
-# pred_folder = os.path.join(
+# baseline_epoch_dir = os.path.join(
 #     g.TRAIN_RESULTS_DIR,
-#     "baseline_2023.02.27.07.08.09_loss.delta=0.5_loss.gamma=0.5_optimal",
+#     "baseline_2023.02.27.07.08.09_loss.gamma=0.5",
 #     "fold=01",
 #     "epoch=205",
-#     "baseline",
-#     "patients",
-#     "patient=336",
 # )
 # # augment_methods =
 # tmp_dataset = IDLGTVnDataSet(
-#     patient="106",
-#     pred_folder=pred_folder,
+#     patients=["106"],
+#     baseline_epoch_dir=baseline_epoch_dir,
 #     augment=augment,
 # )
-# tmp_dataset.__getitem__(2)
+# tmp_dataset.__getitem__(0)

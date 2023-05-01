@@ -271,15 +271,15 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         labels = torch.cat([background, final["label"]], dim=0)
 
         # multi model imgs
-        multimodal_imgs = None
+        input_imgs = None
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             img = self.__preprocess(self.__origin[i], final["seed"])
 
             # concat multi-model img
-            if multimodal_imgs is None:
-                multimodal_imgs = img
+            if input_imgs is None:
+                input_imgs = img
             else:
-                multimodal_imgs = torch.cat([multimodal_imgs, img], dim=0)
+                input_imgs = torch.cat([input_imgs, img], dim=0)
 
         # weight map
         weight_map = self.__preprocess(
@@ -289,7 +289,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
             clip_up_limit=self.__origin["weight.map"].max(),
         )
 
-        return multimodal_imgs, labels, weight_map
+        return input_imgs, labels, weight_map
 
 
 # # for testing

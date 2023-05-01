@@ -3,7 +3,6 @@ import os
 import torch
 import math
 import statistics
-import numpy as np
 from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +10,7 @@ from torch.utils.data import DataLoader
 from training import Training
 from matplotlib import pyplot as plt
 from baseline_dataset import BaselineDataSet
+from idl_gtvn_dataset import IDLGTVnDataSet
 from loss_func import UnifiedFocalLoss
 from custom import Dict
 from custom import Json
@@ -20,7 +20,6 @@ from custom import Folder
 from custom import GPU
 from custom import Value
 from custom import Explorer
-from custom import Img
 
 
 class BaselineTraining(Training):
@@ -46,15 +45,16 @@ class BaselineTraining(Training):
 
         return train_patients, valid_patients, test_patients
 
-    def __load_hyper(
+    def _load_hyper(
         self,
         hyper: Dict,
         fold: int,
-        cnn_path: str = None,  # make cnn_path == None or "" will load a new cnn
+        train_type: str = "baseline",
+        baseline_epoch_dir: str = None,  # this is only for idl.gtvn
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # cross valid folds
-        hyper["dataset.k.folds"] = g.DATASET_K_FOLDS
+        hyper["dataset.fold"] = "{}/{}".format(fold, g.DATASET_K_FOLDS)
 
         # epochs
         if debug_mode:
@@ -97,7 +97,7 @@ class BaselineTraining(Training):
         hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         # load shared hyper parameters
-        super()._load_hyper(hyper=hyper, cnn_path=cnn_path)
+        super()._load_hyper(hyper=hyper, cnn_path=None)
 
         # loss function
         hyper["loss.func"] = UnifiedFocalLoss(
@@ -105,22 +105,13 @@ class BaselineTraining(Training):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-            training_type="baseline",
+            train_type=train_type,
         ).to(g.DEVICE)
 
         # load patients
         (train_patients, valid_patients, test_patients,) = self._load_dataset(
             fold=fold,
             debug_mode=debug_mode,
-        )
-
-        hyper["dataset.len.train"] = train_patients.__len__()
-        hyper["dataset.len.valid"] = valid_patients.__len__()
-        hyper["dataset.len.test"] = test_patients.__len__()
-        hyper["dataset.len"] = (
-            train_patients.__len__()
-            + valid_patients.__len__()
-            + test_patients.__len__()
         )
 
         # create datasets
@@ -131,9 +122,27 @@ class BaselineTraining(Training):
         augment["min"] = hyper["augment.min"]
         augment["max"] = hyper["augment.max"]
 
-        train_set = BaselineDataSet(patients=train_patients, augment=augment)
-        valid_set = BaselineDataSet(patients=valid_patients)
-        test_set = BaselineDataSet(patients=test_patients)
+        if train_type == "baseline":
+            train_set = BaselineDataSet(patients=train_patients, augment=augment)
+            valid_set = BaselineDataSet(patients=valid_patients)
+            test_set = BaselineDataSet(patients=test_patients)
+        else:
+            train_set = IDLGTVnDataSet(
+                patients=train_patients,
+                baseline_epoch_dir=baseline_epoch_dir,
+                augment=augment,
+                random_click=True,
+            )
+            valid_set = IDLGTVnDataSet(
+                patients=valid_patients,
+                baseline_epoch_dir=baseline_epoch_dir,
+                random_click=False,
+            )
+            test_set = IDLGTVnDataSet(
+                patients=test_patients,
+                baseline_epoch_dir=baseline_epoch_dir,
+                random_click=False,
+            )
 
         # dataloader
         hyper["train.loader"] = DataLoader(
@@ -219,7 +228,7 @@ class BaselineTraining(Training):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def __training(self, hyper: Dict, fold_dir: str):
+    def _training(self, hyper: Dict, fold_dir: str, train_type: str):
         best_loss_dict = Dict()
         loss_json_path = os.path.join(fold_dir, "train_info", "loss.json")
         lr_json_path = os.path.join(fold_dir, "train_info", "lr.json")
@@ -232,13 +241,13 @@ class BaselineTraining(Training):
             hyper["cnn"].train()
             train_loss = 0
             num_batches = 0
-            for multimodal_imgs, labels in tqdm(hyper["train.loader"]):
+            for input_imgs, labels in tqdm(hyper["train.loader"]):
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
-                multimodal_imgs = multimodal_imgs.to(g.DEVICE)
+                input_imgs = input_imgs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
-                preds = hyper["cnn"](multimodal_imgs)
-                cur_loss = hyper["loss.func"](preds, labels, weight_map=None)
+                preds = hyper["cnn"](input_imgs)
+                cur_loss = hyper["loss.func"](preds, labels)
                 cur_loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 train_loss += cur_loss.item()
@@ -251,11 +260,11 @@ class BaselineTraining(Training):
             with torch.no_grad():
                 valid_loss = 0
                 num_batches = 0
-                for multimodal_imgs, labels in tqdm(hyper["valid.loader"]):
-                    multimodal_imgs = multimodal_imgs.to(g.DEVICE)
+                for input_imgs, labels in tqdm(hyper["valid.loader"]):
+                    input_imgs = input_imgs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
-                    preds = hyper["cnn"](multimodal_imgs)
-                    cur_loss = hyper["loss.func"](preds, labels, weight_map=None)
+                    preds = hyper["cnn"](input_imgs)
+                    cur_loss = hyper["loss.func"](preds, labels)
                     valid_loss += cur_loss.item()
                     num_batches += 1
             valid_loss /= num_batches
@@ -287,13 +296,15 @@ class BaselineTraining(Training):
             if len(best_loss_dict) < hyper["keep.best.cnn.num"]:
                 best_loss_dict[epoch] = valid_loss
                 epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                Folder.create(os.path.join(epoch_dir, "baseline"))
-                cnn_save_path = os.path.join(
-                    epoch_dir,
-                    "baseline",
-                    "epoch={:03d}.pt".format(epoch),
+                if train_type == "baseline":
+                    cnn_save_dir = os.path.join(epoch_dir, "baseline")
+                else:
+                    cnn_save_dir = epoch_dir
+                Folder.create(cnn_save_dir)
+                self._save_cnn(
+                    hyper,
+                    os.path.join(cnn_save_dir, "epoch={:03d}.pt".format(epoch)),
                 )
-                self._save_cnn(hyper, cnn_save_path)
             else:
                 worst_epoch = best_loss_dict.key_with_max_value()
                 worst_loss = best_loss_dict[worst_epoch]
@@ -304,13 +315,15 @@ class BaselineTraining(Training):
                     best_loss_dict.pop(worst_epoch)
                     best_loss_dict[epoch] = valid_loss
                     epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                    Folder.create(os.path.join(epoch_dir, "baseline"))
-                    cnn_save_path = os.path.join(
-                        epoch_dir,
-                        "baseline",
-                        "epoch={:03d}.pt".format(epoch),
+                    if train_type == "baseline":
+                        cnn_save_dir = os.path.join(epoch_dir, "baseline")
+                    else:
+                        cnn_save_dir = epoch_dir
+                    Folder.create(cnn_save_dir)
+                    self._save_cnn(
+                        hyper,
+                        os.path.join(cnn_save_dir, "epoch={:03d}.pt".format(epoch)),
                     )
-                    self._save_cnn(hyper, cnn_save_path)
                     patience = 0
                 else:
                     patience += 1
@@ -322,28 +335,79 @@ class BaselineTraining(Training):
         train_remark: str = "",
         debug_mode: bool = False,
     ):
-        for hyper in self._load_hyper_list_from_json(g.HYPER_JSON_PATH_BASELINE):
+        self._new_training(
+            train_type="baseline",
+            train_remark=train_remark,
+            debug_mode=debug_mode,
+        )
 
-            baseline_id = "baseline_" + self._init_train_id(
+    def _new_training(
+        self,
+        train_type: str,
+        baseline_id: str = None,
+        baseline_fold: int = None,
+        baseline_epoch: int = None,
+        train_remark: str = "",
+        debug_mode: bool = False,
+    ):
+        if train_type == "baseline":
+            hyper_json_path = g.HYPER_JSON_PATH_BASELINE
+        else:
+            train_type = "idl_gtvn"
+            hyper_json_path = g.HYPER_JSON_PATH_IDL_GTVN
+
+        for hyper in self._load_hyper_sets_from_json(hyper_json_path):
+
+            train_id = train_type + "_"
+            train_id += self._init_train_id(
                 train_remark=train_remark,
-                hyper_json_path=g.HYPER_JSON_PATH_BASELINE,
+                hyper_json_path=hyper_json_path,
                 hyper=hyper,
                 debug_mode=debug_mode,
             )
             print("")
-            print(baseline_id)
+            print(train_id)
 
-            baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
-            Folder.create(baseline_dir)
+            # find baseline fold dir
+            if train_type == "idl_gtvn":
+                if baseline_fold is None or baseline_fold <= 0:
+                    key_word = "fold="
+                else:
+                    key_word = "fold={:02d}".format(baseline_fold)
+                baseline_fold_dir = Explorer.get_sub_folders(
+                    os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
+                    key_word=key_word,
+                    return_full_path=True,
+                )[0]
+                # find epoch folder
+                if baseline_epoch is None or baseline_epoch <= 0:
+                    key_word = "epoch="
+                else:
+                    key_word = "epoch={:03d}".format(baseline_epoch)
+                baseline_epoch_dir = Explorer.get_sub_folders(
+                    baseline_fold_dir, key_word=key_word, return_full_path=True
+                )[0]
+            else:
+                baseline_epoch_dir = None
+
+            # create train result dir
+            if train_type == "baseline":
+                train_result_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id)
+            else:
+                train_result_dir = os.path.join(
+                    baseline_epoch_dir, "idl_gtvn", train_id
+                )
+            Folder.create(train_result_dir)
 
             for fold in range(1, g.DATASET_K_FOLDS + 1):
-                fold_dir = os.path.join(baseline_dir, "fold={:02d}".format(fold))
+                fold_dir = os.path.join(train_result_dir, "fold={:02d}".format(fold))
                 Folder.create(fold_dir)
 
-                self.__load_hyper(
+                self._load_hyper(
                     hyper=hyper,
                     fold=fold,
-                    cnn_path="",  # cnn_path="" will create a new cnn
+                    train_type=train_type,
+                    baseline_epoch_dir=baseline_epoch_dir,
                     debug_mode=debug_mode,
                 )
                 if fold == 1:
@@ -361,17 +425,17 @@ class BaselineTraining(Training):
                 Json.save(Dict(), os.path.join(train_info_dir, "lr.json"))
 
                 # save hyper before training
-                hyper_json_path = os.path.join(train_info_dir, "hyper.json")
-                self._save_hyper(hyper, hyper_json_path)
+                hyper_save_path = os.path.join(train_info_dir, "hyper.json")
+                self._save_hyper(hyper, hyper_save_path)
 
                 # start training
                 hyper["time.spent"] = datetime.now()
-                self.__training(hyper, fold_dir)
+                self._training(hyper, fold_dir, train_type=train_type)
                 hyper["time.spent"] = datetime.now() - hyper["time.spent"]
                 hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
                 # save hyper after training
-                self._save_hyper(hyper, hyper_json_path)
+                self._save_hyper(hyper, hyper_save_path)
 
                 # clear time spent before next training
                 hyper.pop("time.spent")
@@ -379,59 +443,23 @@ class BaselineTraining(Training):
                 # break if no cross validation
                 if hyper["dataset.cross.valid"] is False:
                     break
+
                 # only train 2 folds in debug mode
                 if debug_mode and fold == 2:
                     break
 
-            # inference (valid first, then test, train comes last)
-            for dataset in ["valid", "test", "train"]:
-                self.inference(
-                    baseline_id=baseline_id,
+            # inference (valid set first)
+            if train_type == "baseline":
+                # inference on training set to save pred_gtvn.nii for idl gtvn
+                dataset_order = ["valid", "test", "train"]
+            else:
+                dataset_order = ["valid", "test"]
+            for dataset in dataset_order:
+                self._inference(
+                    train_id=train_id,
                     dataset=dataset,
                     debug_mode=debug_mode,
                 )
-
-    def __patient_inference(self, patient: str, hyper: Dict) -> Dict:
-        # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-        results = Dict()
-        origin_labels = Dict()
-        dataset = BaselineDataSet(patients=[patient])
-
-        # load origin_labels
-        for i in ["s", "t", "n"]:
-            origin_labels["gtv{}".format(i)] = Nii.load(
-                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTV{}.nii".format(patient, i)),
-                binary=True,
-            )
-
-        # get pred
-        hyper["cnn"].eval()  # disable dropout / batch nomalize
-        with torch.no_grad():
-            multimodal_imgs, labels = dataset.get_item(patient=patient)
-            multimodal_imgs = torch.unsqueeze(multimodal_imgs.to(g.DEVICE), dim=0)
-            labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            preds = hyper["cnn"].forward(multimodal_imgs)
-            # squeeze "batch" channel
-            preds = torch.squeeze(preds, dim=0).cpu().numpy()
-
-        results["gtvt"]["pred"] = preds[1]
-        results["gtvn"]["pred"] = preds[2]
-        results["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
-
-        # pad and crop to original size
-        for gtv in ["gtvs", "gtvt", "gtvn"]:
-            results[gtv]["pred"] = Img.central_pad(
-                results[gtv]["pred"], origin_labels[gtv].shape
-            )
-            results[gtv]["pred"] = Img.central_crop(
-                results[gtv]["pred"], origin_labels[gtv].shape
-            )
-            # calculate segment scores
-            for metric in g.METRICS:
-                results[gtv][metric] = self._metrics[metric](
-                    results[gtv]["pred"], origin_labels[gtv]
-                )
-        return results
 
     def inference(
         self,
@@ -439,53 +467,77 @@ class BaselineTraining(Training):
         dataset: str = "test",  # train/valid/test
         debug_mode: bool = False,
     ):
-        print("")
-        print("inference on {} set: {}".format(dataset, baseline_id))
-
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
-
         if dataset != "train" and dataset != "valid":
             dataset = "test"
+        self._inference(
+            train_id=baseline_id,
+            dataset=dataset,
+            debug_mode=debug_mode,
+        )
 
-        # if on valid set, delete non-optimal epoch results
-        if dataset == "valid":
-            # record top median scores through each fold and epoch
-            top_median_scores_set = Dict()
+    def _inference(
+        self,
+        train_id: str,
+        dataset: str = "test",  # train/valid/test
+        debug_mode: bool = False,
+    ):
 
-        # loop through fold folders
+        # confirm inference_type
+        inference_type = None
+        for i in ["baseline", "idl_gtvn"]:
+            if i in train_id:
+                inference_type = i
+        if inference_type is None:
+            print("""cant find key word "baseline" or "idl_gtvn" in train_id""")
+            return
+
+        print("")
+        print("inference on {} set: {}".format(dataset, train_id))
+
+        # find idl gtvt folder
+        if inference_type == "baseline":
+            train_result_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id)
+            if not os.path.exists(train_result_dir):
+                train_result_dir = None
+        else:
+            train_result_dir = self._find_result_dir(train_id)
+        if train_result_dir is None:
+            print("train_id not found")
+            return
+
+        # this is only for idl_gtvn to load baseline gtvn preds
+        if inference_type == "idl_gtvn":
+            idl_gtvn_baseline_epoch_dir = str(Path(train_result_dir).parent.parent)
+        else:
+            idl_gtvn_baseline_epoch_dir = None
+
+        # loop through fold dirs
         for fold_dir in Explorer.get_sub_folders(
-            baseline_dir, key_word="fold=", return_full_path=True
+            train_result_dir, key_word="fold=", return_full_path=True
         ):
             fold = int(Path(fold_dir).name[len("fold=") :])
             print("")
-            print("current fold: ", fold)
-            fold_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, fold_dir)
+            print("fold: ", fold)
 
-            # loop through epoch folders
+            # loop through epoch dirs
             for epoch_dir in Explorer.get_sub_folders(
                 fold_dir, key_word="epoch=", return_full_path=True
             ):
                 epoch = int(Path(epoch_dir).name[len("epoch=") :])
-                print("current epoch: ", epoch)
-                epoch_dir = os.path.join(fold_dir, epoch_dir)
-
-                # initialize scores dict (only for test and valid set)
-                if dataset == "test" or dataset == "valid":
-                    epoch_scores = Dict()
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        for metric in g.METRICS:
-                            epoch_scores["median"][gtv][metric] = List()
+                print("epoch: ", epoch)
 
                 # load cnn
+                if inference_type == "baseline":
+                    cnn_dir = os.path.join(epoch_dir, "baseline")
+                elif inference_type == "idl_gtvn":
+                    cnn_dir = epoch_dir
                 cnn_path = Explorer.get_sub_files(
-                    os.path.join(epoch_dir, "baseline"),
-                    key_word=".pt",
-                    return_full_path=True,
+                    cnn_dir, key_word=".pt", return_full_path=True
                 )[0]
                 hyper = Dict()  # create an empty hyper dict to save cnn
                 self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
-                # load patients
+                # load dataset patients
                 train_patients, valid_patients, test_patients = self._load_dataset(
                     fold=fold, debug_mode=debug_mode
                 )
@@ -496,23 +548,92 @@ class BaselineTraining(Training):
                 elif dataset == "train":
                     patients = train_patients
 
+                # initialize scores dict (only on test and valid set)
+                if dataset == "test" or dataset == "valid":
+                    epoch_scores = Dict()
+                    if inference_type == "baseline":
+                        for gtv in ["gtvs", "gtvt", "gtvn"]:
+                            for metric in g.METRICS:
+                                epoch_scores["median"][gtv][metric] = List()
+                    else:
+                        if dataset == "valid":
+                            # no need to record baseline score for valid set
+                            for metric in g.METRICS:
+                                epoch_scores["median"][metric] = List()
+                        elif dataset == "test":
+                            # record baseline score in ["round=00"] for test set
+                            # so here, initialize ["round=01"] as a list
+                            for metric in g.METRICS:
+                                epoch_scores["median"][metric]["round=01"] = List()
+                            # copy baseline scores of each patient
+                            baseline_scores = Json.load(
+                                os.path.join(
+                                    idl_gtvn_baseline_epoch_dir,
+                                    "baseline",
+                                    "inference_test.json",
+                                )
+                            )
+                            for patient in patients:
+                                for metric in g.METRICS:
+                                    epoch_scores["patient={}".format(patient)][metric][
+                                        "round=00"
+                                    ] = baseline_scores["patient={}".format(patient)][
+                                        "gtvn"
+                                    ][
+                                        metric
+                                    ]
+                            # also copy median score of each patient
+                            for metric in g.METRICS:
+                                epoch_scores["median"][metric][
+                                    "round=00"
+                                ] = baseline_scores["median"]["gtvn"][metric]
+
                 for patient in tqdm(patients):
                     # create folder to save cur patient preds and scores
-                    patient_dir = os.path.join(
-                        epoch_dir,
-                        "baseline",
-                        "patients",
-                        "patient={}".format(patient),
-                    )
-                    Folder.create(patient_dir)
+                    if inference_type == "baseline":
+                        patient_dir = os.path.join(
+                            epoch_dir,
+                            "baseline",
+                            "patients",
+                            "patient={}".format(patient),
+                        )
+                        Folder.create(patient_dir)
+
+                    # for idl gtvn, only create folder for test set
+                    if inference_type == "idl_gtvn" and dataset == "test":
+                        patient_dir = os.path.join(
+                            epoch_dir,
+                            "patients",
+                            "patient={}".format(patient),
+                        )
+                        Folder.create(patient_dir)
 
                     # results structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-                    patient_results = self.__patient_inference(
-                        patient=patient, hyper=hyper
+                    patient_results = self._patient_inference(
+                        patient=patient,
+                        hyper=hyper,
+                        inference_type=inference_type,
+                        idl_gtvn_baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
                     )
 
-                    # save gtvt and gtvn preds of each patient
-                    for gtv in ["gtvt", "gtvn"]:
+                    # save preds of current patient
+                    if inference_type == "baseline":
+                        if dataset == "test":
+                            gtv_list = ["gtvt", "gtvn"]
+                        else:
+                            gtv_list = ["gtvn"]
+                    else:
+                        if dataset == "test":
+                            gtv_list = ["gtvn"]
+                            # save click
+                            Nii.save(
+                                img=patient_results["gtvn"]["click"],
+                                path=os.path.join(patient_dir, "click.nii"),
+                                spacing=g.NII_SPACING,
+                            )
+                        else:
+                            gtv_list = []
+                    for gtv in gtv_list:
                         Nii.save(
                             img=patient_results[gtv]["pred"],
                             path=os.path.join(patient_dir, "pred_{}.nii".format(gtv)),
@@ -520,131 +641,162 @@ class BaselineTraining(Training):
                         )
 
                     # record score of current patient
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    if inference_type == "baseline":
+                        for gtv in ["gtvs", "gtvt", "gtvn"]:
+                            for metric in g.METRICS:
+                                # save cur patient score into inference_test.json (test set only)
+                                if dataset == "test":
+                                    epoch_scores["patient={}".format(patient)][gtv][
+                                        metric
+                                    ] = patient_results[gtv][metric]
+                                # add scores of current patient into median(list)
+                                if dataset == "test" or dataset == "valid":
+                                    epoch_scores["median"][gtv][metric].append(
+                                        patient_results[gtv][metric]
+                                    )
+                    else:
                         for metric in g.METRICS:
-                            # copy cur patient score (test set only)
                             if dataset == "test":
-                                epoch_scores["patient={}".format(patient)][gtv][
-                                    metric
-                                ] = patient_results[gtv][metric]
+                                # save cur patient score into inference_test.json (test set only)
+                                epoch_scores["patient={}".format(patient)][metric][
+                                    "round=01"
+                                ] = patient_results["gtvn"][metric]
+                                # add scores of current patient into median(list)
+                                # record in ["round=01"] for test set
+                                epoch_scores["median"][metric]["round=01"].append(
+                                    patient_results["gtvn"][metric]
+                                )
                             # add scores of current patient into median(list)
-                            if dataset == "test" or dataset == "valid":
-                                epoch_scores["median"][gtv][metric].append(
-                                    patient_results[gtv][metric]
+                            if dataset == "valid":
+                                epoch_scores["median"][metric].append(
+                                    patient_results["gtvn"][metric]
                                 )
 
-                    # save current patient scores to the patient dir
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        # remove pred as it can't be save in json
-                        # make sure it has already been saved
-                        patient_results[gtv].pop("pred")
-                    Json.save(
-                        data=patient_results,
-                        path=os.path.join(patient_dir, "inference.json"),
-                    )
-
                 # all patients under current epoch have been traversed
-                # dont need to do anything on training set
+                # no need to calculate median score on training set
                 if dataset == "train":
-                    continue
+                    continue  # next epoch dir
 
-                # calculate median score (test and valid set only)
                 if dataset == "test" or dataset == "valid":
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        for metric in g.METRICS:
-                            median = epoch_scores["median"][gtv][metric]
-                            epoch_scores["median"][gtv][metric] = statistics.median(
-                                median
-                            )
-
-                # save all patients scores in "baseline" dir
-                if dataset == "test":
-                    Json.save(
-                        data=epoch_scores,
-                        path=os.path.join(
-                            epoch_dir, "baseline", "inference_{}.json".format(dataset)
-                        ),
-                    )
-                    continue
-
-                # valid set, delete non-optimal folds and epochs
-                if dataset == "valid":
-                    epoch_median_scores = epoch_scores["median"]
-                    if math.isnan(epoch_median_scores["gtvs"]["msd"]) or math.isnan(
-                        epoch_median_scores["gtvs"]["hd95"]
-                    ):
-                        Folder.delete(epoch_dir)
-                        continue
-
-                    if top_median_scores_set == {}:
-                        keep_epoch_results = True
+                    # calculate median score (test and valid set only)
+                    if inference_type == "baseline":
+                        for gtv in ["gtvs", "gtvt", "gtvn"]:
+                            for metric in g.METRICS:
+                                median = epoch_scores["median"][gtv][metric]
+                                epoch_scores["median"][gtv][metric] = statistics.median(
+                                    median
+                                )
                     else:
-                        # assign keep_epoch_results to None,
-                        # it will become True/Flase sooner or later
-                        keep_epoch_results = None
-
-                        # loop through top_median_scores_set
-                        for fold_key in top_median_scores_set.keys():
-                            for epoch_key in top_median_scores_set[fold_key].keys():
-
-                                # skip cur_epoch_scores,
-                                # if it is worse than any of the top_median_scores_set
-                                if (
-                                    epoch_median_scores["gtvs"]["dsc"]
-                                    < top_median_scores_set[fold_key][epoch_key]["dsc"]
-                                    and epoch_median_scores["gtvs"]["msd"]
-                                    > top_median_scores_set[fold_key][epoch_key]["msd"]
-                                    and epoch_median_scores["gtvs"]["hd95"]
-                                    > top_median_scores_set[fold_key][epoch_key]["hd95"]
-                                ):
-                                    keep_epoch_results = False
-                                    break
-
-                                # save cur_epoch_scores,
-                                # if it is comparable for one of the top_median_scores_set
-                                # (comparable means: at least one of dsc/msd/hd95 is better)
-                                if (
-                                    epoch_median_scores["gtvs"]["dsc"]
-                                    > top_median_scores_set[fold_key][epoch_key]["dsc"]
-                                    or epoch_median_scores["gtvs"]["msd"]
-                                    < top_median_scores_set[fold_key][epoch_key]["msd"]
-                                    or epoch_median_scores["gtvs"]["hd95"]
-                                    < top_median_scores_set[fold_key][epoch_key]["hd95"]
-                                ):
-                                    keep_epoch_results = True
-
-                                # delete any score in top_median_scores_set,
-                                # if it is worse than cur_epoch_scores
-                                if (
-                                    top_median_scores_set[fold_key][epoch_key]["dsc"]
-                                    < epoch_median_scores["gtvs"]["dsc"]
-                                    and top_median_scores_set[fold_key][epoch_key][
-                                        "msd"
-                                    ]
-                                    > epoch_median_scores["gtvs"]["msd"]
-                                    and top_median_scores_set[fold_key][epoch_key][
-                                        "hd95"
-                                    ]
-                                    > epoch_median_scores["gtvs"]["hd95"]
-                                ):
-                                    Folder.delete(
-                                        os.path.join(
-                                            baseline_dir,
-                                            "fold={:02d}".format(fold_key),
-                                            "epoch={:03d}".format(epoch_key),
-                                        )
-                                    )
-                            if keep_epoch_results is False:
-                                break
-
-                    # save cur epoch median scores
-                    if keep_epoch_results:
-                        top_median_scores_set[fold][epoch] = epoch_median_scores["gtvs"]
-                        Json.save(
-                            data=epoch_scores,
-                            path=os.path.join(
-                                epoch_dir, "baseline", "inference_valid.json"
-                            ),
+                        for metric in g.METRICS:
+                            if dataset == "test":
+                                median = epoch_scores["median"][metric]["round=01"]
+                                epoch_scores["median"][metric][
+                                    "round=01"
+                                ] = statistics.median(median)
+                            elif dataset == "valid":
+                                median = epoch_scores["median"][metric]
+                                epoch_scores["median"][metric] = statistics.median(
+                                    median
+                                )
+                    # save all patients scores in "inference_test.json"
+                    if inference_type == "baseline":
+                        json_save_path = os.path.join(
+                            epoch_dir, "baseline", "inference_{}.json".format(dataset)
                         )
                     else:
-                        Folder.delete(epoch_dir)
+                        json_save_path = os.path.join(
+                            epoch_dir, "inference_{}.json".format(dataset)
+                        )
+                    Json.save(
+                        data=epoch_scores,
+                        path=json_save_path,
+                    )
+                    continue  # next epoch dir
+
+    # def remove_non_optimal_epochs(self):
+    #     # if on valid set, delete non-optimal epoch results
+    #     if dataset == "valid":
+    #         # record top median scores through each fold and epoch
+    #         top_median_scores_set = Dict()
+    #     # valid set, delete non-optimal folds and epochs
+    #     if dataset == "valid":
+    #         if inference_type == "baseline":
+    #             gtv = "gtvs"
+    #         elif inference_type == "idl_gtvn":
+    #             gtv = "gtvn"
+    #         epoch_median_scores = epoch_scores["median"]
+    #         if math.isnan(epoch_median_scores[gtv]["msd"]) or math.isnan(
+    #             epoch_median_scores[gtv]["hd95"]
+    #         ):
+    #             Folder.delete(epoch_dir)
+    #             continue
+
+    #         if top_median_scores_set == {}:
+    #             keep_epoch_results = True
+    #         else:
+    #             # assign keep_epoch_results to None,
+    #             # it will become True/Flase sooner or later
+    #             keep_epoch_results = None
+
+    #             # loop through top_median_scores_set
+    #             for fold_key in top_median_scores_set.keys():
+    #                 for epoch_key in top_median_scores_set[fold_key].keys():
+
+    #                     # skip cur_epoch_scores,
+    #                     # if it is worse than any of the top_median_scores_set
+    #                     if (
+    #                         epoch_median_scores[gtv]["dsc"]
+    #                         < top_median_scores_set[fold_key][epoch_key]["dsc"]
+    #                         and epoch_median_scores[gtv]["msd"]
+    #                         > top_median_scores_set[fold_key][epoch_key]["msd"]
+    #                         and epoch_median_scores[gtv]["hd95"]
+    #                         > top_median_scores_set[fold_key][epoch_key]["hd95"]
+    #                     ):
+    #                         keep_epoch_results = False
+    #                         break
+
+    #                     # save cur_epoch_scores,
+    #                     # if it is comparable for one of the top_median_scores_set
+    #                     # (comparable means: at least one of dsc/msd/hd95 is better)
+    #                     if (
+    #                         epoch_median_scores[gtv]["dsc"]
+    #                         > top_median_scores_set[fold_key][epoch_key]["dsc"]
+    #                         or epoch_median_scores[gtv]["msd"]
+    #                         < top_median_scores_set[fold_key][epoch_key]["msd"]
+    #                         or epoch_median_scores[gtv]["hd95"]
+    #                         < top_median_scores_set[fold_key][epoch_key]["hd95"]
+    #                     ):
+    #                         keep_epoch_results = True
+
+    #                     # delete any score in top_median_scores_set,
+    #                     # if it is worse than cur_epoch_scores
+    #                     if (
+    #                         top_median_scores_set[fold_key][epoch_key]["dsc"]
+    #                         < epoch_median_scores[gtv]["dsc"]
+    #                         and top_median_scores_set[fold_key][epoch_key]["msd"]
+    #                         > epoch_median_scores[gtv]["msd"]
+    #                         and top_median_scores_set[fold_key][epoch_key]["hd95"]
+    #                         > epoch_median_scores[gtv]["hd95"]
+    #                     ):
+    #                         Folder.delete(
+    #                             os.path.join(
+    #                                 train_result_dir,
+    #                                 "fold={:02d}".format(fold_key),
+    #                                 "epoch={:03d}".format(epoch_key),
+    #                             )
+    #                         )
+    #                 if keep_epoch_results is False:
+    #                     break
+
+    #         # save cur epoch median scores
+    #         if keep_epoch_results:
+    #             top_median_scores_set[fold][epoch] = epoch_median_scores[gtv]
+    #             if inference_type == "baseline":
+    #                 json_save_path = os.path.join(
+    #                     epoch_dir, "baseline", "inference_valid.json"
+    #                 )
+    #             elif inference_type == "idl_gtvn":
+    #                 json_save_path = os.path.join(epoch_dir, "inference_valid.json")
+    #             Json.save(data=epoch_scores, path=json_save_path)
+    #         else:
+    #             Folder.delete(epoch_dir)
