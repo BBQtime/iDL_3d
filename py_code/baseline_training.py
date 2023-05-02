@@ -449,17 +449,11 @@ class BaselineTraining(Training):
                     break
 
             # inference (valid set first)
-            if train_type == "baseline":
-                # inference on training set to save pred_gtvn.nii for idl gtvn
-                dataset_order = ["valid", "test", "train"]
-            else:
-                dataset_order = ["valid", "test"]
-            for dataset in dataset_order:
-                self._inference(
-                    train_id=train_id,
-                    dataset=dataset,
-                    debug_mode=debug_mode,
-                )
+            self._inference(
+                train_id=train_id,
+                dataset="valid",
+                debug_mode=debug_mode,
+            )
 
     def inference(
         self,
@@ -713,90 +707,139 @@ class BaselineTraining(Training):
                     )
                     continue  # next epoch dir
 
-    # def remove_non_optimal_epochs(self):
-    #     # if on valid set, delete non-optimal epoch results
-    #     if dataset == "valid":
-    #         # record top median scores through each fold and epoch
-    #         top_median_scores_set = Dict()
-    #     # valid set, delete non-optimal folds and epochs
-    #     if dataset == "valid":
-    #         if inference_type == "baseline":
-    #             gtv = "gtvs"
-    #         elif inference_type == "idl_gtvn":
-    #             gtv = "gtvn"
-    #         epoch_median_scores = epoch_scores["median"]
-    #         if math.isnan(epoch_median_scores[gtv]["msd"]) or math.isnan(
-    #             epoch_median_scores[gtv]["hd95"]
-    #         ):
-    #             Folder.delete(epoch_dir)
-    #             continue
+    def remove_non_optimal_epochs(self):
+        self._remove_non_optimal_epochs(g.TRAIN_RESULTS_DIR)
 
-    #         if top_median_scores_set == {}:
-    #             keep_epoch_results = True
-    #         else:
-    #             # assign keep_epoch_results to None,
-    #             # it will become True/Flase sooner or later
-    #             keep_epoch_results = None
+    def _remove_non_optimal_epochs(self, train_results_dir: str):
+        # record top median scores through each fold and epoch
+        top_scores_set = Dict()
 
-    #             # loop through top_median_scores_set
-    #             for fold_key in top_median_scores_set.keys():
-    #                 for epoch_key in top_median_scores_set[fold_key].keys():
+        if train_results_dir == g.TRAIN_RESULTS_DIR:
+            key_word = "baseline_"
+        else:
+            key_word = "idl_gtvn"
 
-    #                     # skip cur_epoch_scores,
-    #                     # if it is worse than any of the top_median_scores_set
-    #                     if (
-    #                         epoch_median_scores[gtv]["dsc"]
-    #                         < top_median_scores_set[fold_key][epoch_key]["dsc"]
-    #                         and epoch_median_scores[gtv]["msd"]
-    #                         > top_median_scores_set[fold_key][epoch_key]["msd"]
-    #                         and epoch_median_scores[gtv]["hd95"]
-    #                         > top_median_scores_set[fold_key][epoch_key]["hd95"]
-    #                     ):
-    #                         keep_epoch_results = False
-    #                         break
+        for cur_train_result_dir in Explorer.get_sub_folders(
+            train_results_dir, key_word=key_word, return_full_path=True
+        ):
+            cur_train_id = Path(cur_train_result_dir).name
 
-    #                     # save cur_epoch_scores,
-    #                     # if it is comparable for one of the top_median_scores_set
-    #                     # (comparable means: at least one of dsc/msd/hd95 is better)
-    #                     if (
-    #                         epoch_median_scores[gtv]["dsc"]
-    #                         > top_median_scores_set[fold_key][epoch_key]["dsc"]
-    #                         or epoch_median_scores[gtv]["msd"]
-    #                         < top_median_scores_set[fold_key][epoch_key]["msd"]
-    #                         or epoch_median_scores[gtv]["hd95"]
-    #                         < top_median_scores_set[fold_key][epoch_key]["hd95"]
-    #                     ):
-    #                         keep_epoch_results = True
+            for cur_fold_dir in Explorer.get_sub_folders(
+                cur_train_result_dir, key_word="fold=", return_full_path=True
+            ):
+                cur_fold = Path(cur_fold_dir).name
 
-    #                     # delete any score in top_median_scores_set,
-    #                     # if it is worse than cur_epoch_scores
-    #                     if (
-    #                         top_median_scores_set[fold_key][epoch_key]["dsc"]
-    #                         < epoch_median_scores[gtv]["dsc"]
-    #                         and top_median_scores_set[fold_key][epoch_key]["msd"]
-    #                         > epoch_median_scores[gtv]["msd"]
-    #                         and top_median_scores_set[fold_key][epoch_key]["hd95"]
-    #                         > epoch_median_scores[gtv]["hd95"]
-    #                     ):
-    #                         Folder.delete(
-    #                             os.path.join(
-    #                                 train_result_dir,
-    #                                 "fold={:02d}".format(fold_key),
-    #                                 "epoch={:03d}".format(epoch_key),
-    #                             )
-    #                         )
-    #                 if keep_epoch_results is False:
-    #                     break
+                for cur_epoch_dir in Explorer.get_sub_folders(
+                    cur_fold_dir, key_word="epoch=", return_full_path=True
+                ):
+                    cur_epoch = Path(cur_epoch_dir).name
 
-    #         # save cur epoch median scores
-    #         if keep_epoch_results:
-    #             top_median_scores_set[fold][epoch] = epoch_median_scores[gtv]
-    #             if inference_type == "baseline":
-    #                 json_save_path = os.path.join(
-    #                     epoch_dir, "baseline", "inference_valid.json"
-    #                 )
-    #             elif inference_type == "idl_gtvn":
-    #                 json_save_path = os.path.join(epoch_dir, "inference_valid.json")
-    #             Json.save(data=epoch_scores, path=json_save_path)
-    #         else:
-    #             Folder.delete(epoch_dir)
+                    # load scores of current epoch
+                    # if baseline
+                    if train_results_dir == g.TRAIN_RESULTS_DIR:
+                        cur_epoch_scores = Json.load(
+                            os.path.join(
+                                cur_epoch_dir, "baseline", "inference_valid.json"
+                            )
+                        )["median"]["gtvs"]
+                    else:
+                        cur_epoch_scores = Json.load(
+                            os.path.join(cur_epoch_dir, "inference_valid.json")
+                        )["median"]
+
+                    # delete nan msd/hd95 results
+                    if math.isnan(cur_epoch_scores["msd"]) or math.isnan(
+                        cur_epoch_scores["hd95"]
+                    ):
+                        print("delete:", cur_epoch_dir)
+                        Folder.delete(cur_epoch_dir)
+                        continue  # goto next epoch dir
+
+                    # keep cur epoch scores if top scores set is empty
+                    if top_scores_set == {}:
+                        top_scores_set[cur_train_id][cur_fold][
+                            cur_epoch
+                        ] = cur_epoch_scores
+                        continue  # goto next epoch dir
+                    else:
+                        top_scores_set = self.__walk_top_scores_set(
+                            top_scores_set=top_scores_set,
+                            cur_epoch_scores=cur_epoch_scores,
+                            cur_epoch_dir=cur_epoch_dir,
+                        )
+
+    # a sub function of _remove_non_optimal_epochs()
+    def __walk_top_scores_set(
+        self,
+        top_scores_set: Dict,
+        cur_epoch_scores: Dict,
+        cur_epoch_dir: str,
+    ):
+        cur_epoch = Path(cur_epoch_dir).name
+        cur_fold = Path(cur_epoch_dir).parent.name
+        cur_train_id = Path(cur_epoch_dir).parent.parent.name
+        train_results_dir = Path(cur_epoch_dir).parent.parent.parent
+
+        delete_cur_epoch_dir = False
+        add_cur_epoch_scores = False
+
+        # copy dict to avoid conflict between for loop and pop
+        top_scores_set_copy = top_scores_set.copy()
+
+        # loop through top_scores_set
+        for train_id_key in top_scores_set.keys():
+            for fold_key in top_scores_set[train_id_key].keys():
+                for epoch_key in top_scores_set[train_id_key][fold_key].keys():
+
+                    cur_top_scores = top_scores_set[train_id_key][fold_key][epoch_key]
+
+                    # delete cur_epoch_dir,
+                    # if it is worse than anyone in top_scores_set
+                    if (
+                        cur_epoch_scores["dsc"] < cur_top_scores["dsc"]
+                        and cur_epoch_scores["msd"] > cur_top_scores["msd"]
+                        and cur_epoch_scores["hd95"] > cur_top_scores["hd95"]
+                    ):
+                        delete_cur_epoch_dir = True
+
+                    # add cur_epoch_scores in to top_scores_set,
+                    # if it is comparable for one of the top_scores_set
+                    # (comparable means: at least one of dsc/msd/hd95 is better)
+                    if (
+                        cur_epoch_scores["dsc"] > cur_top_scores["dsc"]
+                        or cur_epoch_scores["msd"] < cur_top_scores["msd"]
+                        or cur_epoch_scores["hd95"] < cur_top_scores["hd95"]
+                    ):
+                        add_cur_epoch_scores = True
+
+                    # delete anyone in top_scores_set,
+                    # if it is worse than cur_epoch_scores
+                    if (
+                        cur_top_scores["dsc"] < cur_epoch_scores["dsc"]
+                        and cur_top_scores["msd"] > cur_epoch_scores["msd"]
+                        and cur_top_scores["hd95"] > cur_epoch_scores["hd95"]
+                    ):
+                        delete_dir = os.path.join(
+                            train_results_dir, train_id_key, fold_key, epoch_key
+                        )
+                        print("delete:", delete_dir)
+                        Folder.delete(delete_dir)
+
+                        # remove from dict
+                        top_scores_set_copy[train_id_key][fold_key].pop(epoch_key)
+                        if top_scores_set_copy[train_id_key][fold_key] == {}:
+                            top_scores_set_copy[train_id_key].pop(fold_key)
+                        if top_scores_set_copy[train_id_key] == {}:
+                            top_scores_set_copy.pop(train_id_key)
+
+        # copy data back
+        top_scores_set = top_scores_set_copy
+
+        if delete_cur_epoch_dir:
+            print("delete:", cur_epoch_dir)
+            Folder.delete(cur_epoch_dir)
+
+        if not delete_cur_epoch_dir and add_cur_epoch_scores:
+            top_scores_set[cur_train_id][cur_fold][cur_epoch] = cur_epoch_scores
+
+        return top_scores_set

@@ -126,6 +126,8 @@ def dice(
     ) = confusion_matrix.get_existence()
 
     if test_empty and reference_empty:
+        return 1.0
+    elif test_empty or test_full or reference_empty or reference_full:
         if nan_for_nonexisting:
             return float("NaN")
         else:
@@ -440,11 +442,13 @@ def hausdorff_distance_95(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty or test_full or reference_empty or reference_full:
+    if test_empty and reference_empty:
+        return 0.0
+    elif test_empty or test_full or reference_empty or reference_full:
         if nan_for_nonexisting:
             return float("NaN")
         else:
-            return 0
+            return 0.0
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
@@ -502,11 +506,13 @@ def avg_surface_distance_symmetric(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty or test_full or reference_empty or reference_full:
+    if test_empty and reference_empty:
+        return 0.0
+    elif test_empty or test_full or reference_empty or reference_full:
         if nan_for_nonexisting:
             return float("NaN")
         else:
-            return 0
+            return 0.0
 
     test, reference = confusion_matrix.test, confusion_matrix.reference
 
@@ -540,7 +546,7 @@ ALL_METRICS = {
 class SegmentationMetrics(nn.Module):
     def __init__(
         self,
-        metric: str,
+        metric: str,  # dsc/msd/hd95
     ):
         super().__init__()
         self.__metric = metric
