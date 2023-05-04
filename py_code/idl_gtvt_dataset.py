@@ -17,9 +17,9 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
     def __init__(
         self,
         patient: str,
-        annotated_slices: Dict,
-        label_folder: str,
-        pred_folder: str,
+        selected_slices: Dict,
+        label_dir: str,
+        pred_dir: str,
         augment: Dict,
         weight: Dict,
     ):
@@ -31,21 +31,21 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 
         # load label
         # (1) simulated iDL
-        if label_folder == g.DATASET_DIR:
+        if label_dir == g.DATASET_DIR:
             self.__origin["label"] = Nii.load(
-                os.path.join(label_folder, "HNCDL_{}_GTVt.nii".format(patient)),
+                os.path.join(label_dir, "HNCDL_{}_GTVt.nii".format(patient)),
                 binary=True,
             )
 
         # (2) real iDL
         else:
             self.__origin["label"] = Nii.load(
-                os.path.join(label_folder, "pred_gtvt.nii"), binary=True
+                os.path.join(label_dir, "pred_gtvt.nii"), binary=True
             )
 
         # load pred
         self.__origin["pred"] = Nii.load(
-            os.path.join(pred_folder, "pred_gtvt.nii"), binary=True
+            os.path.join(pred_dir, "pred_gtvt.nii"), binary=True
         )
 
         # load ct/pt/mrt1/mt2
@@ -66,7 +66,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 
         # load weight map
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
-            annotated_slices, weight
+            selected_slices, weight
         )
 
         # save origin label and pred
@@ -88,41 +88,41 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         #     os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
         # )
 
-    def __load_weight_map(self, annotated_slices: Dict, weight: Dict):
+    def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # annotated slice mask
         slice_mask = Dict()
         max_round = max(
-            len(annotated_slices["transverse"]),
-            len(annotated_slices["coronal"]),
-            len(annotated_slices["sagittal"]),
+            len(selected_slices["transverse"]),
+            len(selected_slices["coronal"]),
+            len(selected_slices["sagittal"]),
         )
 
         for plane in ["transverse", "coronal", "sagittal"]:
             # annotated slice mask
             slice_mask[plane] = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
 
-            for cur_round in annotated_slices[plane]:
+            for round_num in selected_slices[plane]:
                 # do NOT change weight["annotate.slice"], use another variable
                 slice_weight = weight["slice"]
-                cur_round_int = int(cur_round[len("round=") :])
                 slice_weight *= pow(
-                    weight["prev.round.decay"], (max_round - cur_round_int)
+                    weight["prev.round.decay"],
+                    (max_round - int(round_num[len("round=") :])),
                 )
                 if slice_weight < weight["background"]:
                     slice_weight = weight["background"]
 
                 # current step
-                for cur_slice in annotated_slices[plane][cur_round]:
+                for slice_num in selected_slices[plane][round_num]:
                     if plane == "transverse":
-                        slice_mask[plane][cur_slice, :, :] = (
+                        slice_mask[plane][slice_num, :, :] = (
                             np.ones_like(slice_mask[plane][0, :, :]) * slice_weight
                         )
                     elif plane == "coronal":
-                        slice_mask[plane][:, cur_slice, :] = (
+                        slice_mask[plane][:, slice_num, :] = (
                             np.ones_like(slice_mask[plane][:, 0, :]) * slice_weight
                         )
                     elif plane == "sagittal":
-                        slice_mask[plane][:, :, cur_slice] = (
+                        slice_mask[plane][:, :, slice_num] = (
                             np.ones_like(slice_mask[plane][:, :, 0]) * slice_weight
                         )
 
@@ -307,11 +307,11 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 # augment["max"] = 1
 # augment["times"] = 1
 
-# annotated_slices = Dict()
-# annotated_slices["round=00"] = [20, 40]
-# annotated_slices["round=01"] = [30]
+# selected_slices = Dict()
+# selected_slices["round=00"] = [20, 40]
+# selected_slices["round=01"] = [30]
 
-# pred_folder = os.path.join(
+# pred_dir = os.path.join(
 #     g.TRAIN_RESULTS_DIR,
 #     "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
 #     "baseline",
@@ -323,9 +323,9 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 # # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
 # tmp_dataset = IDLGTVtDataSet(
 #     patient="336",
-#     annotated_slices=annotated_slices,
-#     label_folder=g.DATASET_DIR,
-#     pred_folder=pred_folder,
+#     selected_slices=selected_slices,
+#     label_dir=g.DATASET_DIR,
+#     pred_dir=pred_dir,
 #     augment=augment,
 #     weight=weight,
 # )

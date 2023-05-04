@@ -48,7 +48,7 @@ class IDLGTVnTraining(BaselineTraining):
             )[0]
         else:
             baseline_fold_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR, baseline_id, "fold={:02d}".format(baseline_fold)
+                g.TRAIN_RESULTS_DIR, baseline_id, "fold={}".format(baseline_fold)
             )
         if not os.path.exists(baseline_fold_dir):
             print("baseline fold dir not exists")

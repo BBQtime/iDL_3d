@@ -54,7 +54,7 @@ class BaselineTraining(Training):
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # cross valid folds
-        hyper["dataset.fold"] = "{}/{}".format(fold, g.DATASET_K_FOLDS)
+        hyper["cross.valid.fold"] = "{}/{}".format(fold, g.DATASET_K_FOLDS)
 
         # epochs
         if debug_mode:
@@ -164,25 +164,27 @@ class BaselineTraining(Training):
             num_workers=g.NUM_WORKERS,
         )
 
-    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+    def __simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
-        for cur_key in hyper:
+        for key_name in hyper:
+            # dont need to save or print dataloaders
             if (
-                cur_key == "train.loader"
-                or cur_key == "valid.loader"
-                or cur_key == "test.loader"
+                key_name == "train.loader"
+                or key_name == "valid.loader"
+                or key_name == "test.loader"
             ):
                 pass
+            # others
             else:
-                simple_hyper[cur_key] = hyper[cur_key]
+                simple_hyper[key_name] = hyper[key_name]
         return simple_hyper
 
     def _print_hyper(self, hyper: Dict):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         super()._print_hyper(simple_hyper)
 
     def _save_hyper(self, hyper: Dict, json_path: str):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         super()._save_hyper(simple_hyper, json_path)
 
     def plot_lr_fig(self, baseline_id: str):
@@ -247,10 +249,10 @@ class BaselineTraining(Training):
                 input_imgs = input_imgs.to(g.DEVICE)
                 labels = labels.to(g.DEVICE)
                 preds = hyper["cnn"](input_imgs)
-                cur_loss = hyper["loss.func"](preds, labels)
-                cur_loss.backward()  # get grad (must after: optim.zero_grad())
+                loss = hyper["loss.func"](preds, labels)
+                loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
-                train_loss += cur_loss.item()
+                train_loss += loss.item()
                 num_batches += 1
             train_loss /= num_batches
 
@@ -264,8 +266,8 @@ class BaselineTraining(Training):
                     input_imgs = input_imgs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
                     preds = hyper["cnn"](input_imgs)
-                    cur_loss = hyper["loss.func"](preds, labels)
-                    valid_loss += cur_loss.item()
+                    loss = hyper["loss.func"](preds, labels)
+                    valid_loss += loss.item()
                     num_batches += 1
             valid_loss /= num_batches
             hyper["scheduler"].step(valid_loss)
@@ -373,7 +375,7 @@ class BaselineTraining(Training):
                 if baseline_fold is None or baseline_fold <= 0:
                     key_word = "fold="
                 else:
-                    key_word = "fold={:02d}".format(baseline_fold)
+                    key_word = "fold={}".format(baseline_fold)
                 baseline_fold_dir = Explorer.get_sub_folders(
                     os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
                     key_word=key_word,
@@ -399,10 +401,22 @@ class BaselineTraining(Training):
                 )
             Folder.create(train_result_dir)
 
-            for fold in range(1, g.DATASET_K_FOLDS + 1):
-                fold_dir = os.path.join(train_result_dir, "fold={:02d}".format(fold))
+            # cross validation
+            hyper["cross.valid.fold"] = int(hyper["cross.valid.fold"])
+            hyper["cross.valid.fold"] = Value.limit_range(
+                hyper["cross.valid.fold"], (0, g.DATASET_K_FOLDS)
+            )
+            if hyper["cross.valid.fold"] == 0:
+                fold_list = List(range(1, g.DATASET_K_FOLDS + 1))
+            else:
+                fold_list = [hyper["cross.valid.fold"]]
+
+            # loop through each fold
+            for fold in fold_list:
+                fold_dir = os.path.join(train_result_dir, "fold={}".format(fold))
                 Folder.create(fold_dir)
 
+                # load and print hyperparams
                 self._load_hyper(
                     hyper=hyper,
                     fold=fold,
@@ -410,9 +424,8 @@ class BaselineTraining(Training):
                     baseline_epoch_dir=baseline_epoch_dir,
                     debug_mode=debug_mode,
                 )
-                if fold == 1:
-                    print("")
-                    self._print_hyper(hyper)
+                print("")
+                self._print_hyper(hyper)
 
                 print("")
                 print("cross validation fold: {}".format(fold))
@@ -440,12 +453,8 @@ class BaselineTraining(Training):
                 # clear time spent before next training
                 hyper.pop("time.spent")
 
-                # break if no cross validation
-                if hyper["dataset.cross.valid"] is False:
-                    break
-
                 # only train 2 folds in debug mode
-                if debug_mode and fold == 2:
+                if debug_mode and fold_list.index(fold) == 1:
                     break
 
             # inference (valid set first)
@@ -619,10 +628,10 @@ class BaselineTraining(Training):
                     else:
                         if dataset == "test":
                             gtv_list = ["gtvn"]
-                            # save click
+                            # save clicks.nii
                             Nii.save(
-                                img=patient_results["gtvn"]["click"],
-                                path=os.path.join(patient_dir, "click.nii"),
+                                img=patient_results["gtvn"]["clicks"],
+                                path=os.path.join(patient_dir, "clicks.nii"),
                                 spacing=g.NII_SPACING,
                             )
                         else:
@@ -719,127 +728,125 @@ class BaselineTraining(Training):
         else:
             key_word = "idl_gtvn"
 
-        for cur_train_result_dir in Explorer.get_sub_folders(
+        for train_result_dir in Explorer.get_sub_folders(
             train_results_dir, key_word=key_word, return_full_path=True
         ):
-            cur_train_id = Path(cur_train_result_dir).name
+            train_id = Path(train_result_dir).name
 
-            for cur_fold_dir in Explorer.get_sub_folders(
-                cur_train_result_dir, key_word="fold=", return_full_path=True
+            for fold_dir in Explorer.get_sub_folders(
+                train_result_dir, key_word="fold=", return_full_path=True
             ):
-                cur_fold = Path(cur_fold_dir).name
+                fold = Path(fold_dir).name
 
-                for cur_epoch_dir in Explorer.get_sub_folders(
-                    cur_fold_dir, key_word="epoch=", return_full_path=True
+                for epoch_dir in Explorer.get_sub_folders(
+                    fold_dir, key_word="epoch=", return_full_path=True
                 ):
-                    cur_epoch = Path(cur_epoch_dir).name
+                    epoch = Path(epoch_dir).name
 
                     # load scores of current epoch
                     # if baseline
                     if train_results_dir == g.TRAIN_RESULTS_DIR:
-                        cur_epoch_scores = Json.load(
-                            os.path.join(
-                                cur_epoch_dir, "baseline", "inference_valid.json"
-                            )
+                        epoch_scores = Json.load(
+                            os.path.join(epoch_dir, "baseline", "inference_valid.json")
                         )["median"]["gtvs"]
                     else:
-                        cur_epoch_scores = Json.load(
-                            os.path.join(cur_epoch_dir, "inference_valid.json")
+                        epoch_scores = Json.load(
+                            os.path.join(epoch_dir, "inference_valid.json")
                         )["median"]
 
                     # delete nan msd/hd95 results
-                    if math.isnan(cur_epoch_scores["msd"]) or math.isnan(
-                        cur_epoch_scores["hd95"]
+                    if math.isnan(epoch_scores["msd"]) or math.isnan(
+                        epoch_scores["hd95"]
                     ):
-                        print("delete:", cur_epoch_dir)
-                        Folder.delete(cur_epoch_dir)
+                        print("delete:", epoch_dir)
+                        Folder.delete(epoch_dir)
                         continue  # goto next epoch dir
 
                     # keep cur epoch scores if top scores set is empty
                     if top_scores_set == {}:
-                        top_scores_set[cur_train_id][cur_fold][
-                            cur_epoch
-                        ] = cur_epoch_scores
+                        top_scores_set[train_id][fold][epoch] = epoch_scores
                         continue  # goto next epoch dir
                     else:
                         top_scores_set = self.__walk_top_scores_set(
                             top_scores_set=top_scores_set,
-                            cur_epoch_scores=cur_epoch_scores,
-                            cur_epoch_dir=cur_epoch_dir,
+                            epoch_scores=epoch_scores,
+                            epoch_dir=epoch_dir,
                         )
 
     # a sub function of _remove_non_optimal_epochs()
     def __walk_top_scores_set(
         self,
         top_scores_set: Dict,
-        cur_epoch_scores: Dict,
-        cur_epoch_dir: str,
+        epoch_scores: Dict,
+        epoch_dir: str,
     ):
-        cur_epoch = Path(cur_epoch_dir).name
-        cur_fold = Path(cur_epoch_dir).parent.name
-        cur_train_id = Path(cur_epoch_dir).parent.parent.name
-        train_results_dir = Path(cur_epoch_dir).parent.parent.parent
+        train_results_dir = Path(epoch_dir).parent.parent.parent
 
-        delete_cur_epoch_dir = False
-        add_cur_epoch_scores = False
+        delete_epoch_dir = False
+        add_epoch_scores = False
 
         # copy dict to avoid conflict between for loop and pop
         top_scores_set_copy = top_scores_set.copy()
 
         # loop through top_scores_set
-        for train_id_key in top_scores_set.keys():
-            for fold_key in top_scores_set[train_id_key].keys():
-                for epoch_key in top_scores_set[train_id_key][fold_key].keys():
+        for train_id in top_scores_set.keys():
+            for fold in top_scores_set[train_id].keys():
+                for epoch in top_scores_set[train_id][fold].keys():
 
-                    cur_top_scores = top_scores_set[train_id_key][fold_key][epoch_key]
+                    top_scores = top_scores_set[train_id][fold][epoch]
 
-                    # delete cur_epoch_dir,
+                    # delete epoch_dir,
                     # if it is worse than anyone in top_scores_set
                     if (
-                        cur_epoch_scores["dsc"] < cur_top_scores["dsc"]
-                        and cur_epoch_scores["msd"] > cur_top_scores["msd"]
-                        and cur_epoch_scores["hd95"] > cur_top_scores["hd95"]
+                        epoch_scores["dsc"] < top_scores["dsc"]
+                        and epoch_scores["msd"] > top_scores["msd"]
+                        and epoch_scores["hd95"] > top_scores["hd95"]
                     ):
-                        delete_cur_epoch_dir = True
+                        delete_epoch_dir = True
 
-                    # add cur_epoch_scores in to top_scores_set,
+                    # add epoch_scores in to top_scores_set,
                     # if it is comparable for one of the top_scores_set
                     # (comparable means: at least one of dsc/msd/hd95 is better)
                     if (
-                        cur_epoch_scores["dsc"] > cur_top_scores["dsc"]
-                        or cur_epoch_scores["msd"] < cur_top_scores["msd"]
-                        or cur_epoch_scores["hd95"] < cur_top_scores["hd95"]
+                        epoch_scores["dsc"] > top_scores["dsc"]
+                        or epoch_scores["msd"] < top_scores["msd"]
+                        or epoch_scores["hd95"] < top_scores["hd95"]
                     ):
-                        add_cur_epoch_scores = True
+                        add_epoch_scores = True
 
                     # delete anyone in top_scores_set,
-                    # if it is worse than cur_epoch_scores
+                    # if it is worse than epoch_scores
                     if (
-                        cur_top_scores["dsc"] < cur_epoch_scores["dsc"]
-                        and cur_top_scores["msd"] > cur_epoch_scores["msd"]
-                        and cur_top_scores["hd95"] > cur_epoch_scores["hd95"]
+                        top_scores["dsc"] < epoch_scores["dsc"]
+                        and top_scores["msd"] > epoch_scores["msd"]
+                        and top_scores["hd95"] > epoch_scores["hd95"]
                     ):
                         delete_dir = os.path.join(
-                            train_results_dir, train_id_key, fold_key, epoch_key
+                            train_results_dir, train_id, fold, epoch
                         )
                         print("delete:", delete_dir)
                         Folder.delete(delete_dir)
 
                         # remove from dict
-                        top_scores_set_copy[train_id_key][fold_key].pop(epoch_key)
-                        if top_scores_set_copy[train_id_key][fold_key] == {}:
-                            top_scores_set_copy[train_id_key].pop(fold_key)
-                        if top_scores_set_copy[train_id_key] == {}:
-                            top_scores_set_copy.pop(train_id_key)
+                        top_scores_set_copy[train_id][fold].pop(epoch)
+                        if top_scores_set_copy[train_id][fold] == {}:
+                            top_scores_set_copy[train_id].pop(fold)
+                        if top_scores_set_copy[train_id] == {}:
+                            top_scores_set_copy.pop(train_id)
 
         # copy data back
         top_scores_set = top_scores_set_copy
 
-        if delete_cur_epoch_dir:
-            print("delete:", cur_epoch_dir)
-            Folder.delete(cur_epoch_dir)
+        # delete epoch dir
+        if delete_epoch_dir:
+            print("delete:", epoch_dir)
+            Folder.delete(epoch_dir)
 
-        if not delete_cur_epoch_dir and add_cur_epoch_scores:
-            top_scores_set[cur_train_id][cur_fold][cur_epoch] = cur_epoch_scores
+        # add epoch scores into top scores set
+        if not delete_epoch_dir and add_epoch_scores:
+            epoch = Path(epoch_dir).name
+            fold = Path(epoch_dir).parent.name
+            train_id = Path(epoch_dir).parent.parent.name
+            top_scores_set[train_id][fold][epoch] = epoch_scores
 
         return top_scores_set

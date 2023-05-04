@@ -118,44 +118,47 @@ class Training:
         if GPU.used_count() > 1:
             hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
 
-    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+    def __simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
-        for cur_key in hyper:
-            if cur_key == "augment.methods":
-                simple_hyper[cur_key] = hyper[cur_key].to_str()
 
-            elif cur_key == "loss.func":
-                simple_hyper[cur_key] = "unified.focal.loss"
+        for key_name in hyper:
+            # "augment.methods" is a list
+            if key_name == "augment.methods":
+                simple_hyper[key_name] = hyper[key_name].to_str()
 
-            elif cur_key == "cnn":
-                if isinstance(hyper[cur_key], UNetPPSlim):
-                    simple_hyper[cur_key] = "unet.pp.slim"
-                elif isinstance(hyper[cur_key], UNetSlim):
-                    simple_hyper[cur_key] = "unet.slim"
+            # only save loss function name
+            elif key_name == "loss.func":
+                simple_hyper[key_name] = "unified.focal.loss"
 
-            elif cur_key == "optim":
-                simple_hyper[cur_key] = "adam"
+            # only save cnn name
+            elif key_name == "cnn":
+                if isinstance(hyper[key_name], UNetPPSlim):
+                    simple_hyper[key_name] = "unet.pp.slim"
+                elif isinstance(hyper[key_name], UNetSlim):
+                    simple_hyper[key_name] = "unet.slim"
 
-            elif cur_key == "scheduler":
-                simple_hyper[cur_key] = "reduce.lr.on.plateau"
+            # only save optimizer name
+            elif key_name == "optim":
+                simple_hyper[key_name] = "adam"
 
+            # only save scheduler name
+            elif key_name == "scheduler":
+                simple_hyper[key_name] = "reduce.lr.on.plateau"
+
+            # others
             else:
-                simple_hyper[cur_key] = hyper[cur_key]
+                simple_hyper[key_name] = hyper[key_name]
 
         simple_hyper = Dict(OrderedDict(sorted(simple_hyper.items())))
-        # for i in simple_hyper:
-        #     if isinstance(simple_hyper[i], dict):
-        #         simple_hyper[i] = Dict(OrderedDict(sorted(simple_hyper[i].items())))
-
         return simple_hyper
 
     def _print_hyper(self, hyper: Dict):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         for key, value in simple_hyper.items():
             print(key + ":", value)
 
     def _save_hyper(self, hyper: Dict, json_path: str):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         Json.save(data=simple_hyper, path=json_path)
 
     # split dataset and save result into json file
@@ -203,7 +206,8 @@ class Training:
         train_id = self._get_cur_time_str()
 
         if debug_mode:
-            train_id += "_delete.this"
+            train_id += "_"
+            train_id += g.DELETE_FLAG
 
         if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
@@ -305,18 +309,27 @@ class Training:
 
         elif inference_type == "idl_gtvn":
             result["gtvn"]["pred"] = preds[1]
-            result["gtvn"]["click"] = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-            result["gtvn"]["click"] = result["gtvn"]["click"][1]
-            # result["gtvn"]["click"] = np.argwhere(result["gtvn"]["click"])
+            input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
+            # imput_imgs: pred, clicks, ...
+            result["gtvn"]["clicks"] = input_imgs[1]
             gtv_list = ["gtvn"]
 
         # pad and crop to original size
+        # pred
         for gtv in gtv_list:
             result[gtv]["pred"] = Img.central_pad(
                 result[gtv]["pred"], origin[gtv].shape
             )
             result[gtv]["pred"] = Img.central_crop(
                 result[gtv]["pred"], origin[gtv].shape
+            )
+        # clicks (if idl_gtvn)
+        if inference_type == "idl_gtvn":
+            result["gtvn"]["clicks"] = Img.central_pad(
+                result["gtvn"]["clicks"], origin[gtv].shape
+            )
+            result["gtvn"]["clicks"] = Img.central_crop(
+                result["gtvn"]["clicks"], origin[gtv].shape
             )
 
         # idl post processing (before calculate scores)
@@ -368,13 +381,13 @@ class Training:
         return group_hyper
 
     def _find_result_dir(self, result_id: str) -> str:
-        # find result folder full path using result id
-        result_folder = None
-        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_DIR, key_word=result_id):
+        # find result directory full path using result id
+        result_dir = None
+        for i in Explorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=result_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
             if i.endswith(result_id):
-                result_folder = i
+                result_dir = i
                 break
-        return result_folder
+        return result_dir

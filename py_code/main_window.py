@@ -129,7 +129,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.__zoomin["rubber.band"] = None
 
         # no data loaded
-        if self.__img_data["pt"] is None:
+        if self.__imgs["pt"] is None:
             self.__reset_zoomin()
             return
 
@@ -194,16 +194,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # get actual zoom position
         if self.__img_plane == "sagittal":
-            origin_width = self.__img_data["pt"].shape[1]
-            origin_height = self.__img_data["pt"].shape[0]
+            origin_width = self.__imgs["pt"].shape[1]
+            origin_height = self.__imgs["pt"].shape[0]
             origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[1])
         elif self.__img_plane == "coronal":
-            origin_width = self.__img_data["pt"].shape[2]
-            origin_height = self.__img_data["pt"].shape[0]
+            origin_width = self.__imgs["pt"].shape[2]
+            origin_height = self.__imgs["pt"].shape[0]
             origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[0])
         else:
-            origin_width = self.__img_data["pt"].shape[2]
-            origin_height = self.__img_data["pt"].shape[1]
+            origin_width = self.__imgs["pt"].shape[2]
+            origin_height = self.__imgs["pt"].shape[1]
 
         start_x = round(start_x * origin_width / resize_pos["width"])
         end_x = round(end_x * origin_width / resize_pos["width"])
@@ -392,7 +392,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__round = None
         self.__slice = None  # starts from 0
         self.__scores = Dict()
-        self.__img_data = Dict()
+        self.__imgs = Dict()
         self.__resize_pos = Dict()
         self.__clear_img_data()
 
@@ -400,9 +400,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__baseline_epoch_dir = None
         self.__idl_gtvt_dir = None
         self.__idl_gtvn_epoch_dir = None
-        self.__scores["dsc"] = None
-        self.__scores["msd"] = None
-        self.__scores["hd95"] = None
+        for i in ["gtvt", "gtvn"]:
+            self.__scores[i]["dsc"] = None
+            self.__scores[i]["msd"] = None
+            self.__scores[i]["hd95"] = None
 
         for i in [
             "ct",
@@ -415,7 +416,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "pred.gtvn",
             "clicks",
         ]:
-            self.__img_data[i] = None
+            self.__imgs[i] = None
 
         # resize position of ct/pt/mrt1/mrt2
         for i in ["ct", "pt", "mrt1", "mrt2"]:
@@ -472,7 +473,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # fill the baseline combobox, format "baseline_id/fold=12/epoch=123"
         baseline_epoch_dirs = List()
-        for cur_dir in Explorer.walk_sub_folders(
+        for cur_dir in Explorer.walk_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="epoch=", suffle=False
         ):
             # "epoch=" in folder name and not a idl_gtvn result
@@ -611,7 +612,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # fill idl.gtvn combox, format "baseline_id/fold=12/epoch=123"
         idl_gtvn_epoch_dirs = List()
-        for cur_dir in Explorer.walk_sub_folders(
+        for cur_dir in Explorer.walk_sub_dirs(
             os.path.join(self.__baseline_epoch_dir, "idl_gtvn"),
             key_word="idl_gtvn_",
             suffle=False,
@@ -725,20 +726,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__enable_arrow_btns("patient")
 
         # load imgs and labels (from dataset dir)
-        self.__img_data["ct"] = self.__load_img(
+        self.__imgs["ct"] = self.__load_img(
             os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(self.__patient))
         )
-        self.__img_data["pt"] = self.__load_img(
+        self.__imgs["pt"] = self.__load_img(
             os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(self.__patient))
         )
-        self.__img_data["mrt1"] = self.__load_img(
+        self.__imgs["mrt1"] = self.__load_img(
             os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(self.__patient))
         )
-        self.__img_data["mrt2"] = self.__load_img(
+        self.__imgs["mrt2"] = self.__load_img(
             os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
         for i in ["t", "n"]:
-            self.__img_data["label.gtv{}".format(i)] = self.__load_img(
+            self.__imgs["label.gtv{}".format(i)] = self.__load_img(
                 os.path.join(
                     g.DATASET_DIR, "HNCDL_{}_GTV{}.nii".format(self.__patient, i)
                 )
@@ -820,21 +821,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         path["pred.gtvt"] = os.path.join(path["pred.gtvt"], "pred_gtvt.nii")
         path["pred.gtvn"] = os.path.join(path["pred.gtvn"], "pred_gtvn.nii")
         if path["clicks"] is not None:
-            path["clicks"] = os.path.join(path["clicks"], "click.nii")
+            path["clicks"] = os.path.join(path["clicks"], "clicks.nii")
 
         for i in ["pred.gtvt", "pred.gtvn", "clicks"]:
             if path[i] is not None and os.path.exists(path[i]):
-                self.__img_data[i] = self.__load_img(path[i])
-                self.__img_data[i] = Img.binarize(self.__img_data[i])
+                self.__imgs[i] = self.__load_img(path[i])
+                self.__imgs[i] = Img.binarize(self.__imgs[i])
             else:
-                self.__img_data[i] = None
+                self.__imgs[i] = None
 
-        # ####################load score
-        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "score.json"))
+        # load gtvt scores
+        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "inference.json"))
         for metric in g.METRICS:
-            self.__scores[metric] = gtvt_score["patient={}".format(self.__patient)][
-                metric
-            ]["round={}".format(self.__round)]
+            self.__scores["gtvt"][metric] = gtvt_score[
+                "patient={}".format(self.__patient)
+            ][metric]["round={}".format(self.__round)]
+
+        # load gtvn scores
+        gtvn_score = Json.load(
+            os.path.join(self.__idl_gtvn_epoch_dir, "inference_test.json")
+        )
+        if self.__round == "00":
+            gtvn_round = "00"
+        else:
+            gtvn_round = "01"
+        for metric in g.METRICS:
+            self.__scores["gtvn"][metric] = gtvn_score[
+                "patient={}".format(self.__patient)
+            ][metric]["round={}".format(gtvn_round)]
 
         # update ui
         self.__refresh_imgs()
@@ -922,7 +936,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __refresh_imgs(self):
         # no img data loaded
-        if self.__img_data["pt"] is None:
+        if self.__imgs["pt"] is None:
             return
 
         # check if cur slice is annotated
@@ -944,13 +958,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
             if self.__img_plane == "sagittal":
-                rgb_img = self.__img_data[i][:, :, self.__slice]
+                rgb_img = self.__imgs[i][:, :, self.__slice]
             elif self.__img_plane == "coronal":
-                rgb_img = self.__img_data[i][:, self.__slice, :]
+                rgb_img = self.__imgs[i][:, self.__slice, :]
             else:  # img_plane == "transverse":
                 # for transverse plane, img is upside down,
                 # true slice id is: img_depth - 1 - slice_id
-                rgb_img = self.__img_data[i][
+                rgb_img = self.__imgs[i][
                     (self.__get_img_depth() - 1 - self.__slice), :, :
                 ]
 
@@ -966,40 +980,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             rgb_img = cv2.addWeighted(rgb_img, contrast, blank, 0, bright)
 
             # add mask to annotated slices
-            annotated_slices = Dict()
+            selected_slices = Dict()
             total_slices_num = Dict()
             if self.__img_plane == "transverse":
-                annotated_slices["horizontal"] = self.__get_annotated_slices("coronal")
-                total_slices_num["horizontal"] = self.__img_data["pt"].shape[1]
-                annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
-                total_slices_num["vertical"] = self.__img_data["pt"].shape[2]
+                selected_slices["horizontal"] = self.__get_selected_slices("coronal")
+                total_slices_num["horizontal"] = self.__imgs["pt"].shape[1]
+                selected_slices["vertical"] = self.__get_selected_slices("sagittal")
+                total_slices_num["vertical"] = self.__imgs["pt"].shape[2]
             elif self.__img_plane == "coronal":
-                annotated_slices["horizontal"] = self.__get_annotated_slices(
-                    "transverse"
-                )
-                total_slices_num["horizontal"] = self.__img_data["pt"].shape[0]
-                annotated_slices["vertical"] = self.__get_annotated_slices("sagittal")
-                total_slices_num["vertical"] = self.__img_data["pt"].shape[2]
+                selected_slices["horizontal"] = self.__get_selected_slices("transverse")
+                total_slices_num["horizontal"] = self.__imgs["pt"].shape[0]
+                selected_slices["vertical"] = self.__get_selected_slices("sagittal")
+                total_slices_num["vertical"] = self.__imgs["pt"].shape[2]
             elif self.__img_plane == "sagittal":
-                annotated_slices["horizontal"] = self.__get_annotated_slices(
-                    "transverse"
-                )
-                total_slices_num["horizontal"] = self.__img_data["pt"].shape[0]
-                annotated_slices["vertical"] = self.__get_annotated_slices("coronal")
-                total_slices_num["vertical"] = self.__img_data["pt"].shape[1]
+                selected_slices["horizontal"] = self.__get_selected_slices("transverse")
+                total_slices_num["horizontal"] = self.__imgs["pt"].shape[0]
+                selected_slices["vertical"] = self.__get_selected_slices("coronal")
+                total_slices_num["vertical"] = self.__imgs["pt"].shape[1]
 
             rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
 
-            annotated_slices_mask = None
+            selected_slices_mask = None
 
             # annotated slices mask
             for direction in ["horizontal", "vertical"]:
-                for cur_annotated_slice in annotated_slices[direction]:
+                for selected_slice in selected_slices[direction]:
                     # image is reversed in the transverse plane
                     if self.__img_plane != "transverse" and direction == "horizontal":
-                        slice_pos = total_slices_num[direction] - cur_annotated_slice
+                        slice_pos = total_slices_num[direction] - selected_slice
                     else:
-                        slice_pos = cur_annotated_slice
+                        slice_pos = selected_slice
 
                     if direction == "horizontal":
                         x1 = 0
@@ -1019,16 +1029,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         color=self.__color["annotation.gtvt"],
                         thickness=-1,
                     )
-                    if annotated_slices_mask is None:
-                        annotated_slices_mask = cur_slice_mask
+                    if selected_slices_mask is None:
+                        selected_slices_mask = cur_slice_mask
                     else:
-                        annotated_slices_mask += cur_slice_mask
+                        selected_slices_mask += cur_slice_mask
 
-            if annotated_slices_mask is not None:
+            if selected_slices_mask is not None:
                 rgb_img = cv2.addWeighted(
                     src1=rgb_img,
                     alpha=1,
-                    src2=annotated_slices_mask,
+                    src2=selected_slices_mask,
                     beta=1,  # 0.5,
                     gamma=0,
                 )
@@ -1042,22 +1052,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # draw label and pred contour
             for k in ["label.gtvt", "pred.gtvt", "label.gtvn", "pred.gtvn", "clicks"]:
-                if self.__img_data[k] is None:
+                if self.__imgs[k] is None:
                     continue
 
                 # load data of current slice
                 if self.__img_plane == "sagittal":
-                    contours = self.__img_data[k][:, :, self.__slice].astype(np.uint8)
+                    contours = self.__imgs[k][:, :, self.__slice].astype(np.uint8)
                 elif self.__img_plane == "coronal":
-                    contours = self.__img_data[k][:, self.__slice, :].astype(np.uint8)
+                    contours = self.__imgs[k][:, self.__slice, :].astype(np.uint8)
                 else:  # img_plane == "transverse":
                     # for transverse plane, img is upside down,
                     # true slice id is: img_depth - 1 - slice_id
-                    contours = self.__img_data[k][
+                    contours = self.__imgs[k][
                         (self.__get_img_depth() - 1 - self.__slice), :, :
                     ].astype(np.uint8)
-                if k == "clicks" and contours.max() > 0:
-                    print(contours.max())
+
                 contours, _ = self.__fit_display_frame(
                     contours, self.__display_frame[i]
                 )
@@ -1089,10 +1098,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             text_pos_y = 10
 
             for metric in g.METRICS:
-                if Value.is_number(self.__scores[metric]):
-                    cv_text += metric.upper() + ": {:.3f}".format(self.__scores[metric])
+                cv_text += "GTVt - " + metric.upper()
+                if Value.is_number(self.__scores["gtvt"][metric]):
+                    cv_text += ": {:.3f}".format(self.__scores["gtvt"][metric])
                 else:
-                    cv_text += metric.upper() + ": N/A"
+                    cv_text += ": N/A"
+                cv_text += "\n"
+            for metric in g.METRICS:
+                cv_text += "GTVn - " + metric.upper()
+                if Value.is_number(self.__scores["gtvn"][metric]):
+                    cv_text += ": {:.3f}".format(self.__scores["gtvn"][metric])
+                else:
+                    cv_text += ": N/A"
                 cv_text += "\n"
 
             self.__cv_put_text(
@@ -1167,7 +1184,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __get_annotated_slices(self, plane) -> list:
+    def __get_selected_slices(self, plane) -> List:
         # get current round
 
         if self.__round == "00":
@@ -1178,31 +1195,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__idl_gtvt_dir,
             "patients",
             "patient={}".format(self.__patient),
-            "annotated_slices.json",
+            "selected_slices.json",
         )
         if not os.path.exists(json_path):
             return []
 
-        annotated_slices_dict = Json.load(json_path)[plane]
-        annotated_slices_list = List()
+        selected_slices_dict = Json.load(json_path)[plane]
+        selected_slices_list = List()
 
-        for cur_round in annotated_slices_dict:
-            annotated_slices_list += List(annotated_slices_dict[cur_round])
+        for round_num in selected_slices_dict:
+            selected_slices_list += List(selected_slices_dict[round_num])
 
-            if (cur_round[len("round=") :]) == self.__round:
+            if (round_num[len("round=") :]) == self.__round:
                 break
 
         # change annotated slice from str to int
-        for i in range(len(annotated_slices_list)):
-            annotated_slices_list[i] = int(annotated_slices_list[i])
+        for i in range(len(selected_slices_list)):
+            selected_slices_list[i] = int(selected_slices_list[i])
 
-        return annotated_slices_list
+        return selected_slices_list
 
     def __is_annotated(self) -> bool:
-        if self.__img_data["pt"] is None:
+        if self.__imgs["pt"] is None:
             return False
 
-        if int(self.__slice) in self.__get_annotated_slices(self.__img_plane):
+        if int(self.__slice) in self.__get_selected_slices(self.__img_plane):
             return True
         else:
             return False
@@ -1244,21 +1261,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__refresh_title()
 
     def __get_img_depth(self):
-        if (self.__img_data["pt"] is None) or (self.__img_plane is None):
+        if (self.__imgs["pt"] is None) or (self.__img_plane is None):
             return None
         if self.__img_plane == "sagittal":
-            img_depth = self.__img_data["pt"].shape[2]
+            img_depth = self.__imgs["pt"].shape[2]
         elif self.__img_plane == "coronal":
-            img_depth = self.__img_data["pt"].shape[1]
+            img_depth = self.__imgs["pt"].shape[1]
         else:  # img_plane == "transverse"
-            img_depth = self.__img_data["pt"].shape[0]
+            img_depth = self.__imgs["pt"].shape[0]
         return img_depth
 
     def __refresh_title(self):
         win_tital = "iDL.Tool "
         if self.__round is not None:
             win_tital += "   Num.of.Annotated.Slices="
-            win_tital += str(len(self.__get_annotated_slices(self.__img_plane)))
+            win_tital += str(len(self.__get_selected_slices(self.__img_plane)))
         if self.__slice is not None:
             img_depth = self.__get_img_depth()
             if img_depth is not None:

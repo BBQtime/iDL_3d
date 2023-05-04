@@ -17,57 +17,57 @@ DSC_LOW_LIMIT = 0.6
 def patients_overview(
     idl_id,
 ):
-    train_result_folder = os.path.join(g.TRAIN_RESULTS_DIR, idl_id)
+    train_result_dir = os.path.join(g.TRAIN_RESULTS_DIR, idl_id)
 
     score_dict = Dict()
 
     # plt.style.use("bmh")  # put this line before drawing figure
 
     patient_tumor_size_dict = Dict()
-    for cur_patient_folder in Explorer.get_sub_folders(
-        train_result_folder, key_word="patient="
+    for patient_dir in Explorer.get_sub_folders(
+        train_result_dir, key_word="patient="
     ):
-        patient_tumor_size_dict[cur_patient_folder] = 0
+        patient_tumor_size_dict[patient_dir] = 0
 
     # iterate through patients folders
-    for cur_patient_folder in patient_tumor_size_dict.keys():
+    for patient_dir in patient_tumor_size_dict.keys():
         # create list of round folders
-        round_folder_list = ["baseline"]
-        round_folder_list += Explorer.get_sub_folders(
-            os.path.join(train_result_folder, cur_patient_folder),
+        round_dir_list = ["baseline"]
+        round_dir_list += Explorer.get_sub_folders(
+            os.path.join(train_result_dir, patient_dir),
             key_word="round=",
         )
         # initialize score_dict of cur patient
         for metric in g.METRICS:
-            score_dict[cur_patient_folder][metric] = List()
+            score_dict[patient_dir][metric] = List()
         # iterate through round folders
-        for cur_round_folder in round_folder_list:
+        for round_dir in round_dir_list:
             iter_json_list = Explorer.get_sub_files(
-                os.path.join(train_result_folder, cur_patient_folder, cur_round_folder),
+                os.path.join(train_result_dir, patient_dir, round_dir),
                 key_word=".json",
             )
             best_iter_json = iter_json_list[-1]
             best_score_dict = Json.load(
                 os.path.join(
-                    train_result_folder,
-                    cur_patient_folder,
-                    cur_round_folder,
+                    train_result_dir,
+                    patient_dir,
+                    round_dir,
                     best_iter_json,
                 )
             )
             for metric in g.METRICS:
-                cur_score = best_score_dict[metric]["3d"]
-                score_dict[cur_patient_folder][metric].append(cur_score)
+                scores = best_score_dict[metric]["3d"]
+                score_dict[patient_dir][metric].append(scores)
 
         # get tumor size of current patient
         label_nii_path = os.path.join(
-            train_result_folder, cur_patient_folder, "baseline", "label.nii"
+            train_result_dir, patient_dir, "baseline", "label.nii"
         )
         label_data = Nii.load(label_nii_path, binary=True)
         label_size = label_data.sum()
         label_size *= g.NII_SPACING[0] * g.NII_SPACING[1] * g.NII_SPACING[2]
         label_size *= 0.001  # mm3 to cm3
-        patient_tumor_size_dict[cur_patient_folder] = label_size
+        patient_tumor_size_dict[patient_dir] = label_size
 
     # sort by tumor size increment
     patient_tumor_size_dict = patient_tumor_size_dict.sort_by_value()
@@ -121,8 +121,8 @@ def patients_overview(
         # plt.yticks(rotation=45)
         # color_idx = 0
 
-        for cur_patient_folder in tqdm(patient_tumor_size_dict.keys()):
-            cur_label_size = patient_tumor_size_dict[cur_patient_folder]
+        for patient_dir in tqdm(patient_tumor_size_dict.keys()):
+            cur_label_size = patient_tumor_size_dict[patient_dir]
             color_value = (int(cur_label_size) - min_label_size) / (
                 max_label_size - min_label_size
             )
@@ -130,8 +130,8 @@ def patients_overview(
             green = 1 - color_value
             blue = 0
             plt.plot(
-                range(len(score_dict[cur_patient_folder][metric])),
-                score_dict[cur_patient_folder][metric],
+                range(len(score_dict[patient_dir][metric])),
+                score_dict[patient_dir][metric],
                 "-o",
                 color=(red, green, blue),  # line_colors[color_idx],
             )

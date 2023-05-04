@@ -5,7 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 4,
     "cnn": "unet.slim",
-    "dataset.cross.valid": false,
+    "cross.valid.fold": 4,
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 200,

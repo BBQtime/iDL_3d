@@ -85,37 +85,43 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         #     os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
         # )
         # simulate click
-        self.__origin["click"] = np.zeros(
+        self.__origin["clicks"] = np.zeros(
             self.__origin["label"].shape, dtype=np.float32
         )
         # loop through each connected components
+        # cc_count = 1
         for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
             if self.__random_click:
-                # find a random point (d,h,w)
-                random_point = Img.find_random_point(cur_gtvn_cc)
-                self.__origin["click"][random_point[0]][random_point[1]][
-                    random_point[2]
-                ] = 1
+                # random point (d,h,w)
+                pos = Img.find_random_point(cur_gtvn_cc)
             else:
-                # gravity_center: (d,h,w)
-                gravity_center = list(measurements.center_of_mass(cur_gtvn_cc))
+                # gravity center: (d,h,w)
+                pos = list(measurements.center_of_mass(cur_gtvn_cc))
                 # float to int
-                for i in range(len(gravity_center)):
-                    gravity_center[i] = round(gravity_center[i])
-                self.__origin["click"][gravity_center[0]][gravity_center[1]][
-                    gravity_center[2]
-                ] = 1
-            # Nii.save(cur_gtvn_cc, os.path.join(g.PROJ_PATH, "debug", "cur_cc.nii"))
+                for i in range(len(pos)):
+                    pos[i] = round(pos[i])
+            self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
+
+            # # debug save img
+            # cur_click_nii = np.zeros_like(self.__origin["clicks"])
+            # cur_click_nii[pos[0]][pos[1]][pos[2]] = 1
             # Nii.save(
-            #     self.__origin["click"], os.path.join(g.PROJ_PATH, "debug", "click.nii")
+            #     cur_gtvn_cc,
+            #     os.path.join(g.PROJ_PATH, "debug", "cur_cc_{}.nii".format(cc_count)),
             # )
+            # Nii.save(
+            #     cur_click_nii,
+            #     os.path.join(g.PROJ_PATH, "debug", "cur_click_{}.nii".format(cc_count)),
+            # )
+            # print(cc_count)
+            # cc_count += 1
 
         # # distance map
         # if np.sum(self.__origin["label"]) > 0:
-        #     self.__origin["click"] = distance_transform_edt(
-        #         np.logical_not(self.__origin["click"])
+        #     self.__origin["clicks"] = distance_transform_edt(
+        #         np.logical_not(self.__origin["clicks"])
         #     ).astype(np.float32)
-        #     self.__origin["click"] = np.exp(-self.__origin["click"])
+        #     self.__origin["clicks"] = np.exp(-self.__origin["clicks"])
 
         final = Dict()
         tmp = Dict()
@@ -172,7 +178,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 
         # pred + click + pt
         input_imgs = None
-        for i in ["pred", "click"]:  # , "pt"]:
+        for i in ["pred", "clicks"]:  # , "pt"]:
             final[i] = self.__preprocess(self.__origin[i], final["seed"])
             if input_imgs is None:
                 input_imgs = final[i]
@@ -191,7 +197,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 # # for testing
 # augment = Dict()
 # # [translate,elastic,rotate,scale,flip.lr,flip.ud]
-# augment["methods"] = ["flip.lr"]
+# augment["methods"] = []
 # augment["pct"] = 1
 # augment["min"] = 1
 # augment["max"] = 1
@@ -205,8 +211,9 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 # )
 # # augment_methods =
 # tmp_dataset = IDLGTVnDataSet(
-#     patients=["106"],
+#     patients=["129"],
 #     baseline_epoch_dir=baseline_epoch_dir,
-#     augment=augment,
+#     augment=None,
+#     random_click=True,
 # )
 # tmp_dataset.__getitem__(0)

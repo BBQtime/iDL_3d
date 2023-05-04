@@ -326,7 +326,7 @@ class Img:
     # def save(
     #     img: Union[ndarray, Tensor],
     #     img_name: str = "",
-    #     save_folder: str = "",
+    #     save_dir: str = "",
     #     extension_name: str = ".png",
     # ):
     #     if isinstance(img, Tensor):
@@ -338,13 +338,13 @@ class Img:
     #     elif len(img.shape) == 4:
     #         img = img[img.shape[0] // 2][img.shape[1] // 2]
 
-    #     if save_folder == "":
-    #         save_folder = os.path.join(Global.PROJ_PATH, "debug")
+    #     if save_dir == "":
+    #         save_dir = os.path.join(Global.PROJ_PATH, "debug")
     #     if img_name == "":
     #         img_name = "debug"
     #     if not img_name.endswith(extension_name):
     #         img_name += extension_name
-    #     save_path = os.path.join(save_folder, img_name)
+    #     save_path = os.path.join(save_dir, img_name)
 
     #     imageio.imwrite(save_path, img)
     #     return save_path
@@ -479,7 +479,7 @@ class Folder:
 
 class Explorer:
     def __get_sub_items(
-        folder_path: str,
+        input_dir: str,
         return_full_path: bool,
         key_word: str,
         shuffle: bool,
@@ -487,15 +487,15 @@ class Explorer:
         select: str,
     ) -> List:
 
-        sub_list = List(os.listdir(folder_path))
+        sub_list = List(os.listdir(input_dir))
 
         if select != "both":
             for sub_name in sub_list.copy():
                 if select == "files":
-                    if not os.path.isfile(os.path.join(folder_path, sub_name)):
+                    if not os.path.isfile(os.path.join(input_dir, sub_name)):
                         sub_list.remove(sub_name)
                 elif select == "folders":
-                    if os.path.isfile(os.path.join(folder_path, sub_name)):
+                    if os.path.isfile(os.path.join(input_dir, sub_name)):
                         sub_list.remove(sub_name)
 
         if shuffle:
@@ -510,19 +510,19 @@ class Explorer:
 
         if return_full_path:
             for i in range(len(sub_list)):
-                sub_list[i] = os.path.join(folder_path, sub_list[i])
+                sub_list[i] = os.path.join(input_dir, sub_list[i])
 
         return sub_list
 
     def get_sub_items(
-        folder_path: str,
+        input_dir: str,
         key_word: str = "",
         return_full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
         sub_list = Explorer.__get_sub_items(
-            folder_path=folder_path,
+            input_dir=input_dir,
             return_full_path=return_full_path,
             key_word=key_word,
             shuffle=shuffle,
@@ -532,14 +532,14 @@ class Explorer:
         return sub_list
 
     def get_sub_files(
-        folder_path: str,
+        input_dir: str,
         key_word: str = "",
         return_full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
         sub_list = Explorer.__get_sub_items(
-            folder_path=folder_path,
+            input_dir=input_dir,
             return_full_path=return_full_path,
             key_word=key_word,
             shuffle=shuffle,
@@ -549,14 +549,14 @@ class Explorer:
         return sub_list
 
     def get_sub_folders(
-        folder_path: str,
+        input_dir: str,
         key_word: str = "",
         return_full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ):
         sub_list = Explorer.__get_sub_items(
-            folder_path=folder_path,
+            input_dir=input_dir,
             return_full_path=return_full_path,
             key_word=key_word,
             shuffle=shuffle,
@@ -565,23 +565,23 @@ class Explorer:
         )
         return sub_list
 
-    def __walk_sub_folders(folder_path: str) -> List:
-        sub_folders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
-        for folder_path in sub_folders:
-            sub_folders.extend(Explorer.__walk_sub_folders(folder_path))
-        return sub_folders
+    def __walk_sub_dirs(input_dir: str) -> List:
+        sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
+        for input_dir in sub_dirs:
+            sub_dirs.extend(Explorer.__walk_sub_dirs(input_dir))
+        return sub_dirs
 
-    def walk_sub_folders(folder_path: str, key_word: str = "", suffle=False) -> List:
-        sub_folders = List()
-        for i in Explorer.__walk_sub_folders(folder_path):
+    def walk_sub_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
+        sub_dirs = List()
+        for i in Explorer.__walk_sub_dirs(input_dir):
             if key_word == "" or key_word in i:
-                sub_folders.append(i)
-        sub_folders.remove_duplicates()
+                sub_dirs.append(i)
+        sub_dirs.remove_duplicates()
         if suffle:
-            sub_folders.shuffle()
+            sub_dirs.shuffle()
         else:
-            sub_folders.sort()
-        return sub_folders
+            sub_dirs.sort()
+        return sub_dirs
 
 
 class GPU:
@@ -601,10 +601,10 @@ class GPU:
 
 class Cleaner:
     def clean_debug_data():
-        for cur_folder in Explorer.walk_sub_folders(
-            Global.TRAIN_RESULTS_DIR, key_word="delete.this"
+        for i in Explorer.walk_sub_dirs(
+            Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
         ):
-            Folder.delete(cur_folder)
+            Folder.delete(i)
         Folder.clear(os.path.join(Global.PROJ_PATH, "debug"))
 
     def clean_linux_trash():
@@ -623,6 +623,7 @@ class Cleaner:
 class Global:
     PROJ_PATH = os.path.dirname(os.path.dirname(__file__))
     EPS = sys.float_info.epsilon
+    DELETE_FLAG = "to.delete"
     METRICS = ["dsc", "msd", "hd95"]
 
     __settings = Json.load(os.path.join(PROJ_PATH, "settings.json"))

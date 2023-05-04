@@ -178,37 +178,41 @@ class IDLGTVtTraining(Training):
 
         return test_patients
 
-    def __get_simple_hyper(self, hyper: Dict) -> Dict:
+    def __simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
-        for cur_key in hyper:
-            if cur_key == "lr" or cur_key == "lr.actual":
-                simple_hyper[cur_key] = hyper[cur_key].to_str()
+        for key_name in hyper:
+            # "lr" and "lr.actual" are lists
+            if key_name == "lr" or key_name == "lr.actual":
+                simple_hyper[key_name] = hyper[key_name].to_str()
 
-            elif cur_key == "patients":
-                simple_hyper[cur_key] = len(hyper[cur_key])
+            # dont need to save "patients"
+            elif key_name == "patients":
+                pass
 
-            elif "select.step" in cur_key:
-                simple_hyper[cur_key] = hyper[cur_key].to_str()
+            # "select.step.coronal/sagittal/transverse" are lists
+            elif "select.step" in key_name:
+                simple_hyper[key_name] = hyper[key_name].to_str()
 
+            # others
             else:
-                simple_hyper[cur_key] = hyper[cur_key]
+                simple_hyper[key_name] = hyper[key_name]
         return simple_hyper
 
     def _print_hyper(self, hyper: Dict):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         super()._print_hyper(simple_hyper)
 
     def _save_hyper(self, hyper: Dict, json_path: str):
-        simple_hyper = self.__get_simple_hyper(hyper)
+        simple_hyper = self.__simplify_hyper(hyper)
         super()._save_hyper(simple_hyper, json_path)
 
     # def real_training(
     #     self,
     #     baseline_id: str,
-    #     idl_results_folder: str,
+    #     idl_results_dir: str,
     #     idl_gtvt_id: str,
     #     cur_patient: str,
-    #     cur_round: int,
+    #     round_num: int,
     #     debug_mode: bool = False,
     # ):
     #     self._idl_gtvt_id = idl_gtvt_id
@@ -238,8 +242,8 @@ class IDLGTVtTraining(Training):
     #     self._print_hyper(hyper)
 
     #     # check if result folder exist
-    #     cur_result_folder = os.path.join(idl_results_folder, self._idl_id)
-    #     if not os.path.exists(cur_result_folder):
+    #     cur_result_dir = os.path.join(idl_results_dir, self._idl_id)
+    #     if not os.path.exists(cur_result_dir):
     #         print("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
 
     #     # create json file to save train loss
@@ -248,58 +252,58 @@ class IDLGTVtTraining(Training):
     #     Json.save(
     #         train_loss_dict,
     #         os.path.join(
-    #             cur_result_folder, "patient={}".format(cur_patient), "train_loss.json"
+    #             cur_result_dir, "patient={}".format(cur_patient), "train_loss.json"
     #         ),
     #     )
 
     #     # get annotated slices
-    #     cur_round_folder = os.path.join(
-    #         cur_result_folder,
+    #     round_dir = os.path.join(
+    #         cur_result_dir,
     #         "patient={}".format(cur_patient),
-    #         "round={:02d}".format(cur_round),
+    #         "round={:02d}".format(round_num),
     #     )
-    #     annotated_slices = Dict()
-    #     annotated_slices["round=01"] = List()  # doesn't matter what the dict key is
-    #     for file_name in Explorer.get_sub_files(cur_round_folder, key_word="_label.npy"):
+    #     selected_slices = Dict()
+    #     selected_slices["round=01"] = List()  # doesn't matter what the dict key is
+    #     for file_name in Explorer.get_sub_files(round_dir, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
     #         slice_id = slice_id.zfill(3)
-    #         annotated_slices["round=01"].append(slice_id)
+    #         selected_slices["round=01"].append(slice_id)
 
     #     # training start time
     #     hyper["time.spent"] = datetime.now()
 
-    #     self.__training_cur_round(
-    #         cur_result_folder=cur_result_folder,
+    #     self.__training_round(
+    #         cur_result_dir=cur_result_dir,
     #         cur_patient=cur_patient,
-    #         annotated_slices=annotated_slices,
-    #         label_folder=cur_round_folder,
+    #         selected_slices=selected_slices,
+    #         label_dir=round_dir,
     #     )
 
     #     # get training time spent before save hyper
     #     hyper["time.spent"] = datetime.now() - hyper["time.spent"]
     #     # save hyper
-    #     self._save_hyper(os.path.join(cur_result_folder, "hyper.json"))
+    #     self._save_hyper(os.path.join(cur_result_dir, "hyper.json"))
 
-    # in this function, cur round slices have not been added into annotated_slices
-    def __select_cur_round_slices(
+    # in this function, cur round slices have not been added into selected_slices
+    def __select_new_round_slices(
         self,
-        annotated_slices: Dict,
+        selected_slices: Dict,
         hyper: Dict,
-        patient_folder: str,
+        patient_dir: str,
     ) -> list:  # return a list of int
 
-        cur_round_slices = Dict()
+        new_round_slices = Dict()
         for plane in ["transverse", "coronal", "sagittal"]:
-            cur_round_slices[plane] = List()
+            new_round_slices[plane] = List()
 
-        cur_round = max(
-            len(annotated_slices["transverse"]),
-            len(annotated_slices["coronal"]),
-            len(annotated_slices["sagittal"]),
+        round_num = max(
+            len(selected_slices["transverse"]),
+            len(selected_slices["coronal"]),
+            len(selected_slices["sagittal"]),
         )
-        cur_round += 1
+        round_num += 1
 
-        patient = Path(patient_folder).name
+        patient = Path(patient_dir).name
         patient = patient[len("patient=") :]
 
         label = Nii.load(
@@ -313,90 +317,86 @@ class IDLGTVtTraining(Training):
         for plane in ["transverse", "coronal", "sagittal"]:
 
             # skip cur plane if no slice needs to be selected
-            if len(hyper["select.step.{}".format(plane)]) < cur_round:
+            if len(hyper["select.step.{}".format(plane)]) < round_num:
                 continue
 
-            candidate_slices = Dict()
-            cur_plane_annotated_slices = annotated_slices[plane].to_list()
+            candidates = Dict()
+            ignored_slices = selected_slices[plane].to_list()
 
             # go through pred and record tumor size
             if plane == "transverse":
-                slice_counts = label.shape[0]
+                total_slices = label.shape[0]
             elif plane == "coronal":
-                slice_counts = label.shape[1]
+                total_slices = label.shape[1]
             elif plane == "sagittal":
-                slice_counts = label.shape[2]
+                total_slices = label.shape[2]
 
-            for cur_slice in range(slice_counts):
+            for slice_num in range(total_slices):
                 # skip slice that already been annotated
-                if cur_slice in cur_plane_annotated_slices:
+                if slice_num in ignored_slices:
                     continue
                 else:
                     if plane == "transverse":
-                        cur_slice_tumor_size = label[cur_slice, :, :].sum()
+                        cur_slice_tumor_size = label[slice_num, :, :].sum()
                     elif plane == "coronal":
-                        cur_slice_tumor_size = label[:, cur_slice, :].sum()
+                        cur_slice_tumor_size = label[:, slice_num, :].sum()
                     elif plane == "sagittal":
-                        cur_slice_tumor_size = label[:, :, cur_slice].sum()
+                        cur_slice_tumor_size = label[:, :, slice_num].sum()
                     # add slice with target (pred or label) into candidates
                     if cur_slice_tumor_size > 0:
-                        candidate_slices[cur_slice] = cur_slice_tumor_size
+                        candidates[slice_num] = cur_slice_tumor_size
 
             # "largest"
             if hyper["select.scenario"] == "largest":
                 # descrease sort the dict (return a list of tuple)
-                candidate_slices = candidate_slices.sort_by_value(reverse=True)
-                cur_round_slices[plane] = candidate_slices.keys()
+                candidates = candidates.sort_by_value(reverse=True)
+                new_round_slices[plane] = candidates.keys()
 
             # "gravity.center", round = 1
-            elif hyper["select.scenario"] == "gravity.center" and cur_round == 1:
+            elif hyper["select.scenario"] == "gravity.center" and round_num == 1:
                 if plane == "transverse":
-                    cur_round_slices[plane].append(round(label_center[0]))
+                    new_round_slices[plane].append(round(label_center[0]))
                 elif plane == "coronal":
-                    cur_round_slices[plane].append(round(label_center[1]))
+                    new_round_slices[plane].append(round(label_center[1]))
                 elif plane == "sagittal":
-                    cur_round_slices[plane].append(round(label_center[2]))
+                    new_round_slices[plane].append(round(label_center[2]))
 
             # "equal.divide", round = 1
-            elif hyper["select.scenario"] == "equal.divide" and cur_round == 1:
+            elif hyper["select.scenario"] == "equal.divide" and round_num == 1:
                 divided_parts = hyper["select.step.{}".format(plane)][0] + 1
-                candidate_slices = candidate_slices.keys()
+                candidates = candidates.keys()
                 for part in range(1, divided_parts):
-                    idx = len(candidate_slices) * part / divided_parts
+                    idx = len(candidates) * part / divided_parts
                     idx = round(idx)
-                    idx = Value.limit_range(idx, (1, len(candidate_slices)))
-                    cur_round_slices[plane].append(candidate_slices[idx - 1])
+                    idx = Value.limit_range(idx, (1, len(candidates)))
+                    new_round_slices[plane].append(candidates[idx - 1])
 
             # (1) "random"
             # (2) "gravity.center", round >= 2
             # (3) "equal.divide", round >= 2
             else:
-                cur_round_slices[plane] = candidate_slices.keys()
-                cur_round_slices[plane].shuffle()
+                new_round_slices[plane] = candidates.keys()
+                new_round_slices[plane].shuffle()
 
-            # narrow cur_round_slices based on select.step
-            if hyper["select.scenario"] == "gravity.center" and cur_round == 1:
-                cur_round_slices_count = 1
+            # narrow new_round_slices based on select.step
+            if hyper["select.scenario"] == "gravity.center" and round_num == 1:
+                new_slices_num = 1
             else:
-                cur_round_slices_count = hyper["select.step.{}".format(plane)][
-                    cur_round - 1
-                ]
-            if cur_round_slices_count < len(cur_round_slices[plane]):
-                cur_round_slices[plane] = cur_round_slices[plane][
-                    :cur_round_slices_count
-                ]
+                new_slices_num = hyper["select.step.{}".format(plane)][round_num - 1]
+            if new_slices_num < len(new_round_slices[plane]):
+                new_round_slices[plane] = new_round_slices[plane][:new_slices_num]
 
-            # add cur_round_slices into annotated_slices
-            annotated_slices[plane][
-                "round={:02d}".format(cur_round)
-            ] = cur_round_slices[plane]
+            # add new_round_slices into selected_slices
+            selected_slices[plane]["round={:02d}".format(round_num)] = new_round_slices[
+                plane
+            ]
 
-        return cur_round_slices
+        return new_round_slices
 
-    def __get_masked_label(self, cur_round_folder: str):
-        cur_round = Path(cur_round_folder).name
-        patient_folder = Path(cur_round_folder).parent
-        patient = patient_folder.name
+    def __get_masked_label(self, round_dir: str):
+        round_num = Path(round_dir).name
+        patient_dir = Path(round_dir).parent
+        patient = patient_dir.name
         # change "patient=123" into "123"
         patient = patient[len("patient=") :]
 
@@ -405,11 +405,9 @@ class IDLGTVtTraining(Training):
             binary=True,
         )
 
-        annotated_slices = Json.load(
-            os.path.join(patient_folder, "annotated_slices.json")
-        )
+        selected_slices = Json.load(os.path.join(patient_dir, "selected_slices.json"))
 
-        # annotated slice mask
+        # selected slices mask
         slice_mask = Dict()
 
         # loop through each plane
@@ -417,26 +415,26 @@ class IDLGTVtTraining(Training):
             slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
 
             # loop through each round
-            for cur_round in annotated_slices[plane]:
+            for round_num in selected_slices[plane]:
 
                 # str to list
-                annotated_slices[plane][cur_round] = List(
-                    annotated_slices[plane][cur_round]
+                selected_slices[plane][round_num] = List(
+                    selected_slices[plane][round_num]
                 )
                 # current step
-                for cur_slice in annotated_slices[plane][cur_round]:
+                for slice_num in selected_slices[plane][round_num]:
                     # change slice id from str into int
-                    cur_slice = int(cur_slice)
+                    slice_num = int(slice_num)
                     if plane == "transverse":
-                        slice_mask[plane][cur_slice, :, :] = np.ones_like(
+                        slice_mask[plane][slice_num, :, :] = np.ones_like(
                             slice_mask[plane][0, :, :]
                         )
                     elif plane == "coronal":
-                        slice_mask[plane][:, cur_slice, :] = np.ones_like(
+                        slice_mask[plane][:, slice_num, :] = np.ones_like(
                             slice_mask[plane][:, 0, :]
                         )
                     elif plane == "sagittal":
-                        slice_mask[plane][:, :, cur_slice] = np.ones_like(
+                        slice_mask[plane][:, :, slice_num] = np.ones_like(
                             slice_mask[plane][:, :, 0]
                         )
 
@@ -445,28 +443,16 @@ class IDLGTVtTraining(Training):
             np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
             slice_mask["sagittal"],
         )
-        if 0:
-            Nii.save(
-                slice_mask,
-                os.path.join(g.PROJ_PATH, "debug", "slice_mask_post_processing.nii"),
-            )
-
         label *= slice_mask
-        if 0:
-            Nii.save(
-                label,
-                os.path.join(g.PROJ_PATH, "debug", "label_post_processing.nii"),
-            )
-
         return label
 
-    def __inference_cur_round(self, cur_round_folder: str, hyper: Dict):
-        cur_round = Path(cur_round_folder).name
+    def __inference_round(self, round_dir: str, hyper: Dict):
+        round_num = Path(round_dir).name
 
-        patient = Path(cur_round_folder).parent.name
+        patient = Path(round_dir).parent.name
 
         # get annotation for post processing
-        masked_label = self.__get_masked_label(cur_round_folder)
+        masked_label = self.__get_masked_label(round_dir)
 
         # result structure: gtvt: {pred, dsc, msd, hd95}
         patient_result = self._patient_inference(
@@ -477,54 +463,52 @@ class IDLGTVtTraining(Training):
         )
 
         # save score of cur patient
-        idl_gtvt_folder = Path(cur_round_folder).parent.parent.parent
-        score_json_path = os.path.join(idl_gtvt_folder, "score.json")
+        idl_gtvt_dir = Path(round_dir).parent.parent.parent
+        score_json_path = os.path.join(idl_gtvt_dir, "inference.json")
         score = Json.load(score_json_path)
         for metric in g.METRICS:
-            score[patient][metric][cur_round] = patient_result["gtvt"][metric]
+            score[patient][metric][round_num] = patient_result["gtvt"][metric]
         Json.save(score, score_json_path)
 
         # save pred of cur patient
         Nii.save(
             img=patient_result["gtvt"]["pred"],
-            path=os.path.join(cur_round_folder, "pred_gtvt.nii"),
+            path=os.path.join(round_dir, "pred_gtvt.nii"),
             spacing=g.NII_SPACING,
         )
 
-    def __training_cur_round(
+    def __training_round(
         self,
-        cur_round_folder: str,
-        baseline_epoch_folder: str,
-        label_folder: str,
+        round_dir: str,
+        baseline_epoch_dir: str,
+        label_dir: str,
         hyper: Dict,
-        annotated_slices: Dict,
+        selected_slices: Dict,
     ):
-        Folder.create(cur_round_folder)
+        Folder.create(round_dir)
 
-        cur_round = Path(cur_round_folder).name
-        cur_round = int(cur_round[len("round=") :])
+        round_num = Path(round_dir).name
+        round_num = int(round_num[len("round=") :])
 
-        patient_folder = Path(cur_round_folder).parent
-        patient = patient_folder.name[len("patient=") :]
+        patient_dir = Path(round_dir).parent
+        patient = patient_dir.name[len("patient=") :]
 
-        idl_gtvt_folder = patient_folder.parent.parent
-        loss_json_path = os.path.join(patient_folder, "loss.json")
+        idl_gtvt_dir = patient_dir.parent.parent
+        loss_json_path = os.path.join(patient_dir, "loss.json")
         loss_dict = Json.load(loss_json_path)
 
-        if cur_round == 1:
-            pred_folder = os.path.join(
-                baseline_epoch_folder,
+        if round_num == 1:
+            pred_dir = os.path.join(
+                baseline_epoch_dir,
                 "baseline",
                 "patients",
                 "patient={}".format(patient),
             )
         else:
-            pred_folder = os.path.join(
-                patient_folder, "round={:02d}".format(cur_round - 1)
-            )
+            pred_dir = os.path.join(patient_dir, "round={:02d}".format(round_num - 1))
 
         # record current round time spent
-        cur_round_time_spent = datetime.now()
+        time_spent = datetime.now()
 
         # create iDL dataset
         augment = Dict()
@@ -533,17 +517,19 @@ class IDLGTVtTraining(Training):
         augment["times"] = hyper["augment.times"]
         augment["min"] = hyper["augment.min"]
         augment["max"] = hyper["augment.max"]
+
         weight = Dict()
         weight["background"] = hyper["weight.background"]
         weight["distance.step"] = hyper["weight.distance.step"]
         weight["fp.fn"] = hyper["weight.fp.fn"]
         weight["prev.round.decay"] = hyper["weight.prev.round.decay"]
         weight["slice"] = hyper["weight.slice"]
+
         idl_gtvt_dataset = IDLGTVtDataSet(
             patient=patient,
-            annotated_slices=annotated_slices,
-            label_folder=label_folder,
-            pred_folder=pred_folder,
+            selected_slices=selected_slices,
+            label_dir=label_dir,
+            pred_dir=pred_dir,
             augment=augment,
             weight=weight,
         )
@@ -560,9 +546,9 @@ class IDLGTVtTraining(Training):
         )
 
         # iter loop
-        for cur_iter in tqdm(range(hyper["iter"])):
+        for iter_num in tqdm(range(hyper["iter"])):
             hyper["cnn"].train()
-            sum_loss = 0
+            iter_loss = 0
             num_batches = 0
 
             # freeze layers before iDL
@@ -584,91 +570,89 @@ class IDLGTVtTraining(Training):
                 loss = hyper["loss.func"](preds, labels, weight_map)
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
-                sum_loss += loss.item()
+                iter_loss += loss.item()
                 num_batches += 1
 
             # cur iter finished
             # update scheduler
-            iter_loss = sum_loss / num_batches
+            iter_loss /= num_batches
             hyper["scheduler"].step(iter_loss)
 
             # record loss
             loss_dict[
-                "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
+                "iter={:03d}".format((round_num - 1) * hyper["iter"] + (iter_num + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
-            patient_folder_list = Explorer.get_sub_folders(
-                os.path.join(idl_gtvt_folder, "patients")
+            patient_dirs_list = Explorer.get_sub_folders(
+                os.path.join(idl_gtvt_dir, "patients")
             )
-            if len(patient_folder_list) <= 1:
+            if len(patient_dirs_list) <= 1:
                 Json.save(loss_dict, loss_json_path)
-                self._plot_loss_fig(idl_gtvt_folder)
+                self._plot_loss_fig(idl_gtvt_dir)
 
         # current round idl finished
         # save cnn
-        cnn_save_path = os.path.join(
-            cur_round_folder, Path(cur_round_folder).name + ".pt"
-        )
+        cnn_save_path = os.path.join(round_dir, Path(round_dir).name + ".pt")
         self._save_cnn(hyper, cnn_save_path)
 
-        # save annotated_slices dict before inference, because masked_label needs it
-        # copy a new dict to avoid changing origin annotated_slices dict
-        annotated_slices_copy = annotated_slices.copy()
+        # save selected_slices dict before inference, because masked_label needs it
+        # copy a new dict to avoid changing origin selected_slices dict
+        selected_slices_to_save = selected_slices.copy()
         for plane in ["transverse", "coronal", "sagittal"]:
-            for round_key in annotated_slices_copy[plane]:
-                annotated_slices_copy[plane][round_key] = annotated_slices_copy[plane][
-                    round_key
-                ].to_str()
+            for round_num in selected_slices_to_save[plane]:
+                selected_slices_to_save[plane][round_num] = selected_slices_to_save[
+                    plane
+                ][round_num].to_str()
         Json.save(
-            data=annotated_slices_copy,
-            path=os.path.join(patient_folder, "annotated_slices.json"),
+            data=selected_slices_to_save,
+            path=os.path.join(patient_dir, "selected_slices.json"),
         )
 
         # inference
-        self.__inference_cur_round(cur_round_folder=cur_round_folder, hyper=hyper)
+        self.__inference_round(round_dir=round_dir, hyper=hyper)
 
         # save time spent
-        cur_round_time_spent = datetime.now() - cur_round_time_spent
-        key_name = "time.spent.avg.round={:02d}".format(cur_round)
+        time_spent = datetime.now() - time_spent
+        # key_name like: "time.spent.round=01"
+        key_name = "time.spent." + Path(round_dir).name
         if hyper[key_name] == {}:
-            hyper[key_name] = cur_round_time_spent
+            hyper[key_name] = time_spent
         else:
-            hyper[key_name] += cur_round_time_spent
+            hyper[key_name] += time_spent
 
         # save loss
         Json.save(loss_dict, loss_json_path)
 
-    def __training_cur_patient(
+    def __training_patient(
         self,
         patient: str,
-        baseline_epoch_folder: str,
-        idl_gtvt_folder: str,
+        baseline_epoch_dir: str,
+        idl_gtvt_dir: str,
         hyper: Dict,
     ):
         # create current patient folder
-        patient_folder = os.path.join(
-            idl_gtvt_folder, "patients", "patient={}".format(patient)
+        patient_dir = os.path.join(
+            idl_gtvt_dir, "patients", "patient={}".format(patient)
         )
-        Folder.create(patient_folder)
+        Folder.create(patient_dir)
         # create an empty loss.json
-        Json.save(Dict(), os.path.join(patient_folder, "loss.json"))
+        Json.save(Dict(), os.path.join(patient_dir, "loss.json"))
 
-        # copy baseline score
+        # copy baseline scores
         baseline_score = Json.load(
-            os.path.join(baseline_epoch_folder, "baseline", "score_test.json")
+            os.path.join(baseline_epoch_dir, "baseline", "inference_test.json")
         )
-        idl_gtvt_score_path = os.path.join(idl_gtvt_folder, "score.json")
-        idl_gtvt_score = Json.load(idl_gtvt_score_path)
+        idl_gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference.json"))
         for metric in g.METRICS:
             idl_gtvt_score["patient={}".format(patient)][metric][
                 "round=00"
             ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
-        Json.save(idl_gtvt_score, idl_gtvt_score_path)
+        Json.save(idl_gtvt_score, os.path.join(idl_gtvt_dir, "inference.json"))
 
         print("")
         print("patient:", patient)
 
-        annotated_slices = Dict()
+        selected_slices = Dict()
 
         # loop through each round
         max_round = max(
@@ -676,64 +660,62 @@ class IDLGTVtTraining(Training):
             len(hyper["select.step.coronal"]),
             len(hyper["select.step.sagittal"]),
         )
-        for cur_round in range(1, max_round + 1):
+        for round_num in range(1, max_round + 1):
 
-            # cur round slices are add into annotated_slices in this function
-            cur_round_slices = self.__select_cur_round_slices(
-                annotated_slices=annotated_slices,
+            # new_round_slices are add into selected_slices in this function
+            new_round_slices = self.__select_new_round_slices(
+                selected_slices=selected_slices,
                 hyper=hyper,
-                patient_folder=patient_folder,
+                patient_dir=patient_dir,
             )
 
             # no slice needs to be annotated in cur round
             if (
-                len(cur_round_slices["transverse"]) == 0
-                and len(cur_round_slices["coronal"]) == 0
-                and len(cur_round_slices["sagittal"]) == 0
+                len(new_round_slices["transverse"]) == 0
+                and len(new_round_slices["coronal"]) == 0
+                and len(new_round_slices["sagittal"]) == 0
             ):
                 break
 
             # start current round
-            print("round:", cur_round)
+            print("round:", round_num)
 
-            cur_round_folder = os.path.join(
-                patient_folder, "round={:02d}".format(cur_round)
-            )
-            self.__training_cur_round(
-                cur_round_folder=cur_round_folder,
-                baseline_epoch_folder=baseline_epoch_folder,
-                label_folder=g.DATASET_DIR,
+            round_dir = os.path.join(patient_dir, "round={:02d}".format(round_num))
+            self.__training_round(
+                round_dir=round_dir,
+                baseline_epoch_dir=baseline_epoch_dir,
+                label_dir=g.DATASET_DIR,
                 hyper=hyper,
-                annotated_slices=annotated_slices,
+                selected_slices=selected_slices,
             )
 
-            if cur_round == max_round:
+            if round_num == max_round:
                 break
 
             # load new lr before next round
             if hyper["lr"]["reset"]:
-                self.__load_next_round_lr(cur_round + 1, hyper)
+                self.__load_next_round_lr(round_num + 1, hyper)
 
         # draw avg loss of all trained patients
-        self._plot_loss_fig(idl_gtvt_folder)
+        self._plot_loss_fig(idl_gtvt_dir)
 
     def plot_loss_fig(self, idl_gtvt_id: str):
-        for i in Explorer.walk_sub_folders(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
+        for i in Explorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
             if i.endswith(idl_gtvt_id):
-                idl_gtvt_folder = i
+                idl_gtvt_dir = i
                 break
-        self._plot_loss_fig(idl_gtvt_folder)
+        self._plot_loss_fig(idl_gtvt_dir)
 
-    def _plot_loss_fig(self, idl_gtvt_folder: str):
+    def _plot_loss_fig(self, idl_gtvt_dir: str):
         # avg loss dict
         avg_loss = Dict()
-        for cur_patient_folder in Explorer.get_sub_folders(
-            os.path.join(idl_gtvt_folder, "patients"), return_full_path=True
+        for patient_dir in Explorer.get_sub_folders(
+            os.path.join(idl_gtvt_dir, "patients"), return_full_path=True
         ):
-            cur_patient_loss = Json.load(os.path.join(cur_patient_folder, "loss.json"))
+            cur_patient_loss = Json.load(os.path.join(patient_dir, "loss.json"))
             if avg_loss == {}:
                 for i in cur_patient_loss:
                     avg_loss[i] = [cur_patient_loss[i]]
@@ -750,7 +732,7 @@ class IDLGTVtTraining(Training):
         plt.figure().clear()
         plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
         plt.legend()
-        plt.savefig(os.path.join(idl_gtvt_folder, "loss.png"))
+        plt.savefig(os.path.join(idl_gtvt_dir, "loss.png"))
 
     def simulation(
         self,
@@ -760,13 +742,13 @@ class IDLGTVtTraining(Training):
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        for cur_hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
+        for hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
 
             idl_gtvt_id = "idl_gtvt_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
                 hyper_json_path=g.HYPER_JSON_PATH_IDL_GTVT,
-                hyper=cur_hyper,
+                hyper=hyper,
             )
             print("")
             print(idl_gtvt_id)
@@ -775,8 +757,8 @@ class IDLGTVtTraining(Training):
             if baseline_fold is None or baseline_fold <= 0:
                 key_word = "fold="
             else:
-                key_word = "fold={:02d}".format(baseline_fold)
-            baseline_fold_folder = Explorer.get_sub_folders(
+                key_word = "fold={}".format(baseline_fold)
+            baseline_fold_dir = Explorer.get_sub_folders(
                 os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
                 key_word=key_word,
                 return_full_path=True,
@@ -787,82 +769,73 @@ class IDLGTVtTraining(Training):
                 key_word = "epoch="
             else:
                 key_word = "epoch={:03d}".format(baseline_epoch)
-            baseline_epoch_folder = Explorer.get_sub_folders(
-                baseline_fold_folder, key_word=key_word, return_full_path=True
+            baseline_epoch_dir = Explorer.get_sub_folders(
+                baseline_fold_dir, key_word=key_word, return_full_path=True
             )[0]
             baseline_cnn_path = Explorer.get_sub_files(
-                os.path.join(baseline_epoch_folder, "baseline"),
+                os.path.join(baseline_epoch_dir, "baseline"),
                 key_word=".pt",
                 return_full_path=True,
             )[0]
 
             # load and print hyper
             self._load_hyper(
-                hyper=cur_hyper,
+                hyper=hyper,
                 baseline_cnn_path=baseline_cnn_path,
                 debug_mode=debug_mode,
             )
             print("")
-            self._print_hyper(cur_hyper)
+            self._print_hyper(hyper)
 
-            # create idl result folder
-            idl_gtvt_folder = os.path.join(
-                baseline_epoch_folder, "idl_gtvt", idl_gtvt_id
-            )
-            Folder.create(idl_gtvt_folder)
+            # create idl result dir
+            idl_gtvt_dir = os.path.join(baseline_epoch_dir, "idl_gtvt", idl_gtvt_id)
+            Folder.create(idl_gtvt_dir)
 
             # save hyper before training
-            hyper_save_path = os.path.join(idl_gtvt_folder, "hyper.json")
-            self._save_hyper(cur_hyper, hyper_save_path)
+            hyper_save_path = os.path.join(idl_gtvt_dir, "hyper.json")
+            self._save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            Json.save(Dict(), os.path.join(idl_gtvt_folder, "score.json"))
+            Json.save(Dict(), os.path.join(idl_gtvt_dir, "inference.json"))
 
             # training start time
-            cur_hyper["time.spent.total"] = datetime.now()
+            hyper["time.spent.total"] = datetime.now()
 
-            # patient loop
-            for cur_patient in cur_hyper["patients"]:
-                self.__training_cur_patient(
-                    patient=cur_patient,
-                    hyper=cur_hyper,
-                    baseline_epoch_folder=baseline_epoch_folder,
-                    idl_gtvt_folder=idl_gtvt_folder,
+            # loop through each patient
+            for patient in hyper["patients"]:
+                self.__training_patient(
+                    patient=patient,
+                    hyper=hyper,
+                    baseline_epoch_dir=baseline_epoch_dir,
+                    idl_gtvt_dir=idl_gtvt_dir,
                 )
 
                 # reset cnn/optimizer/scheduler before next patient
-                if cur_patient != cur_hyper["patients"][-1]:
-                    self.__reset_cnn(
-                        hyper=cur_hyper, baseline_cnn_path=baseline_cnn_path
-                    )
+                if patient != hyper["patients"][-1]:
+                    self.__reset_cnn(hyper=hyper, baseline_cnn_path=baseline_cnn_path)
 
             # record total time spent
-            cur_hyper["time.spent.total"] = (
-                datetime.now() - cur_hyper["time.spent.total"]
-            )
-            cur_hyper["time.spent.total"] = str(cur_hyper["time.spent.total"]).split(
-                ".", 2
-            )[0]
+            hyper["time.spent.total"] = datetime.now() - hyper["time.spent.total"]
+            hyper["time.spent.total"] = str(hyper["time.spent.total"]).split(".", 2)[0]
 
             # record avg time spent per patient
-            for cur_key in cur_hyper:
-                if "time.spent.avg" in cur_key:
-                    cur_hyper[cur_key] /= len(cur_hyper["patients"])
-                    cur_hyper[cur_key] = str(cur_hyper[cur_key]).split(".", 2)[0]
+            for key_name in hyper:
+                if "time.spent.round" in key_name:
+                    hyper[key_name] /= len(hyper["patients"])
+                    hyper[key_name] = str(hyper[key_name]).split(".", 2)[0]
 
-            self._save_hyper(cur_hyper, hyper_save_path)
-
-            self.__calculate_median_score(idl_gtvt_folder)
+            self._save_hyper(hyper, hyper_save_path)
+            self.__calculate_median_score(idl_gtvt_dir)
 
     def calculate_median_score(self, idl_gtvt_id):
-        idl_gtvt_folder = self._find_result_dir(idl_gtvt_id)
-        if idl_gtvt_folder is None:
+        idl_gtvt_dir = self._find_result_dir(idl_gtvt_id)
+        if idl_gtvt_dir is None:
             print("idl_gtvt_id not found")
             return
-        self.__calculate_median_score(idl_gtvt_folder)
+        self.__calculate_median_score(idl_gtvt_dir)
 
-    def __calculate_median_score(self, idl_gtvt_folder: str):
-        score_json_path = os.path.join(idl_gtvt_folder, "score.json")
+    def __calculate_median_score(self, idl_gtvt_dir: str):
+        score_json_path = os.path.join(idl_gtvt_dir, "inference.json")
         score = Json.load(score_json_path)
         median = Dict()
 
@@ -871,16 +844,16 @@ class IDLGTVtTraining(Training):
             if patient == "median":
                 continue
             for metric in g.METRICS:
-                for cur_round in score[patient][metric]:
-                    if median[metric][cur_round] == {}:
-                        median[metric][cur_round] = List()
-                    median[metric][cur_round].append(score[patient][metric][cur_round])
+                for round_num in score[patient][metric]:
+                    if median[metric][round_num] == {}:
+                        median[metric][round_num] = List()
+                    median[metric][round_num].append(score[patient][metric][round_num])
 
         # calculate median score
         for metric in g.METRICS:
-            for cur_round in median[metric]:
-                score["median"][metric][cur_round] = statistics.median(
-                    median[metric][cur_round]
+            for round_num in median[metric]:
+                score["median"][metric][round_num] = statistics.median(
+                    median[metric][round_num]
                 )
         Json.save(data=score, path=os.path.join(score_json_path))
 
@@ -889,14 +862,14 @@ class IDLGTVtTraining(Training):
         print("inference: {}".format(idl_gtvt_id))
 
         # find idl gtvt folder
-        idl_gtvt_folder = self._find_result_dir(idl_gtvt_id)
-        if idl_gtvt_folder is None:
+        idl_gtvt_dir = self._find_result_dir(idl_gtvt_id)
+        if idl_gtvt_dir is None:
             print("idl_gtvt_id not found")
             return
 
         # loop through patients folder
         patient_list = Explorer.get_sub_folders(
-            os.path.join(idl_gtvt_folder, "patients"),
+            os.path.join(idl_gtvt_dir, "patients"),
             key_word="patient=",
         )
         if debug_mode:
@@ -907,40 +880,38 @@ class IDLGTVtTraining(Training):
             patient_list = ["patient=239", "patient=260", "patient=313", "patient=180"]
 
         # copy baseline score
-        baseline_score_json = os.path.join(
-            Path(idl_gtvt_folder).parent.parent, "baseline", "score_test.json"
+        baseline_score = Json.load(
+            os.path.join(
+                Path(idl_gtvt_dir).parent.parent, "baseline", "inference_test.json"
+            )
         )
-        baseline_score = Json.load(baseline_score_json)
-        idl_gtvt_score_path = os.path.join(idl_gtvt_folder, "score.json")
+        idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference.json")
         if os.path.exists(idl_gtvt_score_path):
             idl_gtvt_score = Json.load(idl_gtvt_score_path)
         else:
             idl_gtvt_score = Dict()
-        for cur_patient in patient_list:
+        for patient in patient_list:
             for metric in g.METRICS:
-                idl_gtvt_score[cur_patient][metric]["round=00"] = baseline_score[
-                    cur_patient
-                ]["gtvt"][metric]
+                idl_gtvt_score[patient][metric]["round=00"] = baseline_score[patient][
+                    "gtvt"
+                ][metric]
         Json.save(idl_gtvt_score, idl_gtvt_score_path)
 
         # loop through each patient
-        for cur_patient in tqdm(patient_list):
-            cur_patient_folder = os.path.join(idl_gtvt_folder, "patients", cur_patient)
+        for patient in tqdm(patient_list):
+            patient_dir = os.path.join(idl_gtvt_dir, "patients", patient)
 
             # loop through each round
-            for cur_round_folder in Explorer.get_sub_folders(
-                cur_patient_folder, key_word="round=", return_full_path=True
+            for round_dir in Explorer.get_sub_folders(
+                patient_dir, key_word="round=", return_full_path=True
             ):
                 # load current round cnn
-                cur_round_cnn_path = Explorer.get_sub_files(
-                    cur_round_folder, key_word=".pt", return_full_path=True
-                )
-                cur_round_cnn_path = cur_round_cnn_path[0]
+                cnn_path = Explorer.get_sub_files(
+                    round_dir, key_word=".pt", return_full_path=True
+                )[0]
                 hyper = Dict()
-                self._load_cnn(hyper=hyper, cnn_path=cur_round_cnn_path)
+                self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
-                self.__inference_cur_round(
-                    cur_round_folder=cur_round_folder, hyper=hyper
-                )
+                self.__inference_round(round_dir=round_dir, hyper=hyper)
 
-        self.__calculate_median_score(idl_gtvt_folder)
+        self.__calculate_median_score(idl_gtvt_dir)
