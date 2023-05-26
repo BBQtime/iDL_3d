@@ -12,6 +12,7 @@ from custom import Nii
 from custom import Img
 from scipy.ndimage import measurements
 from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import binary_dilation
 
 
 class IDLGTVnDataSet(torch.utils.data.Dataset):
@@ -61,7 +62,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 
     # must be overrided
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        # origin images
+        # origin images dict
         self.__origin = Dict()
 
         # load pred
@@ -75,54 +76,14 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
             ),
             binary=False,
         )
+
         # load label
         self.__origin["label"] = Nii.load(
             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
             binary=True,
         )
-        # # load pt
-        # self.__origin["pt"] = Nii.load(
-        #     os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
-        # )
-        # simulate click
-        self.__origin["clicks"] = np.zeros(
-            self.__origin["label"].shape, dtype=np.float32
-        )
-        # loop through each connected components
-        # cc_count = 1
-        for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
-            if self.__random_click:
-                # random point (d,h,w)
-                pos = Img.find_random_point(cur_gtvn_cc)
-            else:
-                # gravity center: (d,h,w)
-                pos = list(measurements.center_of_mass(cur_gtvn_cc))
-                # float to int
-                for i in range(len(pos)):
-                    pos[i] = round(pos[i])
-            self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
 
-            # # debug save img
-            # cur_click_nii = np.zeros_like(self.__origin["clicks"])
-            # cur_click_nii[pos[0]][pos[1]][pos[2]] = 1
-            # Nii.save(
-            #     cur_gtvn_cc,
-            #     os.path.join(g.PROJ_PATH, "debug", "cur_cc_{}.nii".format(cc_count)),
-            # )
-            # Nii.save(
-            #     cur_click_nii,
-            #     os.path.join(g.PROJ_PATH, "debug", "cur_click_{}.nii".format(cc_count)),
-            # )
-            # print(cc_count)
-            # cc_count += 1
-
-        # # distance map
-        # if np.sum(self.__origin["label"]) > 0:
-        #     self.__origin["clicks"] = distance_transform_edt(
-        #         np.logical_not(self.__origin["clicks"])
-        #     ).astype(np.float32)
-        #     self.__origin["clicks"] = np.exp(-self.__origin["clicks"])
-
+        # find augment seed
         final = Dict()
         tmp = Dict()
 
@@ -176,14 +137,84 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final["label"]], dim=0)
 
-        # pred + click + pt
+        # simulate click
+        self.__origin["clicks"] = np.zeros(
+            self.__origin["label"].shape, dtype=np.float32
+        )
+        # loop through each connected components
+        # cc_count = 1
+        for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
+            if self.__random_click:
+                # random point (d,h,w)
+                pos = Img.find_random_point(cur_gtvn_cc)
+            else:
+                # gravity center: (d,h,w)
+                pos = list(measurements.center_of_mass(cur_gtvn_cc))
+                # float to int
+                for i in range(len(pos)):
+                    pos[i] = round(pos[i])
+            self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
+
+        # dilation
+        if 0:
+            # Nii.save(
+            #     self.__origin["clicks"],
+            #     os.path.join(g.PROJ_PATH, "debug", "before_dilation.nii"),
+            # )
+            structure = np.ones((5, 5, 5), dtype=np.float32)
+            self.__origin["clicks"] = binary_dilation(
+                self.__origin["clicks"], structure
+            ).astype(np.float32)
+            # Nii.save(
+            #     self.__origin["clicks"],
+            #     os.path.join(g.PROJ_PATH, "debug", "after_dilation.nii"),
+            # )
+
+        # # debug save img
+        # cur_click_nii = np.zeros_like(self.__origin["clicks"])
+        # cur_click_nii[pos[0]][pos[1]][pos[2]] = 1
+        # Nii.save(
+        #     cur_gtvn_cc,
+        #     os.path.join(g.PROJ_PATH, "debug", "cur_cc_{}.nii".format(cc_count)),
+        # )
+        # Nii.save(
+        #     cur_click_nii,
+        #     os.path.join(g.PROJ_PATH, "debug", "cur_click_{}.nii".format(cc_count)),
+        # )
+        # print(cc_count)
+        # cc_count += 1
+
+        # click to distance map
+        if 1:
+            if np.sum(self.__origin["label"]) > 0:
+                self.__origin["clicks"] = distance_transform_edt(
+                    np.logical_not(self.__origin["clicks"])
+                ).astype(np.float32)
+                self.__origin["clicks"] = np.exp(-0.1 * self.__origin["clicks"])
+
         input_imgs = None
-        for i in ["pred", "clicks"]:  # , "pt"]:
+
+        # pred + click
+        for i in ["clicks"]:  # ["pred", "clicks"]:
             final[i] = self.__preprocess(self.__origin[i], final["seed"])
             if input_imgs is None:
                 input_imgs = final[i]
             else:
                 input_imgs = torch.cat([input_imgs, final[i]], dim=0)
+
+        # load ct/pt/mr1/mr2
+        for i in ["CT", "PT", "T1dr", "T2dr"]:
+            img_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_{}.nii".format(patient, i))
+            img = Nii.load(img_path)
+
+            # ct windowing before normalization
+            if i == "CT":
+                img = Img.ct_windowing(img)
+
+            img = self.__preprocess(img, final["seed"])
+
+            # concat multi-model img
+            input_imgs = torch.cat([input_imgs, img], dim=0)
 
         return input_imgs, labels
 
@@ -206,7 +237,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 # baseline_epoch_dir = os.path.join(
 #     g.TRAIN_RESULTS_DIR,
 #     "baseline_2023.02.27.07.08.09_loss.gamma=0.5",
-#     "fold=01",
+#     "fold=1",
 #     "epoch=205",
 # )
 # # augment_methods =

@@ -91,11 +91,15 @@ class UNetSlim(nn.Module):
         for i in range(4):
             self.__unfreeze_layer(self.pool[i])
 
-    def __init__(self, in_chan: int, out_chan: int, dropout: float = 0):
+    def __init__(
+        self,
+        in_chan: int,
+        out_chan: int,
+        edge_chan: int = 16,  # make it 64 for origin UNet
+        dropout: float = 0,
+    ):
         super().__init__()
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-
-        unet_chan = [16, 32, 64, 128, 256]
 
         # vgg blocks
         self.vgg = nn.ModuleDict()
@@ -103,20 +107,20 @@ class UNetSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.vgg[str(i)] = nn.ModuleDict()
 
-        self.vgg["0"]["0"] = VGGBlock(in_chan, unet_chan[0])
-        self.vgg["1"]["0"] = VGGBlock(unet_chan[0], unet_chan[1])
-        self.vgg["2"]["0"] = VGGBlock(unet_chan[1], unet_chan[2], dropout)
-        self.vgg["3"]["0"] = VGGBlock(unet_chan[2], unet_chan[3], dropout)
-        self.vgg["4"]["0"] = VGGBlock(unet_chan[3], unet_chan[4], dropout)
+        self.vgg["0"]["0"] = VGGBlock(in_chan, edge_chan)
+        self.vgg["1"]["0"] = VGGBlock(edge_chan, edge_chan * 2)
+        self.vgg["2"]["0"] = VGGBlock(edge_chan * 2, edge_chan * 4, dropout)
+        self.vgg["3"]["0"] = VGGBlock(edge_chan * 4, edge_chan * 8, dropout)
+        self.vgg["4"]["0"] = VGGBlock(edge_chan * 8, edge_chan * 16, dropout)
 
         self.vgg["3"]["1"] = VGGBlock(
-            unet_chan[3] + unet_chan[4], unet_chan[3], dropout
+            edge_chan * 8 + edge_chan * 16, edge_chan * 8, dropout
         )
         self.vgg["2"]["2"] = VGGBlock(
-            unet_chan[2] + unet_chan[3], unet_chan[2], dropout
+            edge_chan * 4 + edge_chan * 8, edge_chan * 4, dropout
         )
-        self.vgg["1"]["3"] = VGGBlock(unet_chan[1] + unet_chan[2], unet_chan[1])
-        self.vgg["0"]["4"] = VGGBlock(unet_chan[0] + unet_chan[1], unet_chan[0])
+        self.vgg["1"]["3"] = VGGBlock(edge_chan * 2 + edge_chan * 4, edge_chan * 2)
+        self.vgg["0"]["4"] = VGGBlock(edge_chan + edge_chan * 2, edge_chan)
 
         # upsample layers
         self.up = nn.ModuleDict()
@@ -124,11 +128,11 @@ class UNetSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        self.up["4"]["0"] = nn.ConvTranspose3d(unet_chan[4], unet_chan[4], 2, 2)
-        self.up["3"]["1"] = nn.ConvTranspose3d(unet_chan[3], unet_chan[3], 2, 2)
-        self.up["2"]["2"] = nn.ConvTranspose3d(unet_chan[2], unet_chan[2], 2, 2)
+        self.up["4"]["0"] = nn.ConvTranspose3d(edge_chan * 16, edge_chan * 16, 2, 2)
+        self.up["3"]["1"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)
+        self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan * 4, edge_chan * 4, 2, 2)
         self.up["1"]["3"] = nn.ConvTranspose3d(
-            unet_chan[1], unet_chan[1], (1, 2, 2), (1, 2, 2)
+            edge_chan * 2, edge_chan * 2, (1, 2, 2), (1, 2, 2)
         )
 
         # pooling layers
@@ -140,7 +144,7 @@ class UNetSlim(nn.Module):
         self.pool["3"] = nn.MaxPool3d(kernel_size=2, stride=2)
 
         # final layer
-        self.final = nn.Conv3d(unet_chan[0], out_chan, kernel_size=1, stride=1)
+        self.final = nn.Conv3d(edge_chan, out_chan, kernel_size=1, stride=1)
         if out_chan == 1:
             self.final = nn.Sequential(self.final, nn.Sigmoid())
         else:
@@ -182,27 +186,27 @@ class UNetSlim(nn.Module):
         return output
 
 
-# # for testing
-# if 1:
-#     img_size = 256
-#     img_depth = 72
-#     batch_size = 4
-#     in_chan = 6
-#     out_chan = 2
+# for testing
+if 0:
+    img_size = 256
+    img_depth = 72
+    batch_size = 2
+    in_chan = 5
+    out_chan = 2
 
-#     cnn = UNetPPSlim(in_chan, out_chan)
-#     if GPU.used_count() > 1:
-#         cnn = nn.DataParallel(cnn)
-#     cnn = cnn.to(g.DEVICE)
+    cnn = UNetSlim(in_chan, out_chan)
+    if GPU.used_count() > 1:
+        cnn = nn.DataParallel(cnn)
+    cnn = cnn.to(g.DEVICE)
 
-#     input_data = torch.rand(
-#         batch_size,
-#         in_chan,
-#         img_depth,
-#         img_size,
-#         img_size,
-#     ).to(g.DEVICE)
+    input_data = torch.rand(
+        batch_size,
+        in_chan,
+        img_depth,
+        img_size,
+        img_size,
+    ).to(g.DEVICE)
 
-#     print(input_data.shape)
-#     output_data = cnn.forward(input_data)
-#     print(output_data.shape)
+    print(input_data.shape)
+    output_data = cnn.forward(input_data)
+    print(output_data.shape)

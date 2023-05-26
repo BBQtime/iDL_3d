@@ -102,12 +102,19 @@ class Training:
                 hyper["cnn"] = hyper["cnn"].module
 
             if hyper["cnn"] == "unet.pp.slim" or isinstance(hyper["cnn"], UNetPPSlim):
+                if hyper["train.type"] == "baseline":
+                    in_chan = 4
+                    out_chan = 3
+                else:
+                    in_chan = 5
+                    out_chan = 2
                 hyper["cnn"] = UNetPPSlim(
-                    in_chan=4, out_chan=3, dropout=hyper["dropout"]
+                    in_chan=in_chan, out_chan=out_chan, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
+
             elif hyper["cnn"] == "unet.slim" or isinstance(hyper["cnn"], UNetSlim):
                 hyper["cnn"] = UNetSlim(
-                    in_chan=2, out_chan=2, dropout=hyper["dropout"]
+                    in_chan=5, out_chan=2, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
 
         # existing model

@@ -37,7 +37,11 @@ class IDLGTVnTraining(BaselineTraining):
         )
 
     def remove_non_optimal_epochs(
-        self, baseline_id: str, baseline_fold: int = None, baseline_epoch: int = None
+        self,
+        baseline_id: str,
+        baseline_fold: int = None,
+        baseline_epoch: int = None,
+        dataset: str = "valid",
     ):
         # find baseline fold dir
         if baseline_fold is None or baseline_fold <= 0:
@@ -67,4 +71,7 @@ class IDLGTVnTraining(BaselineTraining):
             print("baseline epoch dir not exists")
             return
 
-        self._remove_non_optimal_epochs(os.path.join(baseline_epoch_dir, "idl_gtvn"))
+        self._remove_non_optimal_epochs(
+            train_results_dir=os.path.join(baseline_epoch_dir, "idl_gtvn"),
+            dataset=dataset,
+        )

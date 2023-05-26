@@ -49,7 +49,6 @@ class BaselineTraining(Training):
         self,
         hyper: Dict,
         fold: int,
-        train_type: str = "baseline",
         baseline_epoch_dir: str = None,  # this is only for idl.gtvn
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
@@ -105,7 +104,7 @@ class BaselineTraining(Training):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-            train_type=train_type,
+            train_type=hyper["train.type"],
         ).to(g.DEVICE)
 
         # load patients
@@ -122,7 +121,7 @@ class BaselineTraining(Training):
         augment["min"] = hyper["augment.min"]
         augment["max"] = hyper["augment.max"]
 
-        if train_type == "baseline":
+        if hyper["train.type"] == "baseline":
             train_set = BaselineDataSet(patients=train_patients, augment=augment)
             valid_set = BaselineDataSet(patients=valid_patients)
             test_set = BaselineDataSet(patients=test_patients)
@@ -131,7 +130,8 @@ class BaselineTraining(Training):
                 patients=train_patients,
                 baseline_epoch_dir=baseline_epoch_dir,
                 augment=augment,
-                random_click=True,
+                random_click=False,
+                # random_click=True,
             )
             valid_set = IDLGTVnDataSet(
                 patients=valid_patients,
@@ -230,7 +230,7 @@ class BaselineTraining(Training):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def _training(self, hyper: Dict, fold_dir: str, train_type: str):
+    def _training(self, hyper: Dict, fold_dir: str):
         best_loss_dict = Dict()
         loss_json_path = os.path.join(fold_dir, "train_info", "loss.json")
         lr_json_path = os.path.join(fold_dir, "train_info", "lr.json")
@@ -298,7 +298,7 @@ class BaselineTraining(Training):
             if len(best_loss_dict) < hyper["keep.best.cnn.num"]:
                 best_loss_dict[epoch] = valid_loss
                 epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                if train_type == "baseline":
+                if hyper["train.type"] == "baseline":
                     cnn_save_dir = os.path.join(epoch_dir, "baseline")
                 else:
                     cnn_save_dir = epoch_dir
@@ -317,7 +317,7 @@ class BaselineTraining(Training):
                     best_loss_dict.pop(worst_epoch)
                     best_loss_dict[epoch] = valid_loss
                     epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                    if train_type == "baseline":
+                    if hyper["train.type"] == "baseline":
                         cnn_save_dir = os.path.join(epoch_dir, "baseline")
                     else:
                         cnn_save_dir = epoch_dir
@@ -360,7 +360,10 @@ class BaselineTraining(Training):
 
         for hyper in self._load_hyper_sets_from_json(hyper_json_path):
 
-            train_id = train_type + "_"
+            # add training type into hyper
+            hyper["train.type"] = train_type
+
+            train_id = hyper["train.type"] + "_"
             train_id += self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=hyper_json_path,
@@ -371,7 +374,7 @@ class BaselineTraining(Training):
             print(train_id)
 
             # find baseline fold dir
-            if train_type == "idl_gtvn":
+            if hyper["train.type"] == "idl_gtvn":
                 if baseline_fold is None or baseline_fold <= 0:
                     key_word = "fold="
                 else:
@@ -393,7 +396,7 @@ class BaselineTraining(Training):
                 baseline_epoch_dir = None
 
             # create train result dir
-            if train_type == "baseline":
+            if hyper["train.type"] == "baseline":
                 train_result_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id)
             else:
                 train_result_dir = os.path.join(
@@ -420,7 +423,6 @@ class BaselineTraining(Training):
                 self._load_hyper(
                     hyper=hyper,
                     fold=fold,
-                    train_type=train_type,
                     baseline_epoch_dir=baseline_epoch_dir,
                     debug_mode=debug_mode,
                 )
@@ -443,7 +445,7 @@ class BaselineTraining(Training):
 
                 # start training
                 hyper["time.spent"] = datetime.now()
-                self._training(hyper, fold_dir, train_type=train_type)
+                self._training(hyper, fold_dir)
                 hyper["time.spent"] = datetime.now() - hyper["time.spent"]
                 hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
@@ -458,11 +460,12 @@ class BaselineTraining(Training):
                     break
 
             # inference (valid set first)
-            self._inference(
-                train_id=train_id,
-                dataset="valid",
-                debug_mode=debug_mode,
-            )
+            for dataset in ["valid", "test"]:
+                self._inference(
+                    train_id=train_id,
+                    dataset=dataset,
+                    debug_mode=debug_mode,
+                )
 
     def inference(
         self,
@@ -631,7 +634,7 @@ class BaselineTraining(Training):
                             # save clicks.nii
                             Nii.save(
                                 img=patient_results["gtvn"]["clicks"],
-                                path=os.path.join(patient_dir, "clicks.nii"),
+                                path=os.path.join(patient_dir, "distance_map.nii"),
                                 spacing=g.NII_SPACING,
                             )
                         else:
@@ -716,12 +719,17 @@ class BaselineTraining(Training):
                     )
                     continue  # next epoch dir
 
-    def remove_non_optimal_epochs(self):
-        self._remove_non_optimal_epochs(g.TRAIN_RESULTS_DIR)
+    def remove_non_optimal_epochs(self, dataset: str = "valid"):
+        self._remove_non_optimal_epochs(
+            train_results_dir=g.TRAIN_RESULTS_DIR, dataset=dataset
+        )
 
-    def _remove_non_optimal_epochs(self, train_results_dir: str):
+    def _remove_non_optimal_epochs(self, train_results_dir: str, dataset: str):
         # record top median scores through each fold and epoch
         top_scores_set = Dict()
+
+        if dataset != "valid":
+            dataset = "test"
 
         if train_results_dir == g.TRAIN_RESULTS_DIR:
             key_word = "baseline_"
@@ -747,12 +755,19 @@ class BaselineTraining(Training):
                     # if baseline
                     if train_results_dir == g.TRAIN_RESULTS_DIR:
                         epoch_scores = Json.load(
-                            os.path.join(epoch_dir, "baseline", "inference_valid.json")
+                            os.path.join(
+                                epoch_dir,
+                                "baseline",
+                                "inference_{}.json".format(dataset),
+                            )
                         )["median"]["gtvs"]
                     else:
                         epoch_scores = Json.load(
-                            os.path.join(epoch_dir, "inference_valid.json")
+                            os.path.join(epoch_dir, "inference_{}.json".format(dataset))
                         )["median"]
+                        if dataset == "test":
+                            for metric in g.METRICS:
+                                epoch_scores[metric] = epoch_scores[metric]["round=01"]
 
                     # delete nan msd/hd95 results
                     if math.isnan(epoch_scores["msd"]) or math.isnan(

@@ -2,6 +2,7 @@ from custom import Global as g
 import torch
 import torch.nn as nn
 from torch import Tensor
+from custom import GPU
 
 
 class VGGBlock(nn.Module):
@@ -90,12 +91,16 @@ class UNetPPSlim(nn.Module):
         for i in range(4):
             self.__unfreeze_layer(self.pool[i])
 
-    def __init__(self, in_chan: int, out_chan: int, dropout: float = 0):
+    def __init__(
+        self,
+        in_chan: int,
+        out_chan: int,
+        edge_chan: int = 16,
+        skip_chan: int = 8,
+        dropout: float = 0,
+    ):
         super().__init__()
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-
-        unet_chan = [16, 32, 64, 128, 256]
-        skip_chan = 8
 
         # vgg blocks
         self.vgg = nn.ModuleDict()
@@ -103,32 +108,32 @@ class UNetPPSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.vgg[str(i)] = nn.ModuleDict()
 
-        self.vgg["0"]["0"] = VGGBlock(in_chan, unet_chan[0])
-        self.vgg["1"]["0"] = VGGBlock(unet_chan[0], unet_chan[1])
-        self.vgg["2"]["0"] = VGGBlock(unet_chan[1], unet_chan[2], dropout)
-        self.vgg["3"]["0"] = VGGBlock(unet_chan[2], unet_chan[3], dropout)
-        self.vgg["4"]["0"] = VGGBlock(unet_chan[3], unet_chan[4], dropout)
+        self.vgg["0"]["0"] = VGGBlock(in_chan, edge_chan)
+        self.vgg["1"]["0"] = VGGBlock(edge_chan, edge_chan * 2)
+        self.vgg["2"]["0"] = VGGBlock(edge_chan * 2, edge_chan * 4, dropout)
+        self.vgg["3"]["0"] = VGGBlock(edge_chan * 4, edge_chan * 8, dropout)
+        self.vgg["4"]["0"] = VGGBlock(edge_chan * 8, edge_chan * 16, dropout)
 
-        self.vgg["0"]["1"] = VGGBlock(unet_chan[0] + unet_chan[1], skip_chan)
-        self.vgg["1"]["1"] = VGGBlock(unet_chan[1] + unet_chan[2], skip_chan)
-        self.vgg["2"]["1"] = VGGBlock(unet_chan[2] + unet_chan[3], skip_chan)
+        self.vgg["0"]["1"] = VGGBlock(edge_chan + edge_chan * 2, skip_chan)
+        self.vgg["1"]["1"] = VGGBlock(edge_chan * 2 + edge_chan * 4, skip_chan)
+        self.vgg["2"]["1"] = VGGBlock(edge_chan * 4 + edge_chan * 8, skip_chan)
         self.vgg["3"]["1"] = VGGBlock(
-            unet_chan[3] + unet_chan[4], unet_chan[3], dropout
+            edge_chan * 8 + edge_chan * 16, edge_chan * 8, dropout
         )
 
-        self.vgg["0"]["2"] = VGGBlock(unet_chan[0] + skip_chan * 2, skip_chan)
-        self.vgg["1"]["2"] = VGGBlock(unet_chan[1] + skip_chan * 2, skip_chan)
+        self.vgg["0"]["2"] = VGGBlock(edge_chan + skip_chan * 2, skip_chan)
+        self.vgg["1"]["2"] = VGGBlock(edge_chan * 2 + skip_chan * 2, skip_chan)
         self.vgg["2"]["2"] = VGGBlock(
-            unet_chan[2] + skip_chan + unet_chan[3], unet_chan[2], dropout
+            edge_chan * 4 + skip_chan + edge_chan * 8, edge_chan * 4, dropout
         )
 
-        self.vgg["0"]["3"] = VGGBlock(unet_chan[0] + skip_chan * 3, skip_chan)
+        self.vgg["0"]["3"] = VGGBlock(edge_chan + skip_chan * 3, skip_chan)
         self.vgg["1"]["3"] = VGGBlock(
-            unet_chan[1] + skip_chan * 2 + unet_chan[2], unet_chan[1]
+            edge_chan * 2 + skip_chan * 2 + edge_chan * 4, edge_chan * 2
         )
 
         self.vgg["0"]["4"] = VGGBlock(
-            unet_chan[0] + skip_chan * 3 + unet_chan[1], unet_chan[0]
+            edge_chan + skip_chan * 3 + edge_chan * 2, edge_chan
         )
 
         # upsample layers
@@ -137,17 +142,17 @@ class UNetPPSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        self.up["4"]["0"] = nn.ConvTranspose3d(unet_chan[4], unet_chan[4], 2, 2)
+        self.up["4"]["0"] = nn.ConvTranspose3d(edge_chan * 16, edge_chan * 16, 2, 2)
 
-        self.up["3"]["0"] = nn.ConvTranspose3d(unet_chan[3], unet_chan[3], 2, 2)
-        self.up["3"]["1"] = nn.ConvTranspose3d(unet_chan[3], unet_chan[3], 2, 2)
+        self.up["3"]["0"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)
+        self.up["3"]["1"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)
 
-        self.up["2"]["0"] = nn.ConvTranspose3d(unet_chan[2], unet_chan[2], 2, 2)
+        self.up["2"]["0"] = nn.ConvTranspose3d(edge_chan * 4, edge_chan * 4, 2, 2)
         self.up["2"]["1"] = nn.ConvTranspose3d(skip_chan, skip_chan, 2, 2)
-        self.up["2"]["2"] = nn.ConvTranspose3d(unet_chan[2], unet_chan[2], 2, 2)
+        self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan * 4, edge_chan * 4, 2, 2)
 
         self.up["1"]["0"] = nn.ConvTranspose3d(
-            unet_chan[1], unet_chan[1], (1, 2, 2), (1, 2, 2)
+            edge_chan * 2, edge_chan * 2, (1, 2, 2), (1, 2, 2)
         )
         self.up["1"]["1"] = nn.ConvTranspose3d(
             skip_chan, skip_chan, (1, 2, 2), (1, 2, 2)
@@ -156,7 +161,7 @@ class UNetPPSlim(nn.Module):
             skip_chan, skip_chan, (1, 2, 2), (1, 2, 2)
         )
         self.up["1"]["3"] = nn.ConvTranspose3d(
-            unet_chan[1], unet_chan[1], (1, 2, 2), (1, 2, 2)
+            edge_chan * 2, edge_chan * 2, (1, 2, 2), (1, 2, 2)
         )
 
         # pooling layers
@@ -172,7 +177,7 @@ class UNetPPSlim(nn.Module):
         self.final["0"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
         self.final["1"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
         self.final["2"] = nn.Conv3d(skip_chan, out_chan, kernel_size=1, stride=1)
-        self.final["3"] = nn.Conv3d(unet_chan[0], out_chan, kernel_size=1, stride=1)
+        self.final["3"] = nn.Conv3d(edge_chan, out_chan, kernel_size=1, stride=1)
         for i in range(0, 3 + 1):
             if out_chan == 1:
                 self.final["{}".format(i)] = nn.Sequential(
@@ -239,28 +244,27 @@ class UNetPPSlim(nn.Module):
             return output
 
 
-# # for testing
-# if 1:
-#     img_size = 256
-#     img_depth = 72
-#     batch_size = 4
-#     in_chan = 4
-#     out_chan = 3
+# for testing
+if 0:
+    img_size = 256
+    img_depth = 72
+    batch_size = 2
+    in_chan = 5
+    out_chan = 2
 
+    cnn = UNetPPSlim(in_chan, out_chan)
+    if GPU.used_count() > 1:
+        cnn = nn.DataParallel(cnn)
+    cnn = cnn.to(g.DEVICE)
 
-#     cnn = UNetPPSlim(in_chan, out_chan)
-#     if GPU.used_count() > 1:
-#         cnn = nn.DataParallel(cnn)
-#     cnn = cnn.to(g.DEVICE)
+    input_data = torch.rand(
+        batch_size,
+        in_chan,
+        img_depth,
+        img_size,
+        img_size,
+    ).to(g.DEVICE)
 
-#     input_data = torch.rand(
-#         batch_size,
-#         in_chan,
-#         img_depth,
-#         img_size,
-#         img_size,
-#     ).to(g.DEVICE)
-
-#     print(input_data.shape)
-#     output_data = cnn.forward(input_data)
-#     print(output_data[3].shape)
+    print(input_data.shape)
+    output_data = cnn.forward(input_data)
+    print(output_data.shape)
