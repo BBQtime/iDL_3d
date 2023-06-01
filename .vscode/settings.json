@@ -13,5 +13,4 @@
     "python.analysis.extraPaths": [
         "./py_code"
     ],
-    "qtForPython.designer.path": "c:\\Users\\alan\\.conda\\envs\\pt\\Lib\\site-packages\\PySide6\\designer.exe",
 }

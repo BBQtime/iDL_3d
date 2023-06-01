@@ -719,74 +719,62 @@ class BaselineTraining(Training):
                     )
                     continue  # next epoch dir
 
-    def remove_non_optimal_epochs(self, dataset: str = "valid"):
-        self._remove_non_optimal_epochs(
-            train_results_dir=g.TRAIN_RESULTS_DIR, dataset=dataset
-        )
+    def remove_non_optimal_epochs(self, baseline_id: str, dataset: str = "valid"):
+        self._remove_non_optimal_epochs(train_id=baseline_id, dataset=dataset)
 
-    def _remove_non_optimal_epochs(self, train_results_dir: str, dataset: str):
+    def _remove_non_optimal_epochs(self, train_id: str, dataset: str):
         # record top median scores through each fold and epoch
         top_scores_set = Dict()
 
         if dataset != "valid":
             dataset = "test"
 
-        if train_results_dir == g.TRAIN_RESULTS_DIR:
-            key_word = "baseline_"
-        else:
-            key_word = "idl_gtvn"
+        train_result_dir = self._find_result_dir(train_id)
 
-        for train_result_dir in Explorer.get_sub_folders(
-            train_results_dir, key_word=key_word, return_full_path=True
+        for fold_dir in Explorer.get_sub_folders(
+            train_result_dir, key_word="fold=", return_full_path=True
         ):
-            train_id = Path(train_result_dir).name
+            fold = Path(fold_dir).name
 
-            for fold_dir in Explorer.get_sub_folders(
-                train_result_dir, key_word="fold=", return_full_path=True
+            for epoch_dir in Explorer.get_sub_folders(
+                fold_dir, key_word="epoch=", return_full_path=True
             ):
-                fold = Path(fold_dir).name
+                epoch = Path(epoch_dir).name
 
-                for epoch_dir in Explorer.get_sub_folders(
-                    fold_dir, key_word="epoch=", return_full_path=True
-                ):
-                    epoch = Path(epoch_dir).name
-
-                    # load scores of current epoch
-                    # if baseline
-                    if train_results_dir == g.TRAIN_RESULTS_DIR:
-                        epoch_scores = Json.load(
-                            os.path.join(
-                                epoch_dir,
-                                "baseline",
-                                "inference_{}.json".format(dataset),
-                            )
-                        )["median"]["gtvs"]
-                    else:
-                        epoch_scores = Json.load(
-                            os.path.join(epoch_dir, "inference_{}.json".format(dataset))
-                        )["median"]
-                        if dataset == "test":
-                            for metric in g.METRICS:
-                                epoch_scores[metric] = epoch_scores[metric]["round=01"]
-
-                    # delete nan msd/hd95 results
-                    if math.isnan(epoch_scores["msd"]) or math.isnan(
-                        epoch_scores["hd95"]
-                    ):
-                        print("delete:", epoch_dir)
-                        Folder.delete(epoch_dir)
-                        continue  # goto next epoch dir
-
-                    # keep cur epoch scores if top scores set is empty
-                    if top_scores_set == {}:
-                        top_scores_set[train_id][fold][epoch] = epoch_scores
-                        continue  # goto next epoch dir
-                    else:
-                        top_scores_set = self.__walk_top_scores_set(
-                            top_scores_set=top_scores_set,
-                            epoch_scores=epoch_scores,
-                            epoch_dir=epoch_dir,
+                # load scores of current epoch
+                # if baseline
+                if "baseline_" in train_id:
+                    epoch_scores = Json.load(
+                        os.path.join(
+                            epoch_dir,
+                            "baseline",
+                            "inference_{}.json".format(dataset),
                         )
+                    )["median"]["gtvs"]
+                else:
+                    epoch_scores = Json.load(
+                        os.path.join(epoch_dir, "inference_{}.json".format(dataset))
+                    )["median"]
+                    if dataset == "test":
+                        for metric in g.METRICS:
+                            epoch_scores[metric] = epoch_scores[metric]["round=01"]
+
+                # delete nan msd/hd95 results
+                if math.isnan(epoch_scores["msd"]) or math.isnan(epoch_scores["hd95"]):
+                    print("delete:", epoch_dir)
+                    Folder.delete(epoch_dir)
+                    continue  # goto next epoch dir
+
+                # keep cur epoch scores if top scores set is empty
+                if top_scores_set == {}:
+                    top_scores_set[train_id][fold][epoch] = epoch_scores
+                    continue  # goto next epoch dir
+                else:
+                    top_scores_set = self.__walk_top_scores_set(
+                        top_scores_set=top_scores_set,
+                        epoch_scores=epoch_scores,
+                        epoch_dir=epoch_dir,
+                    )
 
     # a sub function of _remove_non_optimal_epochs()
     def __walk_top_scores_set(

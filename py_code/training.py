@@ -387,14 +387,14 @@ class Training:
 
         return group_hyper
 
-    def _find_result_dir(self, result_id: str) -> str:
-        # find result directory full path using result id
+    # find train result directory full path using train_id
+    def _find_result_dir(self, train_id: str) -> str:
         result_dir = None
-        for i in Explorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=result_id):
+        for i in Explorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=train_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
-            if i.endswith(result_id):
+            if i.endswith(train_id):
                 result_dir = i
                 break
         return result_dir

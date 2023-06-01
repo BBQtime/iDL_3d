@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>908</width>
-    <height>851</height>
+    <width>593</width>
+    <height>673</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,9 +17,9 @@
    <widget class="QLabel" name="_display_frame_ct">
     <property name="geometry">
      <rect>
-      <x>30</x>
-      <y>30</y>
-      <width>91</width>
+      <x>50</x>
+      <y>10</y>
+      <width>41</width>
       <height>81</height>
      </rect>
     </property>
@@ -30,9 +30,9 @@
    <widget class="QLabel" name="_display_frame_pt">
     <property name="geometry">
      <rect>
-      <x>170</x>
-      <y>40</y>
-      <width>101</width>
+      <x>150</x>
+      <y>20</y>
+      <width>81</width>
       <height>71</height>
      </rect>
     </property>
@@ -43,10 +43,10 @@
    <widget class="QLabel" name="_display_frame_mrt1">
     <property name="geometry">
      <rect>
-      <x>30</x>
-      <y>160</y>
-      <width>111</width>
-      <height>101</height>
+      <x>40</x>
+      <y>110</y>
+      <width>71</width>
+      <height>71</height>
      </rect>
     </property>
     <property name="text">
@@ -56,10 +56,10 @@
    <widget class="QLabel" name="_display_frame_mrt2">
     <property name="geometry">
      <rect>
-      <x>170</x>
-      <y>160</y>
-      <width>131</width>
-      <height>101</height>
+      <x>160</x>
+      <y>120</y>
+      <width>71</width>
+      <height>61</height>
      </rect>
     </property>
     <property name="text">
@@ -69,69 +69,69 @@
    <widget class="QLabel" name="_text_label_idl_gtvt">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>120</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>60</y>
+      <width>101</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Choose iDL GTVt</string>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_patient">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>330</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>160</y>
+      <width>91</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Choose Patient</string>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_round">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>430</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>210</y>
+      <width>87</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Choose Round</string>
     </property>
    </widget>
    <widget class="QComboBox" name="_combox_idl_gtvt">
     <property name="geometry">
      <rect>
-      <x>640</x>
-      <y>150</y>
+      <x>350</x>
+      <y>80</y>
       <width>141</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
    <widget class="QComboBox" name="_combox_patient">
     <property name="geometry">
      <rect>
-      <x>640</x>
-      <y>360</y>
+      <x>350</x>
+      <y>180</y>
       <width>141</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
    <widget class="QToolButton" name="_btn_prev_round">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>460</y>
+      <x>300</x>
+      <y>230</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -141,10 +141,10 @@
    <widget class="QToolButton" name="_btn_next_round">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>460</y>
+      <x>490</x>
+      <y>230</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -154,19 +154,19 @@
    <widget class="QComboBox" name="_combox_round">
     <property name="geometry">
      <rect>
-      <x>640</x>
-      <y>460</y>
+      <x>350</x>
+      <y>230</y>
       <width>141</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
    <widget class="QSlider" name="_slider_bright">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>690</y>
-      <width>160</width>
+      <x>300</x>
+      <y>320</y>
+      <width>241</width>
       <height>22</height>
      </rect>
     </property>
@@ -177,9 +177,9 @@
    <widget class="QSlider" name="_slider_contrast">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>750</y>
-      <width>160</width>
+      <x>300</x>
+      <y>370</y>
+      <width>241</width>
       <height>22</height>
      </rect>
     </property>
@@ -190,75 +190,36 @@
    <widget class="QLabel" name="_text_label_bright">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>670</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>300</y>
+      <width>64</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Brightness</string>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_contrast">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>730</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>350</y>
+      <width>52</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
-    </property>
-   </widget>
-   <widget class="QRadioButton" name="_radio_btn_transverse">
-    <property name="geometry">
-     <rect>
-      <x>590</x>
-      <y>560</y>
-      <width>86</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>RadioButton</string>
-    </property>
-   </widget>
-   <widget class="QRadioButton" name="_radio_btn_coronal">
-    <property name="geometry">
-     <rect>
-      <x>590</x>
-      <y>590</y>
-      <width>86</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>RadioButton</string>
-    </property>
-   </widget>
-   <widget class="QRadioButton" name="_radio_btn_sagittal">
-    <property name="geometry">
-     <rect>
-      <x>590</x>
-      <y>620</y>
-      <width>86</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>RadioButton</string>
+     <string>Contrast</string>
     </property>
    </widget>
    <widget class="QToolButton" name="_btn_next_idl_gtvn">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>260</y>
+      <x>490</x>
+      <y>130</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -268,33 +229,33 @@
    <widget class="QComboBox" name="_combox_idl_gtvn">
     <property name="geometry">
      <rect>
-      <x>640</x>
-      <y>260</y>
+      <x>350</x>
+      <y>130</y>
       <width>141</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_idl_gtvn">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>230</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>110</y>
+      <width>104</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Choose iDL GTVn</string>
     </property>
    </widget>
    <widget class="QToolButton" name="_btn_prev_idl_gtvn">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>260</y>
+      <x>300</x>
+      <y>130</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -304,10 +265,10 @@
    <widget class="QToolButton" name="_btn_prev_idl_gtvt">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>150</y>
+      <x>300</x>
+      <y>80</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -317,10 +278,10 @@
    <widget class="QToolButton" name="_btn_next_idl_gtvt">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>150</y>
+      <x>490</x>
+      <y>80</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -330,10 +291,10 @@
    <widget class="QToolButton" name="_btn_prev_patient">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>360</y>
+      <x>300</x>
+      <y>180</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -343,10 +304,10 @@
    <widget class="QToolButton" name="_btn_next_patient">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>360</y>
+      <x>490</x>
+      <y>180</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -356,10 +317,10 @@
    <widget class="QToolButton" name="_btn_prev_baseline">
     <property name="geometry">
      <rect>
-      <x>590</x>
-      <y>50</y>
+      <x>300</x>
+      <y>30</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -369,10 +330,10 @@
    <widget class="QToolButton" name="_btn_next_baseline">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>50</y>
+      <x>490</x>
+      <y>30</y>
       <width>51</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
     <property name="text">
@@ -382,57 +343,234 @@
    <widget class="QComboBox" name="_combox_baseline">
     <property name="geometry">
      <rect>
-      <x>640</x>
-      <y>50</y>
+      <x>350</x>
+      <y>30</y>
       <width>141</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_baseline">
     <property name="geometry">
      <rect>
-      <x>600</x>
-      <y>20</y>
-      <width>47</width>
-      <height>13</height>
+      <x>300</x>
+      <y>10</y>
+      <width>99</width>
+      <height>15</height>
      </rect>
     </property>
     <property name="text">
-     <string>TextLabel</string>
+     <string>Choose Baseline</string>
     </property>
    </widget>
-  </widget>
-  <widget class="QMenuBar" name="_menu_bar">
-   <property name="enabled">
-    <bool>true</bool>
-   </property>
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>908</width>
-     <height>22</height>
-    </rect>
-   </property>
-   <widget class="QMenu" name="_menu_choose_round">
-    <property name="title">
-     <string>Choose Update Round</string>
+   <widget class="QProgressBar" name="_progress_bar_idl_gtvt">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>610</y>
+      <width>241</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="value">
+     <number>24</number>
     </property>
    </widget>
-   <widget class="QMenu" name="_menu_choose_patient">
-    <property name="title">
-     <string>Choose Patient</string>
+   <widget class="QLabel" name="_text_label_idl_gtvt_progress">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>590</y>
+      <width>152</width>
+      <height>15</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>GTVt Retraining Progress</string>
     </property>
    </widget>
-   <widget class="QMenu" name="_menu_choose_idl_id">
-    <property name="title">
-     <string>Choose Training Result</string>
+   <widget class="QLabel" name="_text_label_annotation_tools">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>510</y>
+      <width>241</width>
+      <height>16</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Annotation Tools</string>
     </property>
    </widget>
-   <addaction name="_menu_choose_idl_id"/>
-   <addaction name="_menu_choose_patient"/>
-   <addaction name="_menu_choose_round"/>
+   <widget class="QPushButton" name="_btn_pen">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>540</y>
+      <width>51</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="icon">
+     <iconset>
+      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</iconset>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="_btn_eraser">
+    <property name="geometry">
+     <rect>
+      <x>360</x>
+      <y>540</y>
+      <width>51</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="icon">
+     <iconset>
+      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</iconset>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="_btn_clear">
+    <property name="geometry">
+     <rect>
+      <x>430</x>
+      <y>540</y>
+      <width>51</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="icon">
+     <iconset>
+      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</iconset>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="_btn_confirm">
+    <property name="geometry">
+     <rect>
+      <x>490</x>
+      <y>540</y>
+      <width>51</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="icon">
+     <iconset>
+      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</iconset>
+    </property>
+   </widget>
+   <widget class="QTextEdit" name="_text_box_annotation_msg">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>450</y>
+      <width>241</width>
+      <height>41</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_transverse">
+    <property name="geometry">
+     <rect>
+      <x>301</x>
+      <y>411</y>
+      <width>92</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Transverse</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_coronal">
+    <property name="geometry">
+     <rect>
+      <x>399</x>
+      <y>411</y>
+      <width>72</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Coronal</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_sagittal">
+    <property name="geometry">
+     <rect>
+      <x>477</x>
+      <y>411</y>
+      <width>71</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Sagittal</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_ct">
+    <property name="geometry">
+     <rect>
+      <x>301</x>
+      <y>271</y>
+      <width>42</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>CT</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_pt">
+    <property name="geometry">
+     <rect>
+      <x>355</x>
+      <y>271</y>
+      <width>41</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>PT</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_mrt1">
+    <property name="geometry">
+     <rect>
+      <x>408</x>
+      <y>271</y>
+      <width>63</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>MR-T1</string>
+    </property>
+   </widget>
+   <widget class="QRadioButton" name="_radio_btn_mrt2">
+    <property name="geometry">
+     <rect>
+      <x>477</x>
+      <y>271</y>
+      <width>63</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>MR-T2</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="_status_bar"/>
  </widget>
