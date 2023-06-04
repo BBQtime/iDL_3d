@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import warnings
 import shutil
 import torch
@@ -133,17 +134,6 @@ class Value:
         output_str = str(output_str) + "%"
         return output_str
 
-    def get_avg(input_data: Union[list, dict]) -> float:
-        if isinstance(input_data, list):
-            return sum(input_data) / len(input_data)
-
-        elif isinstance(input_data, dict):
-            input_data = Dict(input_data.copy()).to_list()
-            return sum(input_data) / len(input_data)
-
-        else:
-            return input_data
-
     def limit_range(value, limit: tuple):
         low_limit = limit[0]
         up_limit = limit[1]
@@ -156,7 +146,7 @@ class Value:
         return value
 
     def is_number(i) -> bool:
-        if i is None:
+        if i is None or math.isnan(i):
             return False
         try:
             float(i)
@@ -169,6 +159,18 @@ class Value:
         except (TypeError, ValueError):
             pass
         return False
+
+    def get_avg(input_data: Union[list, dict]) -> float:
+        data = input_data.copy()
+
+        if isinstance(data, dict):
+            data = Dict(data).to_list()
+
+        if isinstance(data, list):
+            data = [i for i in data if Value.is_number(i)]
+            return sum(data) / len(data)
+        else:
+            return data
 
 
 class Img:
@@ -683,4 +685,5 @@ class Global:
     HYPER_JSON_PATH_IDL_GTVN = os.path.join(
         PROJ_PATH, __settings["hyper.json.name.idl.gtvn"]
     )
+    HYPER_JSON_PATH_IDL = os.path.join(PROJ_PATH, __settings["hyper.json.name.idl"])
     TRAIN_RESULTS_DIR = os.path.join(PROJ_PATH, __settings["train.results.dir"])

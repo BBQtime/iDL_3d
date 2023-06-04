@@ -165,7 +165,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>320</y>
+      <y>319</y>
       <width>241</width>
       <height>22</height>
      </rect>
@@ -178,7 +178,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>370</y>
+      <y>369</y>
       <width>241</width>
       <height>22</height>
      </rect>
@@ -191,7 +191,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>300</y>
+      <y>299</y>
       <width>64</width>
       <height>15</height>
      </rect>
@@ -204,7 +204,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>350</y>
+      <y>349</y>
       <width>52</width>
       <height>15</height>
      </rect>
@@ -367,7 +367,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>610</y>
+      <y>639</y>
       <width>241</width>
       <height>21</height>
      </rect>
@@ -380,7 +380,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>590</y>
+      <y>619</y>
       <width>152</width>
       <height>15</height>
      </rect>
@@ -393,7 +393,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>510</y>
+      <y>539</y>
       <width>241</width>
       <height>16</height>
      </rect>
@@ -406,7 +406,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>540</y>
+      <y>569</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -423,7 +423,7 @@
     <property name="geometry">
      <rect>
       <x>360</x>
-      <y>540</y>
+      <y>569</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -440,7 +440,7 @@
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>540</y>
+      <y>569</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -457,7 +457,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>540</y>
+      <y>569</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -474,7 +474,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>450</y>
+      <y>479</y>
       <width>241</width>
       <height>41</height>
      </rect>
@@ -484,7 +484,7 @@
     <property name="geometry">
      <rect>
       <x>301</x>
-      <y>411</y>
+      <y>400</y>
       <width>92</width>
       <height>21</height>
      </rect>
@@ -497,7 +497,7 @@
     <property name="geometry">
      <rect>
       <x>399</x>
-      <y>411</y>
+      <y>400</y>
       <width>72</width>
       <height>21</height>
      </rect>
@@ -510,7 +510,7 @@
     <property name="geometry">
      <rect>
       <x>477</x>
-      <y>411</y>
+      <y>400</y>
       <width>71</width>
       <height>21</height>
      </rect>
@@ -569,6 +569,32 @@
     </property>
     <property name="text">
      <string>MR-T2</string>
+    </property>
+   </widget>
+   <widget class="QSlider" name="_slider_zoom">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>450</y>
+      <width>241</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="orientation">
+     <enum>Qt::Horizontal</enum>
+    </property>
+   </widget>
+   <widget class="QLabel" name="_text_label_zoom">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>430</y>
+      <width>52</width>
+      <height>15</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Zoom In</string>
     </property>
    </widget>
   </widget>

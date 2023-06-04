@@ -23,23 +23,19 @@ from custom import Explorer
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self, parent=None, replay_mode=False):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
         self._status_bar.hide()
 
-        # replay mode or real-time mode (bool)
-        self.__replay_mode = replay_mode
-
         self.__init_ui_names()
+        self.__init_member_var()
         self.__init_zoomin()
         self.__init_color()
+        self.__init_side_bar()  # after __init_member_var(), function connection needed
 
-        self.__init_img_data()
-        self.__refresh_title()  # after __init_img_data()
-
-        # after self.__init_img_data(), because function connection needed
-        self.__init_side_bar()
+        self.__clear_img_data()
+        self.__refresh_title()  # after __init_member_var()
 
         # resize
         self.resize(1200, 800)  # set origin size
@@ -47,6 +43,58 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load first baseline result
         self.__choose_baseline()
+
+    def __init_member_var(self):
+        self.__test_set_patients = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.set"]
+        self.__test_set_patients = List(self.__test_set_patients)  # str to List
+        self.__test_set_patients.sort()
+        self.__idl_gtvt_patients = None
+        self.__idl_gtvn_patients = None
+        self.__patient = None
+        self.__round = None
+        self.__slice = None  # starts from 0
+        self.__scores = Dict()
+        self.__imgs = Dict()
+        self.__resize_pos = Dict()
+        self.__bright = Dict()
+        self.__contrast = Dict()
+        self.__bright_contrast_modality = "ct"
+        self.__side_bar_width = 300
+        self.__replay_mode = False  # replay mode or real-time mode
+
+    def __clear_img_data(self):
+        self.__baseline_epoch_dir = None
+        self.__idl_gtvt_dir = None
+        self.__idl_gtvn_epoch_dir = None
+        self.__idl_gtvt_patients = None
+        self.__idl_gtvn_patients = None
+
+        for i in ["gtvt", "gtvn"]:
+            self.__scores[i]["dsc"] = None
+            self.__scores[i]["msd"] = None
+            self.__scores[i]["hd95"] = None
+
+        for i in [
+            "ct",
+            "pt",
+            "mrt1",
+            "mrt2",
+            "label.gtvt",
+            "label.gtvn",
+            "pred.gtvt",
+            "pred.gtvn",
+            "clicks",
+        ]:
+            self.__imgs[i] = None
+
+        # resize position of ct/pt/mrt1/mrt2
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self.__resize_pos[i] = None
+
+        # set image plane
+        for i in ["transverse", "coronal", "sagittal"]:
+            if self.__radio_btn[i].isChecked():
+                self.__img_plane = i
 
     def __init_zoomin(self):
         self.__zoomin = Dict()
@@ -336,6 +384,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__text_label["round"] = self._text_label_round
         self.__text_label["bright"] = self._text_label_bright
         self.__text_label["contrast"] = self._text_label_contrast
+        self.__text_label["zoom"] = self._text_label_zoom
         self.__text_label["annotation.tools"] = self._text_label_annotation_tools
         self.__text_label["idl.gtvt.progress"] = self._text_label_idl_gtvt_progress
 
@@ -379,6 +428,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__slider = Dict()
         self.__slider["bright"] = self._slider_bright
         self.__slider["contrast"] = self._slider_contrast
+        self.__slider["zoom"] = self._slider_zoom
 
         # set label background black
         pal = QPalette()
@@ -395,8 +445,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__text_label["idl.gtvn"].setText("Choose iDL GTVn Result")
         self.__text_label["patient"].setText("Choose Patient")
         self.__text_label["round"].setText("Choose Update Round")
-        self.__text_label["bright"].setText("Brightness")
-        self.__text_label["contrast"].setText("Contrast")
+        self.__text_label["bright"].setText("Brightness (CT)")
+        self.__text_label["contrast"].setText("Contrast (CT)")
+        self.__text_label["zoom"].setText("Zoom In")
         self.__text_label["annotation.tools"].setText("Annotation Tools")
         self.__text_label["idl.gtvt.progress"].setText("GTVt Retraining Progress")
         self.__text_box["annotation.msg"].setText("Please Select a Patient")
@@ -421,6 +472,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "round",
             "bright",
             "contrast",
+            "zoom",
             "annotation.tools",
             "idl.gtvt.progress",
         ]:
@@ -495,6 +547,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__slider["contrast"].setMinimum(0)
         self.__slider["contrast"].setMaximum(200)
         self.__slider["contrast"].setValue(100)
+        self.__slider["zoom"].setMinimum(100)
+        self.__slider["zoom"].setMaximum(200)
+        self.__slider["zoom"].setValue(100)
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             self.__bright[i] = self.__slider["bright"].value()
             self.__contrast[i] = self.__slider["contrast"].value()
@@ -525,13 +580,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in ["bright", "contrast"]:
             self.__slider[i].valueChanged.connect(self.__refresh_imgs)
 
-        for i in ["transverse", "coronal", "sagittal"]:
-            self.__radio_btn[i].toggled.connect(self.__set_img_plane)
+        # for i in ["transverse", "coronal", "sagittal"]:
+        #     self.__radio_btn[i].toggled.connect(self.__set_img_plane)
+        self.__btn_group_plane.buttonClicked.connect(self.__set_img_plane)
 
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self.__radio_btn[i].toggled.connect(self.__set_bright_contrast_modality)
+        # for i in ["ct", "pt", "mrt1", "mrt2"]:
+        #     self.__radio_btn[i].toggled.connect(self.__set_bright_contrast_modality)
+        self.__btn_group_bright_contrast.buttonClicked.connect(
+            self.__set_bright_contrast_modality
+        )
 
-    def __refresh_side_bar(self, side_bar_width: int):
+    def keyPressEvent(self, event):
+        super().keyPressEvent(event)
+        if event.key() == Qt.Key_F12:
+            if self.__replay_mode:
+                self.__replay_mode = False
+            else:
+                self.__replay_mode = True
+            self.__refresh_side_bar()
+
+    def __refresh_side_bar(self):
         # these are adjustable
         left = 30
         top = 0
@@ -554,13 +622,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         radio_btn_gap["planes"] = 6
 
         if platform.system().lower() == "linux":
-            gap = 40
+            gap = 30
         else:  # windows
-            gap = 60
+            gap = 50
 
         # side bar location
-        side_bar_x = self.geometry().width() - side_bar_width
-        width = side_bar_width - left * 2
+        side_bar_x = self.geometry().width() - self.__side_bar_width
+        width = self.__side_bar_width - left * 2
         left += side_bar_x
 
         # hide and show text label / comboxes / btns
@@ -632,32 +700,58 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             tmp_left += radio_btn_gap["planes"] + radio_btn_width[i]
         top += radio_btn_height
 
-        # annotation message box
+        # zoom
         top += gap
-        rect = QRect(left, top, width, annotation_msg_box_height)
-        self.__text_box["annotation.msg"].setGeometry(rect)
-        top += annotation_msg_box_height
+        rect = QRect(left, top, width, text_height)
+        self.__text_label["zoom"].setGeometry(rect)
+        top += text_height
+        rect = QRect(left, top, width, slider_height)
+        self.__slider["zoom"].setGeometry(rect)
+        top += slider_height
+
+        # annotation message box
+        if self.__replay_mode:
+            self.__text_box["annotation.msg"].hide()
+        else:
+            top += gap
+            rect = QRect(left, top, width, annotation_msg_box_height)
+            self.__text_box["annotation.msg"].setGeometry(rect)
+            self.__text_box["annotation.msg"].show()
+            top += annotation_msg_box_height
 
         # annotation tools
-        top += gap
-        rect = QRect(left, top, width, text_height)
-        self.__text_label["annotation.tools"].setGeometry(rect)
-        top += text_height
-        tmp_left = left
-        tmp_gap = round((width - 4 * annotation_btn_width) / 3)
-        for i in ["pen", "eraser", "clear", "confirm"]:
-            rect = QRect(tmp_left, top, annotation_btn_width, bar_height)
-            self.__btn[i].setGeometry(rect)
-            tmp_left += tmp_gap + annotation_btn_width
-        top += bar_height
+        if self.__replay_mode:
+            self.__text_label["annotation.tools"].hide()
+            for i in ["pen", "eraser", "clear", "confirm"]:
+                self.__btn[i].hide()
+        else:
+            top += gap
+            rect = QRect(left, top, width, text_height)
+            self.__text_label["annotation.tools"].setGeometry(rect)
+            self.__text_label["annotation.tools"].show()
+            top += text_height
+            tmp_left = left
+            tmp_gap = round((width - 4 * annotation_btn_width) / 3)
+            for i in ["pen", "eraser", "clear", "confirm"]:
+                rect = QRect(tmp_left, top, annotation_btn_width, bar_height)
+                self.__btn[i].setGeometry(rect)
+                self.__btn[i].show()
+                tmp_left += tmp_gap + annotation_btn_width
+            top += bar_height
 
         # idl gtvt retraining progress
-        top += gap
-        rect = QRect(left, top, width, text_height)
-        self._text_label_idl_gtvt_progress.setGeometry(rect)
-        top += text_height
-        rect = QRect(left, top, width, bar_height)
-        self._progress_bar_idl_gtvt.setGeometry(rect)
+        if self.__replay_mode:
+            self._text_label_idl_gtvt_progress.hide()
+            self._progress_bar_idl_gtvt.hide()
+        else:
+            top += gap
+            rect = QRect(left, top, width, text_height)
+            self._text_label_idl_gtvt_progress.setGeometry(rect)
+            self._text_label_idl_gtvt_progress.show()
+            top += text_height
+            rect = QRect(left, top, width, bar_height)
+            self._progress_bar_idl_gtvt.setGeometry(rect)
+            self._progress_bar_idl_gtvt.show()
 
     def __load_img(self, path: str):
         img = Nii.load(path, binary=False)
@@ -669,54 +763,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         img = np.flip(m=img, axis=0)
         # img = np.rot90(m=img, k=2, axes=(0, 1))
         return img
-
-    def __init_img_data(self):
-        self.__test_set_patients = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.set"]
-        self.__test_set_patients = List(self.__test_set_patients)  # str to List
-        self.__test_set_patients.sort()
-        self.__idl_gtvt_patients = None
-        self.__idl_gtvn_patients = None
-        self.__patient = None
-        self.__round = None
-        self.__slice = None  # starts from 0
-        self.__scores = Dict()
-        self.__imgs = Dict()
-        self.__resize_pos = Dict()
-        self.__bright = Dict()
-        self.__contrast = Dict()
-        self.__bright_contrast_modality = "ct"
-        self.__clear_img_data()
-
-    def __clear_img_data(self):
-        self.__baseline_epoch_dir = None
-        self.__idl_gtvt_dir = None
-        self.__idl_gtvn_epoch_dir = None
-        for i in ["gtvt", "gtvn"]:
-            self.__scores[i]["dsc"] = None
-            self.__scores[i]["msd"] = None
-            self.__scores[i]["hd95"] = None
-
-        for i in [
-            "ct",
-            "pt",
-            "mrt1",
-            "mrt2",
-            "label.gtvt",
-            "label.gtvn",
-            "pred.gtvt",
-            "pred.gtvn",
-            "clicks",
-        ]:
-            self.__imgs[i] = None
-
-        # resize position of ct/pt/mrt1/mrt2
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self.__resize_pos[i] = None
-
-        # set image plane
-        for i in ["transverse", "coronal", "sagittal"]:
-            if self.__radio_btn[i].isChecked():
-                self.__img_plane = i
 
     def __set_img_plane(self):
         for i in ["transverse", "coronal", "sagittal"]:
@@ -1189,10 +1235,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__bright[i] = self.__slider["bright"].value()
                 self.__contrast[i] = self.__slider["contrast"].value()
 
-            if i == "ct":
-                print("")
-            print(i + ": " + str(self.__contrast[i]))
-
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
             rgb_img = cv2.addWeighted(
                 src1=rgb_img,
@@ -1470,6 +1512,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
 
     def wheelEvent(self, event):
+        super().wheelEvent(event)
         if self.__slice is not None:
             img_depth = self.__get_img_depth()
             if img_depth is None:
@@ -1506,16 +1549,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setWindowTitle(win_tital)
 
     def resizeEvent(self, event):
-        side_bar_width = 300
-        self.__resize_display_frames(side_bar_width)
-        self.__refresh_side_bar(side_bar_width)
+        super().resizeEvent(event)
+        self.__resize_display_frames()
+        self.__refresh_side_bar()
         self.__refresh_imgs()
-        QMainWindow.resizeEvent(self, event)
 
-    def __resize_display_frames(self, side_bar_width: int):
+    def __resize_display_frames(self):
         gap = 1
         size = Dict()
-        size["x"] = self.geometry().width() - side_bar_width
+        size["x"] = self.geometry().width() - self.__side_bar_width
         size["y"] = self.geometry().height()
         for i in ["x", "y"]:
             double_size = size[i] - gap * 3
@@ -1552,6 +1594,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    main_window = MainWindow(replay_mode=False)
+    main_window = MainWindow()
     main_window.show()
     sys.exit(app.exec_())

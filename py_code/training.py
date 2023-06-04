@@ -297,7 +297,9 @@ class Training:
         # get pred
         hyper["cnn"].eval()  # disable dropout / batch nomalize
         with torch.no_grad():
-            input_imgs, labels = dataset.get_item(patient=patient)
+            item = dataset.get_item(patient=patient)
+            input_imgs = item[0]
+            labels = item[1]
             input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
             labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
             preds = hyper["cnn"].forward(input_imgs)
@@ -317,8 +319,8 @@ class Training:
         elif inference_type == "idl_gtvn":
             result["gtvn"]["pred"] = preds[1]
             input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-            # imput_imgs: pred, clicks, ...
-            result["gtvn"]["clicks"] = input_imgs[1]
+            result["gtvn"]["distance.map"] = input_imgs[0]
+            result["gtvn"]["clicks"] = torch.squeeze(item[2], dim=0).cpu().numpy()
             gtv_list = ["gtvn"]
 
         # pad and crop to original size
@@ -330,22 +332,31 @@ class Training:
             result[gtv]["pred"] = Img.central_crop(
                 result[gtv]["pred"], origin[gtv].shape
             )
-        # clicks (if idl_gtvn)
+        # distance_map and clicks
         if inference_type == "idl_gtvn":
-            result["gtvn"]["clicks"] = Img.central_pad(
-                result["gtvn"]["clicks"], origin[gtv].shape
-            )
-            result["gtvn"]["clicks"] = Img.central_crop(
-                result["gtvn"]["clicks"], origin[gtv].shape
-            )
+            for i in ["distance.map", "clicks"]:
+                result["gtvn"][i] = Img.central_pad(
+                    result["gtvn"][i], origin[gtv].shape
+                )
+                result["gtvn"][i] = Img.central_crop(
+                    result["gtvn"][i], origin[gtv].shape
+                )
 
-        # idl post processing (before calculate scores)
+        # idl_gtvt post processing (before calculate scores)
         if inference_type == "idl_gtvt" and idl_gtvt_masked_label is not None:
             cc_list = Img.connected_components(result["gtvt"]["pred"])
             result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
             for cur_cc in cc_list:
                 if (cur_cc * idl_gtvt_masked_label).sum() > 0:
                     result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
+
+        # idl_gtvn post processing (before calculate scores)
+        if 0 and inference_type == "idl_gtvn":
+            cc_list = Img.connected_components(result["gtvn"]["pred"])
+            result["gtvn"]["pred"] = np.zeros_like(result["gtvn"]["pred"])
+            for cur_cc in cc_list:
+                if (cur_cc * result["gtvn"]["clicks"]).sum() > 0:
+                    result["gtvn"]["pred"] = np.maximum(result["gtvn"]["pred"], cur_cc)
 
         # calculate inference scores
         for gtv in gtv_list:

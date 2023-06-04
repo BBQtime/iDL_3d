@@ -184,18 +184,20 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         # print(cc_count)
         # cc_count += 1
 
-        # click to distance map
-        if 1:
-            if np.sum(self.__origin["label"]) > 0:
-                self.__origin["clicks"] = distance_transform_edt(
-                    np.logical_not(self.__origin["clicks"])
-                ).astype(np.float32)
-                self.__origin["clicks"] = np.exp(-0.1 * self.__origin["clicks"])
+        # generate distance map based on clicks
+        if np.sum(self.__origin["label"]) > 0:
+            self.__origin["distance.map"] = distance_transform_edt(
+                np.logical_not(self.__origin["clicks"])
+            ).astype(np.float32)
+            self.__origin["distance.map"] = np.exp(-0.1 * self.__origin["distance.map"])
+        else:
+            self.__origin["distance.map"] = np.zeros_like(self.__origin["label"])
 
         input_imgs = None
+        clicks = self.__preprocess(self.__origin["clicks"], final["seed"])
 
         # pred + click
-        for i in ["clicks"]:  # ["pred", "clicks"]:
+        for i in ["distance.map"]:  # ["pred", "distance.map"]:
             final[i] = self.__preprocess(self.__origin[i], final["seed"])
             if input_imgs is None:
                 input_imgs = final[i]
@@ -216,7 +218,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
             # concat multi-model img
             input_imgs = torch.cat([input_imgs, img], dim=0)
 
-        return input_imgs, labels
+        return input_imgs, labels, clicks
 
     # must be overrided
     # this function is only for training, not for inference

@@ -243,7 +243,9 @@ class BaselineTraining(Training):
             hyper["cnn"].train()
             train_loss = 0
             num_batches = 0
-            for input_imgs, labels in tqdm(hyper["train.loader"]):
+            for item in tqdm(hyper["train.loader"]):
+                input_imgs = item[0]
+                labels = item[1]
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
                 input_imgs = input_imgs.to(g.DEVICE)
@@ -354,9 +356,11 @@ class BaselineTraining(Training):
     ):
         if train_type == "baseline":
             hyper_json_path = g.HYPER_JSON_PATH_BASELINE
-        else:
-            train_type = "idl_gtvn"
+        elif train_type == "idl_gtvn":
             hyper_json_path = g.HYPER_JSON_PATH_IDL_GTVN
+        else:
+            train_type = "idl"
+            hyper_json_path = g.HYPER_JSON_PATH_IDL
 
         for hyper in self._load_hyper_sets_from_json(hyper_json_path):
 
@@ -374,7 +378,7 @@ class BaselineTraining(Training):
             print(train_id)
 
             # find baseline fold dir
-            if hyper["train.type"] == "idl_gtvn":
+            if hyper["train.type"] == "idl_gtvn" or hyper["train.type"] == "idl":
                 if baseline_fold is None or baseline_fold <= 0:
                     key_word = "fold="
                 else:
@@ -400,7 +404,7 @@ class BaselineTraining(Training):
                 train_result_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id)
             else:
                 train_result_dir = os.path.join(
-                    baseline_epoch_dir, "idl_gtvn", train_id
+                    baseline_epoch_dir, hyper["train.type"], train_id
                 )
             Folder.create(train_result_dir)
 
@@ -560,17 +564,20 @@ class BaselineTraining(Training):
                     if inference_type == "baseline":
                         for gtv in ["gtvs", "gtvt", "gtvn"]:
                             for metric in g.METRICS:
-                                epoch_scores["median"][gtv][metric] = List()
-                    else:
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][gtv][metric] = List()
+                    else:  # "idl"
                         if dataset == "valid":
                             # no need to record baseline score for valid set
                             for metric in g.METRICS:
-                                epoch_scores["median"][metric] = List()
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][metric] = List()
                         elif dataset == "test":
                             # record baseline score in ["round=00"] for test set
                             # so here, initialize ["round=01"] as a list
                             for metric in g.METRICS:
-                                epoch_scores["median"][metric]["round=01"] = List()
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][metric]["round=01"] = List()
                             # copy baseline scores of each patient
                             baseline_scores = Json.load(
                                 os.path.join(
@@ -590,9 +597,10 @@ class BaselineTraining(Training):
                                     ]
                             # also copy median score of each patient
                             for metric in g.METRICS:
-                                epoch_scores["median"][metric][
-                                    "round=00"
-                                ] = baseline_scores["median"]["gtvn"][metric]
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][metric][
+                                        "round=00"
+                                    ] = baseline_scores[i]["gtvn"][metric]
 
                 for patient in tqdm(patients):
                     # create folder to save cur patient preds and scores
@@ -633,8 +641,13 @@ class BaselineTraining(Training):
                             gtv_list = ["gtvn"]
                             # save clicks.nii
                             Nii.save(
-                                img=patient_results["gtvn"]["clicks"],
+                                img=patient_results["gtvn"]["distance.map"],
                                 path=os.path.join(patient_dir, "distance_map.nii"),
+                                spacing=g.NII_SPACING,
+                            )
+                            Nii.save(
+                                img=patient_results["gtvn"]["clicks"],
+                                path=os.path.join(patient_dir, "clicks.nii"),
                                 spacing=g.NII_SPACING,
                             )
                         else:
@@ -657,9 +670,10 @@ class BaselineTraining(Training):
                                     ] = patient_results[gtv][metric]
                                 # add scores of current patient into median(list)
                                 if dataset == "test" or dataset == "valid":
-                                    epoch_scores["median"][gtv][metric].append(
-                                        patient_results[gtv][metric]
-                                    )
+                                    for i in ["median", "avg"]:
+                                        epoch_scores[i][gtv][metric].append(
+                                            patient_results[gtv][metric]
+                                        )
                     else:
                         for metric in g.METRICS:
                             if dataset == "test":
@@ -669,14 +683,16 @@ class BaselineTraining(Training):
                                 ] = patient_results["gtvn"][metric]
                                 # add scores of current patient into median(list)
                                 # record in ["round=01"] for test set
-                                epoch_scores["median"][metric]["round=01"].append(
-                                    patient_results["gtvn"][metric]
-                                )
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][metric]["round=01"].append(
+                                        patient_results["gtvn"][metric]
+                                    )
                             # add scores of current patient into median(list)
                             if dataset == "valid":
-                                epoch_scores["median"][metric].append(
-                                    patient_results["gtvn"][metric]
-                                )
+                                for i in ["median", "avg"]:
+                                    epoch_scores[i][metric].append(
+                                        patient_results["gtvn"][metric]
+                                    )
 
                 # all patients under current epoch have been traversed
                 # no need to calculate median score on training set
@@ -688,21 +704,29 @@ class BaselineTraining(Training):
                     if inference_type == "baseline":
                         for gtv in ["gtvs", "gtvt", "gtvn"]:
                             for metric in g.METRICS:
-                                median = epoch_scores["median"][gtv][metric]
                                 epoch_scores["median"][gtv][metric] = statistics.median(
-                                    median
+                                    epoch_scores["median"][gtv][metric]
                                 )
-                    else:
+                                epoch_scores["avg"][gtv][metric] = Value.get_avg(
+                                    epoch_scores["avg"][gtv][metric]
+                                )
+                    else:  # idl/idl_gtvt/idl_gtvn
                         for metric in g.METRICS:
                             if dataset == "test":
-                                median = epoch_scores["median"][metric]["round=01"]
                                 epoch_scores["median"][metric][
                                     "round=01"
-                                ] = statistics.median(median)
+                                ] = statistics.median(
+                                    epoch_scores["median"][metric]["round=01"]
+                                )
+                                epoch_scores["avg"][metric]["round=01"] = Value.get_avg(
+                                    epoch_scores["avg"][metric]["round=01"]
+                                )
                             elif dataset == "valid":
-                                median = epoch_scores["median"][metric]
                                 epoch_scores["median"][metric] = statistics.median(
-                                    median
+                                    epoch_scores["median"][metric]
+                                )
+                                epoch_scores["avg"][metric] = Value.get_avg(
+                                    epoch_scores["avg"][metric]
                                 )
                     # save all patients scores in "inference_test.json"
                     if inference_type == "baseline":
