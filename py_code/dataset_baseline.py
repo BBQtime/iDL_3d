@@ -12,7 +12,7 @@ from custom import Nii
 from custom import Img
 
 
-class BaselineDataSet(torch.utils.data.Dataset):
+class DataSetBaseline(torch.utils.data.Dataset):
     def __init__(self, patients: list, augment: Dict = None):
         self.__patients = patients
         self.__augment = DataAugmentation(augment)
@@ -131,7 +131,7 @@ class BaselineDataSet(torch.utils.data.Dataset):
 # # for testing
 # # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
 # # patients without GTVn: 257 192
-# tmp_dataset = BaselineDataSet(
+# tmp_dataset = DataSetBaseline(
 #     patient_list=["257"],
 #     augment_methods=["rotate"],
 #     augment_pct=1,

@@ -163,7 +163,7 @@ def patients_overview(
 
         img_path = os.path.join(
             os.path.join(
-                g.PROJ_PATH,
+                g.PROJ_DIR,
                 "idl_figs",
                 "patients.overview." + metric + ".png",
             )
@@ -331,7 +331,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
         elif metric == "hd95":
             plt.legend(loc="upper right")
 
-        img_path = Folder.create(os.path.join(g.PROJ_PATH, "idl_figs"))
+        img_path = Folder.create(os.path.join(g.PROJ_DIR, "idl_figs"))
         img_path = os.path.join(
             img_path,
             key_hyper + "." + metric + ".png",

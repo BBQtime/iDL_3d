@@ -15,7 +15,7 @@ from scipy.ndimage import distance_transform_edt
 from scipy.ndimage import binary_dilation
 
 
-class IDLGTVnDataSet(torch.utils.data.Dataset):
+class DataSetIDLGTVn(torch.utils.data.Dataset):
     def __init__(
         self,
         patients: list,
@@ -159,7 +159,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         if 0:
             # Nii.save(
             #     self.__origin["clicks"],
-            #     os.path.join(g.PROJ_PATH, "debug", "before_dilation.nii"),
+            #     os.path.join(g.PROJ_DIR, "debug", "before_dilation.nii"),
             # )
             structure = np.ones((5, 5, 5), dtype=np.float32)
             self.__origin["clicks"] = binary_dilation(
@@ -167,7 +167,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
             ).astype(np.float32)
             # Nii.save(
             #     self.__origin["clicks"],
-            #     os.path.join(g.PROJ_PATH, "debug", "after_dilation.nii"),
+            #     os.path.join(g.PROJ_DIR, "debug", "after_dilation.nii"),
             # )
 
         # # debug save img
@@ -175,11 +175,11 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
         # cur_click_nii[pos[0]][pos[1]][pos[2]] = 1
         # Nii.save(
         #     cur_gtvn_cc,
-        #     os.path.join(g.PROJ_PATH, "debug", "cur_cc_{}.nii".format(cc_count)),
+        #     os.path.join(g.PROJ_DIR, "debug", "cur_cc_{}.nii".format(cc_count)),
         # )
         # Nii.save(
         #     cur_click_nii,
-        #     os.path.join(g.PROJ_PATH, "debug", "cur_click_{}.nii".format(cc_count)),
+        #     os.path.join(g.PROJ_DIR, "debug", "cur_click_{}.nii".format(cc_count)),
         # )
         # print(cc_count)
         # cc_count += 1
@@ -243,7 +243,7 @@ class IDLGTVnDataSet(torch.utils.data.Dataset):
 #     "epoch=205",
 # )
 # # augment_methods =
-# tmp_dataset = IDLGTVnDataSet(
+# tmp_dataset = DataSetIDLGTVn(
 #     patients=["129"],
 #     baseline_epoch_dir=baseline_epoch_dir,
 #     augment=None,

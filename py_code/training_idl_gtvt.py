@@ -10,8 +10,8 @@ from tqdm import tqdm
 from torch import optim
 import matplotlib.pyplot as plt
 from custom import Global as g
-from idl_gtvt_dataset import IDLGTVtDataSet
-from training import Training
+from dataset_idl_gtvt import DataSetIDLGTVt
+from training_parent import TrainingParent
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.ndimage import measurements
 from custom import Dict
@@ -24,7 +24,7 @@ from custom import Value
 from custom import Explorer
 
 
-class IDLGTVtTraining(Training):
+class TrainingIDLGTVt(TrainingParent):
     def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"] is a list of lr of each round
         if next_round > len(hyper["lr"]):
@@ -244,7 +244,7 @@ class IDLGTVtTraining(Training):
     #     # check if result folder exist
     #     cur_result_dir = os.path.join(idl_results_dir, self._idl_id)
     #     if not os.path.exists(cur_result_dir):
-    #         print("IDLGTVtTraining.real_training(): iDL result folder doesn't exist")
+    #         print("TrainingIDLGTVt.real_training(): iDL result folder doesn't exist")
 
     #     # create json file to save train loss
     #     train_loss_dict = Dict()
@@ -525,7 +525,7 @@ class IDLGTVtTraining(Training):
         weight["prev.round.decay"] = hyper["weight.prev.round.decay"]
         weight["slice"] = hyper["weight.slice"]
 
-        idl_gtvt_dataset = IDLGTVtDataSet(
+        dataset_idl_gtvt = DataSetIDLGTVt(
             patient=patient,
             selected_slices=selected_slices,
             label_dir=label_dir,
@@ -535,11 +535,11 @@ class IDLGTVtTraining(Training):
         )
 
         # optimize batch size (before create dataloader)
-        self._optimize_batch_size(dataset=idl_gtvt_dataset, hyper=hyper)
+        self._optimize_batch_size(dataset=dataset_idl_gtvt, hyper=hyper)
 
         # idl gtvt dataloader
         idl_gtvt_loader = DataLoader(
-            dataset=idl_gtvt_dataset,
+            dataset=dataset_idl_gtvt,
             batch_size=hyper["batch.size.actual"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,

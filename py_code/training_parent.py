@@ -13,8 +13,8 @@ from torch import optim
 from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
 from datetime import datetime
-from baseline_dataset import BaselineDataSet
-from idl_gtvn_dataset import IDLGTVnDataSet
+from dataset_baseline import DataSetBaseline
+from dataset_idl_gtvn import DataSetIDLGTVn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from custom import Json
 from custom import Dict
@@ -26,7 +26,7 @@ from custom import Value
 from custom import Explorer
 
 
-class Training:
+class TrainingParent:
     def __init__(self):
         # segmentation metrics
         self._metrics = Dict()
@@ -114,7 +114,7 @@ class Training:
 
             elif hyper["cnn"] == "unet.slim" or isinstance(hyper["cnn"], UNetSlim):
                 hyper["cnn"] = UNetSlim(
-                    in_chan=5, out_chan=2, dropout=hyper["dropout"]
+                    in_chan=5, out_chan=2, edge_chan=16, dropout=hyper["dropout"]
                 ).to(g.DEVICE)
 
         # existing model
@@ -265,9 +265,9 @@ class Training:
         origin = Dict()
 
         if inference_type == "baseline" or inference_type == "idl_gtvt":
-            dataset = BaselineDataSet(patients=[patient])
+            dataset = DataSetBaseline(patients=[patient])
         else:
-            dataset = IDLGTVnDataSet(
+            dataset = DataSetIDLGTVn(
                 patients=[patient],
                 baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
                 random_click=False,

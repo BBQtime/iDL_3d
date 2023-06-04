@@ -13,7 +13,7 @@ from custom import Img
 from scipy.ndimage import distance_transform_edt
 
 
-class IDLGTVtDataSet(torch.utils.data.Dataset):
+class DataSetIDL(torch.utils.data.Dataset):
     def __init__(
         self,
         patient: str,
@@ -72,10 +72,10 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         # save origin label and pred
         # Nii.save(
         #     self.__origin["label"],
-        #     os.path.join(g.PROJ_PATH, "debug", "origin_label.nii"),
+        #     os.path.join(g.PROJ_DIR, "debug", "origin_label.nii"),
         # )
         # Nii.save(
-        #     self.__origin["pred"], os.path.join(g.PROJ_PATH, "debug", "pred.nii")
+        #     self.__origin["pred"], os.path.join(g.PROJ_DIR, "debug", "pred.nii")
         # )
 
         # overwrite pred to label on non-annotated slices
@@ -85,7 +85,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         # save overwrited label
         # Nii.save(
         #     self.__origin["label"],
-        #     os.path.join(g.PROJ_PATH, "debug", "overwrite_label.nii"),
+        #     os.path.join(g.PROJ_DIR, "debug", "overwrite_label.nii"),
         # )
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
@@ -131,7 +131,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
             np.maximum(slice_mask["transverse"], slice_mask["coronal"]),
             slice_mask["sagittal"],
         )
-        # Nii.save(slice_mask, os.path.join(g.PROJ_PATH, "debug", "slice_mask.nii"))
+        # Nii.save(slice_mask, os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii"))
 
         # get fp&fn (keep weight=1 before creating distance map)
         fp = self.__origin["pred"] * (1 - self.__origin["label"])
@@ -145,7 +145,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
             annotation = np.maximum(self.__origin["pred"], self.__origin["label"])
             annotation = annotation * np.where(slice_mask > 0, 1, 0)
             annotation = annotation.astype(np.float32)
-            # Nii.save(annotation, os.path.join(g.PROJ_PATH, "debug", "annotation.nii"))
+            # Nii.save(annotation, os.path.join(g.PROJ_DIR, "debug", "annotation.nii"))
 
         # distance map
         if 1:
@@ -165,15 +165,15 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
         )
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
-        # Nii.save(distance_map, os.path.join(g.PROJ_PATH, "debug", "distance_map.nii"))
+        # Nii.save(distance_map, os.path.join(g.PROJ_DIR, "debug", "distance_map.nii"))
 
         # weighted fp&fn (after weight map)
         fp_fn = fp_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
-        # Nii.save(fp_fn, os.path.join(g.PROJ_PATH, "debug", "fp_fn.nii"))
+        # Nii.save(fp_fn, os.path.join(g.PROJ_DIR, "debug", "fp_fn.nii"))
 
         # final_weight_map
         weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_fn)
-        # Nii.save(weight_map, os.path.join(g.PROJ_PATH, "debug", "weight_map.nii"))
+        # Nii.save(weight_map, os.path.join(g.PROJ_DIR, "debug", "weight_map.nii"))
 
         # return slice_mask to overwrite pred to label on non-annotated slices
         slice_mask = np.where(slice_mask > 0, 1, 0)
@@ -321,7 +321,7 @@ class IDLGTVtDataSet(torch.utils.data.Dataset):
 #     "patient=336",
 # )
 # # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
-# tmp_dataset = IDLGTVtDataSet(
+# tmp_dataset = DataSetIDLGTVt(
 #     patient="336",
 #     selected_slices=selected_slices,
 #     label_dir=g.DATASET_DIR,

@@ -1,7 +1,7 @@
-from baseline_training import BaselineTraining
+from training_baseline import TrainingBaseline
 
 
-class IDLTraining(BaselineTraining):
+class TrainingIDL(TrainingBaseline):
     def new_training(
         self,
         baseline_id: str = None,

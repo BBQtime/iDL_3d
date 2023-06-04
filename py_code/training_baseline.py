@@ -7,10 +7,10 @@ from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
 from torch.utils.data import DataLoader
-from training import Training
+from training_parent import TrainingParent
 from matplotlib import pyplot as plt
-from baseline_dataset import BaselineDataSet
-from idl_gtvn_dataset import IDLGTVnDataSet
+from dataset_baseline import DataSetBaseline
+from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func import UnifiedFocalLoss
 from custom import Dict
 from custom import Json
@@ -22,7 +22,7 @@ from custom import Value
 from custom import Explorer
 
 
-class BaselineTraining(Training):
+class TrainingBaseline(TrainingParent):
     def _load_dataset(self, fold: int, debug_mode: bool = False):
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
 
@@ -122,23 +122,23 @@ class BaselineTraining(Training):
         augment["max"] = hyper["augment.max"]
 
         if hyper["train.type"] == "baseline":
-            train_set = BaselineDataSet(patients=train_patients, augment=augment)
-            valid_set = BaselineDataSet(patients=valid_patients)
-            test_set = BaselineDataSet(patients=test_patients)
+            train_set = DataSetBaseline(patients=train_patients, augment=augment)
+            valid_set = DataSetBaseline(patients=valid_patients)
+            test_set = DataSetBaseline(patients=test_patients)
         else:
-            train_set = IDLGTVnDataSet(
+            train_set = DataSetIDLGTVn(
                 patients=train_patients,
                 baseline_epoch_dir=baseline_epoch_dir,
                 augment=augment,
                 random_click=False,
                 # random_click=True,
             )
-            valid_set = IDLGTVnDataSet(
+            valid_set = DataSetIDLGTVn(
                 patients=valid_patients,
                 baseline_epoch_dir=baseline_epoch_dir,
                 random_click=False,
             )
-            test_set = IDLGTVnDataSet(
+            test_set = DataSetIDLGTVn(
                 patients=test_patients,
                 baseline_epoch_dir=baseline_epoch_dir,
                 random_click=False,
@@ -193,7 +193,7 @@ class BaselineTraining(Training):
         )
         self._plot_lr_fig(lr_json_path)
 
-    # protected function, idl_gtvn_training will inherit it
+    # protected function, TrainingIDLGTVn will inherit it
     def _plot_lr_fig(self, lr_json_path: str):
         plt.figure().clear()
 
@@ -212,7 +212,7 @@ class BaselineTraining(Training):
         )
         self._plot_loss_fig(loss_json_path)
 
-    # protected function, idl_gtvn_training will inherit it
+    # protected function, TrainingIDLGTVn will inherit it
     def _plot_loss_fig(self, loss_json_path: str):
         loss_dict = Json.load(loss_json_path)
         train_loss = List()
@@ -264,7 +264,9 @@ class BaselineTraining(Training):
             with torch.no_grad():
                 valid_loss = 0
                 num_batches = 0
-                for input_imgs, labels in tqdm(hyper["valid.loader"]):
+                for item in tqdm(hyper["valid.loader"]):
+                    input_imgs = item[0]
+                    labels = item[1]
                     input_imgs = input_imgs.to(g.DEVICE)
                     labels = labels.to(g.DEVICE)
                     preds = hyper["cnn"](input_imgs)
