@@ -16,7 +16,7 @@ from Ui_main_window import Ui_MainWindow
 from custom import Json
 from custom import List
 from custom import Dict
-from custom import Value
+from custom import ValueUtils
 from custom import Nii
 from custom import Img
 from custom import Explorer
@@ -45,11 +45,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__choose_baseline()
 
     def __init_member_var(self):
-        self.__test_set_patients = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.set"]
-        self.__test_set_patients = List(self.__test_set_patients)  # str to List
-        self.__test_set_patients.sort()
-        self.__idl_gtvt_patients = None
-        self.__idl_gtvn_patients = None
+        self.__patients = Dict()
+        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.inter"]
+        self.__patients["test.inter"] = List(self.__patients["test.inter"])  # str to List
+        self.__patients["test.inter"].sort()
+        self.__patients["idl.gtvt"] = None
+        self.__patients["idl.gtvn"] = None
         self.__patient = None
         self.__round = None
         self.__slice = None  # starts from 0
@@ -63,11 +64,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__replay_mode = False  # replay mode or real-time mode
 
     def __clear_img_data(self):
-        self.__baseline_epoch_dir = None
-        self.__idl_gtvt_dir = None
-        self.__idl_gtvn_epoch_dir = None
-        self.__idl_gtvt_patients = None
-        self.__idl_gtvn_patients = None
+        self.__patients["idl.gtvt"] = None
+        self.__patients["idl.gtvn"] = None
 
         for i in ["gtvt", "gtvn"]:
             self.__scores[i]["dsc"] = None
@@ -378,6 +376,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.__text_label = Dict()
         self.__text_label["baseline"] = self._text_label_baseline
+        self.__text_label["idl.gtvs"] = self._text_label_idl_gtvs
         self.__text_label["idl.gtvt"] = self._text_label_idl_gtvt
         self.__text_label["idl.gtvn"] = self._text_label_idl_gtvn
         self.__text_label["patient"] = self._text_label_patient
@@ -393,6 +392,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.__combox = Dict()
         self.__combox["baseline"] = self._combox_baseline
+        self.__combox["idl.gtvs"] = self._combox_idl_gtvs
         self.__combox["idl.gtvt"] = self._combox_idl_gtvt
         self.__combox["idl.gtvn"] = self._combox_idl_gtvn
         self.__combox["patient"] = self._combox_patient
@@ -407,6 +407,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__arrow_btn = Dict()
         self.__arrow_btn["prev.baseline"] = self._btn_prev_baseline
         self.__arrow_btn["next.baseline"] = self._btn_next_baseline
+        self.__arrow_btn["prev.idl.gtvs"] = self._btn_prev_idl_gtvs
+        self.__arrow_btn["next.idl.gtvs"] = self._btn_next_idl_gtvs
         self.__arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
         self.__arrow_btn["next.idl.gtvt"] = self._btn_next_idl_gtvt
         self.__arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
@@ -438,9 +440,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__display_frame[i].setAutoFillBackground(True)
             self.__display_frame[i].setPalette(pal)
 
+    def keyPressEvent(self, event):
+        super().keyPressEvent(event)
+        if event.key() == Qt.Key_F12:
+            if self.__replay_mode:
+                self.__replay_mode = False
+            else:
+                self.__replay_mode = True
+            self.__refresh_side_bar()
+
     def __init_side_bar(self):
         # set text
         self.__text_label["baseline"].setText("Choose Baseline Result")
+        self.__text_label["idl.gtvs"].setText("Choose iDL GTVs Result")
         self.__text_label["idl.gtvt"].setText("Choose iDL GTVt Result")
         self.__text_label["idl.gtvn"].setText("Choose iDL GTVn Result")
         self.__text_label["patient"].setText("Choose Patient")
@@ -466,6 +478,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # set font of text labels
         for i in [
             "baseline",
+            "idl.gtvs",
             "idl.gtvt",
             "idl.gtvn",
             "patient",
@@ -485,11 +498,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__radio_btn[i].setFont(font)
         # set font of comboboxes
         font.setBold(False)
-        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
+        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__combox[i].setFont(font)
 
         # set combobox dropdown width: 700px
-        for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn"]:
             self.__combox[i].setStyleSheet(
                 """*
                 QComboBox QAbstractItemView
@@ -499,23 +512,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 """
             )
 
-        # fill the baseline combobox, format "baseline_id/fold=12/epoch=123"
-        baseline_epoch_dirs = List()
-        for cur_dir in Explorer.walk_sub_dirs(
-            g.TRAIN_RESULTS_DIR, key_word="epoch=", suffle=False
-        ):
-            # "epoch=" in folder name and not a idl_gtvn result
-            if "epoch=" in Path(cur_dir).name and "idl_gtvn" not in cur_dir:
-                cur_dir = cur_dir[len(g.TRAIN_RESULTS_DIR) + 1 :]
-                baseline_epoch_dirs.append(cur_dir)
-        self.__combox["baseline"].addItems(baseline_epoch_dirs)
+        # fill the baseline combobox, format "baseline_id"
+        self.__combox["baseline"].addItems(
+            Explorer.get_sub_folders(
+                g.TRAIN_RESULTS_DIR, key_word="baseline_", suffle=True
+            )
+        )
 
         # set initial state
-        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
+        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
             self.__arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
 
-        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
+        for i in ["idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__combox[i].setEnabled(False)
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
@@ -561,6 +570,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
         self.__arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
 
+        self.__combox["idl.gtvs"].activated.connect(self.__choose_idl_gtvs)
+        self.__arrow_btn["prev.idl.gtvs"].clicked.connect(self.__choose_prev_idl_gtvs)
+        self.__arrow_btn["next.idl.gtvs"].clicked.connect(self.__choose_next_idl_gtvs)
+
         self.__combox["idl.gtvt"].activated.connect(self.__choose_idl_gtvt)
         self.__arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
         self.__arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
@@ -590,25 +603,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__set_bright_contrast_modality
         )
 
-    def keyPressEvent(self, event):
-        super().keyPressEvent(event)
-        if event.key() == Qt.Key_F12:
-            if self.__replay_mode:
-                self.__replay_mode = False
-            else:
-                self.__replay_mode = True
-            self.__refresh_side_bar()
-
     def __refresh_side_bar(self):
         # these are adjustable
         left = 30
         top = 0
         text_height = 25
-        bar_height = 30
+        bar_height = 25
         slider_height = 20
         annotation_msg_box_height = 120
         arrow_btn_width = 30
         annotation_btn_width = 50
+
+        if platform.system().lower() == "linux":
+            gap = 27
+        else:  # windows
+            gap = 50
 
         radio_btn_height = 25
         radio_btn_width = Dict()
@@ -621,11 +630,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         radio_btn_gap["bright.contrast"] = 10
         radio_btn_gap["planes"] = 6
 
-        if platform.system().lower() == "linux":
-            gap = 30
-        else:  # windows
-            gap = 50
-
         # side bar location
         side_bar_x = self.geometry().width() - self.__side_bar_width
         width = self.__side_bar_width - left * 2
@@ -633,21 +637,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # hide and show text label / comboxes / btns
         if self.__replay_mode:
-            ui_name_list = ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]
-            for i in ["baseline", "idl.gtvt", "idl.gtvn", "round"]:
+            for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "round"]:
                 self.__text_label[i].show()
                 self.__arrow_btn["prev.{}".format(i)].show()
                 self.__combox[i].show()
                 self.__arrow_btn["next.{}".format(i)].show()
         else:
-            ui_name_list = ["patient"]
-            for i in ["baseline", "idl.gtvt", "idl.gtvn", "round"]:
+            for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "round"]:
                 self.__text_label[i].hide()
                 self.__arrow_btn["prev.{}".format(i)].hide()
                 self.__combox[i].hide()
                 self.__arrow_btn["next.{}".format(i)].hide()
 
         # set position of text label / comboxes / btns
+        if self.__replay_mode:
+            ui_name_list = [
+                "baseline",
+                "idl.gtvs",
+                "idl.gtvt",
+                "idl.gtvn",
+                "patient",
+                "round",
+            ]
+        else:
+            ui_name_list = ["patient"]
         for i in ui_name_list:
             # text label
             top += gap
@@ -774,7 +787,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         img_depth = self.__get_img_depth()
         if img_depth is not None:
             self.__slice = round(img_depth / 2) - 1
-            self.__slice = Value.limit_range(self.__slice, (0, img_depth - 1))
+            self.__slice = ValueUtils.limit_range(self.__slice, (0, img_depth - 1))
         self.__reset_zoomin()
         self.__refresh_imgs()
         self.__refresh_title()
@@ -844,49 +857,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__enable_arrow_btns("baseline")
 
         # reset ui
-        for i in ["idl.gtvt", "idl.gtvn", "patient", "round"]:
+        for i in ["idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
             self.__combox[i].clear()
             self.__combox[i].setEnabled(False)
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        self.__baseline_epoch_dir = self.__combox["baseline"].currentText()
-        if g.TRAIN_RESULTS_DIR.endswith("/"):
-            self.__baseline_epoch_dir = g.TRAIN_RESULTS_DIR + self.__baseline_epoch_dir
-        else:
-            self.__baseline_epoch_dir = (
-                g.TRAIN_RESULTS_DIR + "/" + self.__baseline_epoch_dir
-            )
+        baseline_id = self.__combox["baseline"].currentText()
 
         # fill idl.gtvt combox
-        if os.path.exists(os.path.join(self.__baseline_epoch_dir, "idl_gtvt")):
-            idl_gtvt_dirs = Explorer.get_sub_folders(
-                os.path.join(self.__baseline_epoch_dir, "idl_gtvt")
-            )
-            if idl_gtvt_dirs != []:
-                self.__combox["idl.gtvt"].addItems(idl_gtvt_dirs)
-                self.__combox["idl.gtvt"].setEnabled(True)
-                self.__choose_idl_gtvt()
+        idl_gtvt_dirs = Explorer.get_sub_folders(
+            os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
+            key_word="idl.gtvt",
+            full_path=False,
+        )
+        if idl_gtvt_dirs != []:
+            self.__combox["idl.gtvt"].addItems(idl_gtvt_dirs)
+            self.__combox["idl.gtvt"].setEnabled(True)
+            self.__choose_idl_gtvt()
 
-        # fill idl.gtvn combox, format "baseline_id/fold=12/epoch=123"
-        idl_gtvn_epoch_dirs = List()
-        for cur_dir in Explorer.walk_sub_dirs(
-            os.path.join(self.__baseline_epoch_dir, "idl_gtvn"),
-            key_word="idl_gtvn_",
-            suffle=False,
-        ):
-            # "epoch=" in folder name and not a idl_gtvn result
-            if "epoch=" in Path(cur_dir).name:
-                # only keep idl_gtvn_id/fold=xx/epoch=xxx
-                cur_dir = cur_dir[
-                    len(os.path.join(self.__baseline_epoch_dir, "idl_gtvn")) + 1 :
-                ]
-                idl_gtvn_epoch_dirs.append(cur_dir)
-
-        if idl_gtvn_epoch_dirs != []:
-            self.__combox["idl.gtvn"].addItems(idl_gtvn_epoch_dirs)
+        # fill idl.gtvn combox, format "idl_gtvn_id/fold=12/epoch=123"
+        idl_gtvn_dirs = Explorer.get_sub_folders(
+            os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
+            key_word="idl.gtvn",
+            full_path=False,
+        )
+        if idl_gtvn_dirs != []:
+            self.__combox["idl.gtvn"].addItems(idl_gtvn_dirs)
             self.__combox["idl.gtvn"].setEnabled(True)
             self.__choose_idl_gtvn()
+
+        # fill idl combox, format "idl_id/fold=12/epoch=123"
+        idl_gtvs_dirs = Explorer.get_sub_folders(
+            os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
+            key_word="idl.gtvs",
+            full_path=False,
+        )
+        if idl_gtvs_dirs != []:
+            self.__combox["idl.gtvs"].addItems(idl_gtvs_dirs)
+            self.__combox["idl.gtvs"].setEnabled(True)
+            self.__choose_idl_gtvs()
+
+    def __choose_idl_gtvs(self):
+        return
 
     def __choose_idl_gtvn(self):
         # run this after idl gtvn combox is filled
@@ -899,26 +912,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        # idl_gtvn_dir
         idl_gtvn_id = self.__combox["idl.gtvn"].currentText()
-        self.__idl_gtvn_epoch_dir = os.path.join(
-            self.__baseline_epoch_dir, "idl_gtvn", idl_gtvn_id
-        )
+        if idl_gtvn_id == "":
+            return
+
+        baseline_id = self.__combox["baseline"].currentText()
+        idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
 
         # confirm idl gtvn patients
-        self.__idl_gtvn_patients = Explorer.get_sub_folders(
-            os.path.join(self.__idl_gtvn_epoch_dir, "patients")
+        self.__patients["idl.gtvn"] = Explorer.get_sub_folders(
+            os.path.join(idl_gtvn_dir, "cross_valid", "patients")
         )
-        for i in range(len(self.__idl_gtvn_patients)):
+        for i in range(len(self.__patients["idl.gtvn"])):
             # from "patient=123" to "123"
-            self.__idl_gtvn_patients[i] = self.__idl_gtvn_patients[i][len("patient=") :]
+            self.__patients["idl.gtvn"][i] = self.__patients["idl.gtvn"][i][
+                len("patient=") :
+            ]
         # idl gtvn patients & testset patients
-        self.__idl_gtvn_patients.find_identical_items(self.__test_set_patients)
+        self.__patients["idl.gtvn"].find_identical_items(self.__patients["test.inter"])
 
         # fill combobox and choose patient automatically
-        if self.__idl_gtvt_patients is not None:
-            combox_patients = self.__idl_gtvn_patients.copy()
-            combox_patients.find_identical_items(self.__idl_gtvt_patients)
+        if self.__patients["idl.gtvt"] is not None:
+            combox_patients = self.__patients["idl.gtvn"].copy()
+            combox_patients.find_identical_items(self.__patients["idl.gtvt"])
             self.__combox["patient"].addItems(combox_patients)
             self.__combox["patient"].setEnabled(True)
             # try not to reset patient when idl_gtvt_id is changed
@@ -941,24 +957,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # idl_gtvt_dir
         idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
-        self.__idl_gtvt_dir = os.path.join(
-            self.__baseline_epoch_dir, "idl_gtvt", idl_gtvt_id
-        )
+        if idl_gtvt_id == "":
+            return
 
-        # confirm idl gtvt patients
-        self.__idl_gtvt_patients = Explorer.get_sub_folders(
-            os.path.join(self.__idl_gtvt_dir, "patients")
+        baseline_id = self.__combox["baseline"].currentText()
+        idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
+
+        # idl gtvt patients
+        self.__patients["idl.gtvt"] = Explorer.get_sub_folders(
+            os.path.join(idl_gtvt_dir, "patients")
         )
-        for i in range(len(self.__idl_gtvt_patients)):
+        for i in range(len(self.__patients["idl.gtvt"])):
             # from "patient=123" to "123"
-            self.__idl_gtvt_patients[i] = self.__idl_gtvt_patients[i][len("patient=") :]
+            self.__patients["idl.gtvt"][i] = self.__patients["idl.gtvt"][i][
+                len("patient=") :
+            ]
         # idl gtvt patients & testset patients
-        self.__idl_gtvt_patients.find_identical_items(self.__test_set_patients)
+        self.__patients["idl.gtvt"].find_identical_items(self.__patients["test.inter"])
 
         # fill combobox and choose patient automatically
-        if self.__idl_gtvn_patients is not None:
-            combox_patients = self.__idl_gtvt_patients.copy()
-            combox_patients.find_identical_items(self.__idl_gtvn_patients)
+        if self.__patients["idl.gtvn"] is not None:
+            combox_patients = self.__patients["idl.gtvt"].copy()
+            combox_patients.find_identical_items(self.__patients["idl.gtvn"])
             self.__combox["patient"].addItems(combox_patients)
             self.__combox["patient"].setEnabled(True)
             # try not to reset patient when idl_gtvt_id is changed
@@ -1031,7 +1051,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.__slice is None:
                 self.__slice = round(img_depth / 2) - 1
             # check slice_id range from [0, img_depth-1]
-            self.__slice = Value.limit_range(self.__slice, (0, img_depth - 1))
+            self.__slice = ValueUtils.limit_range(self.__slice, (0, img_depth - 1))
 
         # try not to reset round when patient is changed
         if self.__round not in round_list:
@@ -1089,7 +1109,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__imgs[i] = None
 
         # load gtvt scores
-        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "inference.json"))
+        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "inference_test_inter.json"))
         for metric in g.METRICS:
             self.__scores["gtvt"][metric] = gtvt_score[
                 "patient={}".format(self.__patient)
@@ -1097,7 +1117,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load gtvn scores
         gtvn_score = Json.load(
-            os.path.join(self.__idl_gtvn_epoch_dir, "inference_test.json")
+            os.path.join(self.__idl_gtvn_epoch_dir, "inference_test_inter.json")
         )
         if self.__round == "00":
             gtvn_round = "00"
@@ -1127,6 +1147,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         next_baseline = self.__combox["baseline"].itemText(idx)
         self.__combox["baseline"].setCurrentText(next_baseline)
         self.__choose_baseline()
+
+    def __choose_prev_idl_gtvs(self):
+        idx = self.__combox["idl.gtvs"].currentIndex() - 1
+        if idx < 0:
+            return
+        prev_idl_gtvs = self.__combox["idl.gtvs"].itemText(idx)
+        self.__combox["idl.gtvs"].setCurrentText(prev_idl_gtvs)
+        self.__choose_idl_gtvs()
+
+    def __choose_next_idl_gtvs(self):
+        idx = self.__combox["idl.gtvs"].currentIndex() + 1
+        if idx > self.__combox["idl.gtvs"].count() - 1:
+            return
+        next_idl_gtvs = self.__combox["idl.gtvs"].itemText(idx)
+        self.__combox["idl.gtvs"].setCurrentText(next_idl_gtvs)
+        self.__choose_idl_gtvs()
 
     def __choose_prev_idl_gtvn(self):
         idx = self.__combox["idl.gtvn"].currentIndex() - 1
@@ -1364,14 +1400,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             for metric in g.METRICS:
                 cv_text += "GTVt - " + metric.upper()
-                if Value.is_number(self.__scores["gtvt"][metric]):
+                if ValueUtils.is_number(self.__scores["gtvt"][metric]):
                     cv_text += ": {:.3f}".format(self.__scores["gtvt"][metric])
                 else:
                     cv_text += ": N/A"
                 cv_text += "\n"
             for metric in g.METRICS:
                 cv_text += "GTVn - " + metric.upper()
-                if Value.is_number(self.__scores["gtvn"][metric]):
+                if ValueUtils.is_number(self.__scores["gtvn"][metric]):
                     cv_text += ": {:.3f}".format(self.__scores["gtvn"][metric])
                 else:
                     cv_text += ": N/A"

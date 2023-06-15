@@ -128,14 +128,19 @@ class DataSetBaseline(torch.utils.data.Dataset):
         return self.get_item(patient)
 
 
-# # for testing
-# # augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
-# # patients without GTVn: 257 192
-# tmp_dataset = DataSetBaseline(
-#     patient_list=["257"],
-#     augment_methods=["rotate"],
-#     augment_pct=1,
-#     augment_low_limit=1,
-#     augment_up_limit=1,
-# )
-# tmp_dataset.__getitem__(0)
+# for testing
+# augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
+# patients without GTVn: 257 192
+if 0:
+    augment = Dict()
+    # [translate,elastic,rotate,scale,flip.lr,flip.ud]
+    augment["methods"] = []
+    augment["pct"] = 1
+    augment["min"] = 1
+    augment["max"] = 1
+    augment["times"] = 1
+    tmp_dataset = DataSetBaseline(
+        patients=["257"],
+        augment=augment,
+    )
+    tmp_dataset.__getitem__(0)

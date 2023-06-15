@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import warnings
+import statistics
 import shutil
 import torch
 import json
@@ -20,8 +21,8 @@ from natsort import natsorted
 
 
 # nested dictionary
-# after json loaded, key(int type) will transfrom into string
-# better make all keys "string" type
+# (1) new_dict=Dict(origin_dict), change new_dict will not change my_dict
+# (2) better make all keys "str", because Json.load() will change key type(int type) into string
 class Dict(dict):
     def __getitem__(self, item):
         try:
@@ -104,14 +105,14 @@ class List(list):
         else:
             random.shuffle(self)
 
-    def sort(self):
-        super().__init__(natsorted(self))
+    def sort(self, reverse: bool = False):
+        super().__init__(natsorted(self, reverse=reverse))
 
     def remove_duplicates(self):
         self[:] = List(set(self))
 
 
-class Value:
+class ValueUtils:
     def replace_char(input_str: str, idx: int, new_char: str) -> str:
         return input_str[:idx] + new_char + input_str[idx + 1 :]
 
@@ -130,7 +131,7 @@ class Value:
 
     def to_pct(input_num: Union[float, str]) -> str:
         input_num = float(input_num)
-        output_str = Value.keep_decimal(input_num=input_num * 100, keep_dec_num=2)
+        output_str = ValueUtils.keep_decimal(input_num=input_num * 100, keep_dec_num=2)
         output_str = str(output_str) + "%"
         return output_str
 
@@ -160,20 +161,25 @@ class Value:
             pass
         return False
 
-    def get_avg(input_data: Union[list, dict]) -> float:
-        data = input_data.copy()
+    def median(data):
+        return statistics.median(data)
+
+    def avg(data: Union[list, dict, tuple]) -> float:
 
         if isinstance(data, dict):
             data = Dict(data).to_list()
-
-        if isinstance(data, list):
-            data = [i for i in data if Value.is_number(i)]
-            if len(data) == 0:
-                return None
-            else:
-                return sum(data) / len(data)
+        elif isinstance(data, tuple):
+            data = list(data)
+        elif isinstance(data, list):
+            data = data.copy()
         else:
             return data
+
+        data = [i for i in data if ValueUtils.is_number(i)]
+        if len(data) == 0:
+            return None
+        else:
+            return statistics.mean(data)
 
 
 class Img:
@@ -210,14 +216,14 @@ class Img:
         return ct_img
 
     # max size: 89 283 280
-    def central_crop(img: ndarray, shape: tuple) -> ndarray:
+    def central_crop(img: ndarray, target_shape: tuple) -> ndarray:
         in_shape = Dict()
         in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
         out_shape = Dict()
-        out_shape["d"] = shape[0]
-        out_shape["h"] = shape[1]
-        out_shape["w"] = shape[2]
+        out_shape["d"] = target_shape[0]
+        out_shape["h"] = target_shape[1]
+        out_shape["w"] = target_shape[2]
 
         if (
             in_shape["d"] > out_shape["d"]
@@ -241,14 +247,14 @@ class Img:
 
         return img
 
-    def central_pad(img: ndarray, shape: tuple) -> ndarray:
+    def central_pad(img: ndarray, target_shape: tuple) -> ndarray:
         in_shape = Dict()
         in_shape["d"], in_shape["h"], in_shape["w"] = img.shape
 
         out_shape = Dict()
-        out_shape["d"] = shape[0]
-        out_shape["h"] = shape[1]
-        out_shape["w"] = shape[2]
+        out_shape["d"] = target_shape[0]
+        out_shape["h"] = target_shape[1]
+        out_shape["w"] = target_shape[2]
 
         pad = Dict()
         for i in ["w", "h", "d"]:
@@ -275,6 +281,11 @@ class Img:
             "constant",
             constant_values=0,  # constant_values=0 means black padding
         )
+        return img
+
+    def central_pad_and_crop(img: ndarray, target_shape: tuple):
+        img = Img.central_pad(img, target_shape)
+        img = Img.central_crop(img, target_shape)
         return img
 
     def connected_components(img: ndarray) -> List:
@@ -485,7 +496,7 @@ class Folder:
 class Explorer:
     def __get_sub_items(
         input_dir: str,
-        return_full_path: bool,
+        full_path: bool,
         key_word: str,
         shuffle: bool,
         seed: int,
@@ -513,7 +524,7 @@ class Explorer:
                 if key_word not in i:
                     sub_list.remove(i)
 
-        if return_full_path:
+        if full_path:
             for i in range(len(sub_list)):
                 sub_list[i] = os.path.join(input_dir, sub_list[i])
 
@@ -522,13 +533,13 @@ class Explorer:
     def get_sub_items(
         input_dir: str,
         key_word: str = "",
-        return_full_path: bool = False,
+        full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
         sub_list = Explorer.__get_sub_items(
             input_dir=input_dir,
-            return_full_path=return_full_path,
+            full_path=full_path,
             key_word=key_word,
             shuffle=shuffle,
             seed=seed,
@@ -539,13 +550,13 @@ class Explorer:
     def get_sub_files(
         input_dir: str,
         key_word: str = "",
-        return_full_path: bool = False,
+        full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
         sub_list = Explorer.__get_sub_items(
             input_dir=input_dir,
-            return_full_path=return_full_path,
+            full_path=full_path,
             key_word=key_word,
             shuffle=shuffle,
             seed=seed,
@@ -556,13 +567,13 @@ class Explorer:
     def get_sub_folders(
         input_dir: str,
         key_word: str = "",
-        return_full_path: bool = False,
+        full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ):
         sub_list = Explorer.__get_sub_items(
             input_dir=input_dir,
-            return_full_path=return_full_path,
+            full_path=full_path,
             key_word=key_word,
             shuffle=shuffle,
             seed=seed,
@@ -680,5 +691,5 @@ class Global:
     HYPER_JSON_PATH_BASELINE = os.path.join(PROJ_DIR, __settings["hyper.json.baseline"])
     HYPER_JSON_PATH_IDL_GTVT = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvt"])
     HYPER_JSON_PATH_IDL_GTVN = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvn"])
-    HYPER_JSON_PATH_IDL = os.path.join(PROJ_DIR, __settings["hyper.json.idl"])
+    HYPER_JSON_PATH_IDL_GTVS = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvs"])
     TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])

@@ -20,7 +20,7 @@ from custom import Json
 from custom import GPU
 from custom import Nii
 from custom import Folder
-from custom import Value
+from custom import ValueUtils
 from custom import Explorer
 
 
@@ -84,7 +84,7 @@ class TrainingIDLGTVt(TrainingParent):
             # at least 2 iters to compare loss difference
             hyper["iter"] = 2
         else:
-            hyper["iter"] = Value.limit_range(hyper["iter"], (1, None))
+            hyper["iter"] = ValueUtils.limit_range(hyper["iter"], (1, None))
 
         # lr
         # lr is saved in json file as a string, not a list, because:
@@ -93,9 +93,9 @@ class TrainingIDLGTVt(TrainingParent):
         hyper["lr"] = List(hyper["lr"])
         for i in range(len(hyper["lr"])):
             hyper["lr"][i] = float(hyper["lr"][i])
-            hyper["lr"][i] = Value.limit_range(hyper["lr"][i], (g.EPS, 1))
+            hyper["lr"][i] = ValueUtils.limit_range(hyper["lr"][i], (g.EPS, 1))
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr.min"] = Value.limit_range(
+            hyper["lr.min"] = ValueUtils.limit_range(
                 hyper["lr.min"], (g.EPS, hyper["lr"][i])
             )
 
@@ -107,12 +107,14 @@ class TrainingIDLGTVt(TrainingParent):
             hyper["lr.actual"].append(hyper["lr"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr.decay.patience"] = Value.limit_range(
+        hyper["lr.decay.patience"] = ValueUtils.limit_range(
             hyper["lr.decay.patience"], (1, hyper["iter"])
         )
 
         # augmentation times
-        hyper["augment.times"] = Value.limit_range(hyper["augment.times"], (1, None))
+        hyper["augment.times"] = ValueUtils.limit_range(
+            hyper["augment.times"], (1, None)
+        )
 
         # augmentation percent (based on augment_times)
         hyper["augment.pct"] = hyper["augment.times"] / (hyper["augment.times"] + 1)
@@ -126,7 +128,7 @@ class TrainingIDLGTVt(TrainingParent):
             hyper[plane] = List(hyper[plane])
             for i in range(len(hyper[plane])):
                 hyper[plane][i] = int(hyper[plane][i])
-                hyper[plane][i] = Value.limit_range(hyper[plane][i], (0, None))
+                hyper[plane][i] = ValueUtils.limit_range(hyper[plane][i], (0, None))
 
         # select scenario
         if (
@@ -137,19 +139,19 @@ class TrainingIDLGTVt(TrainingParent):
             hyper["select.scenario"] = "random"
 
         # weight map parameters
-        hyper["weight.background"] = Value.limit_range(
+        hyper["weight.background"] = ValueUtils.limit_range(
             hyper["weight.background"], (0.0, 1.0)
         )
-        hyper["weight.slice"] = Value.limit_range(
+        hyper["weight.slice"] = ValueUtils.limit_range(
             hyper["weight.slice"], (hyper["weight.background"], None)
         )
-        hyper["weight.fp.fn"] = Value.limit_range(
+        hyper["weight.fp.fn"] = ValueUtils.limit_range(
             hyper["weight.fp.fn"], (hyper["weight.slice"], None)
         )
-        hyper["weight.distance.step"] = Value.limit_range(
+        hyper["weight.distance.step"] = ValueUtils.limit_range(
             hyper["weight.distance.step"], (1, None)
         )
-        hyper["weight.prev.round.decay"] = Value.limit_range(
+        hyper["weight.prev.round.decay"] = ValueUtils.limit_range(
             hyper["weight.prev.round.decay"], (0.0, 1.0)
         )
 
@@ -368,7 +370,7 @@ class TrainingIDLGTVt(TrainingParent):
                 for part in range(1, divided_parts):
                     idx = len(candidates) * part / divided_parts
                     idx = round(idx)
-                    idx = Value.limit_range(idx, (1, len(candidates)))
+                    idx = ValueUtils.limit_range(idx, (1, len(candidates)))
                     new_round_slices[plane].append(candidates[idx - 1])
 
             # (1) "random"
@@ -640,7 +642,7 @@ class TrainingIDLGTVt(TrainingParent):
 
         # copy baseline scores
         baseline_score = Json.load(
-            os.path.join(baseline_epoch_dir, "baseline", "inference_test.json")
+            os.path.join(baseline_epoch_dir, "baseline", "inference.json")
         )
         idl_gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference.json"))
         for metric in g.METRICS:
@@ -713,7 +715,7 @@ class TrainingIDLGTVt(TrainingParent):
         # avg loss dict
         avg_loss = Dict()
         for patient_dir in Explorer.get_sub_folders(
-            os.path.join(idl_gtvt_dir, "patients"), return_full_path=True
+            os.path.join(idl_gtvt_dir, "patients"), full_path=True
         ):
             cur_patient_loss = Json.load(os.path.join(patient_dir, "loss.json"))
             if avg_loss == {}:
@@ -724,7 +726,7 @@ class TrainingIDLGTVt(TrainingParent):
                     avg_loss[i].append(cur_patient_loss[i])
 
         for i in avg_loss:
-            avg_loss[i] = Value.get_avg(avg_loss[i])
+            avg_loss[i] = ValueUtils.avg(avg_loss[i])
 
         avg_loss = avg_loss.to_list()
 
@@ -761,7 +763,7 @@ class TrainingIDLGTVt(TrainingParent):
             baseline_fold_dir = Explorer.get_sub_folders(
                 os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
                 key_word=key_word,
-                return_full_path=True,
+                full_path=True,
             )[0]
 
             # find epoch folder
@@ -770,12 +772,12 @@ class TrainingIDLGTVt(TrainingParent):
             else:
                 key_word = "epoch={:03d}".format(baseline_epoch)
             baseline_epoch_dir = Explorer.get_sub_folders(
-                baseline_fold_dir, key_word=key_word, return_full_path=True
+                baseline_fold_dir, key_word=key_word, full_path=True
             )[0]
             baseline_cnn_path = Explorer.get_sub_files(
                 os.path.join(baseline_epoch_dir, "baseline"),
                 key_word=".pt",
-                return_full_path=True,
+                full_path=True,
             )[0]
 
             # load and print hyper
@@ -825,37 +827,41 @@ class TrainingIDLGTVt(TrainingParent):
                     hyper[key_name] = str(hyper[key_name]).split(".", 2)[0]
 
             self._save_hyper(hyper, hyper_save_path)
-            self.__calculate_median_score(idl_gtvt_dir)
+            self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
-    def calculate_median_score(self, idl_gtvt_id):
+    def calculate_median_and_avg_score(self, idl_gtvt_id):
         idl_gtvt_dir = self._find_result_dir(idl_gtvt_id)
         if idl_gtvt_dir is None:
             print("idl_gtvt_id not found")
             return
-        self.__calculate_median_score(idl_gtvt_dir)
+        self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
-    def __calculate_median_score(self, idl_gtvt_dir: str):
+    def __calculate_median_and_avg_score(self, idl_gtvt_dir: str):
         score_json_path = os.path.join(idl_gtvt_dir, "inference.json")
-        score = Json.load(score_json_path)
-        median = Dict()
+        scores = Json.load(score_json_path)
+        all_patient_scores = Dict()
 
         # add all patients score in to a list
-        for patient in score:
-            if patient == "median":
+        for patient in scores:
+            if patient == "median" or patient == "avg":
                 continue
             for metric in g.METRICS:
-                for round_num in score[patient][metric]:
-                    if median[metric][round_num] == {}:
-                        median[metric][round_num] = List()
-                    median[metric][round_num].append(score[patient][metric][round_num])
-
+                for round_num in scores[patient][metric]:
+                    if all_patient_scores[metric][round_num] == {}:
+                        all_patient_scores[metric][round_num] = List()
+                    all_patient_scores[metric][round_num].append(
+                        scores[patient][metric][round_num]
+                    )
         # calculate median score
         for metric in g.METRICS:
-            for round_num in median[metric]:
-                score["median"][metric][round_num] = statistics.median(
-                    median[metric][round_num]
+            for round_num in all_patient_scores[metric]:
+                scores["median"][metric][round_num] = ValueUtils.median(
+                    all_patient_scores[metric][round_num]
                 )
-        Json.save(data=score, path=os.path.join(score_json_path))
+                scores["avg"][metric][round_num] = ValueUtils.avg(
+                    all_patient_scores[metric][round_num]
+                )
+        Json.save(data=scores, path=os.path.join(score_json_path))
 
     def inference(self, idl_gtvt_id: str, debug_mode: bool = False):
         print("")
@@ -881,9 +887,7 @@ class TrainingIDLGTVt(TrainingParent):
 
         # copy baseline score
         baseline_score = Json.load(
-            os.path.join(
-                Path(idl_gtvt_dir).parent.parent, "baseline", "inference_test.json"
-            )
+            os.path.join(Path(idl_gtvt_dir).parent.parent, "baseline", "inference.json")
         )
         idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference.json")
         if os.path.exists(idl_gtvt_score_path):
@@ -903,15 +907,15 @@ class TrainingIDLGTVt(TrainingParent):
 
             # loop through each round
             for round_dir in Explorer.get_sub_folders(
-                patient_dir, key_word="round=", return_full_path=True
+                patient_dir, key_word="round=", full_path=True
             ):
                 # load current round cnn
                 cnn_path = Explorer.get_sub_files(
-                    round_dir, key_word=".pt", return_full_path=True
+                    round_dir, key_word=".pt", full_path=True
                 )[0]
                 hyper = Dict()
                 self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
                 self.__inference_round(round_dir=round_dir, hyper=hyper)
 
-        self.__calculate_median_score(idl_gtvt_dir)
+        self.__calculate_median_and_avg_score(idl_gtvt_dir)

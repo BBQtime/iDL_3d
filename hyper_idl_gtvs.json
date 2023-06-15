@@ -17,5 +17,10 @@
     "lr": 0.0002,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
-    "lr.min": 1e-05
+    "lr.min": 1e-05,
+    "weight.background": 0.2,
+    "weight.distance.step": 3,
+    "weight.fp.fn": 4.0,
+    "weight.prev.round.decay": 0.5,
+    "weight.slice": 1.0
 }

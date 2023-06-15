@@ -218,7 +218,8 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
             # concat multi-model img
             input_imgs = torch.cat([input_imgs, img], dim=0)
 
-        return input_imgs, labels, clicks
+        # None is used as a placeholder to ensure consistent return value formats for each dataset
+        return input_imgs, labels, None, clicks
 
     # must be overrided
     # this function is only for training, not for inference

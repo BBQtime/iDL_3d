@@ -5,47 +5,24 @@ from torch import Tensor
 from torch import tensor
 from custom import Dict
 
-EPSILON = torch.finfo(torch.float32).eps
 
+# only for training
+# dice loss: weight=1.0, delta=0.5
+class UnifiedFocalLoss(nn.Module):
+    def _split_channels(self, input_imgs: Tensor) -> Dict:
 
-def split_channels(
-    input_imgs: Tensor,
-    train_type: str,  # baseline/idl_gtvt/idl_gtvn
-) -> dict:
+        # dimension: [batch, channel, depth, height, width]
+        output_imgs = Dict()
 
-    # dimension: [batch, channel, depth, height, width]
-    output_imgs = Dict()
-
-    # baseline
-    if train_type == "baseline":
         output_imgs["back"] = input_imgs[:, 0, :, :, :]
         output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
         output_imgs["gtvn"] = input_imgs[:, 2, :, :, :]
 
-    # idl gtvt
-    elif train_type == "idl_gtvt":
-        # preds have 3 channels, background = background + gtvn
-        if input_imgs.shape[1] == 3:
-            output_imgs["back"] = input_imgs[:, 0, :, :, :] + input_imgs[:, 2, :, :, :]
-        # labels have 2 channels, background = background
-        elif input_imgs.shape[1] == 2:
-            output_imgs["back"] = input_imgs[:, 0, :, :, :]
-        output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
+        return output_imgs
 
-    # idl gtvn
-    elif train_type == "idl_gtvn":
-        output_imgs["back"] = input_imgs[:, 0, :, :, :]
-        output_imgs["gtvn"] = input_imgs[:, 1, :, :, :]
-
-    return output_imgs
-
-
-def focal_loss(
-    asym: bool,  # asym=true for imbalanced dataset, only suppress background
-    delta: float,  # weight given to foreground (delta) amd background (1-delta)
-    gamma: float,  # focal parameter controls the degree of background suppression
-):
-    def loss_function(preds: dict, labels: dict, weight_map: Tensor = None) -> Tensor:
+    def __focal_loss(
+        self, preds: dict, labels: dict, weight_map: Tensor = None
+    ) -> Tensor:
 
         loss = Dict()
 
@@ -53,26 +30,26 @@ def focal_loss(
         for i in preds.keys():
 
             # clip values to prevent division by zero error
-            preds[i] = torch.clip(preds[i], EPSILON, 1.0 - EPSILON)
+            preds[i] = torch.clip(preds[i], self.__epsilon, 1.0 - self.__epsilon)
 
             # cross entropy
             loss[i] = -labels[i] * torch.log(preds[i])
 
             # always suppress background
             # suppress foreground when symmetrical
-            if i == "back" or not asym:
+            if i == "back" or not self.__asym:
                 # suppression (larger gamma, more suppression)
                 # loss always > 0, both before and after this step
-                loss[i] = loss[i] * torch.pow(1 - preds[i], gamma)
+                loss[i] = loss[i] * torch.pow(1 - preds[i], self.__gamma)
 
             # weight given to foreground (delta) amd background (1-delta)
             if i == "back":
-                loss[i] = loss[i] * (1 - delta)
+                loss[i] = loss[i] * (1 - self.__delta)
             else:
-                loss[i] = loss[i] * delta
+                loss[i] = loss[i] * self.__delta
 
             # add weight to loss
-            if weight_map is not None:
+            if weight_map is not None and i == "gtvt":
                 loss[i] = loss[i] * weight_map
 
         loss = loss.to_list()
@@ -81,17 +58,10 @@ def focal_loss(
         loss = torch.mean(loss)
         return loss
 
-    return loss_function
-
-
-def focal_tversky_loss(
-    asym: bool,  # =true for imbalanced dataset, only enhance foreground
-    delta: float,  # weight given to FN (delta) and FP (1-delta)
-    gamma: float,  # focal parameter controls the degree of foreground enhancement
-):
-    axis = (1, 2, 3)
-
-    def loss_function(preds: dict, labels: dict, weight_map: Tensor = None) -> Tensor:
+    def __focal_tversky_loss(
+        self, preds: dict, labels: dict, weight_map: Tensor = None
+    ) -> Tensor:
+        axis = (1, 2, 3)
 
         tp = Dict()
         fn = Dict()
@@ -101,7 +71,7 @@ def focal_tversky_loss(
         # calculate loss through each channel
         for i in preds.keys():
 
-            if weight_map is not None:
+            if weight_map is not None and i == "gtvt":
                 tp[i] = torch.sum(labels[i] * preds[i] * weight_map, dim=axis)
                 fn[i] = torch.sum(labels[i] * (1 - preds[i]) * weight_map, dim=axis)
                 fp[i] = torch.sum((1 - labels[i]) * preds[i] * weight_map, dim=axis)
@@ -110,18 +80,21 @@ def focal_tversky_loss(
                 fn[i] = torch.sum(labels[i] * (1 - preds[i]), dim=axis)
                 fp[i] = torch.sum((1 - labels[i]) * preds[i], dim=axis)
 
-            loss[i] = (tp[i] + EPSILON) / (
-                tp[i] + delta * fn[i] + (1 - delta) * fp[i] + EPSILON
+            loss[i] = (tp[i] + self.__epsilon) / (
+                tp[i]
+                + self.__delta * fn[i]
+                + (1 - self.__delta) * fp[i]
+                + self.__epsilon
             )
             loss[i] = 1 - loss[i]
 
             # always enhance foreground, enhance background when symmetrical
             # larger gamma, more enhancement
-            if i != "back" or not asym:
+            if i != "back" or not self.__asym:
                 # clip values to prevent division by zero error
-                loss[i] = torch.clip(loss[i], EPSILON)
+                loss[i] = torch.clip(loss[i], self.__epsilon)
                 # loss always > 0, both before and after this step
-                loss[i] = loss[i] * torch.pow(loss[i], -gamma)
+                loss[i] = loss[i] * torch.pow(loss[i], -self.__gamma)
 
         loss = loss.to_list()
         loss = torch.stack(loss, dim=-1)
@@ -129,72 +102,53 @@ def focal_tversky_loss(
 
         return loss
 
-    return loss_function
-
-
-def unified_focal_loss(
-    asym: bool,  # asym=true for imbalanced dataset, only enhance foreground or suppress background
-    weight: float,  # lambda parameter, controls weight given to Focal Tversky loss and Focal loss
-    delta: float,  # controls weight given to each class
-    gamma: float,  # focal parameter controls the degree of background suppression and foreground enhancement
-    train_type: str,  # baseline/idl_gtvt/idl_gtvn
-):
-    def loss_function(
-        preds: Tensor, labels: Tensor, weight_map: Tensor = None
+    def __unified_focal_loss(
+        self, preds: Tensor, labels: Tensor, weight_map: Tensor = None
     ) -> Tensor:
 
-        preds = split_channels(preds, train_type)
-        labels = split_channels(labels, train_type)
-
         if weight_map is not None:
-            # weight_map: [b,c,d,h,w] -> [b,d,h,w]
+            # weight_map only has one channel
+            # weight_map: [b,c,d,h,w] -> [b,d,h,w],
             weight_map = weight_map[:, 0, :, :, :]
 
-        if weight > 0:
-            ftl = focal_tversky_loss(asym=asym, delta=delta, gamma=gamma)(
-                preds=preds,
-                labels=labels,
-                weight_map=weight_map,
+        if self.__weight > 0:
+            ftl = self.__focal_tversky_loss(
+                preds=preds, labels=labels, weight_map=weight_map
             )
         else:
             ftl = tensor(0, dtype=torch.float32)
 
-        if weight < 1:
-            fl = focal_loss(asym=asym, delta=delta, gamma=gamma)(
-                preds=preds,
-                labels=labels,
-                weight_map=weight_map,
-            )
+        if self.__weight < 1:
+            fl = self.__focal_loss(preds=preds, labels=labels, weight_map=weight_map)
         else:
             fl = tensor(0, dtype=torch.float32)
 
-        return (weight * ftl) + (1 - weight) * fl
+        return self.__weight * ftl + (1 - self.__weight) * fl
 
-    return loss_function
-
-
-# only for training
-# dice loss: weight=1.0, delta=0.5
-class UnifiedFocalLoss(nn.Module):
-    def __init__(
-        self,
-        asym: bool,
-        weight: float,
-        delta: float,
-        gamma: float,
-        train_type: str,  # baseline/idl_gtvt/idl_gtvn
-    ):
+    def __init__(self, asym: bool, weight: float, delta: float, gamma: float):
         super().__init__()
-        self.__loss_func = unified_focal_loss(
-            asym=asym,
-            weight=weight,
-            delta=delta,
-            gamma=gamma,
-            train_type=train_type,
-        )
+
+        # asym: =true for imbalanced dataset,
+        # in Focal Tversky loss, asym will enhance foreground
+        # in Focal loss, asym will suppress background
+        self.__asym = asym
+
+        # weight: lambda parameter, controls balance between Focal Tversky loss and Focal loss
+        self.__weight = weight
+
+        # delta: controls weight given to each class
+        # in Focal Tversky loss, delta controls weight given to FN (delta) and FP (1-delta)
+        # in Focal loss, delta controls weight given to foreground (delta) amd background (1-delta)
+        self.__delta = delta
+
+        # gamma: focal parameter controls the degree of background suppression or foreground enhancement
+        # in Focal Tversky loss, gamma controls the degree of foreground enhancement
+        # in Focal loss, gamma controls the degree of background suppression
+        self.__gamma = gamma
+
+        self.__epsilon = torch.finfo(torch.float32).eps
 
     def forward(self, preds, labels, weight_map=None):
-        # if preds.shape != labels.shape:
-        #     raise ValueError("preds.shape != labels.shape")
-
-        return self.__loss_func(preds, labels, weight_map)
+        preds = self._split_channels(preds)
+        labels = self._split_channels(labels)
+        return self.__unified_focal_loss(preds, labels, weight_map)

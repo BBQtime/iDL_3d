@@ -70,7 +70,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>60</y>
+      <y>100</y>
       <width>101</width>
       <height>15</height>
      </rect>
@@ -83,7 +83,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>160</y>
+      <y>200</y>
       <width>91</width>
       <height>15</height>
      </rect>
@@ -96,7 +96,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>210</y>
+      <y>250</y>
       <width>87</width>
       <height>15</height>
      </rect>
@@ -109,7 +109,7 @@
     <property name="geometry">
      <rect>
       <x>350</x>
-      <y>80</y>
+      <y>120</y>
       <width>141</width>
       <height>21</height>
      </rect>
@@ -119,7 +119,7 @@
     <property name="geometry">
      <rect>
       <x>350</x>
-      <y>180</y>
+      <y>220</y>
       <width>141</width>
       <height>21</height>
      </rect>
@@ -129,7 +129,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>230</y>
+      <y>270</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -142,7 +142,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>230</y>
+      <y>270</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -155,7 +155,7 @@
     <property name="geometry">
      <rect>
       <x>350</x>
-      <y>230</y>
+      <y>270</y>
       <width>141</width>
       <height>21</height>
      </rect>
@@ -165,7 +165,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>319</y>
+      <y>359</y>
       <width>241</width>
       <height>22</height>
      </rect>
@@ -178,7 +178,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>369</y>
+      <y>409</y>
       <width>241</width>
       <height>22</height>
      </rect>
@@ -191,7 +191,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>299</y>
+      <y>339</y>
       <width>64</width>
       <height>15</height>
      </rect>
@@ -204,7 +204,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>349</y>
+      <y>389</y>
       <width>52</width>
       <height>15</height>
      </rect>
@@ -217,7 +217,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>130</y>
+      <y>170</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -230,7 +230,7 @@
     <property name="geometry">
      <rect>
       <x>350</x>
-      <y>130</y>
+      <y>170</y>
       <width>141</width>
       <height>21</height>
      </rect>
@@ -240,7 +240,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>110</y>
+      <y>150</y>
       <width>104</width>
       <height>15</height>
      </rect>
@@ -253,7 +253,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>130</y>
+      <y>170</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -266,7 +266,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>80</y>
+      <y>120</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -279,7 +279,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>80</y>
+      <y>120</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -292,7 +292,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>180</y>
+      <y>220</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -305,7 +305,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>180</y>
+      <y>220</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -318,7 +318,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>30</y>
+      <y>20</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -331,7 +331,7 @@
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>30</y>
+      <y>20</y>
       <width>51</width>
       <height>21</height>
      </rect>
@@ -344,7 +344,7 @@
     <property name="geometry">
      <rect>
       <x>350</x>
-      <y>30</y>
+      <y>20</y>
       <width>141</width>
       <height>21</height>
      </rect>
@@ -354,7 +354,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>10</y>
+      <y>0</y>
       <width>99</width>
       <height>15</height>
      </rect>
@@ -367,7 +367,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>639</y>
+      <y>620</y>
       <width>241</width>
       <height>21</height>
      </rect>
@@ -380,7 +380,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>619</y>
+      <y>600</y>
       <width>152</width>
       <height>15</height>
      </rect>
@@ -393,7 +393,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>539</y>
+      <y>540</y>
       <width>241</width>
       <height>16</height>
      </rect>
@@ -406,7 +406,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>569</y>
+      <y>560</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -416,14 +416,14 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_eraser">
     <property name="geometry">
      <rect>
       <x>360</x>
-      <y>569</y>
+      <y>560</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -433,14 +433,14 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_clear">
     <property name="geometry">
      <rect>
       <x>430</x>
-      <y>569</y>
+      <y>560</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -450,14 +450,14 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_confirm">
     <property name="geometry">
      <rect>
       <x>490</x>
-      <y>569</y>
+      <y>560</y>
       <width>51</width>
       <height>31</height>
      </rect>
@@ -467,16 +467,16 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</normaloff>../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</iconset>
     </property>
    </widget>
    <widget class="QTextEdit" name="_text_box_annotation_msg">
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>479</y>
+      <y>519</y>
       <width>241</width>
-      <height>41</height>
+      <height>21</height>
      </rect>
     </property>
    </widget>
@@ -484,7 +484,7 @@
     <property name="geometry">
      <rect>
       <x>301</x>
-      <y>400</y>
+      <y>440</y>
       <width>92</width>
       <height>21</height>
      </rect>
@@ -497,7 +497,7 @@
     <property name="geometry">
      <rect>
       <x>399</x>
-      <y>400</y>
+      <y>440</y>
       <width>72</width>
       <height>21</height>
      </rect>
@@ -510,7 +510,7 @@
     <property name="geometry">
      <rect>
       <x>477</x>
-      <y>400</y>
+      <y>440</y>
       <width>71</width>
       <height>21</height>
      </rect>
@@ -523,7 +523,7 @@
     <property name="geometry">
      <rect>
       <x>301</x>
-      <y>271</y>
+      <y>311</y>
       <width>42</width>
       <height>21</height>
      </rect>
@@ -536,7 +536,7 @@
     <property name="geometry">
      <rect>
       <x>355</x>
-      <y>271</y>
+      <y>311</y>
       <width>41</width>
       <height>21</height>
      </rect>
@@ -549,7 +549,7 @@
     <property name="geometry">
      <rect>
       <x>408</x>
-      <y>271</y>
+      <y>311</y>
       <width>63</width>
       <height>21</height>
      </rect>
@@ -562,7 +562,7 @@
     <property name="geometry">
      <rect>
       <x>477</x>
-      <y>271</y>
+      <y>311</y>
       <width>63</width>
       <height>21</height>
      </rect>
@@ -575,7 +575,7 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>450</y>
+      <y>490</y>
       <width>241</width>
       <height>22</height>
      </rect>
@@ -588,13 +588,62 @@
     <property name="geometry">
      <rect>
       <x>300</x>
-      <y>430</y>
+      <y>470</y>
       <width>52</width>
       <height>15</height>
      </rect>
     </property>
     <property name="text">
      <string>Zoom In</string>
+    </property>
+   </widget>
+   <widget class="QToolButton" name="_btn_next_idl_gtvs">
+    <property name="geometry">
+     <rect>
+      <x>490</x>
+      <y>70</y>
+      <width>51</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>...</string>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="_combox_idl_gtvs">
+    <property name="geometry">
+     <rect>
+      <x>350</x>
+      <y>70</y>
+      <width>141</width>
+      <height>21</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QToolButton" name="_btn_prev_idl_gtvs">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>70</y>
+      <width>51</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>...</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="_text_label_idl_gtvs">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>50</y>
+      <width>103</width>
+      <height>15</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Choose iDL GTVs</string>
     </property>
    </widget>
   </widget>

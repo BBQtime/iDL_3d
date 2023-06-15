@@ -17,12 +17,12 @@ def compare_idls_in_table(
             fields.append("{}_{}".format(metric, i + 1))
 
     baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
-    fold_dir = Explorer.get_sub_folders(baseline_dir, "fold=", return_full_path=True)[0]
-    epoch_dir = Explorer.get_sub_folders(fold_dir, "epoch=", return_full_path=True)[0]
+    fold_dir = Explorer.get_sub_folders(baseline_dir, "fold=", full_path=True)[0]
+    epoch_dir = Explorer.get_sub_folders(fold_dir, "epoch=", full_path=True)[0]
     idl_gtvt_main_dir = os.path.join(epoch_dir, "idl_gtvt")
 
     patient_list = Json.load(
-        os.path.join(idl_gtvt_main_dir, idl_results_list[0], "inference.json")
+        os.path.join(idl_gtvt_main_dir, idl_results_list[0], "inference_test_inter.json")
     )
     patient_list = patient_list.keys()
 
@@ -35,7 +35,7 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             idl_id = idl_results_list[i]
             gtvt_score = Json.load(
-                os.path.join(idl_gtvt_main_dir, idl_id, "inference.json")
+                os.path.join(idl_gtvt_main_dir, idl_id, "inference_test_inter.json")
             )
             for metric in ["DSC", "MSD", "HD95"]:
                 cur_patient_score["{}_{}".format(metric, i + 1)] = gtvt_score[patient][

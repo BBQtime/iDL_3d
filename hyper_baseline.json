@@ -12,7 +12,7 @@
     "keep.best.cnn.num": 5,
     "loss.asym": true,
     "loss.delta": 0.5,
-    "loss.gamma": 0.3,
+    "loss.gamma": 0.5,
     "loss.weight": 0.5,
     "lr": 0.0002,
     "lr.decay.factor": 0.5,
