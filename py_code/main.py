@@ -17,13 +17,6 @@ if 0:
         train_remark="",
         debug_mode=1,
     )
-if 1:
-    baseline.inference(
-        "baseline_2023.02.27.07.08.09_best",
-        dataset="test.inter",
-    )
-if 0:
-    baseline.calculate_cross_valid_mean("baseline_2023.02.27.07.08.09_best")
 
 
 # idl_gtvt = TrainingIDLGTVt()

@@ -368,10 +368,7 @@ class TrainingBaseline(TrainingParent):
             )
 
             # inference
-            for dataset in ["test.inter", "train"]:
-                self.inference(
-                    baseline_id=baseline_id, dataset=dataset, debug_mode=debug_mode
-                )
+            self.inference(baseline_id=baseline_id, debug_mode=debug_mode)
 
             # after inference on internal test set
             self.remove_non_optimal_epochs(baseline_id)
@@ -388,14 +385,9 @@ class TrainingBaseline(TrainingParent):
         else:
             return None
 
-    def inference(
-        self,
-        baseline_id: str,
-        dataset: str = "test.inter",  # train/test.inter/test.exter
-        debug_mode: bool = False,
-    ):
+    def inference(self, baseline_id: str, debug_mode: bool = False):
         print("")
-        print("inference on {} set: {}".format(dataset, baseline_id))
+        print("inference: {}".format(baseline_id))
 
         # find idl gtvt folder
         baseline_dir = self._find_result_dir(baseline_id)
@@ -426,23 +418,18 @@ class TrainingBaseline(TrainingParent):
                 self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
                 # initialize scores dict (only on test)
-                if dataset == "test.inter":
-                    epoch_scores = Dict()
-                    for stats in ["median", "avg"]:
-                        for gtv in ["gtvs", "gtvt", "gtvn"]:
-                            for metric in g.METRICS:
-                                epoch_scores[stats][gtv][metric] = List()
+                epoch_scores = Dict()
+                for stats in ["median", "avg"]:
+                    for gtv in ["gtvs", "gtvt", "gtvn"]:
+                        for metric in g.METRICS:
+                            epoch_scores[stats][gtv][metric] = List()
 
-                # load dataset patients
-                patients = self._load_patients(fold=fold, debug_mode=debug_mode)
-                if dataset == "train":
-                    patients.pop("test.inter")
-                    # patients.pop("test.exter")
-                    patients = patients.to_list()
-                else:
-                    patients = patients[dataset]
+                # load patients
+                all_patients = self._load_patients(debug_mode=debug_mode)
+                inter_test_patients = all_patients["test.inter"]
+                all_patients = all_patients.to_list()
 
-                for patient in tqdm(patients):
+                for patient in tqdm(all_patients):
                     # create folder to save cur patient preds and scores
                     patient_dir = os.path.join(
                         epoch_dir,
@@ -464,8 +451,8 @@ class TrainingBaseline(TrainingParent):
                             spacing=g.NII_SPACING,
                         )
 
-                    # record score of current patient (only on internal test set)
-                    if dataset == "test.inter":
+                    # record score of current patient (test set only)
+                    if patient in inter_test_patients:
                         for gtv in ["gtvs", "gtvt", "gtvn"]:
                             for metric in g.METRICS:
                                 score = self._metrics[metric](
@@ -481,23 +468,21 @@ class TrainingBaseline(TrainingParent):
                                     epoch_scores[stats][gtv][metric].append(score)
 
                 # all patients under current epoch have been traversed
-                if dataset == "test.inter":
-                    # calculate median score (test set only)
-                    for gtv in ["gtvs", "gtvt", "gtvn"]:
-                        for metric in g.METRICS:
-                            epoch_scores["median"][gtv][metric] = ValueUtils.median(
-                                epoch_scores["median"][gtv][metric]
-                            )
-                            epoch_scores["avg"][gtv][metric] = ValueUtils.avg(
-                                epoch_scores["avg"][gtv][metric]
-                            )
-
-                    # save all patients scores in "inference_test.json"
-                    Json.save(
-                        data=epoch_scores,
-                        path=os.path.join(epoch_dir, "inference_test_inter.json"),
-                    )
-                    continue  # next epoch
+                # calculate median score (test set only)
+                for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    for metric in g.METRICS:
+                        epoch_scores["median"][gtv][metric] = ValueUtils.median(
+                            epoch_scores["median"][gtv][metric]
+                        )
+                        epoch_scores["avg"][gtv][metric] = ValueUtils.avg(
+                            epoch_scores["avg"][gtv][metric]
+                        )
+                # save all patients scores in "inference_test.json"
+                Json.save(
+                    data=epoch_scores,
+                    path=os.path.join(epoch_dir, "inference_test_inter.json"),
+                )
+                continue  # next epoch
 
     def calculate_cross_valid_mean(self, baseline_id: str, debug_mode: bool = False):
         print("")
@@ -519,7 +504,7 @@ class TrainingBaseline(TrainingParent):
                 for metric in g.METRICS:
                     scores[stats][gtv][metric] = List()
 
-        # load test patients
+        # load patients
         all_patients = self._load_patients(debug_mode=debug_mode)
         inter_test_patients = all_patients["test.inter"]
         all_patients = all_patients.to_list()

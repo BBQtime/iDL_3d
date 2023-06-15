@@ -76,7 +76,7 @@ class TrainingIDLGTVt(TrainingParent):
             min_lr=hyper["lr.min"],
         )
 
-    def _load_hyper(
+    def __load_unique_hyper(
         self, hyper: Dict, baseline_cnn_path: str, debug_mode: bool = False
     ):
         # iter
@@ -156,10 +156,10 @@ class TrainingIDLGTVt(TrainingParent):
         )
 
         # load patients
-        hyper["patients"] = self._load_dataset(debug_mode)
+        hyper["patients"] = self._load_patients(debug_mode=debug_mode)["test.inter"]
 
         # load shared hyper
-        super()._load_hyper(hyper=hyper, cnn_path=baseline_cnn_path)
+        super()._load_common_hyper(hyper=hyper, cnn_path=baseline_cnn_path)
 
         # run this after shared hyper loaded, because loss parameters are needed
         hyper["loss.func"] = UnifiedFocalLoss(
@@ -169,16 +169,6 @@ class TrainingIDLGTVt(TrainingParent):
             gamma=hyper["loss.gamma"],
             train_type="idl_gtvt",
         ).to(g.DEVICE)
-
-    def _load_dataset(self, debug_mode: bool = False):
-        json_data = Json.load(g.DATASET_SPLIT_JSON_PATH)
-        test_patients = List(json_data["test.set"])
-
-        # debug mode, only 1 or 2 patients
-        if debug_mode:
-            test_patients = test_patients[:2]
-
-        return test_patients
 
     def __simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
@@ -466,7 +456,7 @@ class TrainingIDLGTVt(TrainingParent):
 
         # save score of cur patient
         idl_gtvt_dir = Path(round_dir).parent.parent.parent
-        score_json_path = os.path.join(idl_gtvt_dir, "inference.json")
+        score_json_path = os.path.join(idl_gtvt_dir, "inference_test_inter.json")
         score = Json.load(score_json_path)
         for metric in g.METRICS:
             score[patient][metric][round_num] = patient_result["gtvt"][metric]
@@ -551,7 +541,7 @@ class TrainingIDLGTVt(TrainingParent):
         for iter_num in tqdm(range(hyper["iter"])):
             hyper["cnn"].train()
             iter_loss = 0
-            num_batches = 0
+            batch_count = 0
 
             # freeze layers before iDL
             if hyper["layer.freezing"]:
@@ -573,11 +563,11 @@ class TrainingIDLGTVt(TrainingParent):
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 iter_loss += loss.item()
-                num_batches += 1
+                batch_count += 1
 
             # cur iter finished
             # update scheduler
-            iter_loss /= num_batches
+            iter_loss /= batch_count
             hyper["scheduler"].step(iter_loss)
 
             # record loss
@@ -642,14 +632,14 @@ class TrainingIDLGTVt(TrainingParent):
 
         # copy baseline scores
         baseline_score = Json.load(
-            os.path.join(baseline_epoch_dir, "baseline", "inference.json")
+            os.path.join(baseline_epoch_dir, "baseline", "inference_test_inter.json")
         )
-        idl_gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference.json"))
+        idl_gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
         for metric in g.METRICS:
             idl_gtvt_score["patient={}".format(patient)][metric][
                 "round=00"
             ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
-        Json.save(idl_gtvt_score, os.path.join(idl_gtvt_dir, "inference.json"))
+        Json.save(idl_gtvt_score, os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
 
         print("")
         print("patient:", patient)
@@ -781,7 +771,7 @@ class TrainingIDLGTVt(TrainingParent):
             )[0]
 
             # load and print hyper
-            self._load_hyper(
+            self.__load_unique_hyper(
                 hyper=hyper,
                 baseline_cnn_path=baseline_cnn_path,
                 debug_mode=debug_mode,
@@ -798,7 +788,7 @@ class TrainingIDLGTVt(TrainingParent):
             self._save_hyper(hyper, hyper_save_path)
 
             # create an empty score json files
-            Json.save(Dict(), os.path.join(idl_gtvt_dir, "inference.json"))
+            Json.save(Dict(), os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
 
             # training start time
             hyper["time.spent.total"] = datetime.now()
@@ -837,7 +827,7 @@ class TrainingIDLGTVt(TrainingParent):
         self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
     def __calculate_median_and_avg_score(self, idl_gtvt_dir: str):
-        score_json_path = os.path.join(idl_gtvt_dir, "inference.json")
+        score_json_path = os.path.join(idl_gtvt_dir, "inference_test_inter.json")
         scores = Json.load(score_json_path)
         all_patient_scores = Dict()
 
@@ -887,9 +877,9 @@ class TrainingIDLGTVt(TrainingParent):
 
         # copy baseline score
         baseline_score = Json.load(
-            os.path.join(Path(idl_gtvt_dir).parent.parent, "baseline", "inference.json")
+            os.path.join(Path(idl_gtvt_dir).parent.parent, "baseline", "inference_test_inter.json")
         )
-        idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference.json")
+        idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference_test_inter.json")
         if os.path.exists(idl_gtvt_score_path):
             idl_gtvt_score = Json.load(idl_gtvt_score_path)
         else:
