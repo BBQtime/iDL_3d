@@ -21,6 +21,8 @@ from custom import Nii
 from custom import Img
 from custom import Explorer
 
+USE_1MM = 1
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -46,8 +48,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_member_var(self):
         self.__patients = Dict()
-        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)["test.inter"]
-        self.__patients["test.inter"] = List(self.__patients["test.inter"])  # str to List
+        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)[
+            "test.inter"
+        ]
+        self.__patients["test.inter"] = List(
+            self.__patients["test.inter"]
+        )  # str to List
         self.__patients["test.inter"].sort()
         self.__patients["idl.gtvt"] = None
         self.__patients["idl.gtvn"] = None
@@ -61,7 +67,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__contrast = Dict()
         self.__bright_contrast_modality = "ct"
         self.__side_bar_width = 300
-        self.__replay_mode = False  # replay mode or real-time mode
+        self.__replay_mode = True  # replay mode or real-time mode
 
     def __clear_img_data(self):
         self.__patients["idl.gtvt"] = None
@@ -77,11 +83,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "pt",
             "mrt1",
             "mrt2",
-            "label.gtvt",
-            "label.gtvn",
-            "pred.gtvt",
-            "pred.gtvn",
-            "clicks",
+            "gtvt.label",
+            "gtvn.label",
+            "gtvt.pred",
+            "gtvn.pred",
+            "gtvn.clicks",
         ]:
             self.__imgs[i] = None
 
@@ -266,8 +272,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         err_msg = "MainWindow.__fit_display_frame(), img.shape should == 2 or 3"
 
         # image spacing resize
+        if USE_1MM:
+            nii_spacing = (1.0, 1.0, 1.0)
+        else:
+            nii_spacing = g.NII_SPACING
         if self.__img_plane == "sagittal":
-            spacing_height = round(img.shape[0] * g.NII_SPACING[2] / g.NII_SPACING[1])
+            spacing_height = round(img.shape[0] * nii_spacing[2] / nii_spacing[1])
             img = cv2.resize(
                 img,
                 (
@@ -277,7 +287,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 interpolation=cv2.INTER_AREA,
             )
         elif self.__img_plane == "coronal":
-            spacing_height = round(img.shape[0] * g.NII_SPACING[2] / g.NII_SPACING[0])
+            spacing_height = round(img.shape[0] * nii_spacing[2] / nii_spacing[0])
             img = cv2.resize(
                 img,
                 (
@@ -359,13 +369,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init_color(self):
         self.__color = Dict()
-        self.__color["label.gtvt"] = (0, 255, 255)  # light blue
-        self.__color["label.gtvn"] = (0, 150, 255)  # dark blue
-        self.__color["pred.gtvt"] = (255, 255, 0)  # yellow
-        self.__color["pred.gtvn"] = (255, 128, 0)  # orange
-        self.__color["annotation.gtvt"] = (0, 255, 64)  # green
-        self.__color["annotation.gtvn"] = (255, 70, 200)  # pink
-        self.__color["score.text"] = self.__color["annotation.gtvt"]
+        self.__color["gtvt.label"] = (0, 255, 255)  # light blue
+        self.__color["gtvn.label"] = (0, 150, 255)  # dark blue
+        self.__color["gtvt.pred"] = (255, 255, 0)  # yellow
+        self.__color["gtvn.pred"] = (255, 128, 0)  # orange
+        self.__color["gtvt.annotation"] = (0, 255, 64)  # green
+        self.__color["gtvn.annotation"] = (255, 70, 200)  # pink
+        self.__color["score.text"] = self.__color["gtvt.annotation"]
 
     def __init_ui_names(self):
         self.__display_frame = Dict()
@@ -515,7 +525,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # fill the baseline combobox, format "baseline_id"
         self.__combox["baseline"].addItems(
             Explorer.get_sub_folders(
-                g.TRAIN_RESULTS_DIR, key_word="baseline_", suffle=True
+                g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
             )
         )
 
@@ -913,9 +923,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
         idl_gtvn_id = self.__combox["idl.gtvn"].currentText()
-        if idl_gtvn_id == "":
-            return
-
         baseline_id = self.__combox["baseline"].currentText()
         idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
 
@@ -957,9 +964,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # idl_gtvt_dir
         idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
-        if idl_gtvt_id == "":
-            return
-
         baseline_id = self.__combox["baseline"].currentText()
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
 
@@ -1004,17 +1008,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__enable_arrow_btns("patient")
 
         # load imgs and labels (from dataset dir)
+        if USE_1MM:
+            dataset_dir_1mm = "/mnt/faststorage/alan/Scans1mm/"
+        else:
+            dataset_dir_1mm = "/mnt/faststorage/alan/Scans3mm/"
         self.__imgs["ct"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(self.__patient))
+            os.path.join(dataset_dir_1mm, "HNCDL_{}_CT.nii".format(self.__patient))
         )
         self.__imgs["pt"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(self.__patient))
+            os.path.join(dataset_dir_1mm, "HNCDL_{}_PT.nii".format(self.__patient))
         )
         self.__imgs["mrt1"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(self.__patient))
+            os.path.join(dataset_dir_1mm, "HNCDL_{}_T1dr.nii".format(self.__patient))
         )
         self.__imgs["mrt2"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(self.__patient))
+            os.path.join(dataset_dir_1mm, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
         for i in ["t", "n"]:
             self.__imgs["label.gtv{}".format(i)] = self.__load_img(
@@ -1027,9 +1035,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__combox["round"].clear()
         self.__arrow_btn["prev.round"].setEnabled(False)
         self.__arrow_btn["next.round"].setEnabled(False)
+        baseline_id = self.__combox["baseline"].currentText()
+        idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
+        idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
         round_list = Explorer.get_sub_folders(
             os.path.join(
-                self.__idl_gtvt_dir,
+                idl_gtvt_dir,
                 "patients",
                 "patient={}".format(self.__patient),
             ),
@@ -1075,33 +1086,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # load preds
         path = Dict()
 
+        baseline_id = self.__combox["baseline"].currentText()
+        idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
+        idl_gtvn_id = self.__combox["idl.gtvn"].currentText()
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
+        idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
+        idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
+
         # load preds and click
         if self.__round == "00":
-            path["pred.gtvt"] = path["pred.gtvn"] = os.path.join(
-                self.__baseline_epoch_dir,
-                "baseline",
+            path["gtvt.pred"] = path["gtvn.pred"] = os.path.join(
+                baseline_dir,
+                "cross_valid",
                 "patients",
                 "patient={}".format(self.__patient),
             )
-            path["clicks"] = None
+            path["gtvn.clicks"] = None
         else:
-            path["pred.gtvt"] = os.path.join(
-                self.__idl_gtvt_dir,
+            path["gtvt.pred"] = os.path.join(
+                idl_gtvt_dir,
                 "patients",
                 "patient={}".format(self.__patient),
                 "round={}".format(self.__round),
             )
-            path["pred.gtvn"] = path["clicks"] = os.path.join(
-                self.__idl_gtvn_epoch_dir,
+            path["gtvn.pred"] = path["gtvn.clicks"] = os.path.join(
+                idl_gtvn_dir,
+                "cross_valid",
                 "patients",
                 "patient={}".format(self.__patient),
             )
-        path["pred.gtvt"] = os.path.join(path["pred.gtvt"], "pred_gtvt.nii")
-        path["pred.gtvn"] = os.path.join(path["pred.gtvn"], "pred_gtvn.nii")
-        if path["clicks"] is not None:
-            path["clicks"] = os.path.join(path["clicks"], "clicks.nii")
+        path["gtvt.pred"] = os.path.join(path["gtvt.pred"], "gtvt_pred.nii")
+        path["gtvn.pred"] = os.path.join(path["gtvn.pred"], "gtvn_pred.nii")
+        if path["gtvn.clicks"] is not None:
+            path["gtvn.clicks"] = os.path.join(path["gtvn.clicks"], "gtvn_clicks.nii")
 
-        for i in ["pred.gtvt", "pred.gtvn", "clicks"]:
+        for i in ["gtvt.pred", "gtvn.pred", "gtvn.clicks"]:
             if path[i] is not None and os.path.exists(path[i]):
                 self.__imgs[i] = self.__load_img(path[i])
                 self.__imgs[i] = Img.binarize(self.__imgs[i])
@@ -1109,7 +1128,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__imgs[i] = None
 
         # load gtvt scores
-        gtvt_score = Json.load(os.path.join(self.__idl_gtvt_dir, "inference_test_inter.json"))
+        gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
         for metric in g.METRICS:
             self.__scores["gtvt"][metric] = gtvt_score[
                 "patient={}".format(self.__patient)
@@ -1117,7 +1136,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load gtvn scores
         gtvn_score = Json.load(
-            os.path.join(self.__idl_gtvn_epoch_dir, "inference_test_inter.json")
+            os.path.join(idl_gtvn_dir, "cross_valid", "inference_test_inter.json")
         )
         if self.__round == "00":
             gtvn_round = "00"
@@ -1238,16 +1257,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # set contour color
         color = Dict()
-        color["label.gtvt"] = self.__color["label.gtvt"]
-        color["label.gtvn"] = self.__color["label.gtvn"]
+        color["gtvt.label"] = self.__color["gtvt.label"]
+        color["gtvn.label"] = self.__color["gtvn.label"]
 
         if is_annotated:
-            color["pred.gtvt"] = self.__color["annotation.gtvt"]
+            color["gtvt.pred"] = self.__color["gtvt.annotation"]
         else:
-            color["pred.gtvt"] = self.__color["pred.gtvt"]
+            color["gtvt.pred"] = self.__color["gtvt.pred"]
 
-        color["pred.gtvn"] = self.__color["pred.gtvn"]
-        color["clicks"] = self.__color["annotation.gtvn"]
+        color["gtvn.pred"] = self.__color["gtvn.pred"]
+        color["gtvn.clicks"] = self.__color["gtvn.annotation"]
 
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             # load img
@@ -1327,7 +1346,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         img=rgb_img_zeros,
                         pt1=(x1, y1),
                         pt2=(x2, y2),
-                        color=self.__color["annotation.gtvt"],
+                        color=self.__color["gtvt.annotation"],
                         thickness=-1,
                     )
                     if selected_slices_mask is None:
@@ -1352,7 +1371,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
-            for k in ["label.gtvt", "pred.gtvt", "label.gtvn", "pred.gtvn", "clicks"]:
+            for k in [
+                "gtvt.label",
+                "gtvt.pred",
+                "gtvn.label",
+                "gtvn.pred",
+                "gtvn.clicks",
+            ]:
+                continue
                 if self.__imgs[k] is None:
                     continue
 
@@ -1372,13 +1398,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     contours, self.__display_frame[i]
                 )
                 # blur after __fit_display_frame will make the contours looks better on the UI
-                if k != "clicks":
+                if k != "gtvn.clicks":
                     contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
                 contours, _ = cv2.findContours(
                     contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
                 )
 
-                if k == "clicks":
+                if k == "gtvn.clicks":
                     thickness = 7
                 else:
                     thickness = 2
@@ -1430,7 +1456,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["label.gtvt"],
+                color=color["gtvt.label"],
             )
 
             # add text pred gtvt
@@ -1442,7 +1468,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["pred.gtvt"],
+                color=color["gtvt.pred"],
             )
 
             # add text label gtvn
@@ -1452,7 +1478,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["label.gtvn"],
+                color=color["gtvn.label"],
             )
 
             # add text pred gtvn
@@ -1462,7 +1488,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["pred.gtvn"],
+                color=color["gtvn.pred"],
             )
 
             # add text label gtvn
@@ -1472,7 +1498,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 img=rgb_img,
                 text=cv_text,
                 pos=(text_pos_x, text_pos_y),
-                color=color["clicks"],
+                color=color["gtvn.clicks"],
             )
 
             # show imgs
@@ -1492,8 +1518,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return []
 
         # load annotated slices
+        baseline_id = self.__combox["baseline"].currentText()
+        idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
+        idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
         json_path = os.path.join(
-            self.__idl_gtvt_dir,
+            idl_gtvt_dir,
             "patients",
             "patient={}".format(self.__patient),
             "selected_slices.json",

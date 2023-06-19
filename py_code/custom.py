@@ -378,11 +378,19 @@ class Nii:
                 img = np.squeeze(img, axis=0)
         return img
 
-    def save(img: Union[ndarray, Tensor], path: str, spacing: tuple = ()):
+    def save(
+        img: Union[ndarray, Tensor],
+        save_path: str,
+        copy_info_from: str = None,
+        spacing: tuple = None,
+        origin: tuple = None,
+    ):
+        # tensor to ndarray
         if isinstance(img, Tensor):
             # detach: return a tensor share the same memory but without grad
             img = img.detach().cpu().numpy()
 
+        # squeeze to 3d img
         if len(img.shape) > 3:
             for i in range(len(img.shape) - 3):
                 if img.shape[i] == 1:
@@ -391,12 +399,20 @@ class Nii:
                     img = img[0]
 
         itk_img = sitk.GetImageFromArray(img)
-        if spacing == ():
-            itk_img.SetSpacing(Global.NII_SPACING)
-        else:
+
+        if copy_info_from is not None:
+            itk_img.CopyInformation(sitk.ReadImage(copy_info_from))
+
+        if spacing is not None:
             itk_img.SetSpacing(spacing)
-        sitk.WriteImage(itk_img, path)
-        return path
+        else:
+            itk_img.SetSpacing(Global.NII_SPACING)
+
+        if origin is not None:
+            itk_img.SetOrigin(origin)
+
+        sitk.WriteImage(itk_img, save_path)
+        return save_path
 
 
 class Json:
@@ -678,8 +694,8 @@ class Global:
         NUM_WORKERS = __settings["num.workers"]
 
     # Depth, Height, Width
-    IMG_SHAPE = List(__settings["img.shape"])
-    IMG_SHAPE = tuple(int(i) for i in IMG_SHAPE)
+    IMG_SHAPE = int(__settings["img.shape"])
+    IMG_SHAPE = (IMG_SHAPE, IMG_SHAPE, IMG_SHAPE)
 
     # Width, Height, Depth
     NII_SPACING = List(__settings["nii.spacing"])

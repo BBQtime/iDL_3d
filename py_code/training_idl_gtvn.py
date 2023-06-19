@@ -368,8 +368,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             return
 
         # this is only for idl_gtvn to load baseline gtvn preds
-        baseline_epoch_dir = os.path.join(Path(idl_gtvn_dir).parent,"baseline")
-
+        baseline_epoch_dir = os.path.join(Path(idl_gtvn_dir).parent, "baseline")
 
         # loop through fold dirs
         for fold_dir in Explorer.get_sub_folders(
@@ -492,12 +491,12 @@ class TrainingIDLGTVn(TrainingBaseline):
                             # save clicks.nii
                             Nii.save(
                                 img=patient_results["gtvn"]["distance.map"],
-                                path=os.path.join(patient_dir, "distance_map.nii"),
+                                save_path=os.path.join(patient_dir, "distance_map.nii"),
                                 spacing=g.NII_SPACING,
                             )
                             Nii.save(
                                 img=patient_results["gtvn"]["clicks"],
-                                path=os.path.join(patient_dir, "clicks.nii"),
+                                save_path=os.path.join(patient_dir, "clicks.nii"),
                                 spacing=g.NII_SPACING,
                             )
                         else:
@@ -506,7 +505,9 @@ class TrainingIDLGTVn(TrainingBaseline):
                     for gtv in gtv_list:
                         Nii.save(
                             img=patient_results[gtv]["pred"],
-                            path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
+                            save_path=os.path.join(
+                                patient_dir, "{}_pred.nii".format(gtv)
+                            ),
                             spacing=g.NII_SPACING,
                         )
 

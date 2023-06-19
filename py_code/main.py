@@ -2,7 +2,7 @@ from custom import Global as g
 from training_baseline import TrainingBaseline
 
 # from training_idl_gtvt import TrainingIDLGTVt
-from training_idl_gtvn import TrainingIDLGTVn
+# from training_idl_gtvn import TrainingIDLGTVn
 
 # from training_idl_gtvs import TrainingIDLGTVs
 from custom import Cleaner
@@ -12,10 +12,10 @@ Cleaner.clean_debug_data()
 
 
 baseline = TrainingBaseline()
-if 0:
+if 1:
     baseline.new_training(
-        train_remark="",
-        debug_mode=1,
+        train_remark="lr=0.0001*1",
+        debug_mode=0,
     )
 
 
@@ -53,5 +53,9 @@ if 0:
 # if 0:
 #     idl.inference("idl_2023.06.05.03.53.29")
 
+
+# /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main.py
+
+# scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/train_results/
 
 print("Done!")

@@ -447,8 +447,9 @@ class TrainingBaseline(TrainingParent):
                     for gtv in ["gtvt", "gtvn"]:
                         Nii.save(
                             img=patient_results[gtv]["pred"],
-                            path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
-                            spacing=g.NII_SPACING,
+                            save_path=os.path.join(
+                                patient_dir, "{}_pred.nii".format(gtv)
+                            ),
                         )
 
                     # record score of current patient (test set only)
@@ -553,7 +554,7 @@ class TrainingBaseline(TrainingParent):
                 Folder.create(patient_dir)
                 Nii.save(
                     img=preds[gtv],
-                    path=os.path.join(patient_dir, "gtv{}_pred.nii".format(gtv)),
+                    save_path=os.path.join(patient_dir, "gtv{}_pred.nii".format(gtv)),
                 )
 
             # load labels and calculate metrics (on internal test set only)

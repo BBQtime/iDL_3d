@@ -511,28 +511,28 @@ class TrainingIDLGTVs(TrainingBaseline):
                     # save Niis of current patient
                     Nii.save(
                         img=patient_results["gtvt"]["annotation"],
-                        path=os.path.join(patient_dir, "gtvt_annotation.nii"),
+                        save_path=os.path.join(patient_dir, "gtvt_annotation.nii"),
                         spacing=g.NII_SPACING,
                     )
                     Nii.save(
                         img=patient_results["gtvt"]["weight.map"],
-                        path=os.path.join(patient_dir, "gtvt_weight_map.nii"),
+                        save_path=os.path.join(patient_dir, "gtvt_weight_map.nii"),
                         spacing=g.NII_SPACING,
                     )
                     Nii.save(
                         img=patient_results["gtvn"]["distance.map"],
-                        path=os.path.join(patient_dir, "gtvn_distance_map.nii"),
+                        save_path=os.path.join(patient_dir, "gtvn_distance_map.nii"),
                         spacing=g.NII_SPACING,
                     )
                     Nii.save(
                         img=patient_results["gtvn"]["clicks"],
-                        path=os.path.join(patient_dir, "gtvn_clicks.nii"),
+                        save_path=os.path.join(patient_dir, "gtvn_clicks.nii"),
                         spacing=g.NII_SPACING,
                     )
                     for gtv in gtv_list:
                         Nii.save(
                             img=patient_results[gtv]["pred"],
-                            path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
+                            save_path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
                             spacing=g.NII_SPACING,
                         )
 

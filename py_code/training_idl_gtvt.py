@@ -465,7 +465,7 @@ class TrainingIDLGTVt(TrainingParent):
         # save pred of cur patient
         Nii.save(
             img=patient_result["gtvt"]["pred"],
-            path=os.path.join(round_dir, "pred_gtvt.nii"),
+            save_path=os.path.join(round_dir, "pred_gtvt.nii"),
             spacing=g.NII_SPACING,
         )
 
