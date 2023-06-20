@@ -1,0 +1,6 @@
+1.The background weight in the weightmap cannot be 0.
+2.Use focal loss only doesn't work 
+3.Weight map must be used.
+4.Voxel-wised tversky loss + weight map doesn't work
+5.Elastic augmentation is effective
+6.Optimal weigiht.distance.step: 3

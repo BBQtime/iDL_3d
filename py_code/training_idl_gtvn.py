@@ -1,5 +1,7 @@
 import os
 from training_baseline import TrainingBaseline
+from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
+from dataset_idl_gtvn import DataSetIDLGTVn
 from custom import Global as g
 from custom import Folder
 from custom import Explorer
@@ -44,173 +46,40 @@ class TrainingIDLGTVn(TrainingBaseline):
         if GPU.used_count() > 1:
             hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
 
-    def _load_common_hyper(
-        self,
-        hyper: Dict,
-        baseline_epoch_dir: str = None,  # this is only for idl.gtvn and idl
-        debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
-    ):
-        # epochs
-        if debug_mode:
-            # at least 2 epochs to compare loss difference
-            hyper["epochs"] = 2
-        else:
-            hyper["epochs"] = ValueUtils.limit_range(hyper["epochs"], (1, None))
-
-        # record actual epochs because of early stop
-        hyper["epochs.actual"] = 0
-
-        # early stop, based on epoch
-        hyper["early.stop.epochs"] = ValueUtils.limit_range(
-            hyper["early.stop.epochs"], (1, hyper["epochs"])
-        )
-
-        # lr
-        hyper["lr"] = ValueUtils.limit_range(hyper["lr"], (g.EPS, 1.0))
-
-        # actual lr
-        if GPU.used_count() > 1:
-            hyper["lr.actual"] = hyper["lr"] * GPU.used_count()
-        else:
-            hyper["lr.actual"] = hyper["lr"]
-
-        # min lr
-        hyper["lr.min"] = ValueUtils.limit_range(hyper["lr.min"], (g.EPS, hyper["lr"]))
-
-        # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr.decay.patience"] = ValueUtils.limit_range(
-            hyper["lr.decay.patience"], (1, hyper["epochs"])
-        )
-
-        # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"] = ValueUtils.limit_range(
-            hyper["keep.best.cnn.num"], (1, hyper["epochs"])
-        )
-
-        # augment percent
-        hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
-
-        # load shared hyper parameters
-        super()._load_common_hyper(hyper=hyper, cnn_path=None)
+    def __load_unique_hyper(self, hyper: Dict, debug_mode: bool):
+        # run this first
+        self._load_common_hyper(hyper=hyper, debug_mode=debug_mode)
 
         # loss function
-        hyper["loss.func"] = UnifiedFocalLoss(
+        hyper["loss.func"] = UnifiedFocalLossIDLGTVn(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-            train_type=hyper["train.type"],
         ).to(g.DEVICE)
 
-        # load patients
-        (train_patients, valid_patients, test_patients,) = self._load_patients(
-            fold=fold,
-            debug_mode=debug_mode,
-        )
-
-        # create datasets
-        # run this after shared hyper loaded, because hyper["augment"] is needed
+        # load train/valid/test datasets
         augment = Dict()
         augment["methods"] = hyper["augment.methods"]
         augment["pct"] = hyper["augment.pct"]
         augment["min"] = hyper["augment.min"]
         augment["max"] = hyper["augment.max"]
 
-        # weight map parameters
-        if hyper["train.type"] == "idl":
-            hyper["weight.background"] = ValueUtils.limit_range(
-                hyper["weight.background"], (0.0, 1.0)
-            )
-            hyper["weight.slice"] = ValueUtils.limit_range(
-                hyper["weight.slice"], (hyper["weight.background"], None)
-            )
-            hyper["weight.fp.fn"] = ValueUtils.limit_range(
-                hyper["weight.fp.fn"], (hyper["weight.slice"], None)
-            )
-            hyper["weight.distance.step"] = ValueUtils.limit_range(
-                hyper["weight.distance.step"], (1, None)
-            )
-            hyper["weight.prev.round.decay"] = ValueUtils.limit_range(
-                hyper["weight.prev.round.decay"], (0.0, 1.0)
-            )
-            weight = Dict()
-            weight["background"] = hyper["weight.background"]
-            weight["distance.step"] = hyper["weight.distance.step"]
-            weight["fp.fn"] = hyper["weight.fp.fn"]
-            weight["prev.round.decay"] = hyper["weight.prev.round.decay"]
-            weight["slice"] = hyper["weight.slice"]
-
-        # load train/valid/test datasets
-        if hyper["train.type"] == "baseline":
-            train_set = DataSetBaseline(patients=train_patients, augment=augment)
-            valid_set = DataSetBaseline(patients=valid_patients)
-            test_set = DataSetBaseline(patients=test_patients)
-
-        elif hyper["train.type"] == "idl_gtvn":
-            train_set = DataSetIDLGTVn(
-                patients=train_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                augment=augment,
-                random_click=False,
-                # random_click=True,
-            )
-            valid_set = DataSetIDLGTVn(
-                patients=valid_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                random_click=False,
-            )
-            test_set = DataSetIDLGTVn(
-                patients=test_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                random_click=False,
-            )
-
-        elif hyper["train.type"] == "idl":
-            train_set = DataSetIDLGTVs(
-                patients=train_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                weight=weight,
+        for i in ["train", "valid", "test.inter"]:
+            hyper["{}.set".format(i)] = DataSetIDLGTVn(
+                patients=hyper["{}.patients".format(i)],
+                baseline_id=hyper["baseline.id"],
                 augment=augment,
                 random_click=False,
             )
-            valid_set = DataSetIDLGTVs(
-                patients=valid_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                weight=weight,
-                random_click=False,
-            )
-            test_set = DataSetIDLGTVs(
-                patients=test_patients,
-                baseline_epoch_dir=baseline_epoch_dir,
-                weight=weight,
-                random_click=False,
-            )
+            augment = None
 
-        # dataloader
-        hyper["train.loader"] = DataLoader(
-            dataset=train_set,
-            batch_size=hyper["batch.size.actual"],
-            shuffle=True,  # only shuffle train loader
-            num_workers=g.NUM_WORKERS,
-        )
-        hyper["valid.loader"] = DataLoader(
-            dataset=valid_set,
-            batch_size=hyper["batch.size.actual"],
-            shuffle=False,
-            num_workers=g.NUM_WORKERS,
-        )
-        hyper["test.loader"] = DataLoader(
-            dataset=test_set,
-            batch_size=hyper["batch.size.actual"],
-            shuffle=False,
-            num_workers=g.NUM_WORKERS,
-        )
+        # load dataloader
+        self._load_data_loader(hyper)
 
     def new_training(
         self,
         baseline_id: str,
-        baseline_fold: int = None,
-        baseline_epoch: int = None,
         train_remark: str = "",
         debug_mode: bool = False,
     ):
@@ -225,29 +94,11 @@ class TrainingIDLGTVn(TrainingBaseline):
             print("")
             print(idl_gtvn_id)
 
-            # find baseline fold dir
-            if baseline_fold is None or baseline_fold <= 0:
-                key_word = "fold="
-            else:
-                key_word = "fold={}".format(baseline_fold)
-            baseline_fold_dir = Explorer.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
-                key_word=key_word,
-                full_path=True,
-            )[0]
-
-            # find epoch folder
-            if baseline_epoch is None or baseline_epoch <= 0:
-                key_word = "epoch="
-            else:
-                key_word = "epoch={:03d}".format(baseline_epoch)
-            baseline_epoch_dir = Explorer.get_sub_folders(
-                baseline_fold_dir, key_word=key_word, full_path=True
-            )[0]
-
             # create train result dir
-            idl_gtvn_dir = os.path.join(baseline_epoch_dir, idl_gtvn_id)
+            idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
             Folder.create(idl_gtvn_dir)
+
+            hyper["baseline.id"] = baseline_id
 
             self._training_traverse_folds(
                 hyper=hyper, train_result_dir=idl_gtvn_dir, debug_mode=debug_mode

@@ -1,5 +1,5 @@
 {
-    "cuda.visible.devices": "0,1",
+    "cuda.visible.devices": "1",
     "dataset.dir.linux": "/mnt/faststorage/alan/Scans1mm/",
     "dataset.dir.windows": "E:/Alan/Scans1mm",
     "dataset.k.folds": 5,

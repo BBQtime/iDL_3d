@@ -19,12 +19,12 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
     def __init__(
         self,
         patients: list,
-        baseline_epoch_dir: str,
+        baseline_id: str,
         augment: Dict = None,
         random_click: bool = False,
     ):
         self.__patients = patients
-        self.__baseline_epoch_dir = baseline_epoch_dir
+        self.__baseline_id = baseline_id
         self.__augment = DataAugmentation(augment)
         self.__random_click = random_click
 
@@ -68,7 +68,8 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         # load pred
         self.__origin["pred"] = Nii.load(
             os.path.join(
-                self.__baseline_epoch_dir,
+                g.TRAIN_RESULTS_DIR,
+                self.__baseline_id,
                 "baseline",
                 "patients",
                 "patient={}".format(patient),

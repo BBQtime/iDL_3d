@@ -25,21 +25,6 @@ from custom import Explorer
 
 
 class TrainingBaseline(TrainingParent):
-
-    # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_cnn(self, hyper: Dict, cnn_path: str = None):
-        # new model
-        if cnn_path == "" or cnn_path is None:
-            hyper["cnn"] = UNetPPSlim(
-                in_chan=4, out_chan=3, dropout=hyper["dropout"]
-            ).to(g.DEVICE)
-        # existing model
-        else:
-            hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
-        # set multi-GPU
-        if GPU.used_count() > 1:
-            hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
-
     def _load_common_hyper(
         self,
         hyper: Dict,
@@ -96,7 +81,9 @@ class TrainingBaseline(TrainingParent):
         super()._load_common_hyper(hyper=hyper, cnn_path=None)
 
     def __load_unique_hyper(self, hyper: Dict, debug_mode: bool):
-        # run this first
+        # load cnn before _load_common_hyper, optimizer needs cnn
+        self._load_cnn(hyper=hyper, in_chan=4, out_chan=3)
+
         self._load_common_hyper(hyper=hyper, debug_mode=debug_mode)
 
         # loss function
@@ -123,16 +110,20 @@ class TrainingBaseline(TrainingParent):
         # load dataloader
         self._load_data_loader(hyper)
 
+    # baseline/idl.gtvn/idl.gtvs share this function
     def _load_data_loader(self, hyper: Dict):
-        shuffle = True
         for i in ["train", "valid", "test.inter"]:
+            # only shuffle train loader
+            if i == "train":
+                shuffle = True
+            else:
+                shuffle = False
             hyper["{}.loader".format(i)] = DataLoader(
                 dataset=hyper["{}.set".format(i)],
                 batch_size=hyper["batch.size.actual"],
-                shuffle=shuffle,  # only shuffle train loader
+                shuffle=shuffle,
                 num_workers=g.NUM_WORKERS,
             )
-            shuffle = False
 
     def __simplify_hyper(self, hyper: Dict) -> Dict:
         ignore_list = []
@@ -140,6 +131,8 @@ class TrainingBaseline(TrainingParent):
             ignore_list.append("{}.patients".format(i))
             ignore_list.append("{}.set".format(i))
             ignore_list.append("{}.loader".format(i))
+
+        ignore_list.append("baseline.id")
 
         simple_hyper = Dict()
         for key_name in hyper:

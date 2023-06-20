@@ -2,7 +2,7 @@ from custom import Global as g
 from training_baseline import TrainingBaseline
 
 # from training_idl_gtvt import TrainingIDLGTVt
-# from training_idl_gtvn import TrainingIDLGTVn
+from training_idl_gtvn import TrainingIDLGTVn
 
 # from training_idl_gtvs import TrainingIDLGTVs
 from custom import Cleaner
@@ -12,7 +12,7 @@ Cleaner.clean_debug_data()
 
 
 baseline = TrainingBaseline()
-if 1:
+if 0:
     baseline.new_training(
         train_remark="lr=0.0001*1",
         debug_mode=0,
@@ -30,17 +30,17 @@ if 1:
 #     idl_gtvt.inference("idl_gtvt_2023.04.04.14.43.54")
 
 
-# idl_gtvn = TrainingIDLGTVn()
-# if 0:
-#     idl_gtvn.new_training(
-#         baseline_id="baseline_2023.04.23.23.21.44_loss.gamma=0.3",
-#         debug_mode=1,
-#     )
-# if 0:
-#     idl_gtvn.inference(
-#         "idl_gtvn_2023.05.26.12.06.15_distance.map_4modals_augment_unified.focal.loss_unet.pp.slim",
-#         dataset="test.inter",
-#     )
+idl_gtvn = TrainingIDLGTVn()
+if 1:
+    idl_gtvn.new_training(
+        baseline_id="baseline_2023.06.18.18.49.34_lr=0.0002x2",
+        debug_mode=1,
+    )
+if 0:
+    idl_gtvn.inference(
+        "idl_gtvn_2023.05.26.12.06.15_distance.map_4modals_augment_unified.focal.loss_unet.pp.slim",
+        dataset="test.inter",
+    )
 
 
 # idl = TrainingIDLGTVs()

@@ -59,9 +59,26 @@ class TrainingParent:
 
         return patients
 
-    # abstract function
-    def _load_cnn(self):
-        pass
+        # if float64 needed, use: "cnn.to(torch.double)"
+
+    def _load_cnn(
+        self,
+        hyper: Dict,
+        cnn_path: str = None,
+        in_chan: int = None,
+        out_chan: int = None,
+    ):
+        # new model
+        if cnn_path == "" or cnn_path is None:
+            hyper["cnn"] = UNetPPSlim(
+                in_chan=4, out_chan=3, dropout=hyper["dropout"]
+            ).to(g.DEVICE)
+        # existing model
+        else:
+            hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
+        # set multi-GPU
+        if GPU.used_count() > 1:
+            hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
 
     def _load_common_hyper(self, hyper: Dict, cnn_path: str = None) -> None:
 
@@ -100,9 +117,6 @@ class TrainingParent:
         # loss function parameters
         hyper["loss.weight"] = ValueUtils.limit_range(hyper["loss.weight"], (0.0, 1.0))
         hyper["loss.delta"] = ValueUtils.limit_range(hyper["loss.delta"], (0.0, 1.0))
-
-        # load cnn
-        self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
         # optimizer (no need to move to cuda)
         if isinstance(hyper["lr.actual"], list):
