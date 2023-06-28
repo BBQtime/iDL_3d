@@ -14,8 +14,8 @@ Cleaner.clean_debug_data()
 baseline = TrainingBaseline()
 if 0:
     baseline.new_training(
-        train_remark="lr=0.0001*1",
-        debug_mode=0,
+        train_remark="unet_edge.chan=16",
+        debug_mode=1,
     )
 
 
@@ -31,14 +31,14 @@ if 0:
 
 
 idl_gtvn = TrainingIDLGTVn()
-if 1:
+if 0:
     idl_gtvn.new_training(
-        baseline_id="baseline_2023.06.18.18.49.34_lr=0.0002x2",
+        baseline_id="baseline_2023.02.27.07.08.09_3mm_best",
         debug_mode=1,
     )
-if 0:
+if 1:
     idl_gtvn.inference(
-        "idl_gtvn_2023.05.26.12.06.15_distance.map_4modals_augment_unified.focal.loss_unet.pp.slim",
+        "idl.gtvn_2023.05.26.12.06.15_best",
         dataset="test.inter",
     )
 

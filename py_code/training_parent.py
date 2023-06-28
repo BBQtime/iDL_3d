@@ -11,8 +11,8 @@ from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
 from torch import optim
-from unet_pp_slim import UNetPPSlim
-from unet_slim import UNetSlim
+from unet_pp import UNetPP
+from unet import UNet
 from datetime import datetime
 from dataset_baseline import DataSetBaseline
 from dataset_idl_gtvn import DataSetIDLGTVn
@@ -52,10 +52,10 @@ class TrainingParent:
                 patients["train"] += List(dataset_split[i])
 
         if debug_mode:
-            patients["train"] = patients["train"][:2]
+            patients["train"] = patients["train"][:1]
             # 2 patients in valid and test sets, to debug median score calculation
-            patients["valid"] = patients["valid"][:2]
-            patients["test.inter"] = patients["test.inter"][:2]
+            patients["valid"] = patients["valid"][:1]
+            patients["test.inter"] = patients["test.inter"][:1]
 
         return patients
 
@@ -70,8 +70,21 @@ class TrainingParent:
     ):
         # new model
         if cnn_path == "" or cnn_path is None:
-            hyper["cnn"] = UNetPPSlim(
-                in_chan=4, out_chan=3, dropout=hyper["dropout"]
+            # cnn architecture
+            if hyper["cnn"] == "unet.pp":
+                cnn = UNetPP
+            else:
+                cnn = UNet
+            # 3mm or 1mm
+            if g.IMG_SHAPE[1] > g.IMG_SHAPE[0] * 2:
+                use_3mm = True
+            else:
+                use_3mm = False
+            hyper["cnn"] = cnn(
+                in_chan=in_chan,
+                out_chan=out_chan,
+                use_3mm=use_3mm,
+                dropout=hyper["dropout"],
             ).to(g.DEVICE)
         # existing model
         else:
@@ -81,9 +94,8 @@ class TrainingParent:
             hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
 
     def _load_common_hyper(self, hyper: Dict, cnn_path: str = None) -> None:
-
         # device name
-        if torch.cuda.device_count() < 1:
+        if GPU.used_count() < 1:
             hyper["device"] = "cpu"
         else:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
@@ -138,41 +150,6 @@ class TrainingParent:
             min_lr=hyper["lr.min"],
         )
 
-    # # if float64 needed, use: "cnn.to(torch.double)"
-    # def _load_cnn(self, hyper: Dict, cnn_path: str = None):
-    #     # new model
-    #     if cnn_path == "" or cnn_path is None:
-    #         if isinstance(hyper["cnn"], DataParallel):
-    #             hyper["cnn"] = hyper["cnn"].module
-
-    #         if hyper["cnn"] == "unet.pp.slim" or isinstance(hyper["cnn"], UNetPPSlim):
-    #             if hyper["train.type"] == "baseline":
-    #                 in_chan = 4
-    #                 out_chan = 3
-    #             elif hyper["train.type"] == "idl_gtvn":
-    #                 in_chan = 5
-    #                 out_chan = 2
-    #             elif hyper["train.type"] == "idl":
-    #                 in_chan = 6
-    #                 out_chan = 3
-
-    #             hyper["cnn"] = UNetPPSlim(
-    #                 in_chan=in_chan, out_chan=out_chan, dropout=hyper["dropout"]
-    #             ).to(g.DEVICE)
-
-    #         elif hyper["cnn"] == "unet.slim" or isinstance(hyper["cnn"], UNetSlim):
-    #             hyper["cnn"] = UNetSlim(
-    #                 in_chan=5, out_chan=2, edge_chan=16, dropout=hyper["dropout"]
-    #             ).to(g.DEVICE)
-
-    #     # existing model
-    #     else:
-    #         hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
-
-    #     # set multi-GPU
-    #     if GPU.used_count() > 1:
-    #         hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
-
     def __simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
 
@@ -187,10 +164,15 @@ class TrainingParent:
 
             # only save cnn name
             elif key_name == "cnn":
-                if isinstance(hyper[key_name], UNetPPSlim):
-                    simple_hyper[key_name] = "unet.pp.slim"
-                elif isinstance(hyper[key_name], UNetSlim):
-                    simple_hyper[key_name] = "unet.slim"
+                if isinstance(hyper[key_name], DataParallel):
+                    cnn = hyper[key_name].module
+                else:
+                    cnn = hyper[key_name]
+
+                if isinstance(cnn, UNetPP):
+                    simple_hyper[key_name] = "unet.pp"
+                else:
+                    simple_hyper[key_name] = "unet"
 
             # only save optimizer name
             elif key_name == "optim":

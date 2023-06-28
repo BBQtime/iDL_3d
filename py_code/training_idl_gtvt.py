@@ -76,7 +76,7 @@ class TrainingIDLGTVt(TrainingParent):
             min_lr=hyper["lr.min"],
         )
 
-    def __load_unique_hyper(
+    def _load_unique_hyper(
         self, hyper: Dict, baseline_cnn_path: str, debug_mode: bool = False
     ):
         # iter
@@ -771,7 +771,7 @@ class TrainingIDLGTVt(TrainingParent):
             )[0]
 
             # load and print hyper
-            self.__load_unique_hyper(
+            self._load_unique_hyper(
                 hyper=hyper,
                 baseline_cnn_path=baseline_cnn_path,
                 debug_mode=debug_mode,

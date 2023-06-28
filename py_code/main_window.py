@@ -21,7 +21,7 @@ from custom import Nii
 from custom import Img
 from custom import Explorer
 
-USE_1MM = 1
+USE_1MM = 0
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -275,7 +275,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if USE_1MM:
             nii_spacing = (1.0, 1.0, 1.0)
         else:
-            nii_spacing = g.NII_SPACING
+            nii_spacing = (3.0, 1.0, 1.0)
         if self.__img_plane == "sagittal":
             spacing_height = round(img.shape[0] * nii_spacing[2] / nii_spacing[1])
             img = cv2.resize(

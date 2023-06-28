@@ -4,7 +4,7 @@
     "augment.min": 2,
     "augment.times": 4,
     "batch.size": 4,
-    "cnn": "unet.pp.slim",
+    "cnn": "unet.pp",
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,

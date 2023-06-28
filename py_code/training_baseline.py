@@ -11,7 +11,7 @@ from training_parent import TrainingParent
 from matplotlib import pyplot as plt
 from dataset_baseline import DataSetBaseline
 from torch.nn import DataParallel
-from unet_pp_slim import UNetPPSlim
+from unet_pp import UNetPP
 from loss_func import UnifiedFocalLoss
 from custom import Img
 from custom import Dict
@@ -32,8 +32,7 @@ class TrainingBaseline(TrainingParent):
     ):
         # epochs
         if debug_mode:
-            # at least 2 epochs to compare loss difference
-            hyper["epochs"] = 2
+            hyper["epochs"] = 1
         else:
             hyper["epochs"] = ValueUtils.limit_range(hyper["epochs"], (1, None))
 
@@ -80,7 +79,7 @@ class TrainingBaseline(TrainingParent):
         # run this at last
         super()._load_common_hyper(hyper=hyper, cnn_path=None)
 
-    def __load_unique_hyper(self, hyper: Dict, debug_mode: bool):
+    def _load_unique_hyper(self, hyper: Dict, debug_mode: bool):
         # load cnn before _load_common_hyper, optimizer needs cnn
         self._load_cnn(hyper=hyper, in_chan=4, out_chan=3)
 
@@ -95,17 +94,19 @@ class TrainingBaseline(TrainingParent):
         ).to(g.DEVICE)
 
         # load train/valid/test datasets
-        augment = Dict()
-        augment["methods"] = hyper["augment.methods"]
-        augment["pct"] = hyper["augment.pct"]
-        augment["min"] = hyper["augment.min"]
-        augment["max"] = hyper["augment.max"]
-
         for i in ["train", "valid", "test.inter"]:
+            # only use data augmentation on training set
+            if i == "train":
+                augment = Dict()
+                augment["methods"] = hyper["augment.methods"]
+                augment["pct"] = hyper["augment.pct"]
+                augment["min"] = hyper["augment.min"]
+                augment["max"] = hyper["augment.max"]
+            else:
+                augment = None
             hyper["{}.set".format(i)] = DataSetBaseline(
                 patients=hyper["{}.patients".format(i)], augment=augment
             )
-            augment = None
 
         # load dataloader
         self._load_data_loader(hyper)
@@ -304,7 +305,7 @@ class TrainingBaseline(TrainingParent):
 
             # load and print hyperparams
             hyper["cross.valid.fold"] = fold
-            self.__load_unique_hyper(hyper=hyper, debug_mode=debug_mode)
+            self._load_unique_hyper(hyper=hyper, debug_mode=debug_mode)
             print("")
             self._print_hyper(hyper)
 
@@ -322,7 +323,9 @@ class TrainingBaseline(TrainingParent):
 
             # start training
             hyper["time.spent"] = datetime.now()
+
             self._training_traverse_epochs(hyper, fold_dir)
+
             hyper["time.spent"] = datetime.now() - hyper["time.spent"]
             hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
@@ -332,8 +335,8 @@ class TrainingBaseline(TrainingParent):
             # clear time spent before next training
             hyper.pop("time.spent")
 
-            # only train 2 folds in debug mode
-            if debug_mode and fold_list.index(fold) == 1:
+            # only train 1 fold in debug mode
+            if debug_mode and fold_list.index(fold) == 0:
                 break
 
     def new_training(
@@ -371,7 +374,7 @@ class TrainingBaseline(TrainingParent):
                 baseline_id=baseline_id, debug_mode=debug_mode
             )
 
-    def _find_result_dir(self, baseline_id: str) -> str:
+    def __find_baseline_dir(self, baseline_id: str) -> str:
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
         if os.path.exists(baseline_dir):
             return baseline_dir
@@ -383,7 +386,7 @@ class TrainingBaseline(TrainingParent):
         print("inference: {}".format(baseline_id))
 
         # find idl gtvt folder
-        baseline_dir = self._find_result_dir(baseline_id)
+        baseline_dir = self.__find_baseline_dir(baseline_id)
         if baseline_dir is None:
             print("baseline_id not found")
             return
@@ -404,13 +407,11 @@ class TrainingBaseline(TrainingParent):
                 print("epoch: ", epoch)
 
                 # load cnn
-                cnn_path = Explorer.get_sub_files(
-                    epoch_dir, key_word=".pt", full_path=True
-                )[0]
+                cnn_path = os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch))
                 hyper = Dict()  # create an empty hyper dict to save cnn
                 self._load_cnn(hyper=hyper, cnn_path=cnn_path)
 
-                # initialize scores dict (only on test)
+                # initialize scores dict
                 epoch_scores = Dict()
                 for stats in ["median", "avg"]:
                     for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -462,7 +463,7 @@ class TrainingBaseline(TrainingParent):
                                     epoch_scores[stats][gtv][metric].append(score)
 
                 # all patients under current epoch have been traversed
-                # calculate median score (test set only)
+                # calculate median and avg score of current epoch
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in g.METRICS:
                         epoch_scores["median"][gtv][metric] = ValueUtils.median(
@@ -471,7 +472,7 @@ class TrainingBaseline(TrainingParent):
                         epoch_scores["avg"][gtv][metric] = ValueUtils.avg(
                             epoch_scores["avg"][gtv][metric]
                         )
-                # save all patients scores in "inference_test.json"
+                # save all patients scores in "inference_test_inter.json"
                 Json.save(
                     data=epoch_scores,
                     path=os.path.join(epoch_dir, "inference_test_inter.json"),
@@ -482,7 +483,7 @@ class TrainingBaseline(TrainingParent):
         print("")
         print("calculate cross valid mean: {}".format(baseline_id))
 
-        baseline_dir = self._find_result_dir(baseline_id)
+        baseline_dir = self.__find_baseline_dir(baseline_id)
 
         cross_valid_dir = os.path.join(baseline_dir, "cross_valid")
         Folder.create(cross_valid_dir, "patients")
@@ -583,7 +584,7 @@ class TrainingBaseline(TrainingParent):
         )
 
     def remove_non_optimal_epochs(self, baseline_id: str):
-        train_result_dir = self._find_result_dir(baseline_id)
+        train_result_dir = self.__find_baseline_dir(baseline_id)
         print("")
         print("remove non optimal epochs:{}".format(baseline_id))
 
@@ -661,10 +662,8 @@ class TrainingBaseline(TrainingParent):
                 binary=True,
             )
 
-        # get pred
-        item = dataset.get_item(patient=patient)
-        input_imgs = item[0]
-        labels = item[1]
+        input_imgs, labels = dataset.get_item(patient=patient)
+
         # add "batch" (c/d/h/w -> b/c/d/h/w)
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)

@@ -1,15 +1,20 @@
 {
-    "cuda.visible.devices": "1",
-    "dataset.dir.linux": "/mnt/faststorage/alan/Scans1mm/",
-    "dataset.dir.windows": "E:/Alan/Scans1mm",
+    "cuda.visible.devices": "0,1",
+    "dataset.dir.linux.1mm": "/mnt/faststorage/alan/Scans1mm/",
+    "dataset.dir.linux.3mm": "/mnt/faststorage/alan/Scans3mm/",
+    "dataset.dir.windows.1mm": "E:/Alan/Scans1mm",
+    "dataset.dir.windows.3mm": "E:/Alan/Scans3mm",
     "dataset.k.folds": 5,
     "dataset.split.json": "dataset_split.json",
     "hyper.json.baseline": "hyper_baseline.json",
     "hyper.json.idl.gtvn": "hyper_idl_gtvn.json",
     "hyper.json.idl.gtvs": "hyper_idl_gtvs.json",
     "hyper.json.idl.gtvt": "hyper_idl_gtvt.json",
-    "img.shape": 240,
-    "nii.spacing": "1.0,1.0,1.0",
+    "img.shape.1mm": "256,256,256",
+    "img.shape.3mm": "72,256,256",
+    "nii.spacing.1mm": "1.0,1.0,1.0",
+    "nii.spacing.3mm": "1.171875,1.171875,3.0",
     "num.workers": 16,
-    "train.results.dir": "train_results"
+    "train.results.dir": "train_results",
+    "use.3mm": true
 }

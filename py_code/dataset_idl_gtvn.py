@@ -71,9 +71,10 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
                 g.TRAIN_RESULTS_DIR,
                 self.__baseline_id,
                 "baseline",
+                "cross_valid",
                 "patients",
                 "patient={}".format(patient),
-                "pred_gtvn.nii",
+                "gtvn_pred.nii",
             ),
             binary=False,
         )
@@ -220,7 +221,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
             input_imgs = torch.cat([input_imgs, img], dim=0)
 
         # None is used as a placeholder to ensure consistent return value formats for each dataset
-        return input_imgs, labels, None, clicks
+        return input_imgs, labels, clicks
 
     # must be overrided
     # this function is only for training, not for inference

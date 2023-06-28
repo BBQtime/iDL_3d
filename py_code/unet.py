@@ -41,7 +41,72 @@ class VGGBlock(nn.Module):
         return self.double_conv(input_data)
 
 
-class UNetSlim(nn.Module):
+class UNet(nn.Module):
+    def __init__(
+        self,
+        in_chan: int,
+        out_chan: int,
+        use_3mm: bool,
+        edge_chan: int = 16,  # make it 64 for origin UNet
+        dropout: float = 0,
+    ):
+        super().__init__()
+        # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+
+        # vgg blocks
+        self.vgg = nn.ModuleDict()
+        for i in range(0, 4 + 1):
+            # nn.ModuleDict module name must be "str"
+            self.vgg[str(i)] = nn.ModuleDict()
+
+        self.vgg["0"]["0"] = VGGBlock(in_chan, edge_chan)
+        self.vgg["1"]["0"] = VGGBlock(edge_chan, edge_chan * 2)
+        self.vgg["2"]["0"] = VGGBlock(edge_chan * 2, edge_chan * 4, dropout)
+        self.vgg["3"]["0"] = VGGBlock(edge_chan * 4, edge_chan * 8, dropout)
+        self.vgg["4"]["0"] = VGGBlock(edge_chan * 8, edge_chan * 16, dropout)
+
+        self.vgg["3"]["1"] = VGGBlock(
+            edge_chan * 8 + edge_chan * 16, edge_chan * 8, dropout
+        )
+        self.vgg["2"]["2"] = VGGBlock(
+            edge_chan * 4 + edge_chan * 8, edge_chan * 4, dropout
+        )
+        self.vgg["1"]["3"] = VGGBlock(edge_chan * 2 + edge_chan * 4, edge_chan * 2)
+        self.vgg["0"]["4"] = VGGBlock(edge_chan + edge_chan * 2, edge_chan)
+
+        # upsample layers
+        self.up = nn.ModuleDict()
+        for i in range(1, 4 + 1):
+            # nn.ModuleDict module name must be "str"
+            self.up[str(i)] = nn.ModuleDict()
+
+        if use_3mm:
+            kernel = (1, 2, 2)
+        else:
+            kernel = 2
+
+        self.up["4"]["0"] = nn.ConvTranspose3d(edge_chan * 16, edge_chan * 16, 2, 2)
+        self.up["3"]["1"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)
+        self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan * 4, edge_chan * 4, 2, 2)
+        self.up["1"]["3"] = nn.ConvTranspose3d(
+            edge_chan * 2, edge_chan * 2, kernel, kernel
+        )
+
+        # pooling layers
+        self.pool = nn.ModuleDict()
+        # nn.ModuleDict module name must be "str"
+        self.pool["0"] = nn.MaxPool3d(kernel_size=kernel, stride=kernel)
+        self.pool["1"] = nn.MaxPool3d(kernel_size=2, stride=2)
+        self.pool["2"] = nn.MaxPool3d(kernel_size=2, stride=2)
+        self.pool["3"] = nn.MaxPool3d(kernel_size=2, stride=2)
+
+        # final layer
+        self.final = nn.Conv3d(edge_chan, out_chan, kernel_size=1, stride=1)
+        if out_chan == 1:
+            self.final = nn.Sequential(self.final, nn.Sigmoid())
+        else:
+            self.final = nn.Sequential(self.final, nn.Softmax())
+
     def __freeze_layer(self, layer):
         for param in layer.parameters():
             param.requires_grad = False
@@ -91,65 +156,6 @@ class UNetSlim(nn.Module):
         for i in range(4):
             self.__unfreeze_layer(self.pool[i])
 
-    def __init__(
-        self,
-        in_chan: int,
-        out_chan: int,
-        edge_chan: int = 16,  # make it 64 for origin UNet
-        dropout: float = 0,
-    ):
-        super().__init__()
-        # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-
-        # vgg blocks
-        self.vgg = nn.ModuleDict()
-        for i in range(0, 4 + 1):
-            # nn.ModuleDict module name must be "str"
-            self.vgg[str(i)] = nn.ModuleDict()
-
-        self.vgg["0"]["0"] = VGGBlock(in_chan, edge_chan)
-        self.vgg["1"]["0"] = VGGBlock(edge_chan, edge_chan * 2)
-        self.vgg["2"]["0"] = VGGBlock(edge_chan * 2, edge_chan * 4, dropout)
-        self.vgg["3"]["0"] = VGGBlock(edge_chan * 4, edge_chan * 8, dropout)
-        self.vgg["4"]["0"] = VGGBlock(edge_chan * 8, edge_chan * 16, dropout)
-
-        self.vgg["3"]["1"] = VGGBlock(
-            edge_chan * 8 + edge_chan * 16, edge_chan * 8, dropout
-        )
-        self.vgg["2"]["2"] = VGGBlock(
-            edge_chan * 4 + edge_chan * 8, edge_chan * 4, dropout
-        )
-        self.vgg["1"]["3"] = VGGBlock(edge_chan * 2 + edge_chan * 4, edge_chan * 2)
-        self.vgg["0"]["4"] = VGGBlock(edge_chan + edge_chan * 2, edge_chan)
-
-        # upsample layers
-        self.up = nn.ModuleDict()
-        for i in range(1, 4 + 1):
-            # nn.ModuleDict module name must be "str"
-            self.up[str(i)] = nn.ModuleDict()
-
-        self.up["4"]["0"] = nn.ConvTranspose3d(edge_chan * 16, edge_chan * 16, 2, 2)
-        self.up["3"]["1"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)
-        self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan * 4, edge_chan * 4, 2, 2)
-        self.up["1"]["3"] = nn.ConvTranspose3d(
-            edge_chan * 2, edge_chan * 2, (1, 2, 2), (1, 2, 2)
-        )
-
-        # pooling layers
-        self.pool = nn.ModuleDict()
-        # nn.ModuleDict module name must be "str"
-        self.pool["0"] = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
-        self.pool["1"] = nn.MaxPool3d(kernel_size=2, stride=2)
-        self.pool["2"] = nn.MaxPool3d(kernel_size=2, stride=2)
-        self.pool["3"] = nn.MaxPool3d(kernel_size=2, stride=2)
-
-        # final layer
-        self.final = nn.Conv3d(edge_chan, out_chan, kernel_size=1, stride=1)
-        if out_chan == 1:
-            self.final = nn.Sequential(self.final, nn.Sigmoid())
-        else:
-            self.final = nn.Sequential(self.final, nn.Softmax())
-
     def forward(self, input_data: Tensor) -> Tensor:
         vgg = self.vgg
         pool = self.pool
@@ -189,12 +195,12 @@ class UNetSlim(nn.Module):
 # for testing
 if 0:
     img_size = 256
-    img_depth = 72
-    batch_size = 2
-    in_chan = 5
-    out_chan = 2
+    img_depth = 256
+    batch_size = 1
+    in_chan = 4
+    out_chan = 3
 
-    cnn = UNetSlim(in_chan, out_chan)
+    cnn = UNet(in_chan, out_chan)
     if GPU.used_count() > 1:
         cnn = nn.DataParallel(cnn)
     cnn = cnn.to(g.DEVICE)

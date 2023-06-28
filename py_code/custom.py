@@ -686,19 +686,33 @@ class Global:
 
     # Windows or Linux
     if platform.system().lower() == "windows":
-        DATASET_DIR = __settings["dataset.dir.windows"]
+        if __settings["use.3mm"]:
+            DATASET_DIR = __settings["dataset.dir.windows.3mm"]
+        else:
+            DATASET_DIR = __settings["dataset.dir.windows.1mm"]
         NUM_WORKERS = 0  # window doesn't support pytorch multi-thread
 
     elif platform.system().lower() == "linux":
-        DATASET_DIR = __settings["dataset.dir.linux"]
+        if __settings["use.3mm"]:
+            DATASET_DIR = __settings["dataset.dir.linux.3mm"]
+        else:
+            DATASET_DIR = __settings["dataset.dir.linux.1mm"]
         NUM_WORKERS = __settings["num.workers"]
 
-    # Depth, Height, Width
-    IMG_SHAPE = int(__settings["img.shape"])
-    IMG_SHAPE = (IMG_SHAPE, IMG_SHAPE, IMG_SHAPE)
+    # (Depth, Height, Width)
+    if __settings["use.3mm"]:
+        IMG_SHAPE = __settings["img.shape.3mm"]
+    else:
+        IMG_SHAPE = __settings["img.shape.1mm"]
+    IMG_SHAPE = List(IMG_SHAPE)
+    IMG_SHAPE = tuple(int(i) for i in IMG_SHAPE)
 
-    # Width, Height, Depth
-    NII_SPACING = List(__settings["nii.spacing"])
+    # (Width, Height, Depth)
+    if __settings["use.3mm"]:
+        NII_SPACING = __settings["nii.spacing.3mm"]
+    else:
+        NII_SPACING = __settings["nii.spacing.1mm"]
+    NII_SPACING = List(NII_SPACING)
     NII_SPACING = tuple(float(i) for i in NII_SPACING)
 
     # Pytorch save/load entire cnn or weight only
