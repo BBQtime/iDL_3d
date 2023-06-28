@@ -11,7 +11,7 @@ from training_parent import TrainingParent
 from matplotlib import pyplot as plt
 from dataset_baseline import DataSetBaseline
 from torch.nn import DataParallel
-from unet_pp import UNetPP
+from unet_pp_slim import UNetPPSlim
 from loss_func import UnifiedFocalLoss
 from custom import Img
 from custom import Dict
@@ -32,7 +32,8 @@ class TrainingBaseline(TrainingParent):
     ):
         # epochs
         if debug_mode:
-            hyper["epochs"] = 1
+            # only train 2 epoch in debug mode
+            hyper["epochs"] = 2
         else:
             hyper["epochs"] = ValueUtils.limit_range(hyper["epochs"], (1, None))
 
@@ -284,7 +285,7 @@ class TrainingBaseline(TrainingParent):
     def _training_traverse_folds(
         self,
         hyper: Dict,
-        train_result_dir: str,
+        train_dir: str,
         debug_mode: bool = False,
     ):
         # cross validation
@@ -300,7 +301,7 @@ class TrainingBaseline(TrainingParent):
 
         # loop through each fold
         for fold in fold_list:
-            fold_dir = os.path.join(train_result_dir, "fold={}".format(fold))
+            fold_dir = os.path.join(train_dir, "fold={}".format(fold))
             Folder.create(fold_dir)
 
             # load and print hyperparams
@@ -335,8 +336,8 @@ class TrainingBaseline(TrainingParent):
             # clear time spent before next training
             hyper.pop("time.spent")
 
-            # only train 1 fold in debug mode
-            if debug_mode and fold_list.index(fold) == 0:
+            # only train 2 folds in debug mode
+            if debug_mode and fold_list.index(fold) == 1:
                 break
 
     def new_training(
@@ -360,13 +361,13 @@ class TrainingBaseline(TrainingParent):
             Folder.create(baseline_dir)
 
             self._training_traverse_folds(
-                hyper=hyper, train_result_dir=baseline_dir, debug_mode=debug_mode
+                hyper=hyper, train_dir=baseline_dir, debug_mode=debug_mode
             )
 
             # inference
             self.inference(baseline_id=baseline_id, debug_mode=debug_mode)
 
-            # after inference on internal test set
+            # after inference
             self.remove_non_optimal_epochs(baseline_id)
 
             # after non optimal epochs removed
@@ -374,19 +375,12 @@ class TrainingBaseline(TrainingParent):
                 baseline_id=baseline_id, debug_mode=debug_mode
             )
 
-    def __find_baseline_dir(self, baseline_id: str) -> str:
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
-        if os.path.exists(baseline_dir):
-            return baseline_dir
-        else:
-            return None
-
     def inference(self, baseline_id: str, debug_mode: bool = False):
         print("")
         print("inference: {}".format(baseline_id))
 
         # find idl gtvt folder
-        baseline_dir = self.__find_baseline_dir(baseline_id)
+        baseline_dir = self._find_train_dir(baseline_id)
         if baseline_dir is None:
             print("baseline_id not found")
             return
@@ -483,7 +477,7 @@ class TrainingBaseline(TrainingParent):
         print("")
         print("calculate cross valid mean: {}".format(baseline_id))
 
-        baseline_dir = self.__find_baseline_dir(baseline_id)
+        baseline_dir = self._find_train_dir(baseline_id)
 
         cross_valid_dir = os.path.join(baseline_dir, "cross_valid")
         Folder.create(cross_valid_dir, "patients")
@@ -505,7 +499,7 @@ class TrainingBaseline(TrainingParent):
         all_patients = all_patients.to_list()
 
         for patient in tqdm(all_patients):
-            # load preds
+            # initialize preds
             preds = Dict()
             for gtv in ["s", "t", "n"]:
                 preds[gtv] = None
@@ -541,11 +535,11 @@ class TrainingBaseline(TrainingParent):
                 preds[gtv] /= len(fold_dirs)
 
             # save cross_valid preds
+            patient_dir = os.path.join(
+                cross_valid_dir, "patients", "patient={}".format(patient)
+            )
+            Folder.create(patient_dir)
             for gtv in ["t", "n"]:
-                patient_dir = os.path.join(
-                    cross_valid_dir, "patients", "patient={}".format(patient)
-                )
-                Folder.create(patient_dir)
                 Nii.save(
                     img=preds[gtv],
                     save_path=os.path.join(patient_dir, "gtv{}_pred.nii".format(gtv)),
@@ -584,12 +578,12 @@ class TrainingBaseline(TrainingParent):
         )
 
     def remove_non_optimal_epochs(self, baseline_id: str):
-        train_result_dir = self.__find_baseline_dir(baseline_id)
+        baseline_dir = self._find_train_dir(baseline_id)
         print("")
         print("remove non optimal epochs:{}".format(baseline_id))
 
         for fold_dir in Explorer.get_sub_folders(
-            train_result_dir, key_word="fold=", full_path=True
+            baseline_dir, key_word="fold=", full_path=True
         ):
             fold_scores = Dict()
 
@@ -625,27 +619,29 @@ class TrainingBaseline(TrainingParent):
                     # create a tmp list to sort
                     list_to_sort = List()
                     # add elements into the list
-                    for name in scores.keys():
-                        list_to_sort.append(scores[name][stats][gtv][metric])
+                    for epoch in scores.keys():
+                        list_to_sort.append(scores[epoch][stats][gtv][metric])
                     # sort the list
                     if metric == "dsc":
                         list_to_sort.sort(reverse=False)
                     else:
                         list_to_sort.sort(reverse=True)
                     # update value based on the idx in the list
-                    for name in scores.keys():
-                        new_value = list_to_sort.index(scores[name][stats][gtv][metric])
+                    for epoch in scores.keys():
+                        new_value = list_to_sort.index(
+                            scores[epoch][stats][gtv][metric]
+                        )
                         # if metric == "dsc":
                         #     new_value *= 2
-                        scores[name][stats][gtv][metric] = new_value
+                        scores[epoch][stats][gtv][metric] = new_value
 
         evaluation = Dict()
-        for name in scores:
-            evaluation[name] = 0
+        for epoch in scores:
+            evaluation[epoch] = 0
             for stats in ["avg", "median"]:
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in g.METRICS:
-                        evaluation[name] += scores[name][stats][gtv][metric]
+                        evaluation[epoch] += scores[epoch][stats][gtv][metric]
 
         return evaluation.key_with_max_value()
 

@@ -16,7 +16,7 @@
 # from tqdm import tqdm
 # from custom import Global as g
 # from torch.nn import DataParallel
-# from unet_pp import UNetPP
+# from unet_pp import UNetPPSlim
 
 
 # class TrainingIDLGTVs(TrainingBaseline):
@@ -186,7 +186,7 @@
 #     def __load_cnn(self, hyper: Dict, cnn_path: str = None):
 #         # new model
 #         if cnn_path == "" or cnn_path is None:
-#             hyper["cnn"] = UNetPP(
+#             hyper["cnn"] = UNetPPSlim(
 #                 in_chan=6, out_chan=3, dropout=hyper["dropout"]
 #             ).to(g.DEVICE)
 
@@ -434,7 +434,7 @@
 #         print("inference: {}".format(idl_gtvs_id))
 
 #         # find idl folder
-#         idl_gtvs_dir = self._find_result_dir(idl_gtvs_id)
+#         idl_gtvs_dir = self._find_train_dir(idl_gtvs_id)
 #         if idl_gtvs_dir is None:
 #             print("idl_gtvs_id not found")
 #             return

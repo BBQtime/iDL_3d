@@ -820,7 +820,7 @@ class TrainingIDLGTVt(TrainingParent):
             self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
     def calculate_median_and_avg_score(self, idl_gtvt_id):
-        idl_gtvt_dir = self._find_result_dir(idl_gtvt_id)
+        idl_gtvt_dir = self._find_train_dir(idl_gtvt_id)
         if idl_gtvt_dir is None:
             print("idl_gtvt_id not found")
             return
@@ -858,7 +858,7 @@ class TrainingIDLGTVt(TrainingParent):
         print("inference: {}".format(idl_gtvt_id))
 
         # find idl gtvt folder
-        idl_gtvt_dir = self._find_result_dir(idl_gtvt_id)
+        idl_gtvt_dir = self._find_train_dir(idl_gtvt_id)
         if idl_gtvt_dir is None:
             print("idl_gtvt_id not found")
             return

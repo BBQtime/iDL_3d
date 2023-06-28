@@ -77,22 +77,167 @@ class TrainingIDLGTVn(TrainingBaseline):
             hyper["baseline.id"] = baseline_id
 
             self._training_traverse_folds(
-                hyper=hyper, train_result_dir=idl_gtvn_dir, debug_mode=debug_mode
+                hyper=hyper, train_dir=idl_gtvn_dir, debug_mode=debug_mode
             )
 
-            # # inference
-            # self.inference(idl_gtvn_id=idl_gtvn_id, debug_mode=debug_mode)
+            # inference
+            self.inference(idl_gtvn_id=idl_gtvn_id, debug_mode=debug_mode)
 
-            # # after inference on internal test set
-            # self.remove_non_optimal_epochs(baseline_id)
+            # after inference
+            self.remove_non_optimal_epochs(idl_gtvn_id)
 
-            # # after non optimal epochs removed
-            # self.calculate_cross_valid_mean(
-            #     baseline_id=baseline_id, debug_mode=debug_mode
-            # )
+            # after non optimal epochs removed
+            self.calculate_cross_valid_mean(
+                idl_gtvn_id=idl_gtvn_id, debug_mode=debug_mode
+            )
 
-    def remove_non_optimal_epochs(self, idl_gtvn_id: str, dataset: str = "valid"):
-        self._remove_non_optimal_epochs(train_id=idl_gtvn_id, dataset=dataset)
+    def calculate_cross_valid_mean(self, idl_gtvn_id: str, debug_mode: bool = False):
+        print("")
+        print("calculate cross valid mean: {}".format(idl_gtvn_id))
+
+        idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
+
+        cross_valid_dir = os.path.join(idl_gtvn_dir, "cross_valid")
+        Folder.create(cross_valid_dir, "patients")
+
+        fold_dirs = Explorer.get_sub_folders(
+            idl_gtvn_dir, key_word="fold=", full_path=True
+        )
+
+        # initialize scores dict
+        scores = Dict()
+        for stats in ["median", "avg"]:
+            for metric in g.METRICS:
+                scores[stats][metric] = List()
+
+        # load patients
+        inter_test_patients = self._load_patients(debug_mode=debug_mode)["test.inter"]
+
+        for patient in tqdm(inter_test_patients):
+            # initialize preds
+            pred = None
+
+            for fold_dir in fold_dirs:
+                # find epoch dir
+                epoch_dirs = Explorer.get_sub_folders(
+                    fold_dir, key_word="epoch=", full_path=True
+                )
+                if len(epoch_dirs) > 1:
+                    self.remove_non_optimal_epochs(idl_gtvn_id)
+                    epoch_dir = Explorer.get_sub_folders(
+                        fold_dir, key_word="epoch=", full_path=True
+                    )[0]
+                else:
+                    epoch_dir = epoch_dirs[0]
+
+                # load preds
+                patient_dir = os.path.join(
+                    epoch_dir, "patients", "patient={}".format(patient)
+                )
+                img = Nii.load(os.path.join(patient_dir, "gtvn_pred.nii"))
+                if pred is None:
+                    pred = img
+                else:
+                    pred += img
+
+            pred /= len(fold_dirs)
+
+            # save cross_valid preds
+            patient_dir = os.path.join(
+                cross_valid_dir, "patients", "patient={}".format(patient)
+            )
+            Folder.create(patient_dir)
+            Nii.save(img=pred, save_path=os.path.join(patient_dir, "gtvn_pred.nii"))
+
+            # load labels and calculate metrics (on internal test set only)
+            if patient in inter_test_patients:
+                label = Nii.load(
+                    os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+                    binary=True,
+                )
+                for metric in g.METRICS:
+                    score = self._metrics[metric](pred, label)
+                    scores["patient={}".format(patient)][metric] = score
+
+                    for stats in ["median", "avg"]:
+                        scores[stats][metric].append(score)
+
+        # calculate avg and median score
+        for metric in g.METRICS:
+            scores["median"][metric] = ValueUtils.median(scores["median"][metric])
+            scores["avg"][metric] = ValueUtils.avg(scores["avg"][metric])
+        # save cross validscores
+        Json.save(
+            data=scores,
+            path=os.path.join(cross_valid_dir, "inference_test_inter.json"),
+        )
+
+    def remove_non_optimal_epochs(self, idl_gtvn_id: str):
+        idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
+        print("")
+        print("remove non optimal epochs:{}".format(idl_gtvn_dir))
+
+        for fold_dir in Explorer.get_sub_folders(
+            idl_gtvn_dir, key_word="fold=", full_path=True
+        ):
+            fold_scores = Dict()
+
+            for epoch_dir in Explorer.get_sub_folders(
+                fold_dir, key_word="epoch=", full_path=True
+            ):
+                epoch = Path(epoch_dir).name
+
+                # load scores of current epoch
+                # if baseline
+                epoch_scores = Json.load(
+                    os.path.join(epoch_dir, "inference_test_inter.json")
+                )
+                for stats in ["median", "avg"]:
+                    for metric in g.METRICS:
+                        fold_scores[epoch][stats][metric] = epoch_scores[stats][metric][
+                            "round=01"
+                        ]
+
+            best_epoch = self.__find_best_result(fold_scores)
+
+            # delete non-optimal epochs
+            for epoch_dir in Explorer.get_sub_folders(
+                fold_dir, key_word="epoch=", full_path=True
+            ):
+                epoch = Path(epoch_dir).name
+                if epoch != best_epoch:
+                    Folder.delete(epoch_dir)
+                    print("delete:", epoch_dir)
+
+    # a sub function of _remove_non_optimal_epochs()
+    def __find_best_result(self, scores: Dict):
+        for stats in ["median", "avg"]:
+            for metric in g.METRICS:
+                # create a tmp list to sort
+                list_to_sort = List()
+                # add elements into the list
+                for epoch in scores.keys():
+                    list_to_sort.append(scores[epoch][stats][metric])
+                # sort the list
+                if metric == "dsc":
+                    list_to_sort.sort(reverse=False)
+                else:
+                    list_to_sort.sort(reverse=True)
+                # update value based on the idx in the list
+                for epoch in scores.keys():
+                    new_value = list_to_sort.index(scores[epoch][stats][metric])
+                    # if metric == "dsc":
+                    #     new_value *= 2
+                    scores[epoch][stats][metric] = new_value
+
+        evaluation = Dict()
+        for epoch in scores:
+            evaluation[epoch] = 0
+            for stats in ["avg", "median"]:
+                for metric in g.METRICS:
+                    evaluation[epoch] += scores[epoch][stats][metric]
+
+        return evaluation.key_with_max_value()
 
     def __single_patient_inference(
         self, patient: str, hyper: Dict, baseline_id: str
@@ -152,7 +297,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         print("")
         print("inference: {}".format(idl_gtvn_id))
 
-        idl_gtvn_dir = self._find_result_dir(idl_gtvn_id)
+        idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
         if idl_gtvn_dir is None:
             print("idl_gtvn_id not found")
             return

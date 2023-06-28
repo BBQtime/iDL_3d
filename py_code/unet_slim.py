@@ -41,13 +41,13 @@ class VGGBlock(nn.Module):
         return self.double_conv(input_data)
 
 
-class UNet(nn.Module):
+class UNetSlim(nn.Module):
     def __init__(
         self,
         in_chan: int,
         out_chan: int,
         use_3mm: bool,
-        edge_chan: int = 16,  # make it 64 for origin UNet
+        edge_chan: int = 16,  # make it 64 for origin UNetSlim
         dropout: float = 0,
     ):
         super().__init__()
@@ -200,7 +200,7 @@ if 0:
     in_chan = 4
     out_chan = 3
 
-    cnn = UNet(in_chan, out_chan)
+    cnn = UNetSlim(in_chan, out_chan)
     if GPU.used_count() > 1:
         cnn = nn.DataParallel(cnn)
     cnn = cnn.to(g.DEVICE)

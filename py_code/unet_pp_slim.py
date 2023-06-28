@@ -41,7 +41,7 @@ class VGGBlock(nn.Module):
         return self.double_conv(input_data)
 
 
-class UNetPP(nn.Module):
+class UNetPPSlim(nn.Module):
     def __init__(
         self,
         in_chan: int,
@@ -254,7 +254,7 @@ if 0:
     in_chan = 5
     out_chan = 2
 
-    cnn = UNetPP(in_chan, out_chan)
+    cnn = UNetPPSlim(in_chan, out_chan)
     if GPU.used_count() > 1:
         cnn = nn.DataParallel(cnn)
     cnn = cnn.to(g.DEVICE)

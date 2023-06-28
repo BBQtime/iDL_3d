@@ -11,12 +11,11 @@ from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
 from torch import optim
-from unet_pp import UNetPP
-from unet import UNet
+from unet_pp_slim import UNetPPSlim
+from unet_slim import UNetSlim
 from datetime import datetime
 from dataset_baseline import DataSetBaseline
 from dataset_idl_gtvn import DataSetIDLGTVn
-from dataset_idl_gtvs import DataSetIDLGTVs
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from custom import Json
 from custom import Dict
@@ -71,10 +70,10 @@ class TrainingParent:
         # new model
         if cnn_path == "" or cnn_path is None:
             # cnn architecture
-            if hyper["cnn"] == "unet.pp":
-                cnn = UNetPP
+            if hyper["cnn"] == "unet.pp.slim":
+                cnn = UNetPPSlim
             else:
-                cnn = UNet
+                cnn = UNetSlim
             # 3mm or 1mm
             if g.IMG_SHAPE[1] > g.IMG_SHAPE[0] * 2:
                 use_3mm = True
@@ -169,10 +168,10 @@ class TrainingParent:
                 else:
                     cnn = hyper[key_name]
 
-                if isinstance(cnn, UNetPP):
-                    simple_hyper[key_name] = "unet.pp"
+                if isinstance(cnn, UNetPPSlim):
+                    simple_hyper[key_name] = "unet.pp.slim"
                 else:
-                    simple_hyper[key_name] = "unet"
+                    simple_hyper[key_name] = "unet.slim"
 
             # only save optimizer name
             elif key_name == "optim":
@@ -458,13 +457,18 @@ class TrainingParent:
         return group_hyper
 
     # find train result directory full path using train_id
-    def _find_result_dir(self, train_id: str) -> str:
-        for baseline_dir in Explorer.get_sub_folders(
-            g.TRAIN_RESULTS_DIR, full_path=True
-        ):
-            for train_dir in Explorer.get_sub_folders(baseline_dir, full_path=True):
-                if Path(train_dir).name == train_id:
-                    return train_dir
-
-        # cant find train_dir
-        return None
+    def _find_train_dir(self, train_id: str) -> str:
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
+        # train id is a baseline
+        if os.path.exists(baseline_dir):
+            return baseline_dir
+        # train id is a iDL
+        else:
+            for baseline_dir in Explorer.get_sub_folders(
+                g.TRAIN_RESULTS_DIR, full_path=True
+            ):
+                for train_dir in Explorer.get_sub_folders(baseline_dir, full_path=True):
+                    if Path(train_dir).name == train_id:
+                        return train_dir
+            # cant find train_dir
+            return None

@@ -4,7 +4,7 @@
     "augment.min": 2,
     "augment.pct": 0.8,
     "batch.size": 2,
-    "cnn": "unet.pp",
+    "cnn": "unet.pp.slim",
     "cross.valid.fold": 4,
     "dropout": 0.3,
     "early.stop.epochs": 30,
