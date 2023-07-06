@@ -46,7 +46,7 @@ class UNetSlim(nn.Module):
         self,
         in_chan: int,
         out_chan: int,
-        use_3mm: bool,
+        slice_thick: str,
         edge_chan: int = 16,  # make it 64 for origin UNetSlim
         dropout: float = 0,
     ):
@@ -80,7 +80,7 @@ class UNetSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        if use_3mm:
+        if slice_thick == "3mm":
             kernel = (1, 2, 2)
         else:
             kernel = 2

@@ -20,9 +20,11 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         selected_slices: Dict,
         label_dir: str,
         pred_dir: str,
+        img_shape: tuple,
         augment: Dict,
         weight: Dict,
     ):
+        self.__img_shape = img_shape
         self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
@@ -206,8 +208,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = Img.central_pad(img, g.IMG_SHAPE)
-        img = Img.central_crop(img, g.IMG_SHAPE)
+        img = Img.central_resize(img, self.__img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)

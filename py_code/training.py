@@ -6,41 +6,33 @@ import random
 import numpy as np
 from pathlib import Path
 from torch.nn import DataParallel
+from torch.nn import ModuleDict
 from numpy import ndarray
-from segment_metrics import SegmentationMetrics
 from itertools import product
 from collections import OrderedDict
 from torch import optim
 from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
 from datetime import datetime
-from dataset_baseline import DataSetBaseline
-from dataset_idl_gtvn import DataSetIDLGTVn
+from metrics_lib import SegmentationMetrics
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from custom import Json
 from custom import Dict
 from custom import List
 from custom import GPU
-from custom import Img
-from custom import Nii
 from custom import ValueUtils
 from custom import Explorer
+from custom import Debug
 
 
-class TrainingParent:
-    def __init__(self):
-        # segmentation metrics
-        self._metrics = Dict()
-        for metric in g.METRICS:
-            self._metrics[metric] = SegmentationMetrics(metric).to(g.DEVICE)
-
+class Training:
     def _load_patients(self, fold: int = 1, debug_mode: bool = False):
         patients = Dict()
 
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
 
-        if len(dataset_split) - 1 != g.DATASET_K_FOLDS:
-            dataset_split = super()._split_dataset()
+        if len(dataset_split) - 1 != g.DATASET_FOLDS:
+            dataset_split = self._split_dataset()
 
         patients["test.inter"] = List(dataset_split["test.inter"])
         patients["valid"] = List(dataset_split["fold.{}".format(fold)])
@@ -58,41 +50,51 @@ class TrainingParent:
 
         return patients
 
-        # if float64 needed, use: "cnn.to(torch.double)"
-
-    def _load_cnn(
-        self,
-        hyper: Dict,
-        cnn_path: str = None,
-        in_chan: int = None,
-        out_chan: int = None,
-    ):
-        # new model
-        if cnn_path == "" or cnn_path is None:
-            # cnn architecture
-            if hyper["cnn"] == "unet.pp.slim":
-                cnn = UNetPPSlim
-            else:
-                cnn = UNetSlim
-            # 3mm or 1mm
-            if g.IMG_SHAPE[1] > g.IMG_SHAPE[0] * 2:
-                use_3mm = True
-            else:
-                use_3mm = False
-            hyper["cnn"] = cnn(
-                in_chan=in_chan,
-                out_chan=out_chan,
-                use_3mm=use_3mm,
-                dropout=hyper["dropout"],
-            ).to(g.DEVICE)
-        # existing model
+    # if float64 needed, use: "cnn.to(torch.double)"
+    def _load_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
+        # cnn architecture
+        if hyper["cnn"] == "unet.pp.slim":
+            cnn = UNetPPSlim
+        elif hyper["cnn"] == "unet.slim":
+            cnn = UNetSlim
         else:
-            hyper["cnn"] = torch.load(cnn_path).to(g.DEVICE)
+            Debug.terminate("wrong hyper[cnn] value")
+        hyper["cnn"] = cnn(
+            in_chan=in_chan,
+            out_chan=out_chan,
+            slice_thick=hyper["slice.thick"],
+            dropout=hyper["dropout"],
+        )
         # set multi-GPU
         if GPU.used_count() > 1:
-            hyper["cnn"] = DataParallel(hyper["cnn"]).to(g.DEVICE)
+            hyper["cnn"] = DataParallel(hyper["cnn"])
+        # to gpu (if gpu available)
+        hyper["cnn"] = hyper["cnn"].to(g.DEVICE)
 
-    def _load_common_hyper(self, hyper: Dict, cnn_path: str = None) -> None:
+    def _load_exist_cnn(self, cnn_path: str):
+        cnn = torch.load(cnn_path)
+        if GPU.used_count() > 1:
+            cnn = DataParallel(cnn)
+        cnn = cnn.to(g.DEVICE)
+        return cnn
+
+    def _load_segment_metrics(self, slice_thick: str) -> Dict:
+        segment_metrics = Dict()
+        for metric in g.METRICS:
+            segment_metrics[metric] = SegmentationMetrics(
+                metric=metric, slice_thick=slice_thick
+            )
+            # if GPU.used_count() > 1:
+            #     segment_metrics[metric] = DataParallel(segment_metrics[metric])
+            segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
+        return segment_metrics
+
+    def _load_slice_thick(self, hyper: Dict):
+        # slice thickness
+        if hyper["slice.thick"] != "1mm" and hyper["slice.thick"] != "3mm":
+            Debug.terminate("Invalid slice thickness")
+
+    def _load_hyper(self, hyper: Dict) -> None:
         # device name
         if GPU.used_count() < 1:
             hyper["device"] = "cpu"
@@ -129,6 +131,7 @@ class TrainingParent:
         hyper["loss.weight"] = ValueUtils.limit_range(hyper["loss.weight"], (0.0, 1.0))
         hyper["loss.delta"] = ValueUtils.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
+    def _load_optim_and_scheduler(self, hyper):
         # optimizer (no need to move to cuda)
         if isinstance(hyper["lr.actual"], list):
             lr = hyper["lr.actual"][0]
@@ -149,7 +152,7 @@ class TrainingParent:
             min_lr=hyper["lr.min"],
         )
 
-    def __simplify_hyper(self, hyper: Dict) -> Dict:
+    def _simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
 
         for key_name in hyper:
@@ -189,13 +192,8 @@ class TrainingParent:
         return simple_hyper
 
     def _print_hyper(self, hyper: Dict):
-        simple_hyper = self.__simplify_hyper(hyper)
-        for key, value in simple_hyper.items():
+        for key, value in hyper.items():
             print(key + ":", value)
-
-    def _save_hyper(self, hyper: Dict, json_path: str):
-        simple_hyper = self.__simplify_hyper(hyper)
-        Json.save(data=simple_hyper, path=json_path)
 
     # split dataset and save result into json file
     def _split_dataset(self) -> Dict:
@@ -209,9 +207,9 @@ class TrainingParent:
 
         random.shuffle(train_patients)
 
-        fold_len = round(len(train_patients) / g.DATASET_K_FOLDS)
-        for fold in range(1, g.DATASET_K_FOLDS + 1):
-            if fold == g.DATASET_K_FOLDS:
+        fold_len = round(len(train_patients) / g.DATASET_FOLDS)
+        for fold in range(1, g.DATASET_FOLDS + 1):
+            if fold == g.DATASET_FOLDS:
                 dataset_split["fold.{}".format(fold)] = train_patients.to_str()
             else:
                 dataset_split["fold.{}".format(fold)] = train_patients[
@@ -275,154 +273,6 @@ class TrainingParent:
             )
         else:
             hyper["batch.size"] = dataset.__len__()
-
-    # def _patient_inference(
-    #     self,
-    #     patient: str,
-    #     hyper: Dict,
-    #     inference_type: str,  # baseline/idl_gtvt/idl_gtvn
-    #     idl_gtvt_masked_label: ndarray = None,  # gtvt post processing
-    #     idl_gtvn_baseline_epoch_dir: str = None,  # idl_gtvn dataset needs this
-    # ) -> Dict:
-
-    #     if (
-    #         inference_type != "idl_gtvt"
-    #         and inference_type != "idl_gtvn"
-    #         and inference_type != "idl"
-    #     ):
-    #         inference_type = "baseline"
-
-    #     # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-    #     result = Dict()
-    #     # original labels
-    #     origin = Dict()
-
-    #     if inference_type == "baseline" or inference_type == "idl_gtvt":
-    #         dataset = DataSetBaseline(patients=[patient])
-    #     elif inference_type == "idl_gtvn":
-    #         dataset = DataSetIDLGTVn(
-    #             patients=[patient],
-    #             baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
-    #             random_click=False,
-    #         )
-    #     elif inference_type == "idl":
-    #         weight = Dict()
-    #         weight["background"] = 0.2
-    #         weight["distance.step"] = 2
-    #         weight["fp.fn"] = 1
-    #         weight["prev.round.decay"] = 0.5
-    #         weight["slice"] = 1
-    #         dataset = DataSetIDLGTVs(
-    #             patients=[patient],
-    #             baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
-    #             weight=weight,
-    #             random_click=False,
-    #         )
-
-    #     # load gtvs
-    #     if inference_type == "baseline" or inference_type == "idl":
-    #         origin["gtvs"] = Nii.load(
-    #             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(patient)),
-    #             binary=True,
-    #         )
-
-    #     # load gtvt
-    #     if (
-    #         inference_type == "baseline"
-    #         or inference_type == "idl"
-    #         or inference_type == "idl_gtvt"
-    #     ):
-    #         origin["gtvt"] = Nii.load(
-    #             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
-    #             binary=True,
-    #         )
-
-    #     # load gtvn
-    #     if (
-    #         inference_type == "baseline"
-    #         or inference_type == "idl"
-    #         or inference_type == "idl_gtvn"
-    #     ):
-    #         origin["gtvn"] = Nii.load(
-    #             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
-    #             binary=True,
-    #         )
-
-    #     # get pred
-    #     hyper["cnn"].eval()  # disable dropout / batch nomalize
-    #     with torch.no_grad():
-    #         item = dataset.get_item(patient=patient)
-    #         input_imgs = item[0]
-    #         labels = item[1]
-    #         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
-    #         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-    #         preds = hyper["cnn"].forward(input_imgs)
-    #         # squeeze "batch" channel
-    #         preds = torch.squeeze(preds, dim=0).cpu().numpy()
-
-    #     if inference_type == "baseline":
-    #         result["gtvt"]["pred"] = preds[1]
-    #         result["gtvn"]["pred"] = preds[2]
-    #         result["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
-    #         gtv_list = ["gtvs", "gtvt", "gtvn"]
-
-    #     elif inference_type == "idl_gtvt":
-    #         result["gtvt"]["pred"] = preds[1]
-    #         gtv_list = ["gtvt"]
-
-    #     elif inference_type == "idl_gtvn":
-    #         result["gtvn"]["pred"] = preds[1]
-    #         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-    #         result["gtvn"]["distance.map"] = input_imgs[0]
-    #         clicks = item[2]
-    #         result["gtvn"]["clicks"] = torch.squeeze(clicks, dim=0).cpu().numpy()
-    #         gtv_list = ["gtvn"]
-
-    #     elif inference_type == "idl":
-    #         result["gtvt"]["pred"] = preds[1]
-    #         result["gtvn"]["pred"] = preds[2]
-    #         result["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
-    #         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-    #         result["gtvn"]["distance.map"] = input_imgs[0]
-    #         clicks = item[2]
-    #         result["gtvn"]["clicks"] = torch.squeeze(clicks, dim=0).cpu().numpy()
-    #         gtv_list = ["gtvs", "gtvt", "gtvn"]
-    #         # distance_map and clicks
-    #         for i in ["distance.map", "clicks"]:
-    #             result["gtvn"][i] = Img.central_pad_and_crop(
-    #                 result["gtvn"][i], origin[gtv].shape
-    #             )
-
-    #     # pad and crop to original size
-    #     # preds
-    #     for gtv in gtv_list:
-    #         result[gtv]["pred"] = Img.central_pad_and_crop(
-    #             result[gtv]["pred"], origin[gtv].shape
-    #         )
-
-    #     # idl_gtvt post processing (before calculate scores)
-    #     if inference_type == "idl_gtvt" and idl_gtvt_masked_label is not None:
-    #         cc_list = Img.connected_components(result["gtvt"]["pred"])
-    #         result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
-    #         for cur_cc in cc_list:
-    #             if (cur_cc * idl_gtvt_masked_label).sum() > 0:
-    #                 result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
-
-    #     # idl_gtvn post processing (before calculate scores)
-    #     if 0 and inference_type == "idl_gtvn":
-    #         cc_list = Img.connected_components(result["gtvn"]["pred"])
-    #         result["gtvn"]["pred"] = np.zeros_like(result["gtvn"]["pred"])
-    #         for cur_cc in cc_list:
-    #             if (cur_cc * result["gtvn"]["clicks"]).sum() > 0:
-    #                 result["gtvn"]["pred"] = np.maximum(result["gtvn"]["pred"], cur_cc)
-
-    #     # calculate inference scores
-    #     for gtv in gtv_list:
-    #         for metric in g.METRICS:
-    #             result[gtv][metric] = self._metrics[metric](
-    #                 result[gtv]["pred"], origin[gtv]
-    #             )
-    #     return result
 
     # protected function
     def _get_cur_time_str(self) -> str:

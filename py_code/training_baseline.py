@@ -7,7 +7,7 @@ from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
 from torch.utils.data import DataLoader
-from training_parent import TrainingParent
+from training import Training
 from matplotlib import pyplot as plt
 from dataset_baseline import DataSetBaseline
 from torch.nn import DataParallel
@@ -22,14 +22,19 @@ from custom import Folder
 from custom import GPU
 from custom import ValueUtils
 from custom import Explorer
+from custom import Debug
 
 
-class TrainingBaseline(TrainingParent):
-    def _load_common_hyper(
+class TrainingBaseline(Training):
+    def _load_hyper(
         self,
         hyper: Dict,
+        fold: int,
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
+        # shared by baseline/idl.gtvn/idl.gtvt
+        super()._load_hyper(hyper)
+
         # epochs
         if debug_mode:
             # only train 2 epoch in debug mode
@@ -71,22 +76,28 @@ class TrainingBaseline(TrainingParent):
         hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         # load patients
-        patients = self._load_patients(
-            fold=hyper["cross.valid.fold"], debug_mode=debug_mode
-        )
+        patients = self._load_patients(fold=fold, debug_mode=debug_mode)
         for i in ["train", "valid", "test.inter"]:
             hyper["{}.patients".format(i)] = patients[i]
 
-        # run this at last
-        super()._load_common_hyper(hyper=hyper, cnn_path=None)
+        self._load_slice_thick(hyper)
 
-    def _load_unique_hyper(self, hyper: Dict, debug_mode: bool):
-        # load cnn before _load_common_hyper, optimizer needs cnn
-        self._load_cnn(hyper=hyper, in_chan=4, out_chan=3)
+        self._load_loss_func(hyper)
 
-        self._load_common_hyper(hyper=hyper, debug_mode=debug_mode)
+        # load datasets before load dataloaders
+        self._load_datasets(hyper)
 
-        # loss function
+        self._load_data_loaders(hyper)
+
+        # load cnn before optimizer
+        self._load_new_cnn(hyper=hyper)
+
+        self._load_optim_and_scheduler(hyper)
+
+    def _load_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
+        super()._load_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
+
+    def _load_loss_func(self, hyper: Dict):
         hyper["loss.func"] = UnifiedFocalLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
@@ -94,6 +105,7 @@ class TrainingBaseline(TrainingParent):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
+    def _load_datasets(self, hyper: Dict):
         # load train/valid/test datasets
         for i in ["train", "valid", "test.inter"]:
             # only use data augmentation on training set
@@ -106,14 +118,13 @@ class TrainingBaseline(TrainingParent):
             else:
                 augment = None
             hyper["{}.set".format(i)] = DataSetBaseline(
-                patients=hyper["{}.patients".format(i)], augment=augment
+                patients=hyper["{}.patients".format(i)],
+                slice_thick=hyper["slice.thick"],
+                augment=augment,
             )
 
-        # load dataloader
-        self._load_data_loader(hyper)
-
     # baseline/idl.gtvn/idl.gtvs share this function
-    def _load_data_loader(self, hyper: Dict):
+    def _load_data_loaders(self, hyper: Dict):
         for i in ["train", "valid", "test.inter"]:
             # only shuffle train loader
             if i == "train":
@@ -127,32 +138,29 @@ class TrainingBaseline(TrainingParent):
                 num_workers=g.NUM_WORKERS,
             )
 
-    def __simplify_hyper(self, hyper: Dict) -> Dict:
+    def _simplify_hyper(self, hyper: Dict) -> Dict:
+        simple_hyper = super()._simplify_hyper(hyper)
+
         ignore_list = []
         for i in ["train", "valid", "test.inter"]:
             ignore_list.append("{}.patients".format(i))
             ignore_list.append("{}.set".format(i))
             ignore_list.append("{}.loader".format(i))
 
-        ignore_list.append("baseline.id")
-
-        simple_hyper = Dict()
         for key_name in hyper:
-            # dont need to save or print datasets and data loaders
             if key_name in ignore_list:
-                pass
-            # others
+                simple_hyper.pop(key_name)
             else:
-                simple_hyper[key_name] = hyper[key_name]
+                pass
         return simple_hyper
 
     def _print_hyper(self, hyper: Dict):
-        simple_hyper = self.__simplify_hyper(hyper)
+        simple_hyper = self._simplify_hyper(hyper)
         super()._print_hyper(simple_hyper)
 
     def _save_hyper(self, hyper: Dict, json_path: str):
-        simple_hyper = self.__simplify_hyper(hyper)
-        super()._save_hyper(simple_hyper, json_path)
+        simple_hyper = self._simplify_hyper(hyper)
+        Json.save(data=simple_hyper, path=json_path)
 
     # protected function, TrainingIDLGTVn will inherit it
     def _plot_lr_fig(self, lr_json_path: str):
@@ -288,16 +296,21 @@ class TrainingBaseline(TrainingParent):
         train_dir: str,
         debug_mode: bool = False,
     ):
+        Folder.create(train_dir)
+
         # cross validation
-        hyper["cross.valid.fold"] = int(hyper["cross.valid.fold"])
-        hyper["cross.valid.fold"] = ValueUtils.limit_range(
-            hyper["cross.valid.fold"], (0, g.DATASET_K_FOLDS)
-        )
-        # cross.valid.fold=0 means activate cross validation
-        if hyper["cross.valid.fold"] == 0:
-            fold_list = List(range(1, g.DATASET_K_FOLDS + 1))
+        fold = int(hyper["fold"])
+        fold = ValueUtils.limit_range(fold, (0, g.DATASET_FOLDS))
+        # fold=0 will activate cross validation
+        if fold == 0:
+            fold_list = List(range(1, g.DATASET_FOLDS + 1))
         else:
-            fold_list = [hyper["cross.valid.fold"]]
+            fold_list = [fold]
+        # remove "fold" from hyper
+        hyper.pop("fold")
+
+        # backup origin hyper (after "fold" removed)
+        origin_hyper = hyper.copy()
 
         # loop through each fold
         for fold in fold_list:
@@ -305,13 +318,12 @@ class TrainingBaseline(TrainingParent):
             Folder.create(fold_dir)
 
             # load and print hyperparams
-            hyper["cross.valid.fold"] = fold
-            self._load_unique_hyper(hyper=hyper, debug_mode=debug_mode)
+            self._load_hyper(hyper=hyper, fold=fold, debug_mode=debug_mode)
             print("")
             self._print_hyper(hyper)
 
             print("")
-            print("cross validation fold: {}".format(fold))
+            print("fold: {}".format(fold))
 
             # save an empty loss.json
             Json.save(Dict(), os.path.join(fold_dir, "loss.json"))
@@ -324,17 +336,15 @@ class TrainingBaseline(TrainingParent):
 
             # start training
             hyper["time.spent"] = datetime.now()
-
             self._training_traverse_epochs(hyper, fold_dir)
-
             hyper["time.spent"] = datetime.now() - hyper["time.spent"]
             hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
             # save hyper after training
             self._save_hyper(hyper, hyper_save_path)
 
-            # clear time spent before next training
-            hyper.pop("time.spent")
+            # reset hyper
+            hyper = origin_hyper.copy()
 
             # only train 2 folds in debug mode
             if debug_mode and fold_list.index(fold) == 1:
@@ -355,10 +365,7 @@ class TrainingBaseline(TrainingParent):
             )
             print("")
             print(baseline_id)
-
-            # create train result dir
             baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
-            Folder.create(baseline_dir)
 
             self._training_traverse_folds(
                 hyper=hyper, train_dir=baseline_dir, debug_mode=debug_mode
@@ -371,7 +378,7 @@ class TrainingBaseline(TrainingParent):
             self.remove_non_optimal_epochs(baseline_id)
 
             # after non optimal epochs removed
-            self.calculate_cross_valid_mean(
+            self.calculate_cross_valid_scores(
                 baseline_id=baseline_id, debug_mode=debug_mode
             )
 
@@ -382,13 +389,18 @@ class TrainingBaseline(TrainingParent):
         # find idl gtvt folder
         baseline_dir = self._find_train_dir(baseline_id)
         if baseline_dir is None:
-            print("baseline_id not found")
-            return
+            Debug.terminate("baseline_id not found")
+
+        fold_dirs = Explorer.get_sub_folders(
+            baseline_dir, key_word="fold=", full_path=True
+        )
+
+        # load slice thickness and segmentation metrics
+        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
+        segment_metrics = self._load_segment_metrics(slice_thick)
 
         # loop through fold dirs
-        for fold_dir in Explorer.get_sub_folders(
-            baseline_dir, key_word="fold=", full_path=True
-        ):
+        for fold_dir in fold_dirs:
             fold = int(Path(fold_dir).name[len("fold=") :])
             print("")
             print("fold: ", fold)
@@ -402,8 +414,7 @@ class TrainingBaseline(TrainingParent):
 
                 # load cnn
                 cnn_path = os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch))
-                hyper = Dict()  # create an empty hyper dict to save cnn
-                self._load_cnn(hyper=hyper, cnn_path=cnn_path)
+                cnn = self._load_exist_cnn(cnn_path)
 
                 # initialize scores dict
                 epoch_scores = Dict()
@@ -428,7 +439,7 @@ class TrainingBaseline(TrainingParent):
 
                     # results structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                     patient_results = self.__single_patient_inference(
-                        patient=patient, hyper=hyper
+                        patient=patient, cnn=cnn, slice_thick=slice_thick
                     )
 
                     # save preds of current patient
@@ -438,13 +449,14 @@ class TrainingBaseline(TrainingParent):
                             save_path=os.path.join(
                                 patient_dir, "{}_pred.nii".format(gtv)
                             ),
+                            spacing=g.NII_SPACING[slice_thick],
                         )
 
                     # record score of current patient (test set only)
                     if patient in inter_test_patients:
                         for gtv in ["gtvs", "gtvt", "gtvn"]:
                             for metric in g.METRICS:
-                                score = self._metrics[metric](
+                                score = segment_metrics[metric](
                                     patient_results[gtv]["pred"],
                                     patient_results[gtv]["label"],
                                 )
@@ -473,9 +485,9 @@ class TrainingBaseline(TrainingParent):
                 )
                 continue  # next epoch
 
-    def calculate_cross_valid_mean(self, baseline_id: str, debug_mode: bool = False):
+    def calculate_cross_valid_scores(self, baseline_id: str, debug_mode: bool = False):
         print("")
-        print("calculate cross valid mean: {}".format(baseline_id))
+        print("calculate cross valid scores: {}".format(baseline_id))
 
         baseline_dir = self._find_train_dir(baseline_id)
 
@@ -485,6 +497,10 @@ class TrainingBaseline(TrainingParent):
         fold_dirs = Explorer.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         )
+
+        # load slice thickness and segmentation metrics
+        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
+        segment_metrics = self._load_segment_metrics(slice_thick)
 
         # initialize scores dict
         scores = Dict()
@@ -543,6 +559,7 @@ class TrainingBaseline(TrainingParent):
                 Nii.save(
                     img=preds[gtv],
                     save_path=os.path.join(patient_dir, "gtv{}_pred.nii".format(gtv)),
+                    spacing=g.NII_SPACING[slice_thick],
                 )
 
             # load labels and calculate metrics (on internal test set only)
@@ -551,12 +568,13 @@ class TrainingBaseline(TrainingParent):
                 for gtv in ["s", "t", "n"]:
                     labels[gtv] = Nii.load(
                         os.path.join(
-                            g.DATASET_DIR, "HNCDL_{}_GTV{}.nii".format(patient, gtv)
+                            g.DATASET_DIR[slice_thick],
+                            "HNCDL_{}_GTV{}.nii".format(patient, gtv),
                         ),
                         binary=True,
                     )
                     for metric in g.METRICS:
-                        score = self._metrics[metric](preds[gtv], labels[gtv])
+                        score = segment_metrics[metric](preds[gtv], labels[gtv])
                         scores["patient={}".format(patient)]["gtv{}".format(gtv)][
                             metric
                         ] = score
@@ -580,7 +598,7 @@ class TrainingBaseline(TrainingParent):
     def remove_non_optimal_epochs(self, baseline_id: str):
         baseline_dir = self._find_train_dir(baseline_id)
         print("")
-        print("remove non optimal epochs:{}".format(baseline_id))
+        print("remove non optimal epochs: {}".format(baseline_id))
 
         for fold_dir in Explorer.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
@@ -645,16 +663,19 @@ class TrainingBaseline(TrainingParent):
 
         return evaluation.key_with_max_value()
 
-    def __single_patient_inference(self, patient: str, hyper: Dict) -> Dict:
+    def __single_patient_inference(self, patient: str, cnn, slice_thick: str) -> Dict:
         # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
         result = Dict()
 
-        dataset = DataSetBaseline(patients=[patient])
+        dataset = DataSetBaseline(patients=[patient], slice_thick=slice_thick)
 
         # load labels
         for gtv in ["s", "t", "n"]:
             result["gtv{}".format(gtv)]["label"] = Nii.load(
-                os.path.join(g.DATASET_DIR, "HNCDL_{}_GTV{}.nii".format(patient, gtv)),
+                os.path.join(
+                    g.DATASET_DIR[slice_thick],
+                    "HNCDL_{}_GTV{}.nii".format(patient, gtv),
+                ),
                 binary=True,
             )
 
@@ -664,9 +685,9 @@ class TrainingBaseline(TrainingParent):
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
 
-        hyper["cnn"].eval()  # disable dropout / batch nomalize
+        cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
-            preds = hyper["cnn"].forward(input_imgs)
+            preds = cnn.forward(input_imgs)
         # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
@@ -676,7 +697,7 @@ class TrainingBaseline(TrainingParent):
 
         # pad and crop preds to original size
         for gtv in ["gtvs", "gtvt", "gtvn"]:
-            result[gtv]["pred"] = Img.central_pad_and_crop(
+            result[gtv]["pred"] = Img.central_resize(
                 result[gtv]["pred"], result[gtv]["label"].shape
             )
 

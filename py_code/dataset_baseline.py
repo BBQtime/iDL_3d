@@ -13,8 +13,9 @@ from custom import Img
 
 
 class DataSetBaseline(torch.utils.data.Dataset):
-    def __init__(self, patients: list, augment: Dict = None):
+    def __init__(self, patients: list, slice_thick: str, augment: Dict = None):
         self.__patients = patients
+        self.__slice_thick = slice_thick
         self.__augment = DataAugmentation(augment)
 
     # must be overrided
@@ -37,8 +38,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = Img.central_pad(img, g.IMG_SHAPE)
-        img = Img.central_crop(img, g.IMG_SHAPE)
+        img = Img.central_resize(img, g.IMG_SHAPE[self.__slice_thick])
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)
@@ -51,7 +51,9 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
         origin_gtvs = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(patient)),
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVs.nii".format(patient)
+            ),
             binary=True,
         )
         final_gtvs = None
@@ -83,7 +85,9 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
         # load gtvt
         origin_gtvt = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVt.nii".format(patient)
+            ),
             binary=True,
         )
         final_gtvt = self.__preprocess(origin_gtvt, final_augment_seed)
@@ -91,7 +95,9 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
         # load gtvn
         origin_gtvn = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
+            ),
             binary=True,
         )
         final_gtvn = self.__preprocess(origin_gtvn, final_augment_seed)
@@ -104,7 +110,9 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
         input_imgs = None
         for i in ["CT", "PT", "T1dr", "T2dr"]:
-            img_path = os.path.join(g.DATASET_DIR, "HNCDL_{}_{}.nii".format(patient, i))
+            img_path = os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_{}.nii".format(patient, i)
+            )
             img = Nii.load(img_path)
 
             # ct windowing before normalization

@@ -24,9 +24,7 @@ def patients_overview(
     # plt.style.use("bmh")  # put this line before drawing figure
 
     patient_tumor_size_dict = Dict()
-    for patient_dir in Explorer.get_sub_folders(
-        train_result_dir, key_word="patient="
-    ):
+    for patient_dir in Explorer.get_sub_folders(train_result_dir, key_word="patient="):
         patient_tumor_size_dict[patient_dir] = 0
 
     # iterate through patients folders

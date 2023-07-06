@@ -283,7 +283,7 @@ class Img:
         )
         return img
 
-    def central_pad_and_crop(img: ndarray, target_shape: tuple):
+    def central_resize(img: ndarray, target_shape: tuple):
         img = Img.central_pad(img, target_shape)
         img = Img.central_crop(img, target_shape)
         return img
@@ -381,9 +381,9 @@ class Nii:
     def save(
         img: Union[ndarray, Tensor],
         save_path: str,
-        copy_info_from: str = None,
         spacing: tuple = None,
         origin: tuple = None,
+        copy_info_from: str = None,
     ):
         # tensor to ndarray
         if isinstance(img, Tensor):
@@ -402,14 +402,11 @@ class Nii:
 
         if copy_info_from is not None:
             itk_img.CopyInformation(sitk.ReadImage(copy_info_from))
-
-        if spacing is not None:
-            itk_img.SetSpacing(spacing)
         else:
-            itk_img.SetSpacing(Global.NII_SPACING)
-
-        if origin is not None:
-            itk_img.SetOrigin(origin)
+            if spacing is not None:
+                itk_img.SetSpacing(spacing)
+            if origin is not None:
+                itk_img.SetOrigin(origin)
 
         sitk.WriteImage(itk_img, save_path)
         return save_path
@@ -631,7 +628,11 @@ class GPU:
             return torch.cuda.device_count()
 
 
-class Cleaner:
+class Debug:
+    def terminate(err_msg: str):
+        print("Error:", err_msg)
+        sys.exit(1)
+
     def clean_debug_data():
         for i in Explorer.walk_sub_dirs(
             Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
@@ -684,39 +685,33 @@ class Global:
     # hide warning
     warnings.filterwarnings("ignore")
 
-    # Windows or Linux
-    if platform.system().lower() == "windows":
-        if __settings["use.3mm"]:
-            DATASET_DIR = __settings["dataset.dir.windows.3mm"]
-        else:
-            DATASET_DIR = __settings["dataset.dir.windows.1mm"]
-        NUM_WORKERS = 0  # window doesn't support pytorch multi-thread
+    DATASET_DIR = Dict()
 
+    # Windows
+    if platform.system().lower() == "windows":
+        for i in ["1mm", "3mm"]:
+            DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
+        # window doesn't support pytorch multi-thread
+        NUM_WORKERS = 0
+
+    # Linux
     elif platform.system().lower() == "linux":
-        if __settings["use.3mm"]:
-            DATASET_DIR = __settings["dataset.dir.linux.3mm"]
-        else:
-            DATASET_DIR = __settings["dataset.dir.linux.1mm"]
+        for i in ["1mm", "3mm"]:
+            DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
-    # (Depth, Height, Width)
-    if __settings["use.3mm"]:
-        IMG_SHAPE = __settings["img.shape.3mm"]
-    else:
-        IMG_SHAPE = __settings["img.shape.1mm"]
-    IMG_SHAPE = List(IMG_SHAPE)
-    IMG_SHAPE = tuple(int(i) for i in IMG_SHAPE)
-
-    # (Width, Height, Depth)
-    if __settings["use.3mm"]:
-        NII_SPACING = __settings["nii.spacing.3mm"]
-    else:
-        NII_SPACING = __settings["nii.spacing.1mm"]
-    NII_SPACING = List(NII_SPACING)
-    NII_SPACING = tuple(float(i) for i in NII_SPACING)
+    # IMG_SHAPE (Depth, Height, Width)
+    IMG_SHAPE = Dict()
+    # NII_SPACING (Width, Height, Depth)
+    NII_SPACING = Dict()
+    for i in ["1mm", "3mm"]:
+        IMG_SHAPE[i] = List(__settings["img.shape.{}".format(i)])
+        IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
+        NII_SPACING[i] = List(__settings["nii.spacing.{}".format(i)])
+        NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
     # Pytorch save/load entire cnn or weight only
-    DATASET_K_FOLDS = __settings["dataset.k.folds"]
+    DATASET_FOLDS = __settings["dataset.folds"]
     DATASET_SPLIT_JSON_PATH = os.path.join(PROJ_DIR, __settings["dataset.split.json"])
     HYPER_JSON_PATH_BASELINE = os.path.join(PROJ_DIR, __settings["hyper.json.baseline"])
     HYPER_JSON_PATH_IDL_GTVT = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvt"])

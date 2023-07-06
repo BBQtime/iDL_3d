@@ -542,14 +542,16 @@ ALL_METRICS = {
 }
 
 
-# only for testing
+# only for inference
 class SegmentationMetrics(nn.Module):
     def __init__(
         self,
         metric: str,  # dsc/msd/hd95
+        slice_thick: str,
     ):
         super().__init__()
         self.__metric = metric
+        self.__slice_thick = slice_thick
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
 
@@ -578,7 +580,7 @@ class SegmentationMetrics(nn.Module):
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
+                voxel_spacing=g.NII_SPACING[self.__slice_thick],
             )
 
         if self.__metric == "hd95":
@@ -586,5 +588,5 @@ class SegmentationMetrics(nn.Module):
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
+                voxel_spacing=g.NII_SPACING[self.__slice_thick],
             )

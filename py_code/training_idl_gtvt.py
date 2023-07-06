@@ -11,7 +11,7 @@ from torch import optim
 import matplotlib.pyplot as plt
 from custom import Global as g
 from dataset_idl_gtvt import DataSetIDLGTVt
-from training_parent import TrainingParent
+from training import Training
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from scipy.ndimage import measurements
 from custom import Dict
@@ -24,7 +24,7 @@ from custom import ValueUtils
 from custom import Explorer
 
 
-class TrainingIDLGTVt(TrainingParent):
+class TrainingIDLGTVt(Training):
     def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"] is a list of lr of each round
         if next_round > len(hyper["lr"]):
@@ -56,7 +56,7 @@ class TrainingIDLGTVt(TrainingParent):
     # reset cnn/optimizer/scheduler before next patient
     def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
         # reload cnn
-        self._load_cnn(hyper=hyper, cnn_path=baseline_cnn_path)
+        hyper["cnn"] = self._load_exist_cnn(baseline_cnn_path)
 
         # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(
@@ -159,7 +159,7 @@ class TrainingIDLGTVt(TrainingParent):
         hyper["patients"] = self._load_patients(debug_mode=debug_mode)["test.inter"]
 
         # load shared hyper
-        super()._load_common_hyper(hyper=hyper, cnn_path=baseline_cnn_path)
+        super()._load_hyper(hyper=hyper, cnn_path=baseline_cnn_path)
 
         # run this after shared hyper loaded, because loss parameters are needed
         hyper["loss.func"] = UnifiedFocalLoss(
@@ -634,12 +634,16 @@ class TrainingIDLGTVt(TrainingParent):
         baseline_score = Json.load(
             os.path.join(baseline_epoch_dir, "baseline", "inference_test_inter.json")
         )
-        idl_gtvt_score = Json.load(os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
+        idl_gtvt_score = Json.load(
+            os.path.join(idl_gtvt_dir, "inference_test_inter.json")
+        )
         for metric in g.METRICS:
             idl_gtvt_score["patient={}".format(patient)][metric][
                 "round=00"
             ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
-        Json.save(idl_gtvt_score, os.path.join(idl_gtvt_dir, "inference_test_inter.json"))
+        Json.save(
+            idl_gtvt_score, os.path.join(idl_gtvt_dir, "inference_test_inter.json")
+        )
 
         print("")
         print("patient:", patient)
@@ -877,7 +881,11 @@ class TrainingIDLGTVt(TrainingParent):
 
         # copy baseline score
         baseline_score = Json.load(
-            os.path.join(Path(idl_gtvt_dir).parent.parent, "baseline", "inference_test_inter.json")
+            os.path.join(
+                Path(idl_gtvt_dir).parent.parent,
+                "baseline",
+                "inference_test_inter.json",
+            )
         )
         idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference_test_inter.json")
         if os.path.exists(idl_gtvt_score_path):
@@ -904,7 +912,7 @@ class TrainingIDLGTVt(TrainingParent):
                     round_dir, key_word=".pt", full_path=True
                 )[0]
                 hyper = Dict()
-                self._load_cnn(hyper=hyper, cnn_path=cnn_path)
+                self._load_exist_cnn(hyper=hyper, cnn_path=cnn_path)
 
                 self.__inference_round(round_dir=round_dir, hyper=hyper)
 

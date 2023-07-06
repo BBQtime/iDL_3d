@@ -15,16 +15,31 @@ from custom import Img
 from custom import Nii
 from pathlib import Path
 from tqdm import tqdm
+from custom import Debug
 
 
 class TrainingIDLGTVn(TrainingBaseline):
-    def _load_unique_hyper(self, hyper: Dict, debug_mode: bool):
-        # load cnn before _load_common_hyper, optimizer needs cnn
-        self._load_cnn(hyper=hyper, in_chan=5, out_chan=2)
+    def _load_slice_thick(self, hyper: Dict):
+        baseline_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
+        )
+        fold_dirs = Explorer.get_sub_folders(
+            baseline_dir, key_word="fold=", full_path=True
+        )
+        hyper["slice.thick"] = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
+            "slice.thick"
+        ]
+        super()._load_slice_thick(hyper)
 
-        self._load_common_hyper(hyper=hyper, debug_mode=debug_mode)
+    def _simplify_hyper(self, hyper: Dict) -> Dict:
+        simple_hyper = super()._simplify_hyper(hyper)
+        simple_hyper.pop("baseline.id")
+        return simple_hyper
 
-        # loss function
+    def _load_new_cnn(self, hyper: Dict, in_chan: int = 5, out_chan: int = 2):
+        super()._load_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
+
+    def _load_loss_func(self, hyper: Dict):
         hyper["loss.func"] = UnifiedFocalLossIDLGTVn(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
@@ -32,6 +47,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
+    def _load_datasets(self, hyper: Dict):
         # load train/valid/test datasets
         for i in ["train", "valid", "test.inter"]:
             # only use data augmentation on training set
@@ -46,12 +62,10 @@ class TrainingIDLGTVn(TrainingBaseline):
             hyper["{}.set".format(i)] = DataSetIDLGTVn(
                 patients=hyper["{}.patients".format(i)],
                 baseline_id=hyper["baseline.id"],
+                slice_thick=hyper["slice.thick"],
                 augment=augment,
                 random_click=False,
             )
-
-        # load dataloader
-        self._load_data_loader(hyper)
 
     def new_training(
         self,
@@ -69,11 +83,10 @@ class TrainingIDLGTVn(TrainingBaseline):
             )
             print("")
             print(idl_gtvn_id)
-
-            # create train result dir
             idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
-            Folder.create(idl_gtvn_dir)
 
+            # put baseline_id into hyper,
+            # don't need to add extra input parameters to _training_traverse_folds
             hyper["baseline.id"] = baseline_id
 
             self._training_traverse_folds(
@@ -87,13 +100,13 @@ class TrainingIDLGTVn(TrainingBaseline):
             self.remove_non_optimal_epochs(idl_gtvn_id)
 
             # after non optimal epochs removed
-            self.calculate_cross_valid_mean(
+            self.calculate_cross_valid_scores(
                 idl_gtvn_id=idl_gtvn_id, debug_mode=debug_mode
             )
 
-    def calculate_cross_valid_mean(self, idl_gtvn_id: str, debug_mode: bool = False):
+    def calculate_cross_valid_scores(self, idl_gtvn_id: str, debug_mode: bool = False):
         print("")
-        print("calculate cross valid mean: {}".format(idl_gtvn_id))
+        print("calculate cross valid scores: {}".format(idl_gtvn_id))
 
         idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
 
@@ -104,14 +117,41 @@ class TrainingIDLGTVn(TrainingBaseline):
             idl_gtvn_dir, key_word="fold=", full_path=True
         )
 
+        # load slice thickness and segmentation metrics
+        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
+        segment_metrics = self._load_segment_metrics(slice_thick)
+
+        # load patients
+        inter_test_patients = self._load_patients(debug_mode=debug_mode)["test.inter"]
+
         # initialize scores dict
         scores = Dict()
         for stats in ["median", "avg"]:
             for metric in g.METRICS:
-                scores[stats][metric] = List()
+                scores[stats][metric]["round=01"] = List()
 
-        # load patients
-        inter_test_patients = self._load_patients(debug_mode=debug_mode)["test.inter"]
+        # load baseline scores
+        baseline_scores = Json.load(
+            os.path.join(
+                Path(idl_gtvn_dir).parent,
+                "baseline",
+                "cross_valid",
+                "inference_test_inter.json",
+            )
+        )
+        # copy baseline scores of each patient
+        for patient in inter_test_patients:
+            for metric in g.METRICS:
+                scores["patient={}".format(patient)][metric][
+                    "round=00"
+                ] = baseline_scores["patient={}".format(patient)]["gtvn"][metric]
+
+        # also copy median and avg scores
+        for stats in ["median", "avg"]:
+            for metric in g.METRICS:
+                scores[stats][metric]["round=00"] = baseline_scores[stats]["gtvn"][
+                    metric
+                ]
 
         for patient in tqdm(inter_test_patients):
             # initialize preds
@@ -147,25 +187,35 @@ class TrainingIDLGTVn(TrainingBaseline):
                 cross_valid_dir, "patients", "patient={}".format(patient)
             )
             Folder.create(patient_dir)
-            Nii.save(img=pred, save_path=os.path.join(patient_dir, "gtvn_pred.nii"))
+            Nii.save(
+                img=pred,
+                save_path=os.path.join(patient_dir, "gtvn_pred.nii"),
+                spacing=g.NII_SPACING[slice_thick],
+            )
 
             # load labels and calculate metrics (on internal test set only)
             if patient in inter_test_patients:
                 label = Nii.load(
-                    os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+                    os.path.join(
+                        g.DATASET_DIR[slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
+                    ),
                     binary=True,
                 )
                 for metric in g.METRICS:
-                    score = self._metrics[metric](pred, label)
-                    scores["patient={}".format(patient)][metric] = score
+                    score = segment_metrics[metric](pred, label)
+                    scores["patient={}".format(patient)][metric]["round=01"] = score
 
                     for stats in ["median", "avg"]:
-                        scores[stats][metric].append(score)
+                        scores[stats][metric]["round=01"].append(score)
 
         # calculate avg and median score
         for metric in g.METRICS:
-            scores["median"][metric] = ValueUtils.median(scores["median"][metric])
-            scores["avg"][metric] = ValueUtils.avg(scores["avg"][metric])
+            scores["median"][metric]["round=01"] = ValueUtils.median(
+                scores["median"][metric]["round=01"]
+            )
+            scores["avg"][metric]["round=01"] = ValueUtils.avg(
+                scores["avg"][metric]["round=01"]
+            )
         # save cross validscores
         Json.save(
             data=scores,
@@ -175,7 +225,7 @@ class TrainingIDLGTVn(TrainingBaseline):
     def remove_non_optimal_epochs(self, idl_gtvn_id: str):
         idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
         print("")
-        print("remove non optimal epochs:{}".format(idl_gtvn_dir))
+        print("remove non optimal epochs: {}".format(idl_gtvn_id))
 
         for fold_dir in Explorer.get_sub_folders(
             idl_gtvn_dir, key_word="fold=", full_path=True
@@ -240,7 +290,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         return evaluation.key_with_max_value()
 
     def __single_patient_inference(
-        self, patient: str, hyper: Dict, baseline_id: str
+        self, patient: str, cnn, baseline_id: str, slice_thick: str
     ) -> Dict:
 
         result = Dict()  # ["gtvn"]["label/pred"]
@@ -248,13 +298,16 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset = DataSetIDLGTVn(
             patients=[patient],
             baseline_id=baseline_id,
+            slice_thick=slice_thick,
             augment=None,
             random_click=False,
         )
 
         # load label
         result["gtvn"]["label"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+            os.path.join(
+                g.DATASET_DIR[slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
+            ),
             binary=True,
         )
 
@@ -265,9 +318,9 @@ class TrainingIDLGTVn(TrainingBaseline):
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
 
-        hyper["cnn"].eval()  # disable dropout / batch nomalize
+        cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
-            preds = hyper["cnn"].forward(input_imgs)
+            preds = cnn.forward(input_imgs)
         # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
@@ -279,7 +332,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         # pad and crop to original size
         for i in ["pred", "distance.map", "clicks"]:
-            result["gtvn"][i] = Img.central_pad_and_crop(
+            result["gtvn"][i] = Img.central_resize(
                 result["gtvn"][i], result["gtvn"]["label"].shape
             )
 
@@ -299,13 +352,18 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
         if idl_gtvn_dir is None:
-            print("idl_gtvn_id not found")
-            return
+            Debug.terminate("idl_gtvn_id not found")
+
+        fold_dirs = Explorer.get_sub_folders(
+            idl_gtvn_dir, key_word="fold=", full_path=True
+        )
+
+        # load slice thickness and segmentation metrics
+        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
+        segment_metrics = self._load_segment_metrics(slice_thick)
 
         # loop through fold dirs
-        for fold_dir in Explorer.get_sub_folders(
-            idl_gtvn_dir, key_word="fold=", full_path=True
-        ):
+        for fold_dir in fold_dirs:
             fold = int(Path(fold_dir).name[len("fold=") :])
             print("")
             print("fold: ", fold)
@@ -319,8 +377,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
                 # load cnn
                 cnn_path = os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch))
-                hyper = Dict()  # create an empty hyper dict to save cnn
-                self._load_cnn(hyper=hyper, cnn_path=cnn_path)
+                cnn = self._load_exist_cnn(cnn_path)
 
                 # load patients
                 inter_test_patients = self._load_patients(debug_mode=debug_mode)[
@@ -352,7 +409,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                         ] = baseline_scores["patient={}".format(patient)]["gtvn"][
                             metric
                         ]
-                # also copy median score of each patient
+                # also copy median and avg scores
                 for stats in ["median", "avg"]:
                     for metric in g.METRICS:
                         epoch_scores[stats][metric]["round=00"] = baseline_scores[
@@ -372,23 +429,24 @@ class TrainingIDLGTVn(TrainingBaseline):
                     # results structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                     patient_results = self.__single_patient_inference(
                         patient=patient,
-                        hyper=hyper,
+                        cnn=cnn,
                         baseline_id=Path(idl_gtvn_dir).parent.name,
+                        slice_thick=slice_thick,
                     )
 
                     # save preds of current patient
                     for i in ["pred", "distance.map", "clicks"]:
                         Nii.save(
-                            img=patient_results["gtvn"]["distance.map"],
+                            img=patient_results["gtvn"][i],
                             save_path=os.path.join(
                                 patient_dir, "gtvn_{}.nii".format(i.replace(".", "_"))
                             ),
-                            spacing=g.NII_SPACING,
+                            spacing=g.NII_SPACING[slice_thick],
                         )
 
                     # record score of current patient
                     for metric in g.METRICS:
-                        score = self._metrics[metric](
+                        score = segment_metrics[metric](
                             patient_results["gtvn"]["pred"],
                             patient_results["gtvn"]["label"],
                         )

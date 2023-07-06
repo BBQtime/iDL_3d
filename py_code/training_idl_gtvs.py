@@ -20,7 +20,7 @@
 
 
 # class TrainingIDLGTVs(TrainingBaseline):
-#     def _load_common_hyper(
+#     def _load_hyper(
 #         self,
 #         hyper: Dict,
 #         baseline_epoch_dir: str = None,  # this is only for idl.gtvn and idl
@@ -67,7 +67,7 @@
 #         hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
 #         # load shared hyper parameters
-#         super()._load_common_hyper(hyper=hyper, cnn_path=None)
+#         super()._load_hyper(hyper=hyper, cnn_path=None)
 
 #         # loss function
 #         hyper["loss.func"] = UnifiedFocalLoss(
@@ -269,14 +269,14 @@
 #             Folder.create(train_result_dir)
 
 #             # cross validation
-#             hyper["cross.valid.fold"] = int(hyper["cross.valid.fold"])
-#             hyper["cross.valid.fold"] = ValueUtils.limit_range(
-#                 hyper["cross.valid.fold"], (0, g.DATASET_K_FOLDS)
+#             hyper["fold"] = int(hyper["fold"])
+#             hyper["fold"] = ValueUtils.limit_range(
+#                 hyper["fold"], (0, g.DATASET_FOLDS)
 #             )
-#             if hyper["cross.valid.fold"] == 0:
-#                 fold_list = List(range(1, g.DATASET_K_FOLDS + 1))
+#             if hyper["fold"] == 0:
+#                 fold_list = List(range(1, g.DATASET_FOLDS + 1))
 #             else:
-#                 fold_list = [hyper["cross.valid.fold"]]
+#                 fold_list = [hyper["fold"]]
 
 #             # loop through each fold
 #             for fold in fold_list:
@@ -391,17 +391,17 @@
 #         # pad and crop to original size
 #         # 1.preds
 #         for gtv in ["gtvs", "gtvt", "gtvn"]:
-#             result[gtv]["pred"] = Img.central_pad_and_crop(
+#             result[gtv]["pred"] = Img.central_resize(
 #                 result[gtv]["pred"], origin["gtvs"].shape
 #             )
 #         # 2.annotation and weight_map
 #         for i in ["annotation", "weight.map"]:
-#             result["gtvt"][i] = Img.central_pad_and_crop(
+#             result["gtvt"][i] = Img.central_resize(
 #                 result["gtvt"][i], origin["gtvs"].shape
 #             )
 #         # 3.distance_map and clicks
 #         for i in ["distance.map", "clicks"]:
-#             result["gtvn"][i] = Img.central_pad_and_crop(
+#             result["gtvn"][i] = Img.central_resize(
 #                 result["gtvn"][i], origin["gtvs"].shape
 #             )
 
@@ -571,3 +571,152 @@
 
 #     def remove_non_optimal_epochs(self, idl_gtvs_id: str, dataset: str = "valid"):
 #         self._remove_non_optimal_epochs(train_id=idl_gtvs_id, dataset=dataset)
+
+
+# def _patient_inference(
+#     self,
+#     patient: str,
+#     hyper: Dict,
+#     inference_type: str,  # baseline/idl_gtvt/idl_gtvn
+#     idl_gtvt_masked_label: ndarray = None,  # gtvt post processing
+#     idl_gtvn_baseline_epoch_dir: str = None,  # idl_gtvn dataset needs this
+# ) -> Dict:
+
+#     if (
+#         inference_type != "idl_gtvt"
+#         and inference_type != "idl_gtvn"
+#         and inference_type != "idl"
+#     ):
+#         inference_type = "baseline"
+
+#     # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+#     result = Dict()
+#     # original labels
+#     origin = Dict()
+
+#     if inference_type == "baseline" or inference_type == "idl_gtvt":
+#         dataset = DataSetBaseline(patients=[patient])
+#     elif inference_type == "idl_gtvn":
+#         dataset = DataSetIDLGTVn(
+#             patients=[patient],
+#             baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
+#             random_click=False,
+#         )
+#     elif inference_type == "idl":
+#         weight = Dict()
+#         weight["background"] = 0.2
+#         weight["distance.step"] = 2
+#         weight["fp.fn"] = 1
+#         weight["prev.round.decay"] = 0.5
+#         weight["slice"] = 1
+#         dataset = DataSetIDLGTVs(
+#             patients=[patient],
+#             baseline_epoch_dir=idl_gtvn_baseline_epoch_dir,
+#             weight=weight,
+#             random_click=False,
+#         )
+
+#     # load gtvs
+#     if inference_type == "baseline" or inference_type == "idl":
+#         origin["gtvs"] = Nii.load(
+#             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVs.nii".format(patient)),
+#             binary=True,
+#         )
+
+#     # load gtvt
+#     if (
+#         inference_type == "baseline"
+#         or inference_type == "idl"
+#         or inference_type == "idl_gtvt"
+#     ):
+#         origin["gtvt"] = Nii.load(
+#             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVt.nii".format(patient)),
+#             binary=True,
+#         )
+
+#     # load gtvn
+#     if (
+#         inference_type == "baseline"
+#         or inference_type == "idl"
+#         or inference_type == "idl_gtvn"
+#     ):
+#         origin["gtvn"] = Nii.load(
+#             os.path.join(g.DATASET_DIR, "HNCDL_{}_GTVn.nii".format(patient)),
+#             binary=True,
+#         )
+
+#     # get pred
+#     hyper["cnn"].eval()  # disable dropout / batch nomalize
+#     with torch.no_grad():
+#         item = dataset.get_item(patient=patient)
+#         input_imgs = item[0]
+#         labels = item[1]
+#         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+#         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+#         preds = hyper["cnn"].forward(input_imgs)
+#         # squeeze "batch" channel
+#         preds = torch.squeeze(preds, dim=0).cpu().numpy()
+
+#     if inference_type == "baseline":
+#         result["gtvt"]["pred"] = preds[1]
+#         result["gtvn"]["pred"] = preds[2]
+#         result["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
+#         gtv_list = ["gtvs", "gtvt", "gtvn"]
+
+#     elif inference_type == "idl_gtvt":
+#         result["gtvt"]["pred"] = preds[1]
+#         gtv_list = ["gtvt"]
+
+#     elif inference_type == "idl_gtvn":
+#         result["gtvn"]["pred"] = preds[1]
+#         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
+#         result["gtvn"]["distance.map"] = input_imgs[0]
+#         clicks = item[2]
+#         result["gtvn"]["clicks"] = torch.squeeze(clicks, dim=0).cpu().numpy()
+#         gtv_list = ["gtvn"]
+
+#     elif inference_type == "idl":
+#         result["gtvt"]["pred"] = preds[1]
+#         result["gtvn"]["pred"] = preds[2]
+#         result["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
+#         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
+#         result["gtvn"]["distance.map"] = input_imgs[0]
+#         clicks = item[2]
+#         result["gtvn"]["clicks"] = torch.squeeze(clicks, dim=0).cpu().numpy()
+#         gtv_list = ["gtvs", "gtvt", "gtvn"]
+#         # distance_map and clicks
+#         for i in ["distance.map", "clicks"]:
+#             result["gtvn"][i] = Img.central_resize(
+#                 result["gtvn"][i], origin[gtv].shape
+#             )
+
+#     # pad and crop to original size
+#     # preds
+#     for gtv in gtv_list:
+#         result[gtv]["pred"] = Img.central_resize(
+#             result[gtv]["pred"], origin[gtv].shape
+#         )
+
+#     # idl_gtvt post processing (before calculate scores)
+#     if inference_type == "idl_gtvt" and idl_gtvt_masked_label is not None:
+#         cc_list = Img.connected_components(result["gtvt"]["pred"])
+#         result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
+#         for cur_cc in cc_list:
+#             if (cur_cc * idl_gtvt_masked_label).sum() > 0:
+#                 result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
+
+#     # idl_gtvn post processing (before calculate scores)
+#     if 0 and inference_type == "idl_gtvn":
+#         cc_list = Img.connected_components(result["gtvn"]["pred"])
+#         result["gtvn"]["pred"] = np.zeros_like(result["gtvn"]["pred"])
+#         for cur_cc in cc_list:
+#             if (cur_cc * result["gtvn"]["clicks"]).sum() > 0:
+#                 result["gtvn"]["pred"] = np.maximum(result["gtvn"]["pred"], cur_cc)
+
+#     # calculate inference scores
+#     for gtv in gtv_list:
+#         for metric in g.METRICS:
+#             result[gtv][metric] = self._metrics[metric](
+#                 result[gtv]["pred"], origin[gtv]
+#             )
+#     return result

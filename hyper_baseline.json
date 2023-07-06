@@ -4,11 +4,11 @@
     "augment.min": 2,
     "augment.pct": 0.8,
     "batch.size": 1,
-    "cnn": "unet.pp.slim",
-    "cross.valid.fold": 0,
+    "cnn": "unet.slim",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 500,
+    "fold": 1,
     "keep.best.cnn.num": 5,
     "loss.asym": true,
     "loss.delta": 0.5,
@@ -17,5 +17,6 @@
     "lr": 0.0001,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
-    "lr.min": 1e-05
+    "lr.min": 1e-05,
+    "slice.thick": "1mm"
 }
