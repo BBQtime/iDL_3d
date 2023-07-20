@@ -1,9 +1,8 @@
-from custom import Global as g
 import torch
 import torch.nn as nn
-from torch.nn import ModuleDict
-from torch import Tensor
 from custom import GPU
+from custom import Global as g
+from torch import Tensor
 
 
 class VGGBlock(nn.Module):

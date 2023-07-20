@@ -1,16 +1,14 @@
 import torch
 import torch.nn as nn
-from custom import Global as g
-from torch import Tensor
-from torch import tensor
 from custom import Dict
+from custom import Global as g
+from torch import Tensor, tensor
 
 
 # only for training
 # dice loss: weight=1.0, delta=0.5
 class UnifiedFocalLoss(nn.Module):
     def _split_channels(self, input_imgs: Tensor) -> Dict:
-
         # dimension: [batch, channel, depth, height, width]
         output_imgs = Dict()
 
@@ -23,12 +21,10 @@ class UnifiedFocalLoss(nn.Module):
     def __focal_loss(
         self, preds: dict, labels: dict, weight_map: Tensor = None
     ) -> Tensor:
-
         loss = Dict()
 
         # calculate loss through each channel
         for i in preds.keys():
-
             # clip values to prevent division by zero error
             preds[i] = torch.clip(preds[i], self.__epsilon, 1.0 - self.__epsilon)
 
@@ -70,7 +66,6 @@ class UnifiedFocalLoss(nn.Module):
 
         # calculate loss through each channel
         for i in preds.keys():
-
             if weight_map is not None and i == "gtvt":
                 tp[i] = torch.sum(labels[i] * preds[i] * weight_map, dim=axis)
                 fn[i] = torch.sum(labels[i] * (1 - preds[i]) * weight_map, dim=axis)
@@ -105,7 +100,6 @@ class UnifiedFocalLoss(nn.Module):
     def __unified_focal_loss(
         self, preds: Tensor, labels: Tensor, weight_map: Tensor = None
     ) -> Tensor:
-
         if weight_map is not None:
             # weight_map only has one channel
             # weight_map: [b,c,d,h,w] -> [b,d,h,w],

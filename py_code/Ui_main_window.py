@@ -8,6 +8,7 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -106,7 +107,9 @@ class Ui_MainWindow(object):
         self._progress_bar_idl_gtvt.setObjectName("_progress_bar_idl_gtvt")
         self._text_label_idl_gtvt_progress = QtWidgets.QLabel(self._central_widget)
         self._text_label_idl_gtvt_progress.setGeometry(QtCore.QRect(300, 600, 152, 15))
-        self._text_label_idl_gtvt_progress.setObjectName("_text_label_idl_gtvt_progress")
+        self._text_label_idl_gtvt_progress.setObjectName(
+            "_text_label_idl_gtvt_progress"
+        )
         self._text_label_annotation_tools = QtWidgets.QLabel(self._central_widget)
         self._text_label_annotation_tools.setGeometry(QtCore.QRect(300, 540, 241, 16))
         self._text_label_annotation_tools.setObjectName("_text_label_annotation_tools")
@@ -114,28 +117,52 @@ class Ui_MainWindow(object):
         self._btn_pen.setGeometry(QtCore.QRect(300, 560, 51, 31))
         self._btn_pen.setText("")
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(
+            QtGui.QPixmap(
+                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_pen.png"
+            ),
+            QtGui.QIcon.Normal,
+            QtGui.QIcon.Off,
+        )
         self._btn_pen.setIcon(icon)
         self._btn_pen.setObjectName("_btn_pen")
         self._btn_eraser = QtWidgets.QPushButton(self._central_widget)
         self._btn_eraser.setGeometry(QtCore.QRect(360, 560, 51, 31))
         self._btn_eraser.setText("")
         icon1 = QtGui.QIcon()
-        icon1.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon1.addPixmap(
+            QtGui.QPixmap(
+                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_eraser.png"
+            ),
+            QtGui.QIcon.Normal,
+            QtGui.QIcon.Off,
+        )
         self._btn_eraser.setIcon(icon1)
         self._btn_eraser.setObjectName("_btn_eraser")
         self._btn_clear = QtWidgets.QPushButton(self._central_widget)
         self._btn_clear.setGeometry(QtCore.QRect(430, 560, 51, 31))
         self._btn_clear.setText("")
         icon2 = QtGui.QIcon()
-        icon2.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon2.addPixmap(
+            QtGui.QPixmap(
+                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png"
+            ),
+            QtGui.QIcon.Normal,
+            QtGui.QIcon.Off,
+        )
         self._btn_clear.setIcon(icon2)
         self._btn_clear.setObjectName("_btn_clear")
         self._btn_confirm = QtWidgets.QPushButton(self._central_widget)
         self._btn_confirm.setGeometry(QtCore.QRect(490, 560, 51, 31))
         self._btn_confirm.setText("")
         icon3 = QtGui.QIcon()
-        icon3.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon3.addPixmap(
+            QtGui.QPixmap(
+                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png"
+            ),
+            QtGui.QIcon.Normal,
+            QtGui.QIcon.Off,
+        )
         self._btn_confirm.setIcon(icon3)
         self._btn_confirm.setObjectName("_btn_confirm")
         self._text_box_annotation_msg = QtWidgets.QTextEdit(self._central_widget)
@@ -182,9 +209,6 @@ class Ui_MainWindow(object):
         self._text_label_idl_gtvs.setGeometry(QtCore.QRect(300, 50, 103, 15))
         self._text_label_idl_gtvs.setObjectName("_text_label_idl_gtvs")
         MainWindow.setCentralWidget(self._central_widget)
-        self._status_bar = QtWidgets.QStatusBar(MainWindow)
-        self._status_bar.setObjectName("_status_bar")
-        MainWindow.setStatusBar(self._status_bar)
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -213,8 +237,12 @@ class Ui_MainWindow(object):
         self._btn_prev_baseline.setText(_translate("MainWindow", "..."))
         self._btn_next_baseline.setText(_translate("MainWindow", "..."))
         self._text_label_baseline.setText(_translate("MainWindow", "Choose Baseline"))
-        self._text_label_idl_gtvt_progress.setText(_translate("MainWindow", "GTVt Retraining Progress"))
-        self._text_label_annotation_tools.setText(_translate("MainWindow", "Annotation Tools"))
+        self._text_label_idl_gtvt_progress.setText(
+            _translate("MainWindow", "GTVt Retraining Progress")
+        )
+        self._text_label_annotation_tools.setText(
+            _translate("MainWindow", "Annotation Tools")
+        )
         self._radio_btn_transverse.setText(_translate("MainWindow", "Transverse"))
         self._radio_btn_coronal.setText(_translate("MainWindow", "Coronal"))
         self._radio_btn_sagittal.setText(_translate("MainWindow", "Sagittal"))
@@ -226,4 +254,3 @@ class Ui_MainWindow(object):
         self._btn_next_idl_gtvs.setText(_translate("MainWindow", "..."))
         self._btn_prev_idl_gtvs.setText(_translate("MainWindow", "..."))
         self._text_label_idl_gtvs.setText(_translate("MainWindow", "Choose iDL GTVs"))
-

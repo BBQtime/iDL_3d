@@ -1,23 +1,24 @@
-import os
-import sys
-import math
-import warnings
-import statistics
-import shutil
-import torch
-import json
 import copy
-import random
-import platform
 import hashlib
+import json
+import math
+import os
+import platform
+import random
+import shutil
+import statistics
+import sys
 import unicodedata
+import warnings
+from typing import Union
+
 import cc3d
 import numpy as np
 import SimpleITK as sitk
+import torch
+from natsort import natsorted
 from numpy import ndarray
 from torch import Tensor
-from typing import Union
-from natsort import natsorted
 
 
 # nested dictionary
@@ -165,7 +166,6 @@ class ValueUtils:
         return statistics.median(data)
 
     def avg(data: Union[list, dict, tuple]) -> float:
-
         if isinstance(data, dict):
             data = Dict(data).to_list()
         elif isinstance(data, tuple):
@@ -515,7 +515,6 @@ class Explorer:
         seed: int,
         select: str,
     ) -> List:
-
         sub_list = List(os.listdir(input_dir))
 
         if select != "both":

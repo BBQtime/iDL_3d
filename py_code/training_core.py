@@ -1,31 +1,26 @@
-from custom import Global as g
-import os
-import torch
 import math
+import os
 import random
-import numpy as np
-from pathlib import Path
-from torch.nn import DataParallel
-from torch.nn import ModuleDict
-from numpy import ndarray
-from itertools import product
 from collections import OrderedDict
+from datetime import datetime
+from itertools import product
+from pathlib import Path
+
+import numpy as np
+import torch
+from custom import GPU, Debug, Dict, Explorer
+from custom import Global as g
+from custom import Json, List, ValueUtils
+from numpy import ndarray
+from segment_metric import SegmentationMetric
 from torch import optim
+from torch.nn import DataParallel
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
-from datetime import datetime
-from metrics_lib import SegmentationMetrics
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from custom import Json
-from custom import Dict
-from custom import List
-from custom import GPU
-from custom import ValueUtils
-from custom import Explorer
-from custom import Debug
 
 
-class Training:
+class TrainingCore:
     def _load_patients(self, fold: int = 1, debug_mode: bool = False):
         patients = Dict()
 
@@ -81,16 +76,29 @@ class Training:
     def _load_segment_metrics(self, slice_thick: str) -> Dict:
         segment_metrics = Dict()
         for metric in g.METRICS:
-            segment_metrics[metric] = SegmentationMetrics(
+            segment_metrics[metric] = SegmentationMetric(
                 metric=metric, slice_thick=slice_thick
             )
+            # following line will cause bug, cant figure out why:
             # if GPU.used_count() > 1:
             #     segment_metrics[metric] = DataParallel(segment_metrics[metric])
             segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
         return segment_metrics
 
     def _load_slice_thick(self, hyper: Dict):
-        # slice thickness
+        if hyper["slice.thick"] == {}:
+            baseline_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
+            )
+            fold_dirs = Explorer.get_sub_folders(
+                baseline_dir, key_word="fold=", full_path=True
+            )
+            hyper["slice.thick"] = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
+                "slice.thick"
+            ]
+        else:
+            pass
+
         if hyper["slice.thick"] != "1mm" and hyper["slice.thick"] != "3mm":
             Debug.terminate("Invalid slice thickness")
 
@@ -131,12 +139,11 @@ class Training:
         hyper["loss.weight"] = ValueUtils.limit_range(hyper["loss.weight"], (0.0, 1.0))
         hyper["loss.delta"] = ValueUtils.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
-    def _load_optim_and_scheduler(self, hyper):
-        # optimizer (no need to move to cuda)
-        if isinstance(hyper["lr.actual"], list):
-            lr = hyper["lr.actual"][0]
-        else:
+    def _load_optim_and_scheduler(self, hyper: Dict, lr: float = None):
+        if lr is None:
             lr = hyper["lr.actual"]
+
+        # optimizer (no need to move to cuda)
         hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=lr)
 
         # scheduler
@@ -173,8 +180,10 @@ class Training:
 
                 if isinstance(cnn, UNetPPSlim):
                     simple_hyper[key_name] = "unet.pp.slim"
-                else:
+                elif isinstance(cnn, UNetSlim):
                     simple_hyper[key_name] = "unet.slim"
+                else:
+                    Debug.terminate("_simplify_hyper(): wrong cnn type")
 
             # only save optimizer name
             elif key_name == "optim":
@@ -183,6 +192,10 @@ class Training:
             # only save scheduler name
             elif key_name == "scheduler":
                 simple_hyper[key_name] = "reduce.lr.on.plateau"
+
+            # ignore "baseline.id" and "fold"
+            elif key_name == "baseline.id" or key_name == "fold":
+                pass
 
             # others
             else:
@@ -236,7 +249,6 @@ class Training:
         hyper: Dict,
         debug_mode: bool,
     ) -> str:
-
         train_id = self._get_cur_time_str()
 
         if debug_mode:

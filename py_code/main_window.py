@@ -1,26 +1,21 @@
-from custom import Global as g
-import platform
+import enum
 import os
+import platform
 import sys
+from pathlib import Path
+from tkinter import Tk, filedialog
+from typing import Tuple
+
 import cv2
 import numpy as np
-import enum
-from pathlib import Path
-from typing import Tuple
-from tkinter import Tk
-from tkinter import filedialog
+from custom import Dict, Explorer
+from custom import Global as g
+from custom import Img, Json, List, Nii, ValueUtils
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QPalette, QImage, QPixmap
-from PyQt5.QtWidgets import QApplication, QMainWindow, QRubberBand, QButtonGroup
+from PyQt5.QtGui import QImage, QPalette, QPixmap
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRubberBand
 from Ui_main_window import Ui_MainWindow
-from custom import Json
-from custom import List
-from custom import Dict
-from custom import ValueUtils
-from custom import Nii
-from custom import Img
-from custom import Explorer
 
 
 class Step(enum.Enum):
@@ -86,6 +81,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.__patient = None
         self.__round = None
         self.__slice = None  # starts from 0
+        self.__nii_spacing = None
+        self.__dataset_dir = None
         self.__scores = Dict()
         self.__imgs = Dict()
         self.__resize_pos = Dict()
@@ -277,11 +274,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.__img_plane == "sagittal":
             origin_width = self.__imgs["pt"].shape[1]
             origin_height = self.__imgs["pt"].shape[0]
-            origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[1])
+            origin_height = round(
+                origin_height * self.__nii_spacing[2] / self.__nii_spacing[1]
+            )
         elif self.__img_plane == "coronal":
             origin_width = self.__imgs["pt"].shape[2]
             origin_height = self.__imgs["pt"].shape[0]
-            origin_height = round(origin_height * g.NII_SPACING[2] / g.NII_SPACING[0])
+            origin_height = round(
+                origin_height * self.__nii_spacing[2] / self.__nii_spacing[0]
+            )
         else:
             origin_width = self.__imgs["pt"].shape[2]
             origin_height = self.__imgs["pt"].shape[1]
@@ -300,7 +301,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # image spacing resize
         if self.__img_plane == "sagittal":
-            spacing_height = round(img.shape[0] * g.NII_SPACING[2] / g.NII_SPACING[1])
+            spacing_height = round(
+                img.shape[0] * self.__nii_spacing[2] / self.__nii_spacing[1]
+            )
             img = cv2.resize(
                 img,
                 (
@@ -310,7 +313,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 interpolation=cv2.INTER_AREA,
             )
         elif self.__img_plane == "coronal":
-            spacing_height = round(img.shape[0] * g.NII_SPACING[2] / g.NII_SPACING[0])
+            spacing_height = round(
+                img.shape[0] * self.__nii_spacing[2] / self.__nii_spacing[0]
+            )
             img = cv2.resize(
                 img,
                 (
@@ -958,8 +963,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # set current idl_gtvt_id
             if self.__replay_mode:
                 self.__combox[gtv].setEnabled(True)
+                # no idl found, show baseline
+                if len(train_id_list) == 1:
+                    self.__combox[gtv].setCurrentText(train_id_list[0])
                 # first idl_gtvt_id
-                self.__combox[gtv].setCurrentText(train_id_list[1])
+                else:
+                    self.__combox[gtv].setCurrentText(train_id_list[1])
             else:
                 # "baseline"
                 self.__combox[gtv].setCurrentText("baseline")
@@ -1048,8 +1057,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        # confirm idl gtvt patients
         baseline_id = self.__combox["baseline"].currentText()
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
+
+        # load slice thickness from baseline hyper
+        fold_dirs = Explorer.get_sub_folders(
+            baseline_dir, key_word="fold=", full_path=True
+        )
+        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
+        self.__nii_spacing = g.NII_SPACING[slice_thick]
+        self.__dataset_dir = g.DATASET_DIR[slice_thick]
+
+        # confirm idl gtvt patients
         if self.__combox["idl.gtvt"].currentText() == "baseline":
             self.__patients["idl.gtvt"] = Explorer.get_sub_folders(
                 os.path.join(
@@ -1098,7 +1117,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.__combox["patient"].setCurrentIndex(-1)
 
     def __choose_patient(self, idx: int, reset_patient: bool = True):
-
         # triggered by:
         # (1) patient combox update
         # (2) idl_gtvt/gtvncombox update, but can not find cur patient in new idl folder
@@ -1115,23 +1133,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load imgs
         self.__imgs["ct"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(self.__patient))
+            os.path.join(self.__dataset_dir, "HNCDL_{}_CT.nii".format(self.__patient))
         )
         self.__imgs["pt"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(self.__patient))
+            os.path.join(self.__dataset_dir, "HNCDL_{}_PT.nii".format(self.__patient))
         )
         self.__imgs["mrt1"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(self.__patient))
+            os.path.join(self.__dataset_dir, "HNCDL_{}_T1dr.nii".format(self.__patient))
         )
         self.__imgs["mrt2"] = self.__load_img(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(self.__patient))
+            os.path.join(self.__dataset_dir, "HNCDL_{}_T2dr.nii".format(self.__patient))
         )
         # load labels
         if self.__replay_mode:
             for i in ["t", "n"]:
                 self.__imgs["gtv{}.label".format(i)] = self.__load_img(
                     os.path.join(
-                        g.DATASET_DIR, "HNCDL_{}_GTV{}.nii".format(self.__patient, i)
+                        self.__dataset_dir,
+                        "HNCDL_{}_GTV{}.nii".format(self.__patient, i),
                     )
                 )
 
@@ -1458,7 +1477,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # load rgb imgs
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-
             if self.__img_plane == "sagittal":
                 rgb_img = self.__imgs[i][:, :, self.__slice]
             elif self.__img_plane == "coronal":
@@ -1853,10 +1871,3 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         file_name = filedialog.askopenfilename()
         if file_name == "" or file_name is None:
             pass
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    main_window = MainWindow()
-    main_window.show()
-    sys.exit(app.exec_())

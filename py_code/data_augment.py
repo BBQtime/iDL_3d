@@ -1,13 +1,11 @@
 import imgaug as ia
+from custom import Dict, List
 from imgaug import augmenters as iaa
 from numpy import ndarray
-from custom import Dict
-from custom import List
 
 
 class DataAugmentation:
     def __init__(self, param: Dict = None):
-
         # = None means no data augmentation
         self.__transform = None
 

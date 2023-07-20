@@ -1,18 +1,16 @@
-from custom import Global as g
 import os
 import random
-import torch
-import numpy as np
-from numpy import ndarray
-from torch import Tensor
-from data_augment import DataAugmentation
 from typing import Tuple
+
+import numpy as np
+import torch
 from custom import Dict
-from custom import Nii
-from custom import Img
-from scipy.ndimage import measurements
-from scipy.ndimage import distance_transform_edt
-from scipy.ndimage import binary_dilation
+from custom import Global as g
+from custom import Img, Nii
+from data_augment import DataAugmentation
+from numpy import ndarray
+from scipy.ndimage import binary_dilation, distance_transform_edt, measurements
+from torch import Tensor
 
 
 class DataSetIDLGTVn(torch.utils.data.Dataset):
@@ -82,7 +80,9 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
 
         # load label
         self.__origin["label"] = Nii.load(
-            os.path.join(g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVn.nii".format(patient)),
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
+            ),
             binary=True,
         )
 
@@ -114,7 +114,6 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
 
             # target volume is not large enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
-
                 # if "final" dict is empty
                 if final == {}:
                     for i in ["label", "pred", "seed"]:
@@ -209,7 +208,9 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
 
         # load ct/pt/mr1/mr2
         for i in ["CT", "PT", "T1dr", "T2dr"]:
-            img_path = os.path.join(g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_{}.nii".format(patient, i))
+            img_path = os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_{}.nii".format(patient, i)
+            )
             img = Nii.load(img_path)
 
             # ct windowing before normalization

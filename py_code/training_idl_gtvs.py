@@ -1,7 +1,7 @@
 # import os
 # import torch
 # import numpy as np
-# from training_baseline import TrainingBaseline
+# from baseline import TrainingBaseline
 # from dataset_idl_gtvs import DataSetIDLGTVs
 # from custom import Folder
 # from custom import Json
@@ -284,7 +284,7 @@
 #                 Folder.create(fold_dir)
 
 #                 # load and print hyperparams
-#                 self._load_unique_hyper(
+#                 self._load_hyper(
 #                     hyper=hyper,
 #                     fold=fold,
 #                     baseline_epoch_dir=baseline_epoch_dir,
@@ -309,7 +309,7 @@
 
 #                 # start training
 #                 hyper["time.spent"] = datetime.now()
-#                 self._training_traverse_epochs(hyper, fold_dir)
+#                 self._training_all_epochs(hyper, fold_dir)
 #                 hyper["time.spent"] = datetime.now() - hyper["time.spent"]
 #                 hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 

@@ -1,18 +1,16 @@
-import numpy as np
-from medpy.metric import asd
-from medpy.metric import assd
-from medpy.metric import hd
-from medpy.metric import hd95
-import torch.nn as nn
-from torch import Tensor
-from numpy import ndarray
 from typing import Union
+
+import numpy as np
+import torch.nn as nn
+from custom import Debug
 from custom import Global as g
 from custom import Img
+from medpy.metric import asd, assd, hd, hd95
+from numpy import ndarray
+from torch import Tensor
 
 
 def assert_shape(test, reference):
-
     assert test.shape == reference.shape, "Shape mismatch: {} and {}".format(
         test.shape, reference.shape
     )
@@ -20,7 +18,6 @@ def assert_shape(test, reference):
 
 class ConfusionMatrix:
     def __init__(self, test=None, reference=None):
-
         self.tp = None
         self.fp = None
         self.tn = None
@@ -34,17 +31,14 @@ class ConfusionMatrix:
         self.set_test(test)
 
     def set_test(self, test):
-
         self.test = test
         self.reset()
 
     def set_reference(self, reference):
-
         self.reference = reference
         self.reset()
 
     def reset(self):
-
         self.tp = None
         self.fp = None
         self.tn = None
@@ -56,7 +50,6 @@ class ConfusionMatrix:
         self.reference_full = None
 
     def compute(self):
-
         if self.test is None or self.reference is None:
             raise ValueError(
                 "'test' and 'reference' must both be set to compute confusion matrix."
@@ -75,7 +68,6 @@ class ConfusionMatrix:
         self.reference_full = np.all(self.reference)
 
     def get_matrix(self):
-
         for entry in (self.tp, self.fp, self.tn, self.fn):
             if entry is None:
                 self.compute()
@@ -84,13 +76,11 @@ class ConfusionMatrix:
         return self.tp, self.fp, self.tn, self.fn
 
     def get_size(self):
-
         if self.size is None:
             self.compute()
         return self.size
 
     def get_existence(self):
-
         for case in (
             self.test_empty,
             self.test_full,
@@ -400,7 +390,6 @@ def hausdorff_distance(
     connectivity=1,
     **kwargs
 ):
-
     if confusion_matrix is None:
         confusion_matrix = ConfusionMatrix(test, reference)
 
@@ -431,7 +420,6 @@ def hausdorff_distance_95(
     connectivity=1,
     **kwargs
 ):
-
     if confusion_matrix is None:
         confusion_matrix = ConfusionMatrix(test, reference)
 
@@ -464,7 +452,6 @@ def avg_surface_distance(
     connectivity=1,
     **kwargs
 ):
-
     if confusion_matrix is None:
         confusion_matrix = ConfusionMatrix(test, reference)
 
@@ -495,7 +482,6 @@ def avg_surface_distance_symmetric(
     connectivity=1,
     **kwargs
 ):
-
     if confusion_matrix is None:
         confusion_matrix = ConfusionMatrix(test, reference)
 
@@ -543,7 +529,7 @@ ALL_METRICS = {
 
 
 # only for inference
-class SegmentationMetrics(nn.Module):
+class SegmentationMetric(nn.Module):
     def __init__(
         self,
         metric: str,  # dsc/msd/hd95
@@ -554,19 +540,28 @@ class SegmentationMetrics(nn.Module):
         self.__slice_thick = slice_thick
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
-
         if len(preds.shape) == 4:
             preds = preds.squeeze()
+        else:
+            pass
+
         if len(labels.shape) == 4:
             labels = labels.squeeze()
+        else:
+            pass
 
         preds = Img.binarize(preds)
         labels = Img.binarize(labels)
 
         if isinstance(preds, Tensor):
             preds = preds.cpu().numpy()
+        else:
+            pass
+
         if isinstance(labels, Tensor):
             labels = labels.cpu().numpy()
+        else:
+            pass
 
         if self.__metric == "dsc":
             return dice(
@@ -575,7 +570,7 @@ class SegmentationMetrics(nn.Module):
                 nan_for_nonexisting=False,
             )
 
-        if self.__metric == "msd":
+        elif self.__metric == "msd":
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
@@ -583,10 +578,13 @@ class SegmentationMetrics(nn.Module):
                 voxel_spacing=g.NII_SPACING[self.__slice_thick],
             )
 
-        if self.__metric == "hd95":
+        elif self.__metric == "hd95":
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=True,
                 voxel_spacing=g.NII_SPACING[self.__slice_thick],
             )
+
+        else:
+            Debug.terminate("SegmentationMetric: value of self.__metric error")

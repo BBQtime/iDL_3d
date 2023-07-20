@@ -1,14 +1,11 @@
 import os
-from tqdm import tqdm
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from custom import Dict, Explorer, Folder
 from custom import Global as g
-from custom import Dict
-from custom import Json
-from custom import List
-from custom import Nii
-from custom import Explorer
-from custom import Folder
+from custom import Json, List, Nii
+from tqdm import tqdm
 
 FIGURE_IDX_FONT_SIZE = 20
 DSC_LOW_LIMIT = 0.6
@@ -191,7 +188,6 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
     avg_score_dict = Dict()
 
     for cur_idl_id in tqdm(idl_id_list):
-
         hyper_dict = Json.load(
             os.path.join(g.IDL_RESULTS_FOLDER, cur_idl_id, "hyper.json")
         )
@@ -203,12 +199,10 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
 
         # after all patients data recorded
         for metric in g.METRICS:
-
             # transfer avg scores from dict to list
             score_list = List()
 
             for cur_round in avg_score_dict[cur_idl_id][metric]:
-
                 cur_round_score = avg_score_dict[cur_idl_id][metric][cur_round][
                     "full.slices"
                 ]
@@ -265,7 +259,6 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
         line_colors = ["c", "b", "g", "y", "r", "m", "k", "w"]
         color_idx = 0
         for cur_idl_id in avg_score_dict:
-
             # plt_label = key_hyper.replace(".", " ") + " = "
 
             if key_hyper == "select.step":

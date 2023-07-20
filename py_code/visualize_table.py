@@ -1,15 +1,14 @@
 import csv
 import os
-from custom import Global as g
-from custom import Json
-from custom import List
+
 from custom import Explorer
+from custom import Global as g
+from custom import Json, List
 
 
 def compare_idls_in_table(
     baseline_id: str, idl_results_list: list, table_name: str = "idl_compare"
 ):
-
     # field names
     fields = ["Patient"]
     for metric in ["DSC", "MSD", "HD95"]:
@@ -22,7 +21,9 @@ def compare_idls_in_table(
     idl_gtvt_main_dir = os.path.join(epoch_dir, "idl_gtvt")
 
     patient_list = Json.load(
-        os.path.join(idl_gtvt_main_dir, idl_results_list[0], "inference_test_inter.json")
+        os.path.join(
+            idl_gtvt_main_dir, idl_results_list[0], "inference_test_inter.json"
+        )
     )
     patient_list = patient_list.keys()
 

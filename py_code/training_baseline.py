@@ -1,35 +1,24 @@
-from custom import Global as g
 import os
-import torch
-import math
-import numpy as np
-from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
-from torch.utils.data import DataLoader
-from training import Training
-from matplotlib import pyplot as plt
+
+import numpy as np
+import torch
+from custom import GPU, Debug, Dict, Explorer, Folder
+from custom import Global as g
+from custom import Img, Json, List, Nii, ValueUtils
 from dataset_baseline import DataSetBaseline
-from torch.nn import DataParallel
-from unet_pp_slim import UNetPPSlim
 from loss_func import UnifiedFocalLoss
-from custom import Img
-from custom import Dict
-from custom import Json
-from custom import List
-from custom import Nii
-from custom import Folder
-from custom import GPU
-from custom import ValueUtils
-from custom import Explorer
-from custom import Debug
+from matplotlib import pyplot as plt
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from training_core import TrainingCore
 
 
-class TrainingBaseline(Training):
+class TrainingBaseline(TrainingCore):
     def _load_hyper(
         self,
         hyper: Dict,
-        fold: int,
         debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
     ):
         # shared by baseline/idl.gtvn/idl.gtvt
@@ -76,7 +65,7 @@ class TrainingBaseline(Training):
         hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         # load patients
-        patients = self._load_patients(fold=fold, debug_mode=debug_mode)
+        patients = self._load_patients(fold=hyper["fold"], debug_mode=debug_mode)
         for i in ["train", "valid", "test.inter"]:
             hyper["{}.patients".format(i)] = patients[i]
 
@@ -92,7 +81,7 @@ class TrainingBaseline(Training):
         # load cnn before optimizer
         self._load_new_cnn(hyper=hyper)
 
-        self._load_optim_and_scheduler(hyper)
+        self._load_optim_and_scheduler(hyper=hyper)
 
     def _load_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
         super()._load_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
@@ -139,6 +128,7 @@ class TrainingBaseline(Training):
             )
 
     def _simplify_hyper(self, hyper: Dict) -> Dict:
+        # use simiple_hyper here, dont change origin hyper dict
         simple_hyper = super()._simplify_hyper(hyper)
 
         ignore_list = []
@@ -147,6 +137,8 @@ class TrainingBaseline(Training):
             ignore_list.append("{}.set".format(i))
             ignore_list.append("{}.loader".format(i))
 
+        # here in this for loop, use "hyper" instead of "simple_hyper"
+        # otherwise will cause error: dictionary changed size during iteration
         for key_name in hyper:
             if key_name in ignore_list:
                 simple_hyper.pop(key_name)
@@ -200,7 +192,7 @@ class TrainingBaseline(Training):
         loss = hyper["loss.func"](preds, labels)
         return loss
 
-    def _training_traverse_epochs(self, hyper: Dict, fold_dir: str):
+    def _training_all_epochs(self, hyper: Dict, fold_dir: str):
         best_loss_dict = Dict()
         loss_json_path = os.path.join(fold_dir, "loss.json")
         lr_json_path = os.path.join(fold_dir, "lr.json")
@@ -290,7 +282,7 @@ class TrainingBaseline(Training):
                     if patience >= hyper["early.stop.epochs"]:
                         break
 
-    def _training_traverse_folds(
+    def _training_all_folds(
         self,
         hyper: Dict,
         train_dir: str,
@@ -299,31 +291,31 @@ class TrainingBaseline(Training):
         Folder.create(train_dir)
 
         # cross validation
-        fold = int(hyper["fold"])
-        fold = ValueUtils.limit_range(fold, (0, g.DATASET_FOLDS))
+        hyper["fold"] = int(hyper["fold"])
+        hyper["fold"] = ValueUtils.limit_range(hyper["fold"], (0, g.DATASET_FOLDS))
         # fold=0 will activate cross validation
-        if fold == 0:
+        if hyper["fold"] == 0:
             fold_list = List(range(1, g.DATASET_FOLDS + 1))
         else:
-            fold_list = [fold]
-        # remove "fold" from hyper
-        hyper.pop("fold")
+            fold_list = [hyper["fold"]]
 
-        # backup origin hyper (after "fold" removed)
+        # backup origin hyper for resetting hyper on next fold
+        # (after "fold" removed from hyper Dict)
+        hyper.pop("fold")
         origin_hyper = hyper.copy()
 
         # loop through each fold
-        for fold in fold_list:
-            fold_dir = os.path.join(train_dir, "fold={}".format(fold))
+        for hyper["fold"] in fold_list:
+            fold_dir = os.path.join(train_dir, "fold={}".format(hyper["fold"]))
             Folder.create(fold_dir)
 
             # load and print hyperparams
-            self._load_hyper(hyper=hyper, fold=fold, debug_mode=debug_mode)
+            self._load_hyper(hyper=hyper, debug_mode=debug_mode)
             print("")
             self._print_hyper(hyper)
 
             print("")
-            print("fold: {}".format(fold))
+            print("fold: {}".format(hyper["fold"]))
 
             # save an empty loss.json
             Json.save(Dict(), os.path.join(fold_dir, "loss.json"))
@@ -336,19 +328,23 @@ class TrainingBaseline(Training):
 
             # start training
             hyper["time.spent"] = datetime.now()
-            self._training_traverse_epochs(hyper, fold_dir)
+            self._training_all_epochs(hyper, fold_dir)
             hyper["time.spent"] = datetime.now() - hyper["time.spent"]
             hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
             # save hyper after training
             self._save_hyper(hyper, hyper_save_path)
 
-            # reset hyper
-            hyper = origin_hyper.copy()
-
             # only train 2 folds in debug mode
-            if debug_mode and fold_list.index(fold) == 1:
+            if (
+                debug_mode
+                and len(fold_list) > 1
+                and fold_list.index(hyper["fold"]) == 1
+            ):
                 break
+
+            # reset hyper before next fold
+            hyper = origin_hyper.copy()
 
     def new_training(
         self,
@@ -356,7 +352,6 @@ class TrainingBaseline(Training):
         debug_mode: bool = False,
     ):
         for hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_BASELINE):
-
             baseline_id = "baseline_" + self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=g.HYPER_JSON_PATH_BASELINE,
@@ -367,7 +362,7 @@ class TrainingBaseline(Training):
             print(baseline_id)
             baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
 
-            self._training_traverse_folds(
+            self._training_all_folds(
                 hyper=hyper, train_dir=baseline_dir, debug_mode=debug_mode
             )
 
@@ -627,7 +622,7 @@ class TrainingBaseline(Training):
                 epoch = Path(epoch_dir).name
                 if epoch != best_epoch:
                     Folder.delete(epoch_dir)
-                    print("delete:", epoch_dir)
+                    print("delete: {} {}".format(Path(fold_dir).name, epoch))
 
     # a sub function of _remove_non_optimal_epochs()
     def __find_best_result(self, scores: Dict):

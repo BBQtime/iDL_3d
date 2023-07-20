@@ -416,7 +416,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_pen.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_pen.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_pen.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_eraser">
@@ -433,7 +433,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_eraser.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_eraser.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_eraser.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_clear">
@@ -450,7 +450,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon_clear.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_confirm">
@@ -467,7 +467,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/py_code/icons/icon-confirm.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png</iconset>
     </property>
    </widget>
    <widget class="QTextEdit" name="_text_box_annotation_msg">
@@ -647,7 +647,6 @@
     </property>
    </widget>
   </widget>
-  <widget class="QStatusBar" name="_status_bar"/>
  </widget>
  <resources/>
  <connections/>

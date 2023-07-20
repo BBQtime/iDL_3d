@@ -1,41 +1,18 @@
 import os
-import torch
-import numpy as np
-from training_baseline import TrainingBaseline
-from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
-from dataset_idl_gtvn import DataSetIDLGTVn
-from custom import Global as g
-from custom import Folder
-from custom import Explorer
-from custom import ValueUtils
-from custom import Dict
-from custom import List
-from custom import Json
-from custom import Img
-from custom import Nii
 from pathlib import Path
+
+import numpy as np
+import torch
+from custom import Debug, Dict, Explorer, Folder
+from custom import Global as g
+from custom import Img, Json, List, Nii, ValueUtils
+from dataset_idl_gtvn import DataSetIDLGTVn
+from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from tqdm import tqdm
-from custom import Debug
+from training_baseline import TrainingBaseline
 
 
 class TrainingIDLGTVn(TrainingBaseline):
-    def _load_slice_thick(self, hyper: Dict):
-        baseline_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
-        )
-        fold_dirs = Explorer.get_sub_folders(
-            baseline_dir, key_word="fold=", full_path=True
-        )
-        hyper["slice.thick"] = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
-            "slice.thick"
-        ]
-        super()._load_slice_thick(hyper)
-
-    def _simplify_hyper(self, hyper: Dict) -> Dict:
-        simple_hyper = super()._simplify_hyper(hyper)
-        simple_hyper.pop("baseline.id")
-        return simple_hyper
-
     def _load_new_cnn(self, hyper: Dict, in_chan: int = 5, out_chan: int = 2):
         super()._load_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
@@ -74,7 +51,6 @@ class TrainingIDLGTVn(TrainingBaseline):
         debug_mode: bool = False,
     ):
         for hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_IDL_GTVN):
-
             idl_gtvn_id = "idl.gtvn_" + self._init_train_id(
                 train_remark=train_remark,
                 hyper_json_path=g.HYPER_JSON_PATH_IDL_GTVN,
@@ -85,11 +61,10 @@ class TrainingIDLGTVn(TrainingBaseline):
             print(idl_gtvn_id)
             idl_gtvn_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvn_id)
 
-            # put baseline_id into hyper,
-            # don't need to add extra input parameters to _training_traverse_folds
+            # add baseline_id to hyper Dict, don't need extra param
             hyper["baseline.id"] = baseline_id
 
-            self._training_traverse_folds(
+            self._training_all_folds(
                 hyper=hyper, train_dir=idl_gtvn_dir, debug_mode=debug_mode
             )
 
@@ -257,7 +232,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 epoch = Path(epoch_dir).name
                 if epoch != best_epoch:
                     Folder.delete(epoch_dir)
-                    print("delete:", epoch_dir)
+                    print("delete: {} {}".format(Path(fold_dir).name, epoch))
 
     # a sub function of _remove_non_optimal_epochs()
     def __find_best_result(self, scores: Dict):
@@ -292,7 +267,6 @@ class TrainingIDLGTVn(TrainingBaseline):
     def __single_patient_inference(
         self, patient: str, cnn, baseline_id: str, slice_thick: str
     ) -> Dict:
-
         result = Dict()  # ["gtvn"]["label/pred"]
 
         dataset = DataSetIDLGTVn(

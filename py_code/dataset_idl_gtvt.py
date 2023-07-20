@@ -1,16 +1,16 @@
-from custom import Global as g
 import os
-import torch
-import numpy as np
-from torch import Tensor
-from typing import Tuple
 import random
+from typing import Tuple
+
+import numpy as np
+import torch
+from custom import Dict
+from custom import Global as g
+from custom import Img, Nii
 from data_augment import DataAugmentation
 from numpy import ndarray
-from custom import Dict
-from custom import Nii
-from custom import Img
 from scipy.ndimage import distance_transform_edt
+from torch import Tensor
 
 
 class DataSetIDLGTVt(torch.utils.data.Dataset):
@@ -18,53 +18,56 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         self,
         patient: str,
         selected_slices: Dict,
-        label_dir: str,
+        label_dir: str,  # dont use g.DATASET_DIR because of realtime training
         pred_dir: str,
-        img_shape: tuple,
+        slice_thick: str,
         augment: Dict,
         weight: Dict,
     ):
-        self.__img_shape = img_shape
+        self.__slice_thick = slice_thick
         self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
         # origin images
         self.__origin = Dict()
 
-        # load label
-        # (1) simulated iDL
-        if label_dir == g.DATASET_DIR:
-            self.__origin["label"] = Nii.load(
-                os.path.join(label_dir, "HNCDL_{}_GTVt.nii".format(patient)),
-                binary=True,
-            )
+        # simulated iDL label path
+        label_path = os.path.join(label_dir, "HNCDL_{}_GTVt.nii".format(patient))
+        if not os.path.exists(label_path):
+            # real iDL label path
+            label_path = os.path.join(label_dir, "gtvt_label.nii")
 
-        # (2) real iDL
-        else:
-            self.__origin["label"] = Nii.load(
-                os.path.join(label_dir, "pred_gtvt.nii"), binary=True
-            )
+        # load label
+        self.__origin["label"] = Nii.load(label_path, binary=True)
 
         # load pred
         self.__origin["pred"] = Nii.load(
-            os.path.join(pred_dir, "pred_gtvt.nii"), binary=True
+            os.path.join(pred_dir, "gtvt_pred.nii"), binary=True
         )
 
         # load ct/pt/mrt1/mt2
         self.__origin["ct"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_CT.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_CT.nii".format(patient)
+            )
         )
-        # ct windowing before normalization
-        self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
         self.__origin["pt"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_PT.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_PT.nii".format(patient)
+            )
         )
         self.__origin["mrt1"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T1dr.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_T1dr.nii".format(patient)
+            )
         )
         self.__origin["mrt2"] = Nii.load(
-            os.path.join(g.DATASET_DIR, "HNCDL_{}_T2dr.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_T2dr.nii".format(patient)
+            )
         )
+        # ct windowing
+        self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
 
         # load weight map
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
@@ -208,7 +211,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = Img.central_resize(img, self.__img_shape)
+        img = Img.central_resize(img, g.IMG_SHAPE[self.__slice_thick])
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)
@@ -221,7 +224,6 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
     # must be overrided
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor, Tensor]:
-
         final = Dict()
         tmp = Dict()
 
@@ -247,7 +249,6 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
             # target volume is not large enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
-
                 # if "final" dict is empty
                 if final == {}:
                     for i in ["label", "pred", "seed"]:
@@ -325,7 +326,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 # tmp_dataset = DataSetIDLGTVt(
 #     patient="336",
 #     selected_slices=selected_slices,
-#     label_dir=g.DATASET_DIR,
+#     label_dir=g.DATASET_DIR[self.__slice_thick],
 #     pred_dir=pred_dir,
 #     augment=augment,
 #     weight=weight,

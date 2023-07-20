@@ -1,15 +1,15 @@
-from custom import Global as g
 import os
 import random
-import torch
+from typing import Tuple
+
 import numpy as np
+import torch
+from custom import Dict
+from custom import Global as g
+from custom import Img, Nii
+from data_augment import DataAugmentation
 from numpy import ndarray
 from torch import Tensor
-from data_augment import DataAugmentation
-from typing import Tuple
-from custom import Dict
-from custom import Nii
-from custom import Img
 
 
 class DataSetBaseline(torch.utils.data.Dataset):
