@@ -780,7 +780,7 @@ class TrainingIDLGTVt(TrainingCore):
         debug_mode: bool = False,
     ):
         for hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH_IDL_GTVT):
-            idl_gtvt_id = "idl_gtvt_" + self._init_train_id(
+            idl_gtvt_id = "idl.gtvt_" + self._init_train_id(
                 train_remark=train_remark,
                 debug_mode=debug_mode,
                 hyper_json_path=g.HYPER_JSON_PATH_IDL_GTVT,
