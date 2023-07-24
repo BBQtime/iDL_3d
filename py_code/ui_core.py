@@ -8,7 +8,7 @@ from typing import Tuple
 
 import cv2
 import numpy as np
-from custom import Dict, Explorer
+from custom import Debug, Dict, Explorer
 from custom import Global as g
 from custom import Img, Json, List, Nii, ValueUtils
 from PyQt5 import QtWidgets
@@ -58,9 +58,6 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self._scores = Dict()
         self._3d_imgs = Dict()
         self._resize_pos = Dict()
-        self._bright = Dict()
-        self._contrast = Dict()
-        self._bright_contrast_modality = "ct"
         self._side_bar_width = 300
 
     def __clear_img_data(self):
@@ -436,8 +433,14 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self.__radio_btn["sagittal"] = self._radio_btn_sagittal
 
         self.__slider = Dict()
-        self.__slider["bright"] = self._slider_bright
-        self.__slider["contrast"] = self._slider_contrast
+        self.__slider["bright.ct"] = self._slider_bright_ct
+        self.__slider["bright.pt"] = self._slider_bright_pt
+        self.__slider["bright.mrt1"] = self._slider_bright_mrt1
+        self.__slider["bright.mrt2"] = self._slider_bright_mrt2
+        self.__slider["contrast.ct"] = self._slider_contrast_ct
+        self.__slider["contrast.pt"] = self._slider_contrast_pt
+        self.__slider["contrast.mrt1"] = self._slider_contrast_mrt1
+        self.__slider["contrast.mrt2"] = self._slider_contrast_mrt2
         self.__slider["zoom"] = self._slider_zoom
 
         # set label background black
@@ -474,6 +477,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
         font = self.__text_label["baseline"].font()
         font.setPointSize(8)
         font.setBold(True)
+
         # set font of text labels
         for i in [
             "baseline",
@@ -489,12 +493,15 @@ class UiCore(QMainWindow, Ui_MainWindow):
             "idl.gtvt.progress",
         ]:
             self.__text_label[i].setFont(font)
+
         # set font of text boxes
         for i in ["annotation.msg"]:
             self.__text_box[i].setFont(font)
+
         # set font of radio buttons
         for i in ["transverse", "coronal", "sagittal", "ct", "pt", "mrt1", "mrt2"]:
             self.__radio_btn[i].setFont(font)
+
         # set font of comboboxes
         font.setBold(False)
         for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
@@ -528,7 +535,8 @@ class UiCore(QMainWindow, Ui_MainWindow):
             self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
             self.__arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        # hide gtvs combobox and arrow buttons
+        # hide idl.gtvs controls
+        self.__text_label["idl.gtvs"].hide()
         self.__combox["idl.gtvs"].hide()
         self.__arrow_btn["prev.idl.gtvs"].hide()
         self.__arrow_btn["next.idl.gtvs"].hide()
@@ -556,22 +564,25 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self.__radio_btn["sagittal"].setChecked(False)
 
         # set slider range and default value
-        self.__slider["bright"].setMinimum(-128)
-        self.__slider["bright"].setMaximum(128)
-        self.__slider["bright"].setValue(0)
-        self.__slider["contrast"].setMinimum(0)
-        self.__slider["contrast"].setMaximum(200)
-        self.__slider["contrast"].setValue(100)
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self.__slider["bright.{}".format(i)].setMinimum(-128)
+            self.__slider["bright.{}".format(i)].setMaximum(128)
+            self.__slider["bright.{}".format(i)].setValue(0)
+            self.__slider["contrast.{}".format(i)].setMinimum(0)
+            self.__slider["contrast.{}".format(i)].setMaximum(200)
+            self.__slider["contrast.{}".format(i)].setValue(100)
+
+        # only show ct bright/contrast slider bars
+        for i in ["pt", "mrt1", "mrt2"]:
+            self.__slider["bright.{}".format(i)].hide()
+            self.__slider["contrast.{}".format(i)].hide()
+
         self.__slider["zoom"].setMinimum(100)
         self.__slider["zoom"].setMaximum(200)
         self.__slider["zoom"].setValue(100)
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self._bright[i] = self.__slider["bright"].value()
-            self._contrast[i] = self.__slider["contrast"].value()
 
         # connect ui to functions
-        # (put this at the end, because these functions will need the initialization above)
-        # e.g. __set_bright_contrast_modality will need value of self._bright and self._contrast
+        # (put the connections at last, because these functions will need the initialization above)
         self.__combox["baseline"].activated.connect(self.__choose_baseline)
         self.__arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
         self.__arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
@@ -597,7 +608,10 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self.__arrow_btn["next.round"].clicked.connect(self.__choose_next_round)
 
         for i in ["bright", "contrast"]:
-            self.__slider[i].valueChanged.connect(self.__refresh_imgs)
+            for j in ["ct", "pt", "mrt1", "mrt2"]:
+                self.__slider["{}.{}".format(i, j)].valueChanged.connect(
+                    self.__refresh_imgs
+                )
 
         # for i in ["transverse", "coronal", "sagittal"]:
         #     self.__radio_btn[i].toggled.connect(self.__set_img_plane)
@@ -698,7 +712,8 @@ class UiCore(QMainWindow, Ui_MainWindow):
             self.__text_label[i].setGeometry(rect)
             top += text_height
             rect = QRect(left, top, width, slider_height)
-            self.__slider[i].setGeometry(rect)
+            for j in ["ct", "pt", "mrt1", "mrt2"]:
+                self.__slider["{}.{}".format(i, j)].setGeometry(rect)
             top += slider_height
 
         # img plane
@@ -760,23 +775,22 @@ class UiCore(QMainWindow, Ui_MainWindow):
     def __set_bright_contrast_modality(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             if self.__radio_btn[i].isChecked():
-                self._bright_contrast_modality = i
-                break
+                self.__slider["bright.{}".format(i)].show()
+                self.__slider["contrast.{}".format(i)].show()
+            else:
+                self.__slider["bright.{}".format(i)].hide()
+                self.__slider["contrast.{}".format(i)].hide()
 
-        if self._bright_contrast_modality == "ct":
+        if self.__radio_btn["ct"].isChecked():
             key_word = "CT"
-        if self._bright_contrast_modality == "pt":
+        elif self.__radio_btn["pt"].isChecked():
             key_word = "PT"
-        if self._bright_contrast_modality == "mrt1":
+        elif self.__radio_btn["mrt1"].isChecked():
             key_word = "MR-T1"
-        if self._bright_contrast_modality == "mrt2":
+        elif self.__radio_btn["mrt2"].isChecked():
             key_word = "MR-T2"
-
-        # switch brightness and contrast value (to new modality)
-        self.__slider["bright"].setValue(self._bright[self._bright_contrast_modality])
-        self.__slider["contrast"].setValue(
-            self._contrast[self._bright_contrast_modality]
-        )
+        else:
+            Debug.terminate("no radio button is checked")
 
         self.__text_label["bright"].setText("Brightness ({})".format(key_word))
         self.__text_label["contrast"].setText("Contrast ({})".format(key_word))
@@ -1323,18 +1337,13 @@ class UiCore(QMainWindow, Ui_MainWindow):
             # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
             rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_GRAY2RGB)
 
-            # update brightness and contrast value when slider bar updated
-            if self._bright_contrast_modality == i:
-                self._bright[i] = self.__slider["bright"].value()
-                self._contrast[i] = self.__slider["contrast"].value()
-
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
             rgb_img = cv2.addWeighted(
                 src1=rgb_img,
-                alpha=self._contrast[i] / 100,
+                alpha=self.__slider["contrast.{}".format(i)].value() / 100,
                 src2=np.zeros_like(rgb_img),
                 beta=0,
-                gamma=self._bright[i],
+                gamma=self.__slider["bright.{}".format(i)].value(),
             )
 
             # add mask to annotated slices

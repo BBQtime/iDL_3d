@@ -628,8 +628,8 @@ class GPU:
 
 
 class Debug:
-    def terminate(err_msg: str):
-        print("Error:", err_msg)
+    def terminate(err_msg: str = ""):
+        print("error: {}, exit", err_msg)
         sys.exit(1)
 
     def clean_debug_data():
