@@ -2,7 +2,7 @@ import os
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from custom import Dict, Explorer, Folder
+from custom import Dict, Directory, Folder
 from custom import Global as g
 from custom import Json, List, Nii
 from tqdm import tqdm
@@ -21,14 +21,14 @@ def patients_overview(
     # plt.style.use("bmh")  # put this line before drawing figure
 
     patient_tumor_size_dict = Dict()
-    for patient_dir in Explorer.get_sub_folders(train_result_dir, key_word="patient="):
+    for patient_dir in Directory.get_sub_folders(train_result_dir, key_word="patient="):
         patient_tumor_size_dict[patient_dir] = 0
 
     # iterate through patients folders
     for patient_dir in patient_tumor_size_dict.keys():
         # create list of round folders
         round_dir_list = ["baseline"]
-        round_dir_list += Explorer.get_sub_folders(
+        round_dir_list += Directory.get_sub_folders(
             os.path.join(train_result_dir, patient_dir),
             key_word="round=",
         )
@@ -37,7 +37,7 @@ def patients_overview(
             score_dict[patient_dir][metric] = List()
         # iterate through round folders
         for round_dir in round_dir_list:
-            iter_json_list = Explorer.get_sub_files(
+            iter_json_list = Directory.get_sub_files(
                 os.path.join(train_result_dir, patient_dir, round_dir),
                 key_word=".json",
             )

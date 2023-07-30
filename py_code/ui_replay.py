@@ -1,73 +1,76 @@
-import enum
 import os
 import platform
-import sys
 from pathlib import Path
 from tkinter import Tk, filedialog
 from typing import Tuple
 
 import cv2
 import numpy as np
-from custom import Debug, Dict, Explorer
+from custom import Debug, Dict, Directory
 from custom import Global as g
-from custom import Img, Json, List, Nii, ValueUtils
+from custom import Img, Json, List, Nii, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QImage, QPalette, QPixmap
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRubberBand
-from Ui_main_window import Ui_MainWindow
+from PyQt5.QtWidgets import QButtonGroup, QMainWindow, QRubberBand
+from Ui_core import Ui_Core
 
 
-class UiCore(QMainWindow, Ui_MainWindow):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+class UiReplay(QMainWindow, Ui_Core):
+    def __init__(self):
+        super().__init__()
         self.setupUi(self)
 
-        self.__init_ui_names()
-        self.__init_member_var()
+        self._init_ui_names()
+        self._init_member_var()
+        self.__set_display_frames_background()
         self.__init_zoomin()
         self.__init_color()
-        self.__init_side_bar()  # after __init_member_var(), function connection needed
+        self._init_side_bar()  # after _init_member_var(), function connection needed
 
-        self.__clear_img_data()
-        self.__refresh_title()  # after __init_member_var()
+        self._clear_img_data()
+        self._refresh_title()  # after _init_member_var()
 
         # resize
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
 
         # load first baseline result
-        self.__choose_baseline()
+        self._choose_baseline()
 
-    def __init_member_var(self):
-        # patients: "test.inter"/"idl.gtvt"/"idl.gtvn"
-        self._patients = Dict()
-        self._patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)[
+    def _init_member_var(self):
+        # patients: "test.inter"
+        self.__patients = Dict()
+        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)[
             "test.inter"
         ]
         # str to List
-        self._patients["test.inter"] = List(self._patients["test.inter"])
-        self._patients["test.inter"].sort()
-        self._patients["idl.gtvt"] = None
-        self._patients["idl.gtvn"] = None
+        self.__patients["test.inter"] = List(self.__patients["test.inter"])
+        self.__patients["test.inter"].sort()
+
+        self._baseline_id = None
         self._patient = None
-        self._round = None
-        self._slice = None  # starts from 0
+        self._idl_gtvt_id = "baseline"
+        self._idl_gtvt_round = "round=00"
+        self._idl_gtvn_id = "baseline"
+        self._idl_gtvn_round = "round=00"
+        self._cur_slice = None  # starts from 0
+
         self._nii_spacing = None  # 1mm or 3mm
         self._dataset_dir = None  # 1mm or 3mm
-        self._scores = Dict()
+        self.__scores = Dict()
         self._3d_imgs = Dict()
-        self._resize_pos = Dict()
-        self._side_bar_width = 300
+        self.__resize_pos = Dict()
+        self.__side_bar_width = 300
 
-    def __clear_img_data(self):
-        self._patients["idl.gtvt"] = None
-        self._patients["idl.gtvn"] = None
+    def _clear_img_data(self):
+        # self.__patients["idl.gtvt"] = None
+        # self.__patients["idl.gtvn"] = None
 
         for i in ["gtvt", "gtvn"]:
-            self._scores[i]["dsc"] = None
-            self._scores[i]["msd"] = None
-            self._scores[i]["hd95"] = None
+            self.__scores[i]["dsc"] = None
+            self.__scores[i]["msd"] = None
+            self.__scores[i]["hd95"] = None
 
         for i in [
             "ct",
@@ -84,7 +87,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
         # resize position of ct/pt/mrt1/mrt2
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self._resize_pos[i] = None
+            self.__resize_pos[i] = None
 
         # set image plane
         for i in ["transverse", "coronal", "sagittal"]:
@@ -94,9 +97,9 @@ class UiCore(QMainWindow, Ui_MainWindow):
     def __init_zoomin(self):
         self.__zoomin = Dict()
         self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
-        self.__reset_zoomin()
+        self._reset_zoomin()
 
-    def __reset_zoomin(self):
+    def _reset_zoomin(self):
         self.__zoomin["rubber.band"].hide()
         self.__zoomin["img"] = None
         self.__zoomin["start"] = None
@@ -120,8 +123,8 @@ class UiCore(QMainWindow, Ui_MainWindow):
             ):
                 # already zoomed in, clear zoomin (only click in img frame area)
                 if self.__zoomin["start"] is not None:
-                    self.__reset_zoomin()
-                    self.__refresh_imgs()
+                    self._reset_zoomin()
+                    self._refresh_imgs()
                     return
                 # zoom in
                 else:
@@ -175,7 +178,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
         # no data loaded
         if self._3d_imgs["pt"] is None:
-            self.__reset_zoomin()
+            self._reset_zoomin()
             return
 
         # zoomin size == 0
@@ -184,7 +187,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
             or abs(self.__zoomin["start"].y() - self.__zoomin["end"].y()) <= 1
         ):
             # print("zoomin size 0")
-            self.__reset_zoomin()
+            self._reset_zoomin()
             return
         self.__get_img_roi()
 
@@ -211,7 +214,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
         end_y -= display_frame_top
 
         # get actual_img_area related position
-        resize_pos = self._resize_pos[self.__zoomin["img"]]
+        resize_pos = self.__resize_pos[self.__zoomin["img"]]
         start_x -= resize_pos["x"]
         start_y -= resize_pos["y"]
         end_x -= resize_pos["x"]
@@ -220,12 +223,12 @@ class UiCore(QMainWindow, Ui_MainWindow):
         if (start_x < 0 and end_x < 0) or (
             start_x > resize_pos["width"] and end_x > resize_pos["width"]
         ):
-            self.__reset_zoomin()
+            self._reset_zoomin()
             return
         if (start_y < 0 and end_y < 0) or (
             start_y > resize_pos["height"] and end_y > resize_pos["height"]
         ):
-            self.__reset_zoomin()
+            self._reset_zoomin()
             return
         # limit zoomin frame in image area
         if start_x < 0:
@@ -261,7 +264,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
         self.__zoomin["start"] = QPoint(start_x, start_y)
         self.__zoomin["end"] = QPoint(end_x, end_y)
-        self.__refresh_imgs()
+        self._refresh_imgs()
 
     def __fit_display_frame(self, img, display_frame: QtWidgets.QLabel):
         err_msg = "MainWindow.__fit_display_frame(), img.shape should == 2 or 3"
@@ -363,65 +366,48 @@ class UiCore(QMainWindow, Ui_MainWindow):
         return img, resize_pos
 
     def __init_color(self):
-        self.__color = Dict()
-        self.__color["gtvt.label"] = (0, 255, 255)  # light blue
-        self.__color["gtvn.label"] = (0, 150, 255)  # dark blue
-        self.__color["gtvt.pred"] = (255, 255, 0)  # yellow
-        self.__color["gtvn.pred"] = (255, 128, 0)  # orange
-        self.__color["gtvt.annotation"] = (0, 255, 64)  # green
-        self.__color["gtvn.annotation"] = (255, 70, 200)  # pink
-        self.__color["score.text"] = self.__color["gtvt.annotation"]
+        self._color = Dict()
+        self._color["gtvt.label"] = (0, 255, 255)  # light blue
+        self._color["gtvn.label"] = (0, 150, 255)  # dark blue
+        self._color["gtvt.pred"] = (255, 255, 0)  # yellow
+        self._color["gtvn.pred"] = (255, 128, 0)  # orange
+        self._color["gtvt.annotation"] = (0, 255, 64)  # green
+        self._color["gtvn.annotation"] = (255, 70, 200)  # pink
+        self._color["score.text"] = self._color["gtvt.annotation"]
 
-    def __init_ui_names(self):
+    def _init_ui_names(self):
         self.__display_frame = Dict()
         self.__display_frame["ct"] = self._display_frame_ct
         self.__display_frame["pt"] = self._display_frame_pt
         self.__display_frame["mrt1"] = self._display_frame_mrt1
         self.__display_frame["mrt2"] = self._display_frame_mrt2
 
-        self.__text_label = Dict()
-        self.__text_label["baseline"] = self._text_label_baseline
-        self.__text_label["idl.gtvs"] = self._text_label_idl_gtvs
-        self.__text_label["idl.gtvt"] = self._text_label_idl_gtvt
-        self.__text_label["idl.gtvn"] = self._text_label_idl_gtvn
-        self.__text_label["patient"] = self._text_label_patient
-        self.__text_label["round"] = self._text_label_round
-        self.__text_label["bright"] = self._text_label_bright
-        self.__text_label["contrast"] = self._text_label_contrast
-        self.__text_label["zoom"] = self._text_label_zoom
-        self.__text_label["annotation.tools"] = self._text_label_annotation_tools
-        self.__text_label["idl.gtvt.progress"] = self._text_label_idl_gtvt_progress
+        self._text_label = Dict()
+        self._text_label["baseline"] = self._text_label_baseline
+        self._text_label["patient"] = self._text_label_patient
+        self._text_label["idl.gtvt"] = self._text_label_idl_gtvt
+        self._text_label["idl.gtvn"] = self._text_label_idl_gtvn
+        self._text_label["bright"] = self._text_label_bright
+        self._text_label["contrast"] = self._text_label_contrast
+        self._text_label["zoom"] = self._text_label_zoom
+        self._text_label["annotation.tools"] = self._text_label_annotation_tools
+        self._text_label["idl.gtvt.progress"] = self._text_label_idl_gtvt_progress
 
-        self.__text_box = Dict()
-        self.__text_box["annotation.msg"] = self._text_box_annotation_msg
+        self._combox = Dict()
+        self._combox["baseline"] = self._combox_baseline
+        self._combox["patient"] = self._combox_patient
+        self._combox["idl.gtvt"] = self._combox_idl_gtvt
+        self._combox["idl.gtvn"] = self._combox_idl_gtvn
 
-        self.__combox = Dict()
-        self.__combox["baseline"] = self._combox_baseline
-        self.__combox["idl.gtvs"] = self._combox_idl_gtvs
-        self.__combox["idl.gtvt"] = self._combox_idl_gtvt
-        self.__combox["idl.gtvn"] = self._combox_idl_gtvn
-        self.__combox["patient"] = self._combox_patient
-        self.__combox["round"] = self._combox_round
-
-        self.__btn = Dict()
-        self.__btn["pen"] = self._btn_pen
-        self.__btn["eraser"] = self._btn_eraser
-        self.__btn["clear"] = self._btn_clear
-        self.__btn["confirm"] = self._btn_confirm
-
-        self.__arrow_btn = Dict()
-        self.__arrow_btn["prev.baseline"] = self._btn_prev_baseline
-        self.__arrow_btn["next.baseline"] = self._btn_next_baseline
-        self.__arrow_btn["prev.idl.gtvs"] = self._btn_prev_idl_gtvs
-        self.__arrow_btn["next.idl.gtvs"] = self._btn_next_idl_gtvs
-        self.__arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
-        self.__arrow_btn["next.idl.gtvt"] = self._btn_next_idl_gtvt
-        self.__arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
-        self.__arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
-        self.__arrow_btn["prev.patient"] = self._btn_prev_patient
-        self.__arrow_btn["next.patient"] = self._btn_next_patient
-        self.__arrow_btn["prev.round"] = self._btn_prev_round
-        self.__arrow_btn["next.round"] = self._btn_next_round
+        self._arrow_btn = Dict()
+        self._arrow_btn["prev.baseline"] = self._btn_prev_baseline
+        self._arrow_btn["next.baseline"] = self._btn_next_baseline
+        self._arrow_btn["prev.patient"] = self._btn_prev_patient
+        self._arrow_btn["next.patient"] = self._btn_next_patient
+        self._arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
+        self._arrow_btn["next.idl.gtvt"] = self._btn_next_idl_gtvt
+        self._arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
+        self._arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
 
         self.__radio_btn = Dict()
         self.__radio_btn["ct"] = self._radio_btn_ct
@@ -443,7 +429,8 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self.__slider["contrast.mrt2"] = self._slider_contrast_mrt2
         self.__slider["zoom"] = self._slider_zoom
 
-        # set label background black
+    # set display frames background black
+    def __set_display_frames_background(self):
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
         for i in ["ct", "pt", "mrt1", "mrt2"]:
@@ -451,20 +438,33 @@ class UiCore(QMainWindow, Ui_MainWindow):
             self.__display_frame[i].setAutoFillBackground(True)
             self.__display_frame[i].setPalette(pal)
 
-    def __init_side_bar(self):
+    def _init_side_bar(self):
+        # hide idl.gtvs controls
+        self._text_label_idl_gtvs.hide()
+        self._combox_idl_gtvs.hide()
+        self._btn_prev_idl_gtvs.hide()
+        self._btn_next_idl_gtvs.hide()
+
+        # hide annotation controls
+        self._text_box_annotation_msg.hide()
+        self._text_label_annotation_tools.hide()
+        self._btn_pen.hide()
+        self._btn_eraser.hide()
+        self._btn_clear.hide()
+        self._btn_confirm.hide()
+        self._text_label_idl_gtvt_progress.hide()
+        self._progress_bar_idl_gtvt.hide()
+
         # set text
-        self.__text_label["baseline"].setText("Choose Baseline Result")
-        self.__text_label["idl.gtvs"].setText("Choose iDL GTVs Result")
-        self.__text_label["idl.gtvt"].setText("Choose iDL GTVt Result")
-        self.__text_label["idl.gtvn"].setText("Choose iDL GTVn Result")
-        self.__text_label["patient"].setText("Choose Patient")
-        self.__text_label["round"].setText("Choose Update Round")
-        self.__text_label["bright"].setText("Brightness (CT)")
-        self.__text_label["contrast"].setText("Contrast (CT)")
-        self.__text_label["zoom"].setText("Zoom In")
-        self.__text_label["annotation.tools"].setText("Annotation Tools")
-        self.__text_label["idl.gtvt.progress"].setText("GTVt Retraining Progress")
-        self.__text_box["annotation.msg"].setText("Please Select a Patient")
+        self._text_label["baseline"].setText("Choose Baseline")
+        self._text_label["patient"].setText("Choose Patient")
+        self._text_label["idl.gtvt"].setText("Choose iDL GTVt")
+        self._text_label["idl.gtvn"].setText("Choose iDL GTVn")
+
+        self._text_label["bright"].setText("Brightness (CT)")
+        self._text_label["contrast"].setText("Contrast (CT)")
+        self._text_label["zoom"].setText("Zoom In")
+
         self.__radio_btn["ct"].setText("CT")
         self.__radio_btn["pt"].setText("PT")
         self.__radio_btn["mrt1"].setText("MR-T1")
@@ -474,42 +474,36 @@ class UiCore(QMainWindow, Ui_MainWindow):
         self.__radio_btn["sagittal"].setText("Sagittal")
 
         # set font
-        font = self.__text_label["baseline"].font()
-        font.setPointSize(8)
-        font.setBold(True)
+        self._font_bold = self._text_label["baseline"].font()
+        self._font_light = self._text_label["baseline"].font()
+        self._font_bold.setPointSize(8)
+        self._font_light.setPointSize(8)
+        self._font_bold.setBold(True)
+        self._font_light.setBold(False)
 
         # set font of text labels
         for i in [
             "baseline",
-            "idl.gtvs",
+            "patient",
             "idl.gtvt",
             "idl.gtvn",
-            "patient",
-            "round",
             "bright",
             "contrast",
             "zoom",
-            "annotation.tools",
-            "idl.gtvt.progress",
         ]:
-            self.__text_label[i].setFont(font)
-
-        # set font of text boxes
-        for i in ["annotation.msg"]:
-            self.__text_box[i].setFont(font)
+            self._text_label[i].setFont(self._font_bold)
 
         # set font of radio buttons
         for i in ["transverse", "coronal", "sagittal", "ct", "pt", "mrt1", "mrt2"]:
-            self.__radio_btn[i].setFont(font)
+            self.__radio_btn[i].setFont(self._font_bold)
 
         # set font of comboboxes
-        font.setBold(False)
-        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__combox[i].setFont(font)
+        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            self._combox[i].setFont(self._font_light)
 
         # set combobox dropdown width: 700px
-        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn"]:
-            self.__combox[i].setStyleSheet(
+        for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+            self._combox[i].setStyleSheet(
                 """*
                 QComboBox QAbstractItemView
                 {
@@ -518,30 +512,22 @@ class UiCore(QMainWindow, Ui_MainWindow):
                 """
             )
 
-        # fill the baseline combobox, format "baseline_id"
-        self.__combox["baseline"].addItems(
-            Explorer.get_sub_folders(
+        # fill the baseline combobox with baseline_ids
+        self._combox["baseline"].addItems(
+            Directory.get_sub_folders(
                 g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
             )
         )
 
         # set initial state
-        for i in ["baseline", "idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
-            self.__arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
+        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            self._arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
+            self._arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
 
-        for i in ["idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__combox[i].setEnabled(False)
-            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
-            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
-
-        # hide idl.gtvs controls
-        self.__text_label["idl.gtvs"].hide()
-        self.__combox["idl.gtvs"].hide()
-        self.__arrow_btn["prev.idl.gtvs"].hide()
-        self.__arrow_btn["next.idl.gtvs"].hide()
-
-        self.__text_box["annotation.msg"].setReadOnly(True)
+        for i in ["patient", "idl.gtvt", "idl.gtvn"]:
+            self._combox[i].setEnabled(False)
+            self._arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
         # Add radio buttons to the button group
         self.__btn_group_bright_contrast = QButtonGroup()
@@ -583,34 +569,26 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
         # connect ui to functions
         # (put the connections at last, because these functions will need the initialization above)
-        self.__combox["baseline"].activated.connect(self.__choose_baseline)
-        self.__arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
-        self.__arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
+        self._combox["baseline"].activated.connect(self._choose_baseline)
+        self._arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
+        self._arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
 
-        self.__combox["idl.gtvs"].activated.connect(self.__choose_idl_gtvs)
-        self.__arrow_btn["prev.idl.gtvs"].clicked.connect(self.__choose_prev_idl_gtvs)
-        self.__arrow_btn["next.idl.gtvs"].clicked.connect(self.__choose_next_idl_gtvs)
+        self._combox["patient"].activated.connect(self._choose_patient)
+        self._arrow_btn["prev.patient"].clicked.connect(self.__choose_prev_patient)
+        self._arrow_btn["next.patient"].clicked.connect(self.__choose_next_patient)
 
-        self.__combox["idl.gtvt"].activated.connect(self.__choose_idl_gtvt)
-        self.__arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
-        self.__arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
+        self._combox["idl.gtvt"].activated.connect(self._choose_idl_gtvt)
+        self._arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
+        self._arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
 
-        self.__combox["idl.gtvn"].activated.connect(self.__choose_idl_gtvn)
-        self.__arrow_btn["prev.idl.gtvn"].clicked.connect(self.__choose_prev_idl_gtvn)
-        self.__arrow_btn["next.idl.gtvn"].clicked.connect(self.__choose_next_idl_gtvn)
-
-        self.__combox["patient"].activated.connect(self.__choose_patient)
-        self.__arrow_btn["prev.patient"].clicked.connect(self.__choose_prev_patient)
-        self.__arrow_btn["next.patient"].clicked.connect(self.__choose_next_patient)
-
-        self.__combox["round"].activated.connect(self.__choose_round)
-        self.__arrow_btn["prev.round"].clicked.connect(self.__choose_prev_round)
-        self.__arrow_btn["next.round"].clicked.connect(self.__choose_next_round)
+        self._combox["idl.gtvn"].activated.connect(self.__choose_idl_gtvn)
+        self._arrow_btn["prev.idl.gtvn"].clicked.connect(self.__choose_prev_idl_gtvn)
+        self._arrow_btn["next.idl.gtvn"].clicked.connect(self.__choose_next_idl_gtvn)
 
         for i in ["bright", "contrast"]:
             for j in ["ct", "pt", "mrt1", "mrt2"]:
                 self.__slider["{}.{}".format(i, j)].valueChanged.connect(
-                    self.__refresh_imgs
+                    self._refresh_imgs
                 )
 
         # for i in ["transverse", "coronal", "sagittal"]:
@@ -623,28 +601,18 @@ class UiCore(QMainWindow, Ui_MainWindow):
             self.__set_bright_contrast_modality
         )
 
-    def __clear_annotation(self):
-        print("clear annotation")
-
-    def __select_pen(self):
-        print("select pen")
-
-    def __select_eraser(self):
-        print("select eraser")
-
-    def __refresh_side_bar(self):
-        # these are adjustable
+    def _refresh_side_bar(
+        self, widgets_to_display: list = ["baseline", "patient", "idl.gtvt", "idl.gtvn"]
+    ):
         left = 30
         top = 0
         text_height = 25
         bar_height = 25
         slider_height = 20
-        # annotation_msg_box_height = 120
         arrow_btn_width = 30
-        # annotation_btn_width = 50
 
         if platform.system().lower() == "linux":
-            gap = 27
+            gap = 30
         else:  # windows
             gap = 50
 
@@ -660,61 +628,54 @@ class UiCore(QMainWindow, Ui_MainWindow):
         radio_btn_gap["planes"] = 6
 
         # side bar location
-        side_bar_x = self.geometry().width() - self._side_bar_width
-        width = self._side_bar_width - left * 2
+        side_bar_x = self.geometry().width() - self.__side_bar_width
+        width = self.__side_bar_width - left * 2
         left += side_bar_x
 
-        # hide and show text label / comboxes / btns
-        for i in ["baseline", "idl.gtvt", "idl.gtvn", "round"]:
-            self.__text_label[i].show()
-            self.__arrow_btn["prev.{}".format(i)].show()
-            self.__combox[i].show()
-            self.__arrow_btn["next.{}".format(i)].show()
-
         # set position of text label / comboxes / btns
-        for i in ["baseline", "idl.gtvt", "idl.gtvn", "patient", "round"]:
+        for i in widgets_to_display:
             # text label
             top += gap
             rect = QRect(left, top, width, text_height)
-            self.__text_label[i].setGeometry(rect)
+            self._text_label[i].setGeometry(rect)
             top += text_height
 
             # btn prev
             tmp_left = left
             rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
-            self.__arrow_btn["prev.{}".format(i)].setGeometry(rect)
+            self._arrow_btn["prev.{}".format(i)].setGeometry(rect)
 
             # combobox
             tmp_left += arrow_btn_width
             rect = QRect(tmp_left + 1, top, width - arrow_btn_width * 2 - 2, bar_height)
-            self.__combox[i].setGeometry(rect)
+            self._combox[i].setGeometry(rect)
 
             # btn next
             tmp_left += width - arrow_btn_width * 2
             rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
-            self.__arrow_btn["next.{}".format(i)].setGeometry(rect)
+            self._arrow_btn["next.{}".format(i)].setGeometry(rect)
 
             # next element
             top += bar_height
 
-        # brightness and contrast radio btns
+        # brightness and contrast sliders
         top += gap
+        for i in ["bright", "contrast"]:
+            rect = QRect(left, top, width, text_height)
+            self._text_label[i].setGeometry(rect)
+            top += text_height
+            rect = QRect(left, top, width, slider_height)
+            for j in ["ct", "pt", "mrt1", "mrt2"]:
+                self.__slider["{}.{}".format(i, j)].setGeometry(rect)
+            top += slider_height
+
+        # brightness and contrast radio btns
         tmp_left = left
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
             self.__radio_btn[i].setGeometry(rect)
             tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
         top += radio_btn_height
-
-        # brightness and contrast bars
-        for i in ["bright", "contrast"]:
-            rect = QRect(left, top, width, text_height)
-            self.__text_label[i].setGeometry(rect)
-            top += text_height
-            rect = QRect(left, top, width, slider_height)
-            for j in ["ct", "pt", "mrt1", "mrt2"]:
-                self.__slider["{}.{}".format(i, j)].setGeometry(rect)
-            top += slider_height
 
         # img plane
         top += gap
@@ -728,25 +689,16 @@ class UiCore(QMainWindow, Ui_MainWindow):
         # zoom
         top += gap
         rect = QRect(left, top, width, text_height)
-        self.__text_label["zoom"].setGeometry(rect)
+        self._text_label["zoom"].setGeometry(rect)
         top += text_height
         rect = QRect(left, top, width, slider_height)
         self.__slider["zoom"].setGeometry(rect)
         top += slider_height
 
-        # annotation message box
-        self.__text_box["annotation.msg"].hide()
+        # return the followings for UiIdl
+        return left, top, width, gap, text_height, bar_height
 
-        # annotation tools
-        self.__text_label["annotation.tools"].hide()
-        for i in ["pen", "eraser", "clear", "confirm"]:
-            self.__btn[i].hide()
-
-        # idl gtvt retraining progress
-        self._text_label_idl_gtvt_progress.hide()
-        self._progress_bar_idl_gtvt.hide()
-
-    def __load_img(self, path: str):
+    def _load_img(self, path: str):
         img = Nii.load(path, binary=False)
         # ct windowing before normalization
         if "CT" in path:
@@ -766,11 +718,11 @@ class UiCore(QMainWindow, Ui_MainWindow):
         # update and check slice_id (starts from 0)
         slices_count = self.__get_slices_count()
         if slices_count > 0:
-            self._slice = round(slices_count / 2) - 1
-            self._slice = ValueUtils.limit_range(self._slice, (0, slices_count - 1))
-        self.__reset_zoomin()
-        self.__refresh_imgs()
-        self.__refresh_title()
+            self._cur_slice = round(slices_count / 2) - 1
+            self._cur_slice = Value.limit_range(self._cur_slice, (0, slices_count - 1))
+        self._reset_zoomin()
+        self._refresh_imgs()
+        self._refresh_title()
 
     def __set_bright_contrast_modality(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
@@ -790,12 +742,12 @@ class UiCore(QMainWindow, Ui_MainWindow):
         elif self.__radio_btn["mrt2"].isChecked():
             key_word = "MR-T2"
         else:
-            Debug.terminate("no radio button is checked")
+            Debug.error_exit("no radio button is checked")
 
-        self.__text_label["bright"].setText("Brightness ({})".format(key_word))
-        self.__text_label["contrast"].setText("Contrast ({})".format(key_word))
+        self._text_label["bright"].setText("Brightness ({})".format(key_word))
+        self._text_label["contrast"].setText("Contrast ({})".format(key_word))
 
-    def __clear_display_frames(self):
+    def _clear_display_frames(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             width = self.__display_frame[i].width()
             height = self.__display_frame[i].height()
@@ -809,345 +761,267 @@ class UiCore(QMainWindow, Ui_MainWindow):
             )
             self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __enable_arrow_btns(self, combox_name: str):
+    def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
-        idx = self.__combox[combox_name].currentIndex()
+        idx = self._combox[combox_name].currentIndex()
         if idx == 0:
-            self.__arrow_btn["prev.{}".format(combox_name)].setEnabled(False)
+            self._arrow_btn["prev.{}".format(combox_name)].setEnabled(False)
         else:
-            self.__arrow_btn["prev.{}".format(combox_name)].setEnabled(True)
+            self._arrow_btn["prev.{}".format(combox_name)].setEnabled(True)
 
-        if idx == (self.__combox[combox_name].count() - 1):
-            self.__arrow_btn["next.{}".format(combox_name)].setEnabled(False)
+        if idx == (self._combox[combox_name].count() - 1):
+            self._arrow_btn["next.{}".format(combox_name)].setEnabled(False)
         else:
-            self.__arrow_btn["next.{}".format(combox_name)].setEnabled(True)
+            self._arrow_btn["next.{}".format(combox_name)].setEnabled(True)
 
-    def __get_combox_contents(self, combox: QtWidgets.QComboBox):
+    def _get_combox_contents(self, combox: QtWidgets.QComboBox):
         content_list = List()
         for i in range(combox.count()):
             content_list.append(combox.itemText(i))
         return content_list
 
-    def __choose_baseline(self):
-        self.__reset_zoomin()
-        self.__clear_img_data()
-        self.__clear_display_frames()
-
-        # run this after baseline combox current text is decided
-        self.__enable_arrow_btns("baseline")
-
-        # reset ui
-        for i in ["idl.gtvs", "idl.gtvt", "idl.gtvn", "patient", "round"]:
-            self.__combox[i].clear()
-            self.__combox[i].setEnabled(False)
-            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
-            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
-
-        baseline_id = self.__combox["baseline"].currentText()
-
-        # fill idl.gtvt/gtvn/gtvs combobox
-        for gtv in ["idl.gtvt", "idl.gtvn", "idl.gtvs"]:
-            train_id_list = ["baseline"]
-            train_id_list += Explorer.get_sub_folders(
-                os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
-                key_word=gtv,
-                full_path=False,
-            )
-            self.__combox[gtv].addItems(train_id_list)
-
-            # set current idl_gtvt_id
-            self.__combox[gtv].setEnabled(True)
-            # no idl found, show baseline
-            if len(train_id_list) == 1:
-                self.__combox[gtv].setCurrentText(train_id_list[0])
-            # first idl_gtvt_id
-            else:
-                self.__combox[gtv].setCurrentText(train_id_list[1])
-
-            if gtv == "idl.gtvt":
-                self.__choose_idl_gtvt()
-            elif gtv == "idl.gtvn":
-                self.__choose_idl_gtvn()
-            else:
-                self.__choose_idl_gtvs()
-
-    def __choose_idl_gtvs(self):
-        return
-
-    def __choose_idl_gtvn(self):
-        # run this after idl gtvn combox is filled
-        self.__enable_arrow_btns("idl.gtvn")
-
-        # reset ui
-        for i in ["patient", "round"]:
-            self.__combox[i].clear()
-            self.__combox[i].setEnabled(False)
-            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
-            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
-
-        # confirm idl gtvn patients
-        baseline_id = self.__combox["baseline"].currentText()
-        if self.__combox["idl.gtvn"].currentText() == "baseline":
-            self._patients["idl.gtvn"] = Explorer.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    "baseline",
-                    "cross_valid",
-                    "patients",
-                )
-            )
-        else:
-            idl_gtvn_id = self.__combox["idl.gtvn"].currentText()
-            self._patients["idl.gtvn"] = Explorer.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    idl_gtvn_id,
-                    "cross_valid",
-                    "patients",
-                )
-            )
-        # from "patient=123" to "123"
-        for i in range(len(self._patients["idl.gtvn"])):
-            self._patients["idl.gtvn"][i] = self._patients["idl.gtvn"][i][
-                len("patient=") :
-            ]
-        # idl gtvn patients & testset patients
-        self._patients["idl.gtvn"].find_identical_items(self._patients["test.inter"])
-
-        # fill combobox
-        if self._patients["idl.gtvt"] is not None:
-            combox_patients = self._patients["idl.gtvn"].copy()
-            combox_patients.find_identical_items(self._patients["idl.gtvt"])
-            self.__combox["patient"].addItems(combox_patients)
-            self.__combox["patient"].setEnabled(True)
-
-            # choose patient automatically
-            # try not to reset patient when idl_gtvt_id is changed
-            if self._patient not in combox_patients:
-                reset_patient = True
-            else:
-                reset_patient = False
-            self.__choose_patient(idx=None, reset_patient=reset_patient)
-
-    def __choose_idl_gtvt(self):
-        # run this after idl gtvt combox is filled
-        self.__enable_arrow_btns("idl.gtvt")
-
-        # reset ui
-        for i in ["patient", "round"]:
-            self.__combox[i].clear()
-            self.__combox[i].setEnabled(False)
-            self.__arrow_btn["prev.{}".format(i)].setEnabled(False)
-            self.__arrow_btn["next.{}".format(i)].setEnabled(False)
-
-        baseline_id = self.__combox["baseline"].currentText()
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline")
-
+    def _load_dataset_dir_and_nii_spacing(self):
         # load slice thickness from baseline hyper
-        fold_dirs = Explorer.get_sub_folders(
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
+        fold_dir = Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
-        )
-        slice_thick = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["slice.thick"]
-        self._nii_spacing = g.NII_SPACING[slice_thick]
+        )[0]
+        slice_thick = Json.load(os.path.join(fold_dir, "hyper.json"))["slice.thick"]
         self._dataset_dir = g.DATASET_DIR[slice_thick]
+        self._nii_spacing = g.NII_SPACING[slice_thick]
 
-        # confirm idl gtvt patients
-        if self.__combox["idl.gtvt"].currentText() == "baseline":
-            self._patients["idl.gtvt"] = Explorer.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    "baseline",
-                    "cross_valid",
-                    "patients",
-                )
-            )
-        else:
-            idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
-            self._patients["idl.gtvt"] = Explorer.get_sub_folders(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    idl_gtvt_id,
-                    "patients",
-                )
-            )
+    def _fill_combox_patient(self):
+        combox_patients = Directory.get_sub_folders(
+            os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
+        )
         # from "patient=123" to "123"
-        for i in range(len(self._patients["idl.gtvt"])):
-            self._patients["idl.gtvt"][i] = self._patients["idl.gtvt"][i][
-                len("patient=") :
-            ]
-        # idl gtvt patients & testset patients
-        self._patients["idl.gtvt"].find_identical_items(self._patients["test.inter"])
+        for i in range(len(combox_patients)):
+            combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        # fill combobox
-        if self._patients["idl.gtvn"] is not None:
-            combox_patients = self._patients["idl.gtvt"].copy()
-            combox_patients.find_identical_items(self._patients["idl.gtvn"])
-            self.__combox["patient"].addItems(combox_patients)
-            self.__combox["patient"].setEnabled(True)
+        combox_patients.find_identical_items(self.__patients["test.inter"])
+        self._combox["patient"].addItems(combox_patients)
+        self._combox["patient"].setEnabled(True)
+        return combox_patients
 
-            # choose patient automatically
-            # try not to reset patient when idl_gtvt_id is changed
-            if self._patient not in combox_patients:
-                reset_patient = True
-            else:
-                reset_patient = False
-            self.__choose_patient(idx=None, reset_patient=reset_patient)
+    def _choose_baseline(self):
+        self._reset_zoomin()
+        self._clear_img_data()
+        self._clear_display_frames()
 
-    def __choose_patient(self, idx: int, reset_patient: bool = True):
-        # triggered by:
-        # (1) patient combox update
-        # (2) idl_gtvt/gtvncombox update, but can not find cur patient in new idl folder
-        if reset_patient is True:
-            self._patient = self.__combox["patient"].currentText()
-            self.__reset_zoomin()
+        # run this after current text of baseline combox is confirmed
+        self._enable_arrow_btns("baseline")
 
-        # triggered by idl_gtvt combox update, and find cur patient in new idl folder
+        self._baseline_id = self._combox["baseline"].currentText()
+
+        # reset comboboxes
+        for i in ["patient", "idl.gtvt", "idl.gtvn"]:
+            self._combox[i].clear()
+            self._combox[i].setEnabled(False)
+            self._arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self._arrow_btn["next.{}".format(i)].setEnabled(False)
+
+        # run these 2 lines after self._baseline_id is confirmed
+        self._load_dataset_dir_and_nii_spacing()
+        combox_patients = self._fill_combox_patient()
+
+        # choose patient automatically
+        # try not to reset patient when idl.gtvt/gtvn_id are changed
+        if self._patient not in combox_patients:
+            reset_patient = True
         else:
-            self.__combox["patient"].setCurrentText(self._patient)
+            reset_patient = False
+        self._choose_patient(idx=None, reset_patient=reset_patient)
 
-        # run this after patient combox current text is set up
-        self.__enable_arrow_btns("patient")
-
-        # load imgs
-        self._3d_imgs["ct"] = self.__load_img(
+    def _load_multi_modal_imgs(self):
+        self._3d_imgs["ct"] = self._load_img(
             os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(self._patient))
         )
-        self._3d_imgs["pt"] = self.__load_img(
+        self._3d_imgs["pt"] = self._load_img(
             os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(self._patient))
         )
-        self._3d_imgs["mrt1"] = self.__load_img(
+        self._3d_imgs["mrt1"] = self._load_img(
             os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(self._patient))
         )
-        self._3d_imgs["mrt2"] = self.__load_img(
+        self._3d_imgs["mrt2"] = self._load_img(
             os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(self._patient))
         )
+
+    def _get_middle_slice_id(self):
+        slices_count = self.__get_slices_count()
+        if slices_count > 0:
+            # show the middle slice of whole 3D img,
+            slice_id = round(slices_count / 2) - 1
+            slice_id = Value.limit_range(slice_id, (0, slices_count - 1))
+            return slice_id
+        else:
+            return None
+
+    def _choose_patient(self, idx: int = None, reset_patient: bool = True):
+        # triggered by:
+        # (1) patient combox update
+        # (2) baseline combox update, but can not find cur patient in new baseline dir
+        if reset_patient is True:
+            self._patient = self._combox["patient"].currentText()
+            self._reset_zoomin()
+
+        # triggered by baseline combox update, and find cur patient in new baseline dir
+        else:
+            self._combox["patient"].setCurrentText(self._patient)
+
+        # run this after patient combox current text is set up
+        self._enable_arrow_btns("patient")
+
+        # reset comboboxes
+        for i in ["idl.gtvt", "idl.gtvn"]:
+            self._combox[i].clear()
+            self._combox[i].setEnabled(False)
+            self._arrow_btn["prev.{}".format(i)].setEnabled(False)
+            self._arrow_btn["next.{}".format(i)].setEnabled(False)
+
+        # fill idl comboboxes
+        for i in ["idl.gtvt", "idl.gtvn"]:
+            combox_items = ["baseline"]
+            # get all round folder under current patient folder
+            for idl_result_dir in Directory.get_sub_folders(
+                os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id),
+                key_word=i,
+                full_path=True,
+            ):
+                round_folders = Directory.get_sub_folders(
+                    os.path.join(
+                        idl_result_dir,
+                        "patients",
+                        "patient={}".format(self._patient),
+                    ),
+                    key_word="round=",
+                    full_path=False,
+                )
+                for round_folder in round_folders:
+                    combox_items.append(
+                        os.path.join(Path(idl_result_dir).name, round_folder)
+                    )
+
+            self._combox[i].addItems(combox_items)
+
+            # enable idl.gtvt/gtvn combobox
+            self._combox[i].setEnabled(True)
+            self._enable_arrow_btns(i)
+
+            # no idl found, show baseline
+            if self._combox[i].count() == 1:
+                self._combox[i].setCurrentIndex(0)
+            # otherwise, show first idl result
+            else:
+                self._combox[i].setCurrentIndex(1)
+
+        self._load_multi_modal_imgs()
+
         # load labels
         for i in ["t", "n"]:
-            self._3d_imgs["gtv{}.label".format(i)] = self.__load_img(
+            self._3d_imgs["gtv{}.label".format(i)] = self._load_img(
                 os.path.join(
                     self._dataset_dir,
                     "HNCDL_{}_GTV{}.nii".format(self._patient, i),
                 )
             )
 
-        # initialize round combobox
-        self.__combox["round"].clear()
-        self.__arrow_btn["prev.round"].setEnabled(False)
-        self.__arrow_btn["next.round"].setEnabled(False)
+        # get slice id (after multi-modal imgs are loaded)
+        self._cur_slice = self._get_middle_slice_id()
 
-        round_list = []
+        # choose idl gtvt automatically
+        # try not to reset idl.gtvt id/round when patient is changed
+        if self._idl_gtvt_id == "baseline":
+            reset_idl_gtvt = False
+        elif (
+            os.path.join(self._idl_gtvt_id, self._idl_gtvt_round)
+            not in self._combox["idl.gtvt"].currentText()
+        ):
+            reset_idl_gtvt = True
+        else:
+            reset_idl_gtvt = False
+        # refresh imgs after idl.gtvn is chosen
+        self._choose_idl_gtvt(
+            idx=None, reset_idl_gtvt=reset_idl_gtvt, refresh_imgs=False
+        )
 
-        for gtv in ["idl.gtvt", "idl.gtvn"]:
-            if self.__combox[gtv].currentText() == "baseline":
-                if round_list == []:
-                    round_list = ["00"]
-                else:
-                    pass
+        # choose idl gtvn automatically
+        # try not to reset idl.gtvn id/round when patient is changed
+        if self._idl_gtvn_id == "baseline":
+            reset_idl_gtvn = False
+        elif (
+            os.path.join(self._idl_gtvn_id, self._idl_gtvn_round)
+            not in self._combox["idl.gtvn"].currentText()
+        ):
+            reset_idl_gtvn = True
+        else:
+            reset_idl_gtvn = False
+        # refresh imgs here
+        self.__choose_idl_gtvn(
+            idx=None, reset_idl_gtvn=reset_idl_gtvn, refresh_imgs=True
+        )
+
+    def _choose_idl_gtvt(
+        self, idx: int = None, reset_idl_gtvt: bool = True, refresh_imgs=True
+    ):
+        # triggered by:
+        # (1) idl.gtvt combox update
+        # (2) patient combox update, but can not find cur patient in idl.gtvt dir
+        if reset_idl_gtvt is True:
+            combox_item = self._combox["idl.gtvt"].currentText()
+            if combox_item == "baseline":
+                self._idl_gtvt_id = "baseline"
+                self._idl_gtvt_round = "round=00"
             else:
-                round_list = ["00", "01"]
+                self._idl_gtvt_id = combox_item[: combox_item.index("/")]
+                self._idl_gtvt_round = combox_item[combox_item.index("/") + 1 :]
+            self._reset_zoomin()
 
-        self.__combox["round"].addItems(round_list)
-        self.__combox["round"].setEnabled(True)
-
-        # get slice id
-        slices_count = self.__get_slices_count()
-        if slices_count > 0:
-            # try to keep slice id unchanged
-            # if slice is None, show the middle slice of whole 3D img,
-            if self._slice is None:
-                self._slice = round(slices_count / 2) - 1
-            # check slice_id range from [0, slices_count-1]
-            self._slice = ValueUtils.limit_range(self._slice, (0, slices_count - 1))
-
-        # try not to reset round when patient is changed
-        if self._round not in round_list:
-            # this happens when:
-            # (1) current idl training has less round than prev idl training
-            # (2) the first time loading a idl training
-            reset_round = True
+        # triggered by patient combox update, and find cur patient in idl.gtvt dir
         else:
-            reset_round = False
-        self.__choose_round(idx=None, reset_round=reset_round)
-
-    def __choose_round(self, idx: int, reset_round: bool = True):
-        if reset_round is True:
-            self._round = self.__combox["round"].currentText()
-        else:
-            self.__combox["round"].setCurrentText(self._round)
-
-        # run this after "round" combox current text is decided
-        self.__enable_arrow_btns("round")
-
-        # load preds
-        path = Dict()
-        baseline_id = self.__combox["baseline"].currentText()
-
-        # load gtvt/gtvn preds and gtvn.clicks
-        for gtv in ["gtvt", "gtvn"]:
-            if (
-                self._round == "00"
-                or self.__combox["idl.{}".format(gtv)].currentText() == "baseline"
-            ):
-                path["{}.pred".format(gtv)] = os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    "baseline",
-                    "cross_valid",
-                    "patients",
-                    "patient={}".format(self._patient),
+            if self._idl_gtvt_id == "baseline":
+                self._combox["idl.gtvt"].setCurrentText("baseline")
+            else:
+                self._combox["idl.gtvt"].setCurrentText(
+                    os.path.join(self._idl_gtvt_id, self._idl_gtvt_round)
                 )
-                if gtv == "gtvn":
-                    path["gtvn.clicks"] = None
-            else:
-                if gtv == "gtvt":
-                    path["{}.pred".format(gtv)] = os.path.join(
-                        g.TRAIN_RESULTS_DIR,
-                        baseline_id,
-                        self.__combox["idl.{}".format(gtv)].currentText(),
-                        "patients",
-                        "patient={}".format(self._patient),
-                        "round={}".format(self._round),
-                    )
-                else:
-                    path["gtvn.pred"] = path["gtvn.clicks"] = os.path.join(
-                        g.TRAIN_RESULTS_DIR,
-                        baseline_id,
-                        self.__combox["idl.{}".format(gtv)].currentText(),
-                        "cross_valid",
-                        "patients",
-                        "patient={}".format(self._patient),
-                    )
-        # Add the file name to complete the path
-        path["gtvt.pred"] = os.path.join(path["gtvt.pred"], "gtvt_pred.nii")
-        path["gtvn.pred"] = os.path.join(path["gtvn.pred"], "gtvn_pred.nii")
-        if path["gtvn.clicks"] is not None:
-            path["gtvn.clicks"] = os.path.join(path["gtvn.clicks"], "gtvn_clicks.nii")
 
-        # load imgs based on paths
-        for i in ["gtvt.pred", "gtvn.pred", "gtvn.clicks"]:
-            if path[i] is not None and os.path.exists(path[i]):
-                self._3d_imgs[i] = self.__load_img(path[i])
-                self._3d_imgs[i] = Img.binarize(self._3d_imgs[i])
-            else:
-                self._3d_imgs[i] = None
+        # run this after idl gtvt combox is filled
+        self._enable_arrow_btns("idl.gtvt")
+
+        # load gtvt pred
+        if self._idl_gtvt_id == "baseline":
+            gtvt_pred_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                "baseline",
+                "patients",
+                "patient={}".format(self._patient),
+            )
+        else:
+            gtvt_pred_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_gtvt_id,
+                "patients",
+                "patient={}".format(self._patient),
+                self._idl_gtvt_round,
+            )
+        gtvt_pred_path = os.path.join(gtvt_pred_path, "gtvt_pred.nii")
+        self._3d_imgs["gtvt.pred"] = self._load_img(gtvt_pred_path)
+        self._3d_imgs["gtvt.pred"] = Img.binarize(self._3d_imgs["gtvt.pred"])
 
         # load baseline gtvt scores
-        if self.__combox["idl.gtvt"].currentText() == "baseline" or self._round == "00":
+        if self._idl_gtvt_id == "baseline":
             gtvt_score = Json.load(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
-                    baseline_id,
+                    self._baseline_id,
                     "baseline",
-                    "cross_valid",
                     "inference_test_inter.json",
                 )
             )
             for metric in g.METRICS:
-                self._scores["gtvt"][metric] = gtvt_score[
+                self.__scores["gtvt"][metric] = gtvt_score[
                     "patient={}".format(self._patient)
                 ]["gtvt"][metric]
 
@@ -1156,29 +1030,87 @@ class UiCore(QMainWindow, Ui_MainWindow):
             gtvt_score = Json.load(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    self.__combox["idl.gtvt"].currentText(),
+                    self._baseline_id,
+                    self._idl_gtvt_id,
                     "inference_test_inter.json",
                 )
             )
             for metric in g.METRICS:
-                self._scores["gtvt"][metric] = gtvt_score[
+                self.__scores["gtvt"][metric] = gtvt_score[
                     "patient={}".format(self._patient)
-                ][metric]["round={}".format(self._round)]
+                ][metric][self._idl_gtvt_round]
+
+        if refresh_imgs:
+            self._refresh_imgs()
+            self._refresh_title()
+
+    def __choose_idl_gtvn(
+        self, idx: int = None, reset_idl_gtvn: bool = True, refresh_imgs=True
+    ):
+        # triggered by:
+        # (1) idl.gtvn combox update
+        # (2) patient combox update, but can not find cur patient in idl.gtvn dir
+        if reset_idl_gtvn is True:
+            combox_item = self._combox["idl.gtvn"].currentText()
+            if combox_item == "baseline":
+                self._idl_gtvn_id = "baseline"
+                self._idl_gtvn_round = "round=00"
+            else:
+                self._idl_gtvn_id = combox_item[: combox_item.index("/")]
+                self._idl_gtvn_round = combox_item[combox_item.index("/") + 1 :]
+            self._reset_zoomin()
+
+        # triggered by patient combox update, and find cur patient in idl.gtvn dir
+        else:
+            if self._idl_gtvn_id == "baseline":
+                self._combox["idl.gtvn"].setCurrentText("baseline")
+            else:
+                self._combox["idl.gtvn"].setCurrentText(
+                    os.path.join(self._idl_gtvn_id, self._idl_gtvn_round)
+                )
+
+        # run this after idl gtvn combox is filled
+        self._enable_arrow_btns("idl.gtvn")
+
+        # load gtvn pred and clicks
+        if self._idl_gtvn_id == "baseline":
+            gtvn_pred_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                "baseline",
+                "patients",
+                "patient={}".format(self._patient),
+            )
+        else:
+            gtvn_pred_path = gtvn_clicks_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_gtvn_id,
+                "patients",
+                "patient={}".format(self._patient),
+                self._idl_gtvn_round,
+            )
+            # load gtvn clicks
+            gtvn_clicks_path = os.path.join(gtvn_clicks_path, "gtvn_clicks.nii")
+            self._3d_imgs["gtvn.clicks"] = self._load_img(gtvn_clicks_path)
+            self._3d_imgs["gtvn.clicks"] = Img.binarize(self._3d_imgs["gtvn.clicks"])
+        # load gtvn preds
+        gtvn_pred_path = os.path.join(gtvn_pred_path, "gtvn_pred.nii")
+        self._3d_imgs["gtvn.pred"] = self._load_img(gtvn_pred_path)
+        self._3d_imgs["gtvn.pred"] = Img.binarize(self._3d_imgs["gtvn.pred"])
 
         # load baseline gtvn scores
-        if self.__combox["idl.gtvn"].currentText() == "baseline" or self._round == "00":
+        if self._idl_gtvn_id == "baseline":
             gtvn_score = Json.load(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
-                    baseline_id,
+                    self._baseline_id,
                     "baseline",
-                    "cross_valid",
                     "inference_test_inter.json",
                 )
             )
             for metric in g.METRICS:
-                self._scores["gtvn"][metric] = gtvn_score[
+                self.__scores["gtvn"][metric] = gtvn_score[
                     "patient={}".format(self._patient)
                 ]["gtvn"][metric]
 
@@ -1187,151 +1119,119 @@ class UiCore(QMainWindow, Ui_MainWindow):
             gtvn_score = Json.load(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    self.__combox["idl.gtvn"].currentText(),
-                    "cross_valid",
+                    self._baseline_id,
+                    self._idl_gtvn_id,
                     "inference_test_inter.json",
                 )
             )
             for metric in g.METRICS:
-                self._scores["gtvn"][metric] = gtvn_score[
+                self.__scores["gtvn"][metric] = gtvn_score[
                     "patient={}".format(self._patient)
-                ][metric]["round={}".format(self._round)]
+                ][metric][self._idl_gtvn_round]
 
-        # update ui
-        self.__refresh_imgs()
-        self.__refresh_title()
+        if refresh_imgs:
+            self._refresh_imgs()
+            self._refresh_title()
 
     def __choose_prev_baseline(self):
-        idx = self.__combox["baseline"].currentIndex() - 1
+        idx = self._combox["baseline"].currentIndex() - 1
         if idx < 0:
             return
-        prev_baseline = self.__combox["baseline"].itemText(idx)
-        self.__combox["baseline"].setCurrentText(prev_baseline)
-        self.__choose_baseline()
+        prev_baseline = self._combox["baseline"].itemText(idx)
+        self._combox["baseline"].setCurrentText(prev_baseline)
+        self._choose_baseline()
 
     def __choose_next_baseline(self):
-        idx = self.__combox["baseline"].currentIndex() + 1
-        if idx > self.__combox["baseline"].count() - 1:
+        idx = self._combox["baseline"].currentIndex() + 1
+        if idx > self._combox["baseline"].count() - 1:
             return
-        next_baseline = self.__combox["baseline"].itemText(idx)
-        self.__combox["baseline"].setCurrentText(next_baseline)
-        self.__choose_baseline()
-
-    def __choose_prev_idl_gtvs(self):
-        idx = self.__combox["idl.gtvs"].currentIndex() - 1
-        if idx < 0:
-            return
-        prev_idl_gtvs = self.__combox["idl.gtvs"].itemText(idx)
-        self.__combox["idl.gtvs"].setCurrentText(prev_idl_gtvs)
-        self.__choose_idl_gtvs()
-
-    def __choose_next_idl_gtvs(self):
-        idx = self.__combox["idl.gtvs"].currentIndex() + 1
-        if idx > self.__combox["idl.gtvs"].count() - 1:
-            return
-        next_idl_gtvs = self.__combox["idl.gtvs"].itemText(idx)
-        self.__combox["idl.gtvs"].setCurrentText(next_idl_gtvs)
-        self.__choose_idl_gtvs()
+        next_baseline = self._combox["baseline"].itemText(idx)
+        self._combox["baseline"].setCurrentText(next_baseline)
+        self._choose_baseline()
 
     def __choose_prev_idl_gtvn(self):
-        idx = self.__combox["idl.gtvn"].currentIndex() - 1
+        idx = self._combox["idl.gtvn"].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvn = self.__combox["idl.gtvn"].itemText(idx)
-        self.__combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
+        prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
+        self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
         self.__choose_idl_gtvn()
 
     def __choose_next_idl_gtvn(self):
-        idx = self.__combox["idl.gtvn"].currentIndex() + 1
-        if idx > self.__combox["idl.gtvn"].count() - 1:
+        idx = self._combox["idl.gtvn"].currentIndex() + 1
+        if idx > self._combox["idl.gtvn"].count() - 1:
             return
-        next_idl_gtvn = self.__combox["idl.gtvn"].itemText(idx)
-        self.__combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
+        next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
+        self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
         self.__choose_idl_gtvn()
 
     def __choose_prev_idl_gtvt(self):
-        idx = self.__combox["idl.gtvt"].currentIndex() - 1
+        idx = self._combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvt = self.__combox["idl.gtvt"].itemText(idx)
-        self.__combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
-        self.__choose_idl_gtvt()
+        prev_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
+        self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
+        self._choose_idl_gtvt()
 
     def __choose_next_idl_gtvt(self):
-        idx = self.__combox["idl.gtvt"].currentIndex() + 1
-        if idx > self.__combox["idl.gtvt"].count() - 1:
+        idx = self._combox["idl.gtvt"].currentIndex() + 1
+        if idx > self._combox["idl.gtvt"].count() - 1:
             return
-        next_idl_gtvt = self.__combox["idl.gtvt"].itemText(idx)
-        self.__combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
-        self.__choose_idl_gtvt()
+        next_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
+        self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
+        self._choose_idl_gtvt()
 
     def __choose_prev_patient(self):
-        idx = self.__combox["patient"].currentIndex() - 1
+        idx = self._combox["patient"].currentIndex() - 1
         if idx < 0:
             return
-        prev_patient = self.__combox["patient"].itemText(idx)
-        self.__combox["patient"].setCurrentText(prev_patient)
-        self.__choose_patient(idx=None, reset_patient=True)
+        prev_patient = self._combox["patient"].itemText(idx)
+        self._combox["patient"].setCurrentText(prev_patient)
+        self._choose_patient()
 
     def __choose_next_patient(self):
-        idx = self.__combox["patient"].currentIndex() + 1
-        if idx > self.__combox["patient"].count() - 1:
+        idx = self._combox["patient"].currentIndex() + 1
+        if idx > self._combox["patient"].count() - 1:
             return
-        next_patient = self.__combox["patient"].itemText(idx)
-        self.__combox["patient"].setCurrentText(next_patient)
-        self.__choose_patient(idx=None, reset_patient=True)
+        next_patient = self._combox["patient"].itemText(idx)
+        self._combox["patient"].setCurrentText(next_patient)
+        self._choose_patient()
 
-    def __choose_prev_round(self):
-        idx = self.__combox["round"].currentIndex() - 1
-        if idx < 0:
-            return
-        prev_round = self.__combox["round"].itemText(idx)
-        self.__combox["round"].setCurrentText(prev_round)
-        self.__choose_round(idx=None, reset_round=True)
-
-    def __choose_next_round(self):
-        idx = self.__combox["round"].currentIndex() + 1
-        if idx > self.__combox["round"].count() - 1:
-            return
-        next_round = self.__combox["round"].itemText(idx)
-        self.__combox["round"].setCurrentText(next_round)
-        self.__choose_round(idx=None, reset_round=True)
-
-    def __refresh_imgs(self):
+    def _refresh_imgs(self):
         # no img data loaded
         if self._3d_imgs["pt"] is None:
             return
 
         # check if cur slice is annotated
-        is_annotated = self.__is_annotated()
+        is_annotated = self.__is_cur_slice_annotated()
 
         # set contour color
         color = Dict()
-        color["gtvt.label"] = self.__color["gtvt.label"]
-        color["gtvn.label"] = self.__color["gtvn.label"]
+        color["gtvt.label"] = self._color["gtvt.label"]
+        color["gtvn.label"] = self._color["gtvn.label"]
 
         if is_annotated:
-            color["gtvt.pred"] = self.__color["gtvt.annotation"]
+            color["gtvt.pred"] = self._color["gtvt.annotation"]
         else:
-            color["gtvt.pred"] = self.__color["gtvt.pred"]
+            color["gtvt.pred"] = self._color["gtvt.pred"]
 
-        color["gtvn.pred"] = self.__color["gtvn.pred"]
-        color["gtvn.clicks"] = self.__color["gtvn.annotation"]
+        color["gtvn.pred"] = self._color["gtvn.pred"]
+        color["gtvn.clicks"] = self._color["gtvn.annotation"]
 
         # load rgb imgs
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             if self.__img_plane == "sagittal":
-                rgb_img = self._3d_imgs[i][:, :, self._slice]
+                rgb_img = self._3d_imgs[i][:, :, self._cur_slice]
             elif self.__img_plane == "coronal":
-                rgb_img = self._3d_imgs[i][:, self._slice, :]
-            # img_plane == "transverse":
-            else:
+                rgb_img = self._3d_imgs[i][:, self._cur_slice, :]
+            elif self.__img_plane == "transverse":
                 # for transverse plane, img is upside down,
                 # true slice id is: slices_count - 1 - slice_id
                 rgb_img = self._3d_imgs[i][
-                    (self.__get_slices_count() - 1 - self._slice), :, :
+                    (self.__get_slices_count() - 1 - self._cur_slice), :, :
                 ]
+            else:
+                Debug.error_exit("self.__img_plane value error")
 
             rgb_img = np.uint8((rgb_img - rgb_img.min()) / rgb_img.ptp() * 255.0)
             # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
@@ -1349,21 +1249,37 @@ class UiCore(QMainWindow, Ui_MainWindow):
             # add mask to annotated slices
             selected_slices = Dict()
             total_slices_num = Dict()
+
             if self.__img_plane == "transverse":
-                selected_slices["horizontal"] = self.__get_selected_slices("coronal")
+                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
+                    "coronal"
+                )
                 total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[1]
-                selected_slices["vertical"] = self.__get_selected_slices("sagittal")
+                selected_slices["vertical"] = self.__get_gtvt_selected_slices(
+                    "sagittal"
+                )
                 total_slices_num["vertical"] = self._3d_imgs["pt"].shape[2]
+
             elif self.__img_plane == "coronal":
-                selected_slices["horizontal"] = self.__get_selected_slices("transverse")
+                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
+                    "transverse"
+                )
                 total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[0]
-                selected_slices["vertical"] = self.__get_selected_slices("sagittal")
+                selected_slices["vertical"] = self.__get_gtvt_selected_slices(
+                    "sagittal"
+                )
                 total_slices_num["vertical"] = self._3d_imgs["pt"].shape[2]
+
             elif self.__img_plane == "sagittal":
-                selected_slices["horizontal"] = self.__get_selected_slices("transverse")
+                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
+                    "transverse"
+                )
                 total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[0]
-                selected_slices["vertical"] = self.__get_selected_slices("coronal")
+                selected_slices["vertical"] = self.__get_gtvt_selected_slices("coronal")
                 total_slices_num["vertical"] = self._3d_imgs["pt"].shape[1]
+
+            else:
+                Debug.error_exit("self.__img_plane value error")
 
             rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
 
@@ -1393,7 +1309,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
                         img=rgb_img_zeros,
                         pt1=(x1, y1),
                         pt2=(x2, y2),
-                        color=self.__color["gtvt.annotation"],
+                        color=self._color["gtvt.annotation"],
                         thickness=-1,
                     )
                     if selected_slices_mask is None:
@@ -1411,7 +1327,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
                 )
 
             # resize and fit img frame
-            rgb_img, self._resize_pos[i] = self.__fit_display_frame(
+            rgb_img, self.__resize_pos[i] = self.__fit_display_frame(
                 rgb_img, self.__display_frame[i]
             )
             # blur after __fit_display_frame will gain better effect
@@ -1432,14 +1348,14 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
                 # load data of current slice
                 if self.__img_plane == "sagittal":
-                    contours = self._3d_imgs[k][:, :, self._slice].astype(np.uint8)
+                    contours = self._3d_imgs[k][:, :, self._cur_slice].astype(np.uint8)
                 elif self.__img_plane == "coronal":
-                    contours = self._3d_imgs[k][:, self._slice, :].astype(np.uint8)
+                    contours = self._3d_imgs[k][:, self._cur_slice, :].astype(np.uint8)
                 else:  # img_plane == "transverse":
                     # for transverse plane, img is upside down,
                     # true slice id is: slices_count - 1 - slice_id
                     contours = self._3d_imgs[k][
-                        (self.__get_slices_count() - 1 - self._slice), :, :
+                        (self.__get_slices_count() - 1 - self._cur_slice), :, :
                     ].astype(np.uint8)
 
                 contours, _ = self.__fit_display_frame(
@@ -1469,86 +1385,11 @@ class UiCore(QMainWindow, Ui_MainWindow):
             rgb_img_chan = rgb_img.shape[2]
 
             # add score text
-            cv_text = ""
-            text_pos_x = 10
-            text_pos_y = 10
-
-            for metric in g.METRICS:
-                cv_text += "GTVt - " + metric.upper()
-                if ValueUtils.is_number(self._scores["gtvt"][metric]):
-                    cv_text += ": {:.3f}".format(self._scores["gtvt"][metric])
-                else:
-                    cv_text += ": N/A"
-                cv_text += "\n"
-            for metric in g.METRICS:
-                cv_text += "GTVn - " + metric.upper()
-                if ValueUtils.is_number(self._scores["gtvn"][metric]):
-                    cv_text += ": {:.3f}".format(self._scores["gtvn"][metric])
-                else:
-                    cv_text += ": N/A"
-                cv_text += "\n"
-
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=self.__color["score.text"],
-            )
+            self._add_score_on_rgb_img(rgb_img)
 
             # add text label gtvt
-            text_pos_y = rgb_img_height - 108
-            # text_pos_y = height - 46
-            text_pos_gap = 20
-
-            cv_text = "LABEL - GTVt"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["gtvt.label"],
-            )
-
-            # add text pred gtvt
-            text_pos_y += text_pos_gap
-            cv_text = "PRED - GTVt"
-            if is_annotated:
-                cv_text += " (ANNOTATED)"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["gtvt.pred"],
-            )
-
-            # add text label gtvn
-            text_pos_y += text_pos_gap
-            cv_text = "LABEL - GTVn"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["gtvn.label"],
-            )
-
-            # add text pred gtvn
-            text_pos_y += text_pos_gap
-            cv_text = "PRED - GTVn"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["gtvn.pred"],
-            )
-
-            # add text label gtvn
-            text_pos_y += text_pos_gap
-            cv_text = "CLICKS - GTVn"
-            self.__cv_put_text(
-                img=rgb_img,
-                text=cv_text,
-                pos=(text_pos_x, text_pos_y),
-                color=color["gtvn.clicks"],
-            )
+            self._add_label_text_on_rgb_img(rgb_img)
+            self._add_pred_text_on_rgb_img(rgb_img)
 
             # show imgs
             qt_image = QImage(
@@ -1560,16 +1401,116 @@ class UiCore(QMainWindow, Ui_MainWindow):
             )
             self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
-    def __get_selected_slices(self, plane) -> List:
+    def _add_label_text_on_rgb_img(self, rgb_img):
+        rgb_img_height = rgb_img.shape[0]
+        pos_x = 10
+        pos_y = rgb_img_height - 48
+
+        cv_text = "LABEL:"
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=self._color["score.text"],
+        )
+
+        cv_text = "GTVt"
+        pos_x += 65
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=self._color["gtvt.label"],
+        )
+
+        cv_text = "GTVn"
+        pos_x += 50
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=self._color["gtvn.label"],
+        )
+
+    def _add_pred_text_on_rgb_img(self, rgb_img):
+        rgb_img_height = rgb_img.shape[0]
+        pos_x = 10
+        pos_y = rgb_img_height - 28
+
+        cv_text = "PRED:"
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=self._color["score.text"],
+        )
+
+        cv_text = "GTVt"
+        pos_x += 65
+        if self.__is_cur_slice_annotated():
+            color = self._color["gtvt.annotation"]
+        else:
+            color = self._color["gtvt.pred"]
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=color,
+        )
+
+        # add text pred gtvn
+        cv_text = "GTVn"
+        pos_x += 50
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(pos_x, pos_y),
+            color=self._color["gtvn.pred"],
+        )
+
+    def _add_score_on_rgb_img(self, rgb_img):
+        text_pos_x = 10
+        text_pos_y = 10
+        cv_text = ""
+
+        for metric in g.METRICS:
+            # "DSC/MSD/HD95: "
+            cv_text += metric.upper() + ": "
+            # load scores
+            for i in ["gtvt", "gtvn"]:
+                if Value.is_number(self.__scores[i][metric]):
+                    if metric == "dsc":
+                        cv_text += "{:.2f}".format(self.__scores[i][metric])
+                    elif metric == "msd":
+                        cv_text += "{:.1f}".format(self.__scores[i][metric])
+                    elif metric == "hd95":
+                        cv_text += "{:.1f}".format(self.__scores[i][metric])
+                    else:
+                        Debug.error_exit("metric value error")
+                else:
+                    cv_text += "NaN"
+                if i == "gtvt":
+                    cv_text += " / "
+                else:
+                    cv_text += "\n"
+
+        self._cv_put_text(
+            img=rgb_img,
+            text=cv_text,
+            pos=(text_pos_x, text_pos_y),
+            color=self._color["score.text"],
+        )
+
+    def __get_gtvt_selected_slices(self, plane) -> List:
         # get current round
 
-        if self._round == "00":
+        if self._idl_gtvt_round == "round=00":
             return []
 
         # load annotated slices
-        baseline_id = self.__combox["baseline"].currentText()
-        idl_gtvt_id = self.__combox["idl.gtvt"].currentText()
-        idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
+        idl_gtvt_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_gtvt_id
+        )
         json_path = os.path.join(
             idl_gtvt_dir,
             "patients",
@@ -1585,7 +1526,7 @@ class UiCore(QMainWindow, Ui_MainWindow):
         for round_num in selected_slices_dict:
             selected_slices_list += List(selected_slices_dict[round_num])
 
-            if (round_num[len("round=") :]) == self._round:
+            if (round_num) == self._idl_gtvt_round:
                 break
 
         # change annotated slice from str to int
@@ -1594,16 +1535,16 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
         return selected_slices_list
 
-    def __is_annotated(self) -> bool:
+    def __is_cur_slice_annotated(self) -> bool:
         if self._3d_imgs["pt"] is None:
             return False
 
-        if int(self._slice) in self.__get_selected_slices(self.__img_plane):
+        if int(self._cur_slice) in self.__get_gtvt_selected_slices(self.__img_plane):
             return True
         else:
             return False
 
-    def __cv_put_text(
+    def _cv_put_text(
         self,
         img,
         text: str,
@@ -1627,51 +1568,52 @@ class UiCore(QMainWindow, Ui_MainWindow):
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
-        if self._slice is not None:
+        if self._cur_slice is not None:
             slices_count = self.__get_slices_count()
             if slices_count == 0:
                 return
             slice_delta = event.angleDelta().y() // 120
             if self.__img_plane == "coronal":
                 slice_delta = -slice_delta
-            self._slice -= slice_delta
+            self._cur_slice -= slice_delta
             # limite slice_id in range(0,slices_count)
-            self._slice %= slices_count
-            self.__refresh_imgs()
-            self.__refresh_title()
+            self._cur_slice %= slices_count
+            self._refresh_imgs()
+            self._refresh_title()
 
     def __get_slices_count(self) -> int:
         if (self._3d_imgs["pt"] is None) or (self.__img_plane is None):
             return 0
-        if self.__img_plane == "sagittal":
-            slices_count = self._3d_imgs["pt"].shape[2]
+        elif self.__img_plane == "sagittal":
+            return self._3d_imgs["pt"].shape[2]
         elif self.__img_plane == "coronal":
-            slices_count = self._3d_imgs["pt"].shape[1]
-        else:  # img_plane == "transverse"
-            slices_count = self._3d_imgs["pt"].shape[0]
-        return slices_count
+            return self._3d_imgs["pt"].shape[1]
+        elif self.__img_plane == "transverse":
+            return self._3d_imgs["pt"].shape[0]
+        else:
+            Debug.error_exit("self.__img_plane value error")
 
-    def __refresh_title(self):
+    def _refresh_title(self):
         win_tital = "iDL.Tool "
-        if self._round is not None:
-            win_tital += "   Num.of.Annotated.Slices="
-            win_tital += str(len(self.__get_selected_slices(self.__img_plane)))
-        if self._slice is not None:
+        # if self._idl_gtvt_round is not None:
+        #     win_tital += "   Num.of.Annotated.Slices="
+        #     win_tital += str(len(self.__get_gtvt_selected_slices(self.__img_plane)))
+        if self._cur_slice is not None:
             slices_count = self.__get_slices_count()
             if slices_count > 0:
-                win_tital += "   Slice={}/{}".format(self._slice + 1, slices_count)
+                win_tital += "   Slice={}/{}".format(self._cur_slice + 1, slices_count)
         self.setWindowTitle(win_tital)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.__resize_display_frames()
-        self.__refresh_side_bar()
-        self.__refresh_imgs()
+        self._refresh_side_bar()
+        self._refresh_imgs()
 
     def __resize_display_frames(self):
         gap = 1
         size = Dict()
-        size["x"] = self.geometry().width() - self._side_bar_width
+        size["x"] = self.geometry().width() - self.__side_bar_width
         size["y"] = self.geometry().height()
         for i in ["x", "y"]:
             double_size = size[i] - gap * 3
@@ -1699,14 +1641,8 @@ class UiCore(QMainWindow, Ui_MainWindow):
             QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
         )
 
-    def __open_file_dlg(self):
+    def _open_file_dlg(self):
         Tk().withdraw()
         file_name = filedialog.askopenfilename()
         if file_name == "" or file_name is None:
             pass
-
-
-app = QApplication(sys.argv)
-ui_core = UiCore()
-ui_core.show()
-sys.exit(app.exec_())

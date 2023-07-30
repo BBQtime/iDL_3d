@@ -1,21 +1,34 @@
 import sys
 
-from custom import Debug, Explorer
+from custom import GPU, Debug, Directory
 from custom import Global as g
+from PyQt5.QtWidgets import QApplication
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
+from ui_idl import UiIdl
+from ui_replay import UiReplay
 
-Debug.clean_gpu_cache()
-Debug.clean_debug_data()
-Debug.clean_linux_trash()
+GPU.clear_cache()
+Debug.clear_debug_data()
+Debug.clear_linux_trash()
+
+
+if 1:
+    app = QApplication(sys.argv)
+    if 0:
+        ui = UiIdl()
+    else:
+        ui = UiReplay()
+    ui.show()
+    sys.exit(app.exec_())
 
 
 baseline = TrainingBaseline()
 if 0:
     baseline.new_training(
-        train_remark="unet_edge.chan=16_dropout=0.3",
-        debug_mode=1,
+        train_remark="",
+        debug_mode=0,
     )
 
 
@@ -28,14 +41,11 @@ if 0:
 
 
 idl_gtvt = TrainingIDLGTVt()
-if 1:
+if 0:
     idl_gtvt.simulation(
         baseline_id="baseline_2023.07.05.16.49.25_unet_edge.chan=16_dropout=0.15",
-        train_remark="",
         debug_mode=1,
     )
-if 0:
-    idl_gtvt.inference("idl_gtvt_2023.07.16.01.50.07_best")
 
 
 print("Done!")

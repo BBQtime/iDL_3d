@@ -10,6 +10,7 @@ import statistics
 import sys
 import unicodedata
 import warnings
+from datetime import datetime
 from typing import Union
 
 import cc3d
@@ -113,7 +114,7 @@ class List(list):
         self[:] = List(set(self))
 
 
-class ValueUtils:
+class Value:
     def replace_char(input_str: str, idx: int, new_char: str) -> str:
         return input_str[:idx] + new_char + input_str[idx + 1 :]
 
@@ -132,7 +133,7 @@ class ValueUtils:
 
     def to_pct(input_num: Union[float, str]) -> str:
         input_num = float(input_num)
-        output_str = ValueUtils.keep_decimal(input_num=input_num * 100, keep_dec_num=2)
+        output_str = Value.keep_decimal(input_num=input_num * 100, keep_dec_num=2)
         output_str = str(output_str) + "%"
         return output_str
 
@@ -175,7 +176,7 @@ class ValueUtils:
         else:
             return data
 
-        data = [i for i in data if ValueUtils.is_number(i)]
+        data = [i for i in data if Value.is_number(i)]
         if len(data) == 0:
             return None
         else:
@@ -506,7 +507,7 @@ class Folder:
             return False
 
 
-class Explorer:
+class Directory:
     def __get_sub_items(
         input_dir: str,
         full_path: bool,
@@ -549,7 +550,7 @@ class Explorer:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = Explorer.__get_sub_items(
+        sub_list = Directory.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -566,7 +567,7 @@ class Explorer:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = Explorer.__get_sub_items(
+        sub_list = Directory.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -583,7 +584,7 @@ class Explorer:
         shuffle: bool = False,
         seed: int = None,
     ):
-        sub_list = Explorer.__get_sub_items(
+        sub_list = Directory.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -596,12 +597,12 @@ class Explorer:
     def __walk_sub_dirs(input_dir: str) -> List:
         sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
         for input_dir in sub_dirs:
-            sub_dirs.extend(Explorer.__walk_sub_dirs(input_dir))
+            sub_dirs.extend(Directory.__walk_sub_dirs(input_dir))
         return sub_dirs
 
     def walk_sub_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
         sub_dirs = List()
-        for i in Explorer.__walk_sub_dirs(input_dir):
+        for i in Directory.__walk_sub_dirs(input_dir):
             if key_word == "" or key_word in i:
                 sub_dirs.append(i)
         sub_dirs.remove_duplicates()
@@ -628,28 +629,30 @@ class GPU:
 
 
 class Debug:
-    def terminate(err_msg: str = ""):
-        print("error: {}, exit", err_msg)
+    def error_exit(err_msg: str = ""):
+        print(err_msg)
         sys.exit(1)
 
-    def clean_debug_data():
-        for i in Explorer.walk_sub_dirs(
+    def clear_debug_data():
+        for i in Directory.walk_sub_dirs(
             Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
         ):
             Folder.delete(i)
         Folder.clear(os.path.join(Global.PROJ_DIR, "debug"))
 
-    def clean_linux_trash():
+    def clear_linux_trash():
         if platform.system().lower() == "linux":
             Folder.clear("/home/alan/.local/share/Trash/files/")
             Folder.clear("/home/alan/.local/share/Trash/info/")
 
-    def clean_gpu_cache():
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            return True
-        else:
-            return False
+
+class Time:
+    def get_cur_time_str() -> str:
+        cur_time = str(datetime.now().replace(microsecond=0))
+        cur_time = cur_time.replace(":", ".")
+        cur_time = cur_time.replace("-", ".")
+        cur_time = cur_time.replace(" ", ".")
+        return cur_time
 
 
 class Global:

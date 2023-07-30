@@ -3,9 +3,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from custom import Debug, Dict, Explorer, Folder
+from custom import Debug, Dict, Directory, Folder
 from custom import Global as g
-from custom import Img, Json, List, Nii, ValueUtils
+from custom import Img, Json, List, Nii, Value
 from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from tqdm import tqdm
@@ -85,10 +85,9 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
 
-        cross_valid_dir = os.path.join(idl_gtvn_dir, "cross_valid")
-        Folder.create(cross_valid_dir, "patients")
+        Folder.create(os.path.join(idl_gtvn_dir, "patients"))
 
-        fold_dirs = Explorer.get_sub_folders(
+        fold_dirs = Directory.get_sub_folders(
             idl_gtvn_dir, key_word="fold=", full_path=True
         )
 
@@ -108,10 +107,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         # load baseline scores
         baseline_scores = Json.load(
             os.path.join(
-                Path(idl_gtvn_dir).parent,
-                "baseline",
-                "cross_valid",
-                "inference_test_inter.json",
+                Path(idl_gtvn_dir).parent, "baseline", "inference_test_inter.json"
             )
         )
         # copy baseline scores of each patient
@@ -134,12 +130,12 @@ class TrainingIDLGTVn(TrainingBaseline):
 
             for fold_dir in fold_dirs:
                 # find epoch dir
-                epoch_dirs = Explorer.get_sub_folders(
+                epoch_dirs = Directory.get_sub_folders(
                     fold_dir, key_word="epoch=", full_path=True
                 )
                 if len(epoch_dirs) > 1:
                     self.remove_non_optimal_epochs(idl_gtvn_id)
-                    epoch_dir = Explorer.get_sub_folders(
+                    epoch_dir = Directory.get_sub_folders(
                         fold_dir, key_word="epoch=", full_path=True
                     )[0]
                 else:
@@ -158,13 +154,13 @@ class TrainingIDLGTVn(TrainingBaseline):
             pred /= len(fold_dirs)
 
             # save cross_valid preds
-            patient_dir = os.path.join(
-                cross_valid_dir, "patients", "patient={}".format(patient)
+            round_dir = os.path.join(
+                idl_gtvn_dir, "patients", "patient={}".format(patient), "round=01"
             )
-            Folder.create(patient_dir)
+            Folder.create(round_dir)
             Nii.save(
                 img=pred,
-                save_path=os.path.join(patient_dir, "gtvn_pred.nii"),
+                save_path=os.path.join(round_dir, "gtvn_pred.nii"),
                 spacing=g.NII_SPACING[slice_thick],
             )
 
@@ -185,16 +181,16 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         # calculate avg and median score
         for metric in g.METRICS:
-            scores["median"][metric]["round=01"] = ValueUtils.median(
+            scores["median"][metric]["round=01"] = Value.median(
                 scores["median"][metric]["round=01"]
             )
-            scores["avg"][metric]["round=01"] = ValueUtils.avg(
+            scores["avg"][metric]["round=01"] = Value.avg(
                 scores["avg"][metric]["round=01"]
             )
         # save cross validscores
         Json.save(
             data=scores,
-            path=os.path.join(cross_valid_dir, "inference_test_inter.json"),
+            path=os.path.join(idl_gtvn_dir, "inference_test_inter.json"),
         )
 
     def remove_non_optimal_epochs(self, idl_gtvn_id: str):
@@ -202,12 +198,12 @@ class TrainingIDLGTVn(TrainingBaseline):
         print("")
         print("remove non optimal epochs: {}".format(idl_gtvn_id))
 
-        for fold_dir in Explorer.get_sub_folders(
+        for fold_dir in Directory.get_sub_folders(
             idl_gtvn_dir, key_word="fold=", full_path=True
         ):
             fold_scores = Dict()
 
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
@@ -226,7 +222,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             best_epoch = self.__find_best_result(fold_scores)
 
             # delete non-optimal epochs
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
@@ -326,9 +322,9 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
         if idl_gtvn_dir is None:
-            Debug.terminate("idl_gtvn_id not found")
+            Debug.error_exit("idl_gtvn_id not found")
 
-        fold_dirs = Explorer.get_sub_folders(
+        fold_dirs = Directory.get_sub_folders(
             idl_gtvn_dir, key_word="fold=", full_path=True
         )
 
@@ -343,7 +339,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             print("fold: ", fold)
 
             # loop through epoch dirs
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = int(Path(epoch_dir).name[len("epoch=") :])
@@ -371,7 +367,6 @@ class TrainingIDLGTVn(TrainingBaseline):
                     os.path.join(
                         Path(idl_gtvn_dir).parent,
                         "baseline",
-                        "cross_valid",
                         "inference_test_inter.json",
                     )
                 )
@@ -392,15 +387,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
                 # loop through each patient
                 for patient in tqdm(inter_test_patients):
-                    # create folder to save cur patient preds and scores
-                    patient_dir = os.path.join(
-                        epoch_dir,
-                        "patients",
-                        "patient={}".format(patient),
-                    )
-                    Folder.create(patient_dir)
-
-                    # results structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+                    # results structure: gtvn: {"pred", "distance.map", "clicks"}
                     patient_results = self.__single_patient_inference(
                         patient=patient,
                         cnn=cnn,
@@ -408,15 +395,39 @@ class TrainingIDLGTVn(TrainingBaseline):
                         slice_thick=slice_thick,
                     )
 
-                    # save preds of current patient
-                    for i in ["pred", "distance.map", "clicks"]:
-                        Nii.save(
-                            img=patient_results["gtvn"][i],
-                            save_path=os.path.join(
-                                patient_dir, "gtvn_{}.nii".format(i.replace(".", "_"))
-                            ),
-                            spacing=g.NII_SPACING[slice_thick],
+                    # create folder to save cur patient preds and scores
+                    epoch_patient_dir = os.path.join(
+                        epoch_dir,
+                        "patients",
+                        "patient={}".format(patient),
+                    )
+                    cross_valid_patient_dir = os.path.join(
+                        idl_gtvn_dir,
+                        "patients",
+                        "patient={}".format(patient),
+                        "round=01",
+                    )
+                    Folder.create(epoch_patient_dir)
+                    Folder.create(cross_valid_patient_dir)
+
+                    # save pred of current patient
+                    Nii.save(
+                        img=patient_results["gtvn"]["pred"],
+                        save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii"),
+                        spacing=g.NII_SPACING[slice_thick],
+                    )
+                    # save distance map and clicks of current patient
+                    for i in ["distance.map", "clicks"]:
+                        save_path = os.path.join(
+                            cross_valid_patient_dir,
+                            "gtvn_{}.nii".format(i.replace(".", "_")),
                         )
+                        if not os.path.exists(save_path):
+                            Nii.save(
+                                img=patient_results["gtvn"][i],
+                                save_path=save_path,
+                                spacing=g.NII_SPACING[slice_thick],
+                            )
 
                     # record score of current patient
                     for metric in g.METRICS:
@@ -436,10 +447,10 @@ class TrainingIDLGTVn(TrainingBaseline):
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
                 for metric in g.METRICS:
-                    epoch_scores["median"][metric]["round=01"] = ValueUtils.median(
+                    epoch_scores["median"][metric]["round=01"] = Value.median(
                         epoch_scores["median"][metric]["round=01"]
                     )
-                    epoch_scores["avg"][metric]["round=01"] = ValueUtils.avg(
+                    epoch_scores["avg"][metric]["round=01"] = Value.avg(
                         epoch_scores["avg"][metric]["round=01"]
                     )
                 # save all patients scores in "inference_test_inter.json"

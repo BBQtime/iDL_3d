@@ -2,15 +2,14 @@ import math
 import os
 import random
 from collections import OrderedDict
-from datetime import datetime
 from itertools import product
 from pathlib import Path
 
 import numpy as np
 import torch
-from custom import GPU, Debug, Dict, Explorer
+from custom import GPU, Debug, Dict, Directory
 from custom import Global as g
-from custom import Json, List, ValueUtils
+from custom import Json, List, Time, Value
 from numpy import ndarray
 from segment_metric import SegmentationMetric
 from torch import optim
@@ -53,7 +52,7 @@ class TrainingCore:
         elif hyper["cnn"] == "unet.slim":
             cnn = UNetSlim
         else:
-            Debug.terminate("wrong hyper[cnn] value")
+            Debug.error_exit("wrong hyper[cnn] value")
         hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
@@ -90,7 +89,7 @@ class TrainingCore:
             baseline_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
             )
-            fold_dirs = Explorer.get_sub_folders(
+            fold_dirs = Directory.get_sub_folders(
                 baseline_dir, key_word="fold=", full_path=True
             )
             hyper["slice.thick"] = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
@@ -100,7 +99,7 @@ class TrainingCore:
             pass
 
         if hyper["slice.thick"] != "1mm" and hyper["slice.thick"] != "3mm":
-            Debug.terminate("Invalid slice thickness")
+            Debug.error_exit("Invalid slice thickness")
 
     def _load_hyper(self, hyper: Dict) -> None:
         # device name
@@ -110,17 +109,17 @@ class TrainingCore:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper["dropout"] = ValueUtils.limit_range(hyper["dropout"], (0.0, 1.0))
+        hyper["dropout"] = Value.limit_range(hyper["dropout"], (0.0, 1.0))
 
         # batch size
-        hyper["batch.size"] = ValueUtils.limit_range(hyper["batch.size"], (1, None))
+        hyper["batch.size"] = Value.limit_range(hyper["batch.size"], (1, None))
         if GPU.used_count() > 1:
             hyper["batch.size.actual"] = hyper["batch.size"] * GPU.used_count()
         else:
             hyper["batch.size.actual"] = hyper["batch.size"]
 
         # = 1 will cause error
-        hyper["lr.decay.factor"] = ValueUtils.limit_range(
+        hyper["lr.decay.factor"] = Value.limit_range(
             hyper["lr.decay.factor"], (g.EPS, 1 - g.EPS)
         )
 
@@ -128,16 +127,16 @@ class TrainingCore:
         hyper["augment.methods"] = List(hyper["augment.methods"])
 
         # augment lower/upper limit
-        hyper["augment.max"] = ValueUtils.limit_range(
+        hyper["augment.max"] = Value.limit_range(
             hyper["augment.max"], (1, len(hyper["augment.methods"]))
         )
-        hyper["augment.min"] = ValueUtils.limit_range(
+        hyper["augment.min"] = Value.limit_range(
             hyper["augment.min"], (1, hyper["augment.max"])
         )
 
         # loss function parameters
-        hyper["loss.weight"] = ValueUtils.limit_range(hyper["loss.weight"], (0.0, 1.0))
-        hyper["loss.delta"] = ValueUtils.limit_range(hyper["loss.delta"], (0.0, 1.0))
+        hyper["loss.weight"] = Value.limit_range(hyper["loss.weight"], (0.0, 1.0))
+        hyper["loss.delta"] = Value.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
     def _load_optim_and_scheduler(self, hyper: Dict, lr: float = None):
         if lr is None:
@@ -183,7 +182,7 @@ class TrainingCore:
                 elif isinstance(cnn, UNetSlim):
                     simple_hyper[key_name] = "unet.slim"
                 else:
-                    Debug.terminate("_simplify_hyper(): wrong cnn type")
+                    Debug.error_exit("_simplify_hyper(): wrong cnn type")
 
             # only save optimizer name
             elif key_name == "optim":
@@ -243,13 +242,9 @@ class TrainingCore:
 
     # train_id = start_time + train_remark
     def _init_train_id(
-        self,
-        train_remark: str,
-        hyper_json_path: str,
-        hyper: Dict,
-        debug_mode: bool,
+        self, train_remark: str, hyper_json_path: str, hyper: Dict, debug_mode: bool
     ) -> str:
-        train_id = self._get_cur_time_str()
+        train_id = Time.get_cur_time_str()
 
         if debug_mode:
             train_id += "_"
@@ -286,14 +281,6 @@ class TrainingCore:
         else:
             hyper["batch.size"] = dataset.__len__()
 
-    # protected function
-    def _get_cur_time_str(self) -> str:
-        start_time = str(datetime.now().replace(microsecond=0))
-        start_time = start_time.replace(":", ".")
-        start_time = start_time.replace("-", ".")
-        start_time = start_time.replace(" ", ".")
-        return start_time
-
     def _load_hyper_sets_from_json(self, path: str) -> List:
         group_hyper = List()
         origin_hyper_dict = Json.load(path)
@@ -326,10 +313,12 @@ class TrainingCore:
             return baseline_dir
         # train id is a iDL
         else:
-            for baseline_dir in Explorer.get_sub_folders(
+            for baseline_dir in Directory.get_sub_folders(
                 g.TRAIN_RESULTS_DIR, full_path=True
             ):
-                for train_dir in Explorer.get_sub_folders(baseline_dir, full_path=True):
+                for train_dir in Directory.get_sub_folders(
+                    baseline_dir, full_path=True
+                ):
                     if Path(train_dir).name == train_id:
                         return train_dir
             # cant find train_dir

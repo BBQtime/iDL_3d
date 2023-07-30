@@ -5,9 +5,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from custom import GPU, Dict, Explorer, Folder
+from custom import GPU, Dict, Directory, Folder
 from custom import Global as g
-from custom import Img, Json, List, Nii, ValueUtils
+from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from dataset_idl_gtvt import DataSetIDLGTVt
 from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
@@ -51,7 +51,7 @@ class TrainingIDLGTVt(TrainingCore):
             # at least 2 iters to compare loss difference
             hyper["iter"] = 2
         else:
-            hyper["iter"] = ValueUtils.limit_range(hyper["iter"], (1, None))
+            hyper["iter"] = Value.limit_range(hyper["iter"], (1, None))
 
         # lr
         # lr is saved in json file as a string, not a list, because:
@@ -60,9 +60,9 @@ class TrainingIDLGTVt(TrainingCore):
         hyper["lr"] = List(hyper["lr"])
         for i in range(len(hyper["lr"])):
             hyper["lr"][i] = float(hyper["lr"][i])
-            hyper["lr"][i] = ValueUtils.limit_range(hyper["lr"][i], (g.EPS, 1))
+            hyper["lr"][i] = Value.limit_range(hyper["lr"][i], (g.EPS, 1))
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr.min"] = ValueUtils.limit_range(
+            hyper["lr.min"] = Value.limit_range(
                 hyper["lr.min"], (g.EPS, hyper["lr"][i])
             )
 
@@ -74,14 +74,12 @@ class TrainingIDLGTVt(TrainingCore):
             hyper["lr.actual"].append(hyper["lr"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr.decay.patience"] = ValueUtils.limit_range(
+        hyper["lr.decay.patience"] = Value.limit_range(
             hyper["lr.decay.patience"], (1, hyper["iter"])
         )
 
         # augmentation times
-        hyper["augment.times"] = ValueUtils.limit_range(
-            hyper["augment.times"], (1, None)
-        )
+        hyper["augment.times"] = Value.limit_range(hyper["augment.times"], (1, None))
 
         # augmentation percent (based on augment_times)
         hyper["augment.pct"] = hyper["augment.times"] / (hyper["augment.times"] + 1)
@@ -95,7 +93,7 @@ class TrainingIDLGTVt(TrainingCore):
             hyper[plane] = List(hyper[plane])
             for i in range(len(hyper[plane])):
                 hyper[plane][i] = int(hyper[plane][i])
-                hyper[plane][i] = ValueUtils.limit_range(hyper[plane][i], (0, None))
+                hyper[plane][i] = Value.limit_range(hyper[plane][i], (0, None))
 
         # select scenario
         if (
@@ -106,19 +104,19 @@ class TrainingIDLGTVt(TrainingCore):
             hyper["select.scenario"] = "random"
 
         # weight map parameters
-        hyper["weight.background"] = ValueUtils.limit_range(
+        hyper["weight.background"] = Value.limit_range(
             hyper["weight.background"], (0.0, 1.0)
         )
-        hyper["weight.slice"] = ValueUtils.limit_range(
+        hyper["weight.slice"] = Value.limit_range(
             hyper["weight.slice"], (hyper["weight.background"], None)
         )
-        hyper["weight.fp.fn"] = ValueUtils.limit_range(
+        hyper["weight.fp.fn"] = Value.limit_range(
             hyper["weight.fp.fn"], (hyper["weight.slice"], None)
         )
-        hyper["weight.distance.step"] = ValueUtils.limit_range(
+        hyper["weight.distance.step"] = Value.limit_range(
             hyper["weight.distance.step"], (1, None)
         )
-        hyper["weight.prev.round.decay"] = ValueUtils.limit_range(
+        hyper["weight.prev.round.decay"] = Value.limit_range(
             hyper["weight.prev.round.decay"], (0.0, 1.0)
         )
 
@@ -230,7 +228,7 @@ class TrainingIDLGTVt(TrainingCore):
     #     )
     #     selected_slices = Dict()
     #     selected_slices["round=01"] = List()  # doesn't matter what the dict key is
-    #     for file_name in Explorer.get_sub_files(round_dir, key_word="_label.npy"):
+    #     for file_name in Directory.get_sub_files(round_dir, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
     #         slice_id = slice_id.zfill(3)
     #         selected_slices["round=01"].append(slice_id)
@@ -334,7 +332,7 @@ class TrainingIDLGTVt(TrainingCore):
                 for part in range(1, divided_parts):
                     idx = len(candidates) * part / divided_parts
                     idx = round(idx)
-                    idx = ValueUtils.limit_range(idx, (1, len(candidates)))
+                    idx = Value.limit_range(idx, (1, len(candidates)))
                     new_round_slices[plane].append(candidates[idx - 1])
 
             # (1) "random"
@@ -469,7 +467,6 @@ class TrainingIDLGTVt(TrainingCore):
             pred_dir = os.path.join(
                 idl_gtvt_dir.parent,
                 "baseline",
-                "cross_valid",
                 "patients",
                 "patient={}".format(patient),
             )
@@ -553,7 +550,7 @@ class TrainingIDLGTVt(TrainingCore):
                 "iter={:03d}".format((round_num - 1) * hyper["iter"] + (iter_num + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
-            patient_dirs_list = Explorer.get_sub_folders(
+            patient_dirs_list = Directory.get_sub_folders(
                 os.path.join(idl_gtvt_dir, "patients")
             )
             if len(patient_dirs_list) <= 1:
@@ -612,10 +609,7 @@ class TrainingIDLGTVt(TrainingCore):
         # copy baseline scores
         baseline_score = Json.load(
             os.path.join(
-                Path(idl_gtvt_dir).parent,
-                "baseline",
-                "cross_valid",
-                "inference_test_inter.json",
+                Path(idl_gtvt_dir).parent, "baseline", "inference_test_inter.json"
             )
         )
         idl_gtvt_score = Json.load(
@@ -678,7 +672,7 @@ class TrainingIDLGTVt(TrainingCore):
         self._plot_loss_fig(idl_gtvt_dir)
 
     def plot_loss_fig(self, idl_gtvt_id: str):
-        for i in Explorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
+        for i in Directory.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
@@ -690,7 +684,7 @@ class TrainingIDLGTVt(TrainingCore):
     def _plot_loss_fig(self, idl_gtvt_dir: str):
         # avg loss dict
         avg_loss = Dict()
-        for patient_dir in Explorer.get_sub_folders(
+        for patient_dir in Directory.get_sub_folders(
             os.path.join(idl_gtvt_dir, "patients"), full_path=True
         ):
             cur_patient_loss = Json.load(os.path.join(patient_dir, "loss.json"))
@@ -702,7 +696,7 @@ class TrainingIDLGTVt(TrainingCore):
                     avg_loss[i].append(cur_patient_loss[i])
 
         for i in avg_loss:
-            avg_loss[i] = ValueUtils.avg(avg_loss[i])
+            avg_loss[i] = Value.avg(avg_loss[i])
 
         avg_loss = avg_loss.to_list()
 
@@ -715,14 +709,14 @@ class TrainingIDLGTVt(TrainingCore):
     def __find_best_baseline_cnn(self, baseline_id: str) -> str:
         scores = Dict()
 
-        fold_dirs = Explorer.get_sub_folders(
+        fold_dirs = Directory.get_sub_folders(
             input_dir=os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline"),
             key_word="fold=",
             full_path=True,
         )
         for fold_dir in fold_dirs:
             fold = Path(fold_dir).name
-            epoch_dir = Explorer.get_sub_folders(
+            epoch_dir = Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             )[0]
             epoch_scores = Json.load(
@@ -765,10 +759,10 @@ class TrainingIDLGTVt(TrainingCore):
         best_fold_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, baseline_id, "baseline", best_fold
         )
-        best_epoch_dir = Explorer.get_sub_folders(
+        best_epoch_dir = Directory.get_sub_folders(
             best_fold_dir, key_word="epoch=", full_path=True
         )[0]
-        best_cnn_path = Explorer.get_sub_files(
+        best_cnn_path = Directory.get_sub_files(
             best_epoch_dir, key_word=".pt", full_path=True
         )[0]
         return best_cnn_path
@@ -865,10 +859,10 @@ class TrainingIDLGTVt(TrainingCore):
         # calculate median score
         for metric in g.METRICS:
             for round_num in all_patient_scores[metric]:
-                scores["median"][metric][round_num] = ValueUtils.median(
+                scores["median"][metric][round_num] = Value.median(
                     all_patient_scores[metric][round_num]
                 )
-                scores["avg"][metric][round_num] = ValueUtils.avg(
+                scores["avg"][metric][round_num] = Value.avg(
                     all_patient_scores[metric][round_num]
                 )
         Json.save(data=scores, path=os.path.join(score_json_path))
@@ -887,7 +881,7 @@ class TrainingIDLGTVt(TrainingCore):
         slice_thick = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))["slice.thick"]
 
         # get all patients
-        patient_list = Explorer.get_sub_folders(
+        patient_list = Directory.get_sub_folders(
             os.path.join(idl_gtvt_dir, "patients"),
             key_word="patient=",
         )
@@ -901,10 +895,7 @@ class TrainingIDLGTVt(TrainingCore):
         # copy baseline score
         baseline_score = Json.load(
             os.path.join(
-                Path(idl_gtvt_dir).parent,
-                "baseline",
-                "cross_valid",
-                "inference_test_inter.json",
+                Path(idl_gtvt_dir).parent, "baseline", "inference_test_inter.json"
             )
         )
         idl_gtvt_score_path = os.path.join(idl_gtvt_dir, "inference_test_inter.json")
@@ -924,11 +915,11 @@ class TrainingIDLGTVt(TrainingCore):
             patient_dir = os.path.join(idl_gtvt_dir, "patients", patient)
 
             # loop through each round
-            for round_dir in Explorer.get_sub_folders(
+            for round_dir in Directory.get_sub_folders(
                 patient_dir, key_word="round=", full_path=True
             ):
                 # load current round cnn
-                cnn_path = Explorer.get_sub_files(
+                cnn_path = Directory.get_sub_files(
                     round_dir, key_word=".pt", full_path=True
                 )[0]
                 cnn = self._load_exist_cnn(cnn_path)

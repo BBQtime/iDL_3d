@@ -587,4 +587,4 @@ class SegmentationMetric(nn.Module):
             )
 
         else:
-            Debug.terminate("SegmentationMetric: value of self.__metric error")
+            Debug.error_exit("SegmentationMetric: value of self.__metric error")

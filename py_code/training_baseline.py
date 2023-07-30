@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from custom import GPU, Debug, Dict, Explorer, Folder
+from custom import GPU, Debug, Dict, Directory, Folder
 from custom import Global as g
-from custom import Img, Json, List, Nii, ValueUtils
+from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
@@ -29,18 +29,18 @@ class TrainingBaseline(TrainingCore):
             # only train 2 epoch in debug mode
             hyper["epochs"] = 2
         else:
-            hyper["epochs"] = ValueUtils.limit_range(hyper["epochs"], (1, None))
+            hyper["epochs"] = Value.limit_range(hyper["epochs"], (1, None))
 
         # record actual epochs because of early stop
         hyper["epochs.actual"] = 0
 
         # early stop, based on epoch
-        hyper["early.stop.epochs"] = ValueUtils.limit_range(
+        hyper["early.stop.epochs"] = Value.limit_range(
             hyper["early.stop.epochs"], (1, hyper["epochs"])
         )
 
         # lr
-        hyper["lr"] = ValueUtils.limit_range(hyper["lr"], (g.EPS, 1.0))
+        hyper["lr"] = Value.limit_range(hyper["lr"], (g.EPS, 1.0))
 
         # actual lr
         if GPU.used_count() > 1:
@@ -49,20 +49,20 @@ class TrainingBaseline(TrainingCore):
             hyper["lr.actual"] = hyper["lr"]
 
         # min lr
-        hyper["lr.min"] = ValueUtils.limit_range(hyper["lr.min"], (g.EPS, hyper["lr"]))
+        hyper["lr.min"] = Value.limit_range(hyper["lr.min"], (g.EPS, hyper["lr"]))
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr.decay.patience"] = ValueUtils.limit_range(
+        hyper["lr.decay.patience"] = Value.limit_range(
             hyper["lr.decay.patience"], (1, hyper["epochs"])
         )
 
         # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"] = ValueUtils.limit_range(
+        hyper["keep.best.cnn.num"] = Value.limit_range(
             hyper["keep.best.cnn.num"], (1, hyper["epochs"])
         )
 
         # augment percent
-        hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
+        hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         # load patients
         patients = self._load_patients(fold=hyper["fold"], debug_mode=debug_mode)
@@ -292,7 +292,7 @@ class TrainingBaseline(TrainingCore):
 
         # cross validation
         hyper["fold"] = int(hyper["fold"])
-        hyper["fold"] = ValueUtils.limit_range(hyper["fold"], (0, g.DATASET_FOLDS))
+        hyper["fold"] = Value.limit_range(hyper["fold"], (0, g.DATASET_FOLDS))
         # fold=0 will activate cross validation
         if hyper["fold"] == 0:
             fold_list = List(range(1, g.DATASET_FOLDS + 1))
@@ -384,9 +384,9 @@ class TrainingBaseline(TrainingCore):
         # find idl gtvt folder
         baseline_dir = self._find_train_dir(baseline_id)
         if baseline_dir is None:
-            Debug.terminate("baseline_id not found")
+            Debug.error_exit("baseline_id not found")
 
-        fold_dirs = Explorer.get_sub_folders(
+        fold_dirs = Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         )
 
@@ -401,7 +401,7 @@ class TrainingBaseline(TrainingCore):
             print("fold: ", fold)
 
             # loop through epoch dirs
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = int(Path(epoch_dir).name[len("epoch=") :])
@@ -467,10 +467,10 @@ class TrainingBaseline(TrainingCore):
                 # calculate median and avg score of current epoch
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in g.METRICS:
-                        epoch_scores["median"][gtv][metric] = ValueUtils.median(
+                        epoch_scores["median"][gtv][metric] = Value.median(
                             epoch_scores["median"][gtv][metric]
                         )
-                        epoch_scores["avg"][gtv][metric] = ValueUtils.avg(
+                        epoch_scores["avg"][gtv][metric] = Value.avg(
                             epoch_scores["avg"][gtv][metric]
                         )
                 # save all patients scores in "inference_test_inter.json"
@@ -486,10 +486,9 @@ class TrainingBaseline(TrainingCore):
 
         baseline_dir = self._find_train_dir(baseline_id)
 
-        cross_valid_dir = os.path.join(baseline_dir, "cross_valid")
-        Folder.create(cross_valid_dir, "patients")
+        Folder.create(os.path.join(baseline_dir, "patients"))
 
-        fold_dirs = Explorer.get_sub_folders(
+        fold_dirs = Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         )
 
@@ -517,12 +516,12 @@ class TrainingBaseline(TrainingCore):
 
             for fold_dir in fold_dirs:
                 # find epoch dir
-                epoch_dirs = Explorer.get_sub_folders(
+                epoch_dirs = Directory.get_sub_folders(
                     fold_dir, key_word="epoch=", full_path=True
                 )
                 if len(epoch_dirs) > 1:
                     self.remove_non_optimal_epochs(baseline_id)
-                    epoch_dir = Explorer.get_sub_folders(
+                    epoch_dir = Directory.get_sub_folders(
                         fold_dir, key_word="epoch=", full_path=True
                     )[0]
                 else:
@@ -547,7 +546,7 @@ class TrainingBaseline(TrainingCore):
 
             # save cross_valid preds
             patient_dir = os.path.join(
-                cross_valid_dir, "patients", "patient={}".format(patient)
+                baseline_dir, "patients", "patient={}".format(patient)
             )
             Folder.create(patient_dir)
             for gtv in ["t", "n"]:
@@ -580,14 +579,15 @@ class TrainingBaseline(TrainingCore):
         # calculate avg and median score
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in g.METRICS:
-                scores["median"][gtv][metric] = ValueUtils.median(
+                scores["median"][gtv][metric] = Value.median(
                     scores["median"][gtv][metric]
                 )
-                scores["avg"][gtv][metric] = ValueUtils.avg(scores["avg"][gtv][metric])
-        # save cross validscores
+                scores["avg"][gtv][metric] = Value.avg(scores["avg"][gtv][metric])
+
+        # save cross valid scores
         Json.save(
             data=scores,
-            path=os.path.join(cross_valid_dir, "inference_test_inter.json"),
+            path=os.path.join(baseline_dir, "inference_test_inter.json"),
         )
 
     def remove_non_optimal_epochs(self, baseline_id: str):
@@ -595,12 +595,12 @@ class TrainingBaseline(TrainingCore):
         print("")
         print("remove non optimal epochs: {}".format(baseline_id))
 
-        for fold_dir in Explorer.get_sub_folders(
+        for fold_dir in Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         ):
             fold_scores = Dict()
 
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
@@ -616,7 +616,7 @@ class TrainingBaseline(TrainingCore):
             best_epoch = self.__find_best_result(fold_scores)
 
             # delete non-optimal epochs
-            for epoch_dir in Explorer.get_sub_folders(
+            for epoch_dir in Directory.get_sub_folders(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name

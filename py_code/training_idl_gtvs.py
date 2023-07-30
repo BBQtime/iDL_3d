@@ -5,13 +5,13 @@
 # from dataset_idl_gtvs import DataSetIDLGTVs
 # from custom import Folder
 # from custom import Json
-# from custom import Explorer
+# from custom import Directory
 # from custom import Nii
 # from custom import Dict
 # from custom import List
 # from custom import Img
 # from custom import GPU
-# from custom import ValueUtils
+# from custom import Value
 # from pathlib import Path
 # from tqdm import tqdm
 # from custom import Global as g
@@ -31,18 +31,18 @@
 #             # at least 2 epochs to compare loss difference
 #             hyper["epochs"] = 2
 #         else:
-#             hyper["epochs"] = ValueUtils.limit_range(hyper["epochs"], (1, None))
+#             hyper["epochs"] = Value.limit_range(hyper["epochs"], (1, None))
 
 #         # record actual epochs because of early stop
 #         hyper["epochs.actual"] = 0
 
 #         # early stop, based on epoch
-#         hyper["early.stop.epochs"] = ValueUtils.limit_range(
+#         hyper["early.stop.epochs"] = Value.limit_range(
 #             hyper["early.stop.epochs"], (1, hyper["epochs"])
 #         )
 
 #         # lr
-#         hyper["lr"] = ValueUtils.limit_range(hyper["lr"], (g.EPS, 1.0))
+#         hyper["lr"] = Value.limit_range(hyper["lr"], (g.EPS, 1.0))
 
 #         # actual lr
 #         if GPU.used_count() > 1:
@@ -51,20 +51,20 @@
 #             hyper["lr.actual"] = hyper["lr"]
 
 #         # min lr
-#         hyper["lr.min"] = ValueUtils.limit_range(hyper["lr.min"], (g.EPS, hyper["lr"]))
+#         hyper["lr.min"] = Value.limit_range(hyper["lr.min"], (g.EPS, hyper["lr"]))
 
 #         # lr decay patience, based on epoch, must be defined before shared_hyper()
-#         hyper["lr.decay.patience"] = ValueUtils.limit_range(
+#         hyper["lr.decay.patience"] = Value.limit_range(
 #             hyper["lr.decay.patience"], (1, hyper["epochs"])
 #         )
 
 #         # number of best valid loss cnn retained
-#         hyper["keep.best.cnn.num"] = ValueUtils.limit_range(
+#         hyper["keep.best.cnn.num"] = Value.limit_range(
 #             hyper["keep.best.cnn.num"], (1, hyper["epochs"])
 #         )
 
 #         # augment percent
-#         hyper["augment.pct"] = ValueUtils.limit_range(hyper["augment.pct"], (0.0, 1.0))
+#         hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
 #         # load shared hyper parameters
 #         super()._load_hyper(hyper=hyper, cnn_path=None)
@@ -94,19 +94,19 @@
 
 #         # weight map parameters
 #         if hyper["train.type"] == "idl":
-#             hyper["weight.background"] = ValueUtils.limit_range(
+#             hyper["weight.background"] = Value.limit_range(
 #                 hyper["weight.background"], (0.0, 1.0)
 #             )
-#             hyper["weight.slice"] = ValueUtils.limit_range(
+#             hyper["weight.slice"] = Value.limit_range(
 #                 hyper["weight.slice"], (hyper["weight.background"], None)
 #             )
-#             hyper["weight.fp.fn"] = ValueUtils.limit_range(
+#             hyper["weight.fp.fn"] = Value.limit_range(
 #                 hyper["weight.fp.fn"], (hyper["weight.slice"], None)
 #             )
-#             hyper["weight.distance.step"] = ValueUtils.limit_range(
+#             hyper["weight.distance.step"] = Value.limit_range(
 #                 hyper["weight.distance.step"], (1, None)
 #             )
-#             hyper["weight.prev.round.decay"] = ValueUtils.limit_range(
+#             hyper["weight.prev.round.decay"] = Value.limit_range(
 #                 hyper["weight.prev.round.decay"], (0.0, 1.0)
 #             )
 #             weight = Dict()
@@ -245,7 +245,7 @@
 #                     key_word = "fold="
 #                 else:
 #                     key_word = "fold={}".format(baseline_fold)
-#                 baseline_fold_dir = Explorer.get_sub_folders(
+#                 baseline_fold_dir = Directory.get_sub_folders(
 #                     os.path.join(g.TRAIN_RESULTS_DIR, baseline_id),
 #                     key_word=key_word,
 #                     full_path=True,
@@ -255,7 +255,7 @@
 #                     key_word = "epoch="
 #                 else:
 #                     key_word = "epoch={:03d}".format(baseline_epoch)
-#                 baseline_epoch_dir = Explorer.get_sub_folders(
+#                 baseline_epoch_dir = Directory.get_sub_folders(
 #                     baseline_fold_dir, key_word=key_word, full_path=True
 #                 )[0]
 
@@ -270,7 +270,7 @@
 
 #             # cross validation
 #             hyper["fold"] = int(hyper["fold"])
-#             hyper["fold"] = ValueUtils.limit_range(
+#             hyper["fold"] = Value.limit_range(
 #                 hyper["fold"], (0, g.DATASET_FOLDS)
 #             )
 #             if hyper["fold"] == 0:
@@ -442,7 +442,7 @@
 #         baseline_epoch_dir = str(Path(idl_gtvs_dir).parent.parent)
 
 #         # loop through fold dirs
-#         for fold_dir in Explorer.get_sub_folders(
+#         for fold_dir in Directory.get_sub_folders(
 #             idl_gtvs_dir, key_word="fold=", full_path=True
 #         ):
 #             fold = int(Path(fold_dir).name[len("fold=") :])
@@ -450,14 +450,14 @@
 #             print("fold: ", fold)
 
 #             # loop through epoch dirs
-#             for epoch_dir in Explorer.get_sub_folders(
+#             for epoch_dir in Directory.get_sub_folders(
 #                 fold_dir, key_word="epoch=", full_path=True
 #             ):
 #                 epoch = int(Path(epoch_dir).name[len("epoch=") :])
 #                 print("epoch: ", epoch)
 
 #                 # load cnn
-#                 cnn_path = Explorer.get_sub_files(
+#                 cnn_path = Directory.get_sub_files(
 #                     epoch_dir, key_word=".pt", full_path=True
 #                 )[0]
 #                 hyper = Dict()  # create an empty dict to save cnn
@@ -555,10 +555,10 @@
 #                     for metric in g.METRICS:
 #                         epoch_scores["median"][gtv][metric][
 #                             "round=01"
-#                         ] = ValueUtils.median(
+#                         ] = Value.median(
 #                             epoch_scores["median"][gtv][metric]["round=01"]
 #                         )
-#                         epoch_scores["avg"][gtv][metric]["round=01"] = ValueUtils.avg(
+#                         epoch_scores["avg"][gtv][metric]["round=01"] = Value.avg(
 #                             epoch_scores["avg"][gtv][metric]["round=01"]
 #                         )
 

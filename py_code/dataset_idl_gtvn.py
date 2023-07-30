@@ -70,7 +70,6 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
                 g.TRAIN_RESULTS_DIR,
                 self.__baseline_id,
                 "baseline",
-                "cross_valid",
                 "patients",
                 "patient={}".format(patient),
                 "gtvn_pred.nii",
