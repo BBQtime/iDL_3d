@@ -10,6 +10,7 @@ from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
+from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from training_core import TrainingCore
@@ -354,24 +355,29 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         self._new_training(
-            train_type="baseline", train_remark=train_remark, debug_mode=debug_mode
+            baseline_id=None, train_remark=train_remark, debug_mode=debug_mode
         )
 
     def _new_training(
         self,
-        train_type: str,  # baseline/idl.gtvn
         baseline_id: str = None,  # this is only for idl.gtvn
         train_remark: str = "",
         debug_mode: bool = False,
     ):
-        if train_type != "baseline" and train_type != "idl.gtvn":
-            Debug.error_exit("training type error")
+        if baseline_id is None:
+            hyper_json_path = g.HYPER_JSON_PATH["baseline"]
+        else:
+            hyper_json_path = g.HYPER_JSON_PATH["idl.gtvn"]
 
-        for hyper in self._load_hyper_sets_from_json(g.HYPER_JSON_PATH[train_type]):
-            train_id = train_type + "_"
+        for hyper in self._load_hyper_sets_from_json(hyper_json_path):
+            if baseline_id is None:
+                train_id = "baseline_"
+            else:
+                train_id = "idl.gtvn_"
+
             train_id += self._init_train_id(
                 train_remark=train_remark,
-                hyper_json_path=g.HYPER_JSON_PATH[train_type],
+                hyper_json_path=hyper_json_path,
                 hyper=hyper,
                 debug_mode=debug_mode,
             )
@@ -379,9 +385,9 @@ class TrainingBaseline(TrainingCore):
             print("")
             print(train_id)
 
-            if train_type == "baseline":
+            if baseline_id is None:
                 train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
-            elif train_type == "idl.gtvn":
+            else:
                 train_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, train_id)
 
             # add baseline_id to hyper Dict, don't need extra param
@@ -392,18 +398,17 @@ class TrainingBaseline(TrainingCore):
             )
 
             # inference
-            Value.is_valid_dataset_version(hyper["dataset.ver"])
+            Value.is_valid_dataset_version(dataset_ver=hyper["dataset.ver"])
             if hyper["dataset.ver"] == "mda":
                 dataset_section_list = ["valid", "test"]
             else:
                 dataset_section_list = ["valid", "test.inter"]
 
-            if train_type == "baseline":
+            if baseline_id is None:
                 dataset_section_list.append("train")
 
             for dataset_section in dataset_section_list:
                 self._inference(
-                    inference_type=train_type,
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_section=dataset_section,
@@ -411,143 +416,48 @@ class TrainingBaseline(TrainingCore):
                 )
 
             # remove non-optimal epochs after inference
-            self._remove_non_optimal_epochs(
-                inference_type=train_type, train_id=train_id
-            )
+            self._remove_non_optimal_epochs(train_id)
 
             # cross validation evaluation after non optimal epochs removed
             dataset_section_list.remove("valid")
             for dataset_section in dataset_section_list:
                 self._cross_valid_evaluation(
-                    inference_type=train_type,
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_section=dataset_section,
                     debug_mode=debug_mode,
                 )
 
+    def _is_valid_baseline_id(self, baseline_id: str):
+        if not baseline_id.startswith("baseline"):
+            Debug.error_exit("baseline id error")
+
     def inference(
         self,
         baseline_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_section: str,  # train/valid/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
+        self._is_valid_baseline_id(baseline_id)
         self._inference(
-            inference_type="baseline",
             train_id=baseline_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def __inference_prepare(
-        self,
-        inference_type: str,  # baseline/idl.gtvn
-        train_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
-    ):
-        if inference_type != "baseline" and inference_type != "idl.gtvn":
-            Debug.error_exit("inference type error")
-
-        train_dir = self._find_train_dir(train_id)
-        if train_dir is None:
-            Debug.error_exit("training id not found")
-
-        fold_dirs = Directory.get_sub_folders(
-            train_dir, key_word="fold=", full_path=True
-        )
-
-        # load dataset version
-        dataset_ver_training = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
-            "dataset.ver"
-        ]
-        if dataset_ver is None:
-            dataset_ver = dataset_ver_training
-        Value.is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            dataset_ver_baseline_or_training=dataset_ver_training,
-        )
-        Value.is_valid_dataset_section(
-            dataset_section=dataset_section,
-            dataset_ver=dataset_ver,
-            inference_type=inference_type,
-        )
-        print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_section))
-
-        # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
-
-        return dataset_ver, fold_dirs, segment_metrics
-
-    def __inference_init_scores(
-        self,
-        inference_type: str,
-        baseline_id: str,
-        dataset_ver: str,
-        dataset_section: str,
-        patients: Dict,
-    ) -> Dict:
-        scores = Dict()
-        # baseline
-        if inference_type == "baseline":
-            for stats in ["median", "avg"]:
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in g.METRICS:
-                        scores[stats][gtv][metric] = List()
-        # idl.gtvn
-        else:
-            for stats in ["median", "avg"]:
-                for metric in g.METRICS:
-                    scores[stats][metric]["round=01"] = List()
-
-            # only load baseline scores of test set, because there is no validation scores
-            if "test" in dataset_section:
-                # load baseline scores
-                baseline_scores = Json.load(
-                    os.path.join(
-                        g.TRAIN_RESULTS_DIR,
-                        baseline_id,
-                        "baseline",
-                        "inference_{}_{}.json".format(dataset_ver, dataset_section),
-                    )
-                )
-
-                # copy baseline gtvn scores of each patient
-                for patient in patients[dataset_section]:
-                    for metric in g.METRICS:
-                        scores["patient={}".format(patient)][metric][
-                            "round=00"
-                        ] = baseline_scores["patient={}".format(patient)]["gtvn"][
-                            metric
-                        ]
-
-                # also copy baseline median and avg gtvn scores
-                for stats in ["median", "avg"]:
-                    for metric in g.METRICS:
-                        scores[stats][metric]["round=00"] = baseline_scores[stats][
-                            "gtvn"
-                        ][metric]
-
-        return scores
-
     def _inference(
         self,
-        inference_type: str,  # baseline/idl.gtvn
         train_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_section: str,  # train/valid/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
-        if not train_id.startswith(inference_type):
-            Debug.error_exit("train id error")
         print("")
         print("inference: {}".format(train_id))
 
         dataset_ver, fold_dirs, segment_metrics = self.__inference_prepare(
-            inference_type=inference_type,
             train_id=train_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
@@ -577,8 +487,7 @@ class TrainingBaseline(TrainingCore):
 
                 # initialize scores dict (only for test sets)
                 if "test" in dataset_section or "valid" in dataset_section:
-                    epoch_scores = self.__inference_init_scores(
-                        inference_type=inference_type,
+                    epoch_scores = self._inference_init_scores(
                         baseline_id=Path(fold_dir).parent.parent.name,
                         dataset_ver=dataset_ver,
                         dataset_section=dataset_section,
@@ -587,129 +496,142 @@ class TrainingBaseline(TrainingCore):
 
                 # loop through each patient
                 for patient in tqdm(patients[dataset_section]):
-                    # create folder to save cur patient preds and scores
-                    epoch_patient_dir = os.path.join(
-                        epoch_dir,
-                        "patients",
-                        "patient={}".format(patient),
-                    )
-                    Folder.create(epoch_patient_dir)
-
-                    # create cross validation dir to save distance maps and clicks
-                    if inference_type == "idl.gtvn":
-                        cross_valid_patient_dir = os.path.join(
-                            Path(fold_dir).parent,
-                            "patients",
-                            "patient={}".format(patient),
-                            "round=01",
-                        )
-                        Folder.create(cross_valid_patient_dir)
-
-                    # results structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-                    patient_results = self._single_patient_inference(
-                        inference_type=inference_type,
+                    # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+                    patient_outputs = self._inference_single_patient(
                         patient=patient,
                         cnn=cnn,
                         dataset_ver=dataset_ver,
+                        dataset_section=dataset_section,
                         segment_metrics=segment_metrics,
                         baseline_id=Path(fold_dir).parent.parent.name,
                     )
 
-                    # baseline: save preds of current patient
-                    if inference_type == "baseline":
-                        for gtv in ["gtvt", "gtvn"]:
-                            Nii.save(
-                                img=patient_results[gtv]["pred"],
-                                save_path=os.path.join(
-                                    epoch_patient_dir, "{}_pred.nii".format(gtv)
-                                ),
-                                spacing=g.NII_SPACING[dataset_ver],
-                            )
-                    # idl.gtvn: save pred, distance map and clicks of current patient
-                    else:
-                        # save pred
-                        Nii.save(
-                            img=patient_results["gtvn"]["pred"],
-                            save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii"),
-                            spacing=g.NII_SPACING[dataset_ver],
-                        )
-                        # save distance map and clicks
-                        for i in ["distance.map", "clicks"]:
-                            save_path = os.path.join(
-                                cross_valid_patient_dir,
-                                "gtvn_{}.nii".format(i.replace(".", "_")),
-                            )
-                            if not os.path.exists(save_path):
-                                Nii.save(
-                                    img=patient_results["gtvn"][i],
-                                    save_path=save_path,
-                                    spacing=g.NII_SPACING[dataset_ver],
-                                )
+                    # create folder and save preds of current patient
+                    self._inference_save_patient_preds(
+                        patient=patient,
+                        epoch_dir=epoch_dir,
+                        patient_outputs=patient_outputs,
+                        dataset_ver=dataset_ver,
+                    )
 
                     # record score of current patient (test and valid sets only)
                     if "test" in dataset_section or "valid" in dataset_section:
-                        for gtv in patient_results.keys():
-                            for metric in g.METRICS:
-                                # baseline
-                                if inference_type == "baseline":
-                                    # save cur patient score
-                                    epoch_scores["patient={}".format(patient)][gtv][
-                                        metric
-                                    ] = patient_results[gtv][metric]
-                                    # add scores of current patient into avg and median
-                                    for stats in ["median", "avg"]:
-                                        epoch_scores[stats][gtv][metric].append(
-                                            patient_results[gtv][metric]
-                                        )
-                                # idl.gtvn
-                                else:
-                                    # save cur patient score
-                                    epoch_scores["patient={}".format(patient)][metric][
-                                        "round=01"
-                                    ] = patient_results[gtv][metric]
-                                    # add scores of current patient into median(list)
-                                    for stats in ["median", "avg"]:
-                                        epoch_scores[stats][metric]["round=01"].append(
-                                            patient_results[gtv][metric]
-                                        )
+                        self._inference_record_patient_score(
+                            patient=patient,
+                            patient_outputs=patient_outputs,
+                            scores=epoch_scores,
+                        )
 
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
                 if "test" in dataset_section or "valid" in dataset_section:
-                    self.__inference_calculate_avg_mean_then_save(
-                        inference_type=inference_type,
+                    self._calculate_and_save_avg_and_median(
                         scores=epoch_scores,
+                        save_dir=epoch_dir,
+                        dataset_ver=dataset_ver,
+                        dataset_section=dataset_section,
                     )
-                    # save scores in json
-                    Json.save(
-                        data=epoch_scores,
-                        path=os.path.join(
-                            epoch_dir,
-                            "inference_{}_{}.json".format(dataset_ver, dataset_section),
-                        ),
-                    )
+
                 continue  # next epoch
 
-    def __inference_calculate_avg_mean_then_save(
-        self, inference_type: str, scores: Dict
+    def __inference_prepare(
+        self,
+        train_id: str,
+        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_ver: str = None,  # au.1mm/au.3mm/mda
     ):
-        # baseline
-        if inference_type == "baseline":
+        train_dir = self._find_train_dir(train_id)
+        if train_dir is None:
+            Debug.error_exit("training id not found")
+
+        fold_dirs = Directory.get_sub_folders(
+            train_dir, key_word="fold=", full_path=True
+        )
+
+        # load dataset version
+        dataset_ver_training = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
+            "dataset.ver"
+        ]
+        if dataset_ver is None:
+            dataset_ver = dataset_ver_training
+        Value.is_valid_dataset_version(
+            dataset_ver=dataset_ver,
+            dataset_ver_baseline_or_training=dataset_ver_training,
+        )
+        Value.is_valid_dataset_section(
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+        print("dataset version: {}".format(dataset_ver))
+        print("dataset section: {}".format(dataset_section))
+
+        # load segmentation metrics
+        segment_metrics = self._load_segment_metrics(dataset_ver)
+
+        return dataset_ver, fold_dirs, segment_metrics
+
+    def _inference_init_scores(
+        self,
+        baseline_id: str = None,
+        dataset_ver: str = None,
+        dataset_section: str = None,
+        patients: Dict = None,
+    ) -> Dict:
+        scores = Dict()
+        for stats in ["median", "avg"]:
             for gtv in ["gtvs", "gtvt", "gtvn"]:
                 for metric in g.METRICS:
-                    scores["median"][gtv][metric] = Value.median(
-                        scores["median"][gtv][metric]
-                    )
-                    scores["avg"][gtv][metric] = Value.avg(scores["avg"][gtv][metric])
-        # idl.gtvn
-        else:
+                    scores[stats][gtv][metric] = List()
+
+        return scores
+
+    def _inference_save_patient_preds(
+        self, patient: str, epoch_dir: str, patient_outputs: Dict, dataset_ver: str
+    ):
+        patient_dir = os.path.join(
+            epoch_dir,
+            "patients",
+            "patient={}".format(patient),
+        )
+        Folder.create(patient_dir)
+
+        for gtv in ["gtvt", "gtvn"]:
+            Nii.save(
+                img=patient_outputs[gtv]["pred"],
+                save_path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
+                spacing=g.NII_SPACING[dataset_ver],
+            )
+
+    def _inference_record_patient_score(
+        self, patient: str, patient_outputs: Dict, scores: Dict
+    ):
+        for gtv in patient_outputs.keys():
             for metric in g.METRICS:
-                scores["median"][metric]["round=01"] = Value.median(
-                    scores["median"][metric]["round=01"]
+                # save cur patient score
+                scores["patient={}".format(patient)][gtv][metric] = patient_outputs[
+                    gtv
+                ][metric]
+                # add scores of current patient into avg and median
+                for stats in ["median", "avg"]:
+                    scores[stats][gtv][metric].append(patient_outputs[gtv][metric])
+
+    def _calculate_and_save_avg_and_median(
+        self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
+    ):
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            for metric in g.METRICS:
+                scores["median"][gtv][metric] = Value.median(
+                    scores["median"][gtv][metric]
                 )
-                scores["avg"][metric]["round=01"] = Value.avg(
-                    scores["avg"][metric]["round=01"]
-                )
+                scores["avg"][gtv][metric] = Value.avg(scores["avg"][gtv][metric])
+
+        # save scores in json
+        Json.save(
+            data=scores,
+            path=os.path.join(
+                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_section)
+            ),
+        )
 
     def cross_valid_evaluation(
         self,
@@ -718,8 +640,8 @@ class TrainingBaseline(TrainingCore):
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
+        self._is_valid_baseline_id(baseline_id)
         self._cross_valid_evaluation(
-            inference_type="baseline",
             train_id=baseline_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
@@ -728,27 +650,19 @@ class TrainingBaseline(TrainingCore):
 
     def _cross_valid_evaluation(
         self,
-        inference_type: str,
         train_id: str,
         dataset_section: str,  # train/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
-        if not train_id.startswith(inference_type):
-            Debug.error_exit("train id error")
         print("")
-        print("calculate cross valid scores: {}".format(train_id))
+        print("cross valid evaluation: {}".format(train_id))
 
         if "valid" in dataset_section:
-            Debug.error_exit(
-                "use 'train' instead of 'valid' in cross validation evaluation"
-            )
+            Debug.error_exit("use 'train' instead of 'valid' in cross valid evaluation")
 
         dataset_ver, fold_dirs, segment_metrics = self.__inference_prepare(
-            inference_type=inference_type,
-            train_id=train_id,
-            dataset_section=dataset_section,
-            dataset_ver=dataset_ver,
+            train_id=train_id, dataset_section=dataset_section, dataset_ver=dataset_ver
         )
 
         # create folder in train_dir to save cross_valid preds
@@ -761,8 +675,7 @@ class TrainingBaseline(TrainingCore):
         )
 
         # initialize scores dict
-        scores = self.__inference_init_scores(
-            inference_type=inference_type,
+        scores = self._inference_init_scores(
             baseline_id=Path(fold_dirs[0]).parent.parent.name,
             dataset_ver=dataset_ver,
             dataset_section=dataset_section,
@@ -772,11 +685,7 @@ class TrainingBaseline(TrainingCore):
         for patient in tqdm(patients[dataset_section]):
             # initialize preds
             preds = Dict()
-            if inference_type == "baseline":
-                gtv_list = ["gtvs", "gtvt", "gtvn"]
-            else:
-                gtv_list = ["gtvn"]
-            for gtv in gtv_list:
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
                 preds[gtv] = None
 
             for fold_dir in fold_dirs:
@@ -796,91 +705,88 @@ class TrainingBaseline(TrainingCore):
                 patient_dir = os.path.join(
                     epoch_dir, "patients", "patient={}".format(patient)
                 )
-                if inference_type == "baseline":
-                    gtv_list = ["gtvt", "gtvn"]
-                else:
-                    gtv_list = ["gtvn"]
-                for gtv in gtv_list:
-                    img = Nii.load(os.path.join(patient_dir, "{}_pred.nii".format(gtv)))
-                    if preds[gtv] is None:
-                        preds[gtv] = img
-                    else:
-                        preds[gtv] += img
+                for gtv in ["gtvt", "gtvn"]:
+                    pred_path = os.path.join(patient_dir, "{}_pred.nii".format(gtv))
+                    if os.path.exists(pred_path):
+                        img = Nii.load(path=pred_path, binary=False)
+                        if preds[gtv] is None:
+                            preds[gtv] = img
+                        else:
+                            preds[gtv] += img
 
-            # all folds is walked
-            if inference_type == "baseline":
+            # all folds is traversed
+            # for idl.gtvn pred["gtvt"] will be None
+            if preds["gtvt"] is not None:
                 preds["gtvs"] = preds["gtvt"] + preds["gtvn"]
-                gtv_list = ["gtvt", "gtvn"]
-            else:
-                gtv_list = ["gtvn"]
 
-            for gtv in gtv_list:
-                preds[gtv] /= len(fold_dirs)
+            for gtv in preds.keys():
+                if preds[gtv] is None:
+                    preds.pop(gtv)
+                else:
+                    preds[gtv] /= len(fold_dirs)
 
             # create cross_valid dir
             pred_dir = os.path.join(
                 Path(fold_dirs[0]).parent, "patients", "patient={}".format(patient)
             )
-            if inference_type == "idl.gtvn":
+            if len(preds.keys()) == 1:
                 pred_dir = os.path.join(pred_dir, "round=01")
             Folder.create(pred_dir)
 
-            # save cross_valid preds
-            for gtv in gtv_list:
-                Nii.save(
-                    img=preds[gtv],
-                    save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
-                    spacing=g.NII_SPACING[dataset_ver],
-                )
+            # save cross_valid preds (only save gtvt and gtvn)
+            for gtv in preds.keys():
+                if gtv != "gtvs":
+                    Nii.save(
+                        img=preds[gtv],
+                        save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
+                        spacing=g.NII_SPACING[dataset_ver],
+                    )
 
             # load labels and calculate metrics (on test set only)
             if "test" in dataset_section:
                 labels = Img.load_labels(
                     dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
                 )
-                if inference_type == "baseline":
-                    gtv_list = ["gtvs", "gtvt", "gtvn"]
-                else:
-                    gtv_list = ["gtvn"]
-
-                for gtv in gtv_list:
-                    for metric in g.METRICS:
-                        score = segment_metrics[metric](preds[gtv], labels[gtv])
-                        # record current score
-                        if inference_type == "baseline":
-                            scores["patient={}".format(patient)][gtv][metric] = score
-                        else:
-                            scores["patient={}".format(patient)][metric][
-                                "round=01"
-                            ] = score
-                        # record scores for avg and median score calculation
-                        for stats in ["median", "avg"]:
-                            if inference_type == "baseline":
-                                scores[stats][gtv][metric].append(score)
-                            else:
-                                scores[stats][metric]["round=01"].append(score)
+                self._cross_valid_evaluation_record_patient_score(
+                    patient=patient,
+                    preds=preds,
+                    labels=labels,
+                    segment_metrics=segment_metrics,
+                    scores=scores,
+                )
 
         # all patients have been traversed
         if "test" in dataset_section:
             # calculate avg and median score
-            self.__inference_calculate_avg_mean_then_save(
-                inference_type=inference_type, scores=scores
+            self._calculate_and_save_avg_and_median(
+                scores=scores,
+                save_dir=Path(fold_dirs[0]).parent,
+                dataset_section=dataset_section,
+                dataset_ver=dataset_ver,
             )
-            # save scores in json
-            Json.save(
-                data=scores,
-                path=os.path.join(
-                    Path(fold_dirs[0]).parent,
-                    "inference_{}_{}.json".format(dataset_ver, dataset_section),
-                ),
-            )
+
+    def _cross_valid_evaluation_record_patient_score(
+        self,
+        patient: str,
+        preds: Dict,
+        labels: Dict,
+        segment_metrics: Dict,
+        scores: Dict,
+    ):
+        for gtv in preds.keys():
+            for metric in g.METRICS:
+                score = segment_metrics[metric](preds[gtv], labels[gtv])
+                # record current score
+                scores["patient={}".format(patient)][gtv][metric] = score
+                # record scores for avg and median score calculation
+                for stats in ["median", "avg"]:
+                    scores[stats][gtv][metric].append(score)
 
     def remove_non_optimal_epochs(self, baseline_id: str):
-        self._remove_non_optimal_epochs(inference_type="baseline", train_id=baseline_id)
+        self._is_valid_baseline_id(baseline_id)
+        self._remove_non_optimal_epochs(baseline_id)
 
-    def _remove_non_optimal_epochs(self, inference_type: str, train_id: str):
-        if not train_id.startswith(inference_type):
-            Debug.error_exit("train id error")
+    def _remove_non_optimal_epochs(self, train_id: str):
         print("")
         print("remove non optimal epochs: {}".format(train_id))
 
@@ -902,21 +808,15 @@ class TrainingBaseline(TrainingCore):
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
-
-                # load scores of current epoch
-                # if baseline
+                # load and record scores of current epoch
                 epoch_scores = Json.load(os.path.join(epoch_dir, inference_json_name))
-                for stats in ["median", "avg"]:
-                    if inference_type == "baseline":
-                        fold_scores[epoch][stats] = epoch_scores[stats]
-                    else:
-                        for metric in g.METRICS:
-                            fold_scores[epoch][stats][metric] = epoch_scores[stats][
-                                metric
-                            ]["round=01"]
 
-            best_epoch = self.__find_best_result(
-                inference_type=inference_type, scores=fold_scores
+                self._remove_non_optimal_epochs_record_epoch_scores(
+                    fold_scores=fold_scores, epoch_scores=epoch_scores, epoch=epoch
+                )
+
+            best_epoch = self._remove_non_optimal_epochs_find_best_epoch(
+                scores=fold_scores
             )
 
             # delete non-optimal epochs
@@ -928,13 +828,16 @@ class TrainingBaseline(TrainingCore):
                     Folder.delete(epoch_dir)
                     print("delete: {} {}".format(Path(fold_dir).name, epoch))
 
-    # a sub function of _remove_non_optimal_epochs()
-    def __find_best_result(self, inference_type: str, scores: Dict):
-        if inference_type == "baseline":
-            gtv_list = ["gtvs", "gtvt", "gtvn"]
-        else:
-            gtv_list = ["gtvn"]
+    def _remove_non_optimal_epochs_record_epoch_scores(
+        self, fold_scores: Dict, epoch_scores: Dict, epoch: str
+    ):
+        for stats in ["median", "avg"]:
+            fold_scores[epoch][stats] = epoch_scores[stats]
 
+    # a sub function of _remove_non_optimal_epochs()
+    def _remove_non_optimal_epochs_find_best_epoch(
+        self, scores: Dict, gtv_list: list = ["gtvs", "gtvt", "gtvn"]
+    ):
         for stats in ["median", "avg"]:
             for gtv in gtv_list:
                 for metric in g.METRICS:
@@ -943,7 +846,7 @@ class TrainingBaseline(TrainingCore):
 
                     # add elements into the list
                     for epoch in scores.keys():
-                        if inference_type == "baseline":
+                        if len(gtv_list) > 1:
                             cur_score = scores[epoch][stats][gtv][metric]
                         else:
                             cur_score = scores[epoch][stats][metric]
@@ -957,7 +860,7 @@ class TrainingBaseline(TrainingCore):
 
                     # update value based on the idx in the list
                     for epoch in scores.keys():
-                        if inference_type == "baseline":
+                        if len(gtv_list) > 1:
                             cur_score = scores[epoch][stats][gtv][metric]
                         else:
                             cur_score = scores[epoch][stats][metric]
@@ -966,7 +869,7 @@ class TrainingBaseline(TrainingCore):
                         if metric == "dsc":
                             new_value *= 2
 
-                        if inference_type == "baseline":
+                        if len(gtv_list) > 1:
                             scores[epoch][stats][gtv][metric] = new_value
                         else:
                             scores[epoch][stats][metric] = new_value
@@ -977,8 +880,22 @@ class TrainingBaseline(TrainingCore):
             for stats in ["avg", "median"]:
                 for gtv in gtv_list:
                     for metric in g.METRICS:
-                        if inference_type == "baseline":
+                        if len(gtv_list) > 1:
                             evaluation[epoch] += scores[epoch][stats][gtv][metric]
                         else:
                             evaluation[epoch] += scores[epoch][stats][metric]
+
         return evaluation.key_with_max_value()
+
+    def _inference_single_patient_record_labels(self, labels: Dict):
+        outputs = Dict()
+        for gtv in ["gtvt", "gtvn", "gtvs"]:
+            outputs[gtv]["label"] = labels[gtv]
+        return outputs
+
+    def _inference_single_patient_record_outputs(
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+    ):
+        outputs["gtvt"]["pred"] = preds[1]
+        outputs["gtvn"]["pred"] = preds[2]
+        outputs["gtvs"]["pred"] = np.maximum(preds[1], preds[2])

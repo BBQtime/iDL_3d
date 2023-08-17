@@ -27,16 +27,21 @@ if 0:
 
 ############# Baseline #############
 baseline = TrainingBaseline()
-if 1:
+if 0:
     baseline.new_training(
         train_remark="",
         debug_mode=1,
     )
 if 0:
     baseline.inference(
-        # "baseline_2023.07.05.16.49.25_1mm_best",
+        "baseline_2023.07.05.16.49.25_1mm_best",
+        # "baseline_2023.02.27.07.08.09_3mm_best",
+        dataset_section="valid",
+        # dataset_ver="mda",
+    )
+if 0:
+    baseline.remove_non_optimal_epochs(
         "baseline_2023.02.27.07.08.09_3mm_best",
-        dataset_section="test.inter",
     )
 if 0:
     baseline.cross_valid_evaluation(
@@ -48,7 +53,7 @@ if 0:
 
 ############# IDL.GTVn #############
 idl_gtvn = TrainingIDLGTVn()
-if 1:
+if 0:
     idl_gtvn.new_training(
         baseline_id="baseline_2023.07.05.16.49.25_1mm_best",
         train_remark="",

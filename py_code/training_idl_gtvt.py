@@ -13,7 +13,7 @@ from dataset_idl_gtvt import DataSetIDLGTVt
 from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
 from numpy import ndarray
 from scipy.ndimage import measurements
-from torch import optim
+from torch import Tensor, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -422,7 +422,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # result structure: gtvt: {pred, dsc, msd, hd95}
-        patient_result = self._single_patient_inference(
+        patient_result = self._inference_single_patient(
             patient=patient[len("patient=") :],
             cnn=cnn,
             dataset_ver=dataset_ver,
@@ -930,65 +930,24 @@ class TrainingIDLGTVt(TrainingCore):
 
         self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
-    # def _single_patient_inference(
-    #     self,
-    #     patient: str,
-    #     cnn,
-    #     dataset_ver: str,
-    #     masked_label: ndarray,  # gtvt post processing
-    # ) -> Dict:
-    # # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-    # result = Dict()
-    # # original labels
-    # origin = Dict()
+    def _inference_single_patient_record_labels(self, labels: Dict):
+        outputs = Dict()
+        outputs["gtvt"]["label"] = labels["gtvt"]
+        return outputs
 
-    # dataset = DataSetBaseline(
-    #     patients=[patient], dataset_ver=dataset_ver, augment=None
-    # )
+    def _inference_single_patient_record_outputs(
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+    ):
+        outputs["gtvt"]["pred"] = preds[1]
 
-    # # load gtvt
-    # origin["gtvt"] = Nii.load(
-    #     os.path.join(
-    #         g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
-    #     ),
-    #     binary=True,
-    # )
-
-    # get pred
-    # cnn.eval()  # disable dropout / batch nomalize
-    # with torch.no_grad():
-    # item = dataset.get_item(patient)
-    # input_imgs = item[0]
-    # labels = item[1]
-    # input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
-    # labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-    # preds = cnn.forward(input_imgs)
-    # squeeze "batch" channel
-    # preds = torch.squeeze(preds, dim=0).cpu().numpy()
-
-    # result["gtvt"]["pred"] = preds[1]
-    # gtv_list = ["gtvt"]
-
-    # pad and crop to original size
-    # preds
-    # for gtv in gtv_list:
-    #     result[gtv]["pred"] = Img.central_pad_and_crop(
-    #         result[gtv]["pred"], origin[gtv].shape
-    #     )
-
-    # # idl_gtvt post processing (before calculate scores)
-    # if masked_label is not None:
-    #     cc_list = Img.connected_components(result["gtvt"]["pred"])
-    #     result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
-    #     for cur_cc in cc_list:
-    #         if (cur_cc * masked_label).sum() > 0:
-    #             result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
-
-    # calculate inference scores
-    # segment_metrics = self._load_segment_metrics(dataset_ver)
-    # for gtv in gtv_list:
-    #     for metric in g.METRICS:
-    #         result[gtv][metric] = segment_metrics[metric](
-    #             result[gtv]["pred"], origin[gtv]
-    #         )
-    # return result
+    def _inference_single_patient_gtvt_post_process(
+        self, outputs: Dict, gtvt_masked_label: ndarray
+    ):
+        if gtvt_masked_label is not None:
+            cc_list = Img.connected_components(outputs["gtvt"]["pred"])
+            outputs["gtvt"]["pred"] = np.zeros_like(outputs["gtvt"]["pred"])
+            for cur_cc in cc_list:
+                if (cur_cc * gtvt_masked_label).sum() > 0:
+                    outputs["gtvt"]["pred"] = np.maximum(
+                        outputs["gtvt"]["pred"], cur_cc
+                    )

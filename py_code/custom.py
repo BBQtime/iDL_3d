@@ -220,9 +220,7 @@ class Value:
             else:
                 Debug.error_exit("invalid baseline dataset version")
 
-    def is_valid_dataset_section(
-        dataset_section: str, dataset_ver: str = None, inference_type: str = None
-    ):
+    def is_valid_dataset_section(dataset_section: str, dataset_ver: str = None):
         err_msg = "invalid dataset section"
 
         if (
@@ -245,10 +243,6 @@ class Value:
             elif "au" in dataset_ver:
                 if dataset_ver == "test":
                     Debug.error_exit(err_msg)
-
-        # check dataset section based on inference_type
-        if inference_type == "idl.gtvn" and dataset_section == "train":
-            Debug.error_exit(err_msg)
 
 
 class Img:

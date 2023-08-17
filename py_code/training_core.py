@@ -4,6 +4,7 @@ import random
 from collections import OrderedDict
 from itertools import product
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import torch
@@ -15,7 +16,7 @@ from dataset_idl_gtvn import DataSetIDLGTVn
 from dataset_idl_gtvt import DataSetIDLGTVt
 from numpy import ndarray
 from segment_metric import SegmentationMetric
-from torch import optim
+from torch import Tensor, optim
 from torch.nn import DataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from unet_pp_slim import UNetPPSlim
@@ -341,52 +342,35 @@ class TrainingCore:
             # cant find train_dir
             return None
 
-    def _single_patient_inference(
+    def _inference_single_patient(
         self,
-        inference_type: str,
         patient: str,
         cnn,
         dataset_ver: str,
+        dataset_section: str,
         segment_metrics: Dict,
         baseline_id: str = None,  # only for idl.gtvn
         gtvt_masked_label: ndarray = None,  # gtvt post processing
     ) -> Dict:
-        # results structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
-        results = Dict()
-
-        if inference_type == "baseline" or inference_type == "idl.gtvt":
-            dataset = DataSetBaseline(
-                patients=[patient], dataset_ver=dataset_ver, augment=None
-            )
-        elif inference_type == "idl.gtvn":
-            dataset = DataSetIDLGTVn(
-                patients=[patient],
-                baseline_id=baseline_id,
-                dataset_ver=dataset_ver,
-                augment=None,
-                random_click=False,
-            )
-        else:
-            Debug.error_exit("invalid inference type")
+        # load dataset
+        dataset = self._inference_single_patient_load_dataset(
+            patient=patient,
+            dataset_ver=dataset_ver,
+            baseline_id=baseline_id,
+        )
 
         # load labels
         labels = Img.load_labels(
             dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
         )
-        if inference_type == "baseline":
-            for gtv in ["gtvt", "gtvn", "gtvs"]:
-                results[gtv]["label"] = labels[gtv]
-        elif inference_type == "idl.gtvn":
-            results["gtvn"]["label"] = labels["gtvn"]
-        elif inference_type == "idl.gtvt":
-            results["gtvt"]["label"] = labels["gtvt"]
+        # outputs structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
+        outputs = self._inference_single_patient_record_labels(labels)
 
         # get items from dataset
         item = dataset.get_item(patient)
         input_imgs = item[0]
         labels = item[1]
-        if inference_type == "idl.gtvn":
-            gtvn_clicks = item[2]
+        gtvn_clicks = self._inference_single_patient_get_gtvn_clicks(item)
 
         # add "batch" (c/d/h/w -> b/c/d/h/w)
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
@@ -399,54 +383,57 @@ class TrainingCore:
         # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
-        # record img into results
-        if inference_type == "baseline":
-            results["gtvt"]["pred"] = preds[1]
-            results["gtvn"]["pred"] = preds[2]
-            results["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
-
-        elif inference_type == "idl.gtvn":
-            results["gtvn"]["pred"] = preds[1]
-            input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-            results["gtvn"]["distance.map"] = input_imgs[0]
-            results["gtvn"]["clicks"] = torch.squeeze(gtvn_clicks, dim=0).cpu().numpy()
-
-        elif inference_type == "idl.gtvt":
-            results["gtvt"]["pred"] = preds[1]
+        # record img into outputs
+        self._inference_single_patient_record_outputs(
+            outputs=outputs, preds=preds, input_imgs=input_imgs, gtvn_clicks=gtvn_clicks
+        )
 
         # pad and crop all imgs to original size
-        for gtv in results.keys():
-            for i in results[gtv].keys():
-                results[gtv][i] = Img.central_pad_and_crop(
-                    results[gtv][i], results[gtv]["label"].shape
+        for gtv in outputs.keys():
+            for i in outputs[gtv].keys():
+                outputs[gtv][i] = Img.central_pad_and_crop(
+                    outputs[gtv][i], outputs[gtv]["label"].shape
                 )
 
-        # idl.gtvt post processing (after pad and crop, before calculate scores)
-        if gtvt_masked_label is not None:
-            cc_list = Img.connected_components(results["gtvt"]["pred"])
-            results["gtvt"]["pred"] = np.zeros_like(results["gtvt"]["pred"])
-            for cur_cc in cc_list:
-                if (cur_cc * gtvt_masked_label).sum() > 0:
-                    results["gtvt"]["pred"] = np.maximum(
-                        results["gtvt"]["pred"], cur_cc
-                    )
-
-        # idl.gtvn post processing (after pad and crop, before calculate scores)
-        if inference_type == "idl.gtvn" and 0:
-            cc_list = Img.connected_components(results["gtvn"]["pred"])
-            results["gtvn"]["pred"] = np.zeros_like(results["gtvn"]["pred"])
-            for cur_cc in cc_list:
-                if (cur_cc * results["gtvn"]["clicks"]).sum() > 0:
-                    results["gtvn"]["pred"] = np.maximum(
-                        results["gtvn"]["pred"], cur_cc
-                    )
+        # post processing (after pad and crop, before calculate scores)
+        self._inference_single_patient_gtvt_post_process(
+            outputs=outputs, gtvt_masked_label=gtvt_masked_label
+        )
+        self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate scores of current patient
-        for gtv in results.keys():
-            for metric in g.METRICS:
-                results[gtv][metric] = segment_metrics[metric](
-                    results[gtv]["pred"],
-                    results[gtv]["label"],
-                )
+        if dataset_section != "train":
+            for gtv in outputs.keys():
+                for metric in g.METRICS:
+                    outputs[gtv][metric] = segment_metrics[metric](
+                        outputs[gtv]["pred"],
+                        outputs[gtv]["label"],
+                    )
 
-        return results
+        return outputs
+
+    def _inference_single_patient_load_dataset(
+        self, patient: str, dataset_ver: str, baseline_id: str = None
+    ):
+        return DataSetBaseline(
+            patients=[patient], dataset_ver=dataset_ver, augment=None
+        )
+
+    def _inference_single_patient_record_labels(self, labels: Dict, outputs: Dict):
+        pass
+
+    def _inference_single_patient_get_gtvn_clicks(self, item: list):
+        return None
+
+    def _inference_single_patient_record_outputs(
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+    ):
+        pass
+
+    def _inference_single_patient_gtvn_post_process(self, outputs: Dict):
+        pass
+
+    def _inference_single_patient_gtvt_post_process(
+        self, outputs: Dict, gtvt_masked_label: ndarray
+    ):
+        pass
