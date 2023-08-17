@@ -12,19 +12,19 @@ from custom import Img, Json, List, Nii, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QImage, QPalette, QPixmap
-from PyQt5.QtWidgets import QButtonGroup, QMainWindow, QRubberBand
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRubberBand
 from Ui_core import Ui_Core
 
 
 class UiReplay(QMainWindow, Ui_Core):
-    def __init__(self):
+    def __init__(self, debug_mode: bool = False):
         super().__init__()
         self.setupUi(self)
 
         self._init_ui_names()
-        self._init_member_var()
+        self._init_member_var(debug_mode)
         self.__set_display_frames_background()
-        self.__init_zoomin()
+        # self.__init_zoomin()
         self.__init_color()
         self._init_side_bar()  # after _init_member_var(), function connection needed
 
@@ -38,25 +38,28 @@ class UiReplay(QMainWindow, Ui_Core):
         # load first baseline result
         self._choose_baseline()
 
-    def _init_member_var(self):
+    # param: debug_mode is for subclass: UiIdl
+    def _init_member_var(self, debug_mode: bool = False):
         # patients: "test.inter"
         self.__patients = Dict()
-        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH)[
-            "test.inter"
+        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH["mda"])[
+            "test"
         ]
         # str to List
         self.__patients["test.inter"] = List(self.__patients["test.inter"])
         self.__patients["test.inter"].sort()
 
         self._baseline_id = None
-        self._patient = None
-        self._idl_gtvt_id = "baseline"
-        self._idl_gtvt_round = "round=00"
-        self._idl_gtvn_id = "baseline"
-        self._idl_gtvn_round = "round=00"
-        self._cur_slice = None  # starts from 0
+        self._cur_patient = None
+        self._cur_slice = 0  # starts from 0
 
-        self._nii_spacing = None  # 1mm or 3mm
+        self._idl_id = Dict()
+        self._idl_round = Dict()
+        for i in ["gtvt", "gtvn"]:
+            self._idl_id[i] = "baseline"
+            self._idl_round[i] = "round=00"
+
+        self._nii_spacing = None  # (1,1,1) or (1,1,3)
         self._dataset_dir = None  # 1mm or 3mm
         self.__scores = Dict()
         self._3d_imgs = Dict()
@@ -94,177 +97,177 @@ class UiReplay(QMainWindow, Ui_Core):
             if self.__radio_btn[i].isChecked():
                 self.__img_plane = i
 
-    def __init_zoomin(self):
-        self.__zoomin = Dict()
-        self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
-        self._reset_zoomin()
+    # def __init_zoomin(self):
+    #     self.__zoomin = Dict()
+    #     self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
+    #     self._reset_zoomin()
 
-    def _reset_zoomin(self):
-        self.__zoomin["rubber.band"].hide()
-        self.__zoomin["img"] = None
-        self.__zoomin["start"] = None
-        self.__zoomin["end"] = None
+    # def _reset_zoomin(self):
+    #     self.__zoomin["rubber.band"].hide()
+    #     self.__zoomin["img"] = None
+    #     self.__zoomin["start"] = None
+    #     self.__zoomin["end"] = None
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+    # def mousePressEvent(self, event):
+    #     super().mousePressEvent(event)
 
-        # loop 4 img frames
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            left = self.__display_frame[i].x()
-            top = self.__display_frame[i].y()
-            width = self.__display_frame[i].width()
-            height = self.__display_frame[i].height()
-            # if start pos is in current img frame
-            if (
-                event.x() >= left
-                and event.x() <= left + width
-                and event.y() >= top
-                and event.y() <= top + height
-            ):
-                # already zoomed in, clear zoomin (only click in img frame area)
-                if self.__zoomin["start"] is not None:
-                    self._reset_zoomin()
-                    self._refresh_imgs()
-                    return
-                # zoom in
-                else:
-                    self.__zoomin["img"] = i
-                    self.__zoomin["start"] = event.pos()
-                    rect = QRect(event.pos(), event.pos())
-                    self.__zoomin["rubber.band"].setGeometry(rect.normalized())
-                    self.__zoomin["rubber.band"].show()
-                    return
+    #     # loop 4 img frames
+    #     for i in ["ct", "pt", "mrt1", "mrt2"]:
+    #         left = self._display_frame[i].x()
+    #         top = self._display_frame[i].y()
+    #         width = self._display_frame[i].width()
+    #         height = self._display_frame[i].height()
+    #         # if start pos is in current img frame
+    #         if (
+    #             event.x() >= left
+    #             and event.x() <= left + width
+    #             and event.y() >= top
+    #             and event.y() <= top + height
+    #         ):
+    #             # already zoomed in, clear zoomin (only click in img frame area)
+    #             if self.__zoomin["start"] is not None:
+    #                 self._reset_zoomin()
+    #                 self._refresh_imgs()
+    #                 return
+    #             # zoom in
+    #             else:
+    #                 self.__zoomin["img"] = i
+    #                 self.__zoomin["start"] = event.pos()
+    #                 rect = QRect(event.pos(), event.pos())
+    #                 self.__zoomin["rubber.band"].setGeometry(rect.normalized())
+    #                 self.__zoomin["rubber.band"].show()
+    #                 return
 
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
-            return
-        self.__mouse_move_event(event)
+    # def mouseMoveEvent(self, event):
+    #     super().mouseMoveEvent(event)
+    #     if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
+    #         return
+    #     self.__mouse_move_event(event)
 
-    def __mouse_move_event(self, event):
-        # limit zoomin frame in img frame
-        display_frame = self.__display_frame[self.__zoomin["img"]]
-        display_frame_right = display_frame.x() + display_frame.width() - 1
-        if event.x() < display_frame.x():
-            event_x = display_frame.x()
-        elif event.x() > display_frame_right:
-            event_x = display_frame_right
-        else:
-            event_x = event.x()
-        display_frame_buttom = display_frame.y() + display_frame.height() - 1
-        if event.y() < display_frame.y():
-            event_y = display_frame.y()
-        elif event.y() > display_frame_buttom:
-            event_y = display_frame_buttom
-        else:
-            event_y = event.y()
-        # resize zoomin frame
-        self.__zoomin["end"] = QPoint(event_x, event_y)
-        rect = QRect(
-            self.__zoomin["start"],
-            self.__zoomin["end"],
-        )
-        self.__zoomin["rubber.band"].setGeometry(rect.normalized())
+    # def __mouse_move_event(self, event):
+    #     # limit zoomin frame in img frame
+    #     display_frame = self._display_frame[self.__zoomin["img"]]
+    #     display_frame_right = display_frame.x() + display_frame.width() - 1
+    #     if event.x() < display_frame.x():
+    #         event_x = display_frame.x()
+    #     elif event.x() > display_frame_right:
+    #         event_x = display_frame_right
+    #     else:
+    #         event_x = event.x()
+    #     display_frame_buttom = display_frame.y() + display_frame.height() - 1
+    #     if event.y() < display_frame.y():
+    #         event_y = display_frame.y()
+    #     elif event.y() > display_frame_buttom:
+    #         event_y = display_frame_buttom
+    #     else:
+    #         event_y = event.y()
+    #     # resize zoomin frame
+    #     self.__zoomin["end"] = QPoint(event_x, event_y)
+    #     rect = QRect(
+    #         self.__zoomin["start"],
+    #         self.__zoomin["end"],
+    #     )
+    #     self.__zoomin["rubber.band"].setGeometry(rect.normalized())
 
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
+    # def mouseReleaseEvent(self, event):
+    #     super().mouseReleaseEvent(event)
 
-        # not zoomed in
-        if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
-            return
-        self.__mouse_move_event(event)
-        self.__zoomin["rubber.band"].hide()
-        # self.__zoomin["rubber.band"] = None
+    #     # not zoomed in
+    #     if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
+    #         return
+    #     self.__mouse_move_event(event)
+    #     self.__zoomin["rubber.band"].hide()
+    #     # self.__zoomin["rubber.band"] = None
 
-        # no data loaded
-        if self._3d_imgs["pt"] is None:
-            self._reset_zoomin()
-            return
+    #     # no data loaded
+    #     if self._3d_imgs["pt"] is None:
+    #         self._reset_zoomin()
+    #         return
 
-        # zoomin size == 0
-        if (
-            abs(self.__zoomin["start"].x() - self.__zoomin["end"].x()) <= 1
-            or abs(self.__zoomin["start"].y() - self.__zoomin["end"].y()) <= 1
-        ):
-            # print("zoomin size 0")
-            self._reset_zoomin()
-            return
-        self.__get_img_roi()
+    #     # zoomin size == 0
+    #     if (
+    #         abs(self.__zoomin["start"].x() - self.__zoomin["end"].x()) <= 1
+    #         or abs(self.__zoomin["start"].y() - self.__zoomin["end"].y()) <= 1
+    #     ):
+    #         # print("zoomin size 0")
+    #         self._reset_zoomin()
+    #         return
+    #     self.__get_img_roi()
 
-    def __get_img_roi(self):
-        # make sure start point always < end point
-        start_x = self.__zoomin["start"].x()
-        start_y = self.__zoomin["start"].y()
-        end_x = self.__zoomin["end"].x()
-        end_y = self.__zoomin["end"].y()
-        if start_x > end_x:
-            x = start_x
-            start_x = end_x
-            end_x = x
-        if start_y > end_y:
-            y = start_y
-            start_y = end_y
-            end_y = y
-        # get display_frame related position
-        display_frame_left = self.__display_frame[self.__zoomin["img"]].x()
-        display_frame_top = self.__display_frame[self.__zoomin["img"]].y()
-        start_x -= display_frame_left
-        end_x -= display_frame_left
-        start_y -= display_frame_top
-        end_y -= display_frame_top
+    # def __get_img_roi(self):
+    #     # make sure start point always < end point
+    #     start_x = self.__zoomin["start"].x()
+    #     start_y = self.__zoomin["start"].y()
+    #     end_x = self.__zoomin["end"].x()
+    #     end_y = self.__zoomin["end"].y()
+    #     if start_x > end_x:
+    #         x = start_x
+    #         start_x = end_x
+    #         end_x = x
+    #     if start_y > end_y:
+    #         y = start_y
+    #         start_y = end_y
+    #         end_y = y
+    #     # get display_frame related position
+    #     display_frame_left = self._display_frame[self.__zoomin["img"]].x()
+    #     display_frame_top = self._display_frame[self.__zoomin["img"]].y()
+    #     start_x -= display_frame_left
+    #     end_x -= display_frame_left
+    #     start_y -= display_frame_top
+    #     end_y -= display_frame_top
 
-        # get actual_img_area related position
-        resize_pos = self.__resize_pos[self.__zoomin["img"]]
-        start_x -= resize_pos["x"]
-        start_y -= resize_pos["y"]
-        end_x -= resize_pos["x"]
-        end_y -= resize_pos["y"]
-        # out of range
-        if (start_x < 0 and end_x < 0) or (
-            start_x > resize_pos["width"] and end_x > resize_pos["width"]
-        ):
-            self._reset_zoomin()
-            return
-        if (start_y < 0 and end_y < 0) or (
-            start_y > resize_pos["height"] and end_y > resize_pos["height"]
-        ):
-            self._reset_zoomin()
-            return
-        # limit zoomin frame in image area
-        if start_x < 0:
-            start_x = 0
-        if start_y < 0:
-            start_y = 0
-        if end_x > resize_pos["width"]:
-            end_x = resize_pos["width"]
-        if end_y > resize_pos["height"]:
-            end_y = resize_pos["height"]
+    #     # get actual_img_area related position
+    #     resize_pos = self.__resize_pos[self.__zoomin["img"]]
+    #     start_x -= resize_pos["x"]
+    #     start_y -= resize_pos["y"]
+    #     end_x -= resize_pos["x"]
+    #     end_y -= resize_pos["y"]
+    #     # out of range
+    #     if (start_x < 0 and end_x < 0) or (
+    #         start_x > resize_pos["width"] and end_x > resize_pos["width"]
+    #     ):
+    #         self._reset_zoomin()
+    #         return
+    #     if (start_y < 0 and end_y < 0) or (
+    #         start_y > resize_pos["height"] and end_y > resize_pos["height"]
+    #     ):
+    #         self._reset_zoomin()
+    #         return
+    #     # limit zoomin frame in image area
+    #     if start_x < 0:
+    #         start_x = 0
+    #     if start_y < 0:
+    #         start_y = 0
+    #     if end_x > resize_pos["width"]:
+    #         end_x = resize_pos["width"]
+    #     if end_y > resize_pos["height"]:
+    #         end_y = resize_pos["height"]
 
-        # get actual zoom position
-        if self.__img_plane == "sagittal":
-            origin_width = self._3d_imgs["pt"].shape[1]
-            origin_height = self._3d_imgs["pt"].shape[0]
-            origin_height = round(
-                origin_height * self._nii_spacing[2] / self._nii_spacing[1]
-            )
-        elif self.__img_plane == "coronal":
-            origin_width = self._3d_imgs["pt"].shape[2]
-            origin_height = self._3d_imgs["pt"].shape[0]
-            origin_height = round(
-                origin_height * self._nii_spacing[2] / self._nii_spacing[0]
-            )
-        else:
-            origin_width = self._3d_imgs["pt"].shape[2]
-            origin_height = self._3d_imgs["pt"].shape[1]
+    #     # get actual zoom position
+    #     if self.__img_plane == "sagittal":
+    #         origin_width = self._3d_imgs["pt"].shape[1]
+    #         origin_height = self._3d_imgs["pt"].shape[0]
+    #         origin_height = round(
+    #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
+    #         )
+    #     elif self.__img_plane == "coronal":
+    #         origin_width = self._3d_imgs["pt"].shape[2]
+    #         origin_height = self._3d_imgs["pt"].shape[0]
+    #         origin_height = round(
+    #             origin_height * self._nii_spacing[2] / self._nii_spacing[0]
+    #         )
+    #     else:
+    #         origin_width = self._3d_imgs["pt"].shape[2]
+    #         origin_height = self._3d_imgs["pt"].shape[1]
 
-        start_x = round(start_x * origin_width / resize_pos["width"])
-        end_x = round(end_x * origin_width / resize_pos["width"])
-        start_y = round(start_y * origin_height / resize_pos["height"])
-        end_y = round(end_y * origin_height / resize_pos["height"])
+    #     start_x = round(start_x * origin_width / resize_pos["width"])
+    #     end_x = round(end_x * origin_width / resize_pos["width"])
+    #     start_y = round(start_y * origin_height / resize_pos["height"])
+    #     end_y = round(end_y * origin_height / resize_pos["height"])
 
-        self.__zoomin["start"] = QPoint(start_x, start_y)
-        self.__zoomin["end"] = QPoint(end_x, end_y)
-        self._refresh_imgs()
+    #     self.__zoomin["start"] = QPoint(start_x, start_y)
+    #     self.__zoomin["end"] = QPoint(end_x, end_y)
+    #     self._refresh_imgs()
 
     def __fit_display_frame(self, img, display_frame: QtWidgets.QLabel):
         err_msg = "MainWindow.__fit_display_frame(), img.shape should == 2 or 3"
@@ -295,21 +298,21 @@ class UiReplay(QMainWindow, Ui_Core):
                 interpolation=cv2.INTER_AREA,
             )
 
-        # zoom in
-        if self.__zoomin["start"] is not None and self.__zoomin["end"] is not None:
-            if len(img.shape) == 3:
-                img = img[
-                    self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-                    self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-                    :,
-                ]
-            elif len(img.shape) == 2:
-                img = img[
-                    self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-                    self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-                ]
-            else:
-                raise ValueError(err_msg)
+        # # zoom in
+        # if self.__zoomin["start"] is not None and self.__zoomin["end"] is not None:
+        #     if len(img.shape) == 3:
+        #         img = img[
+        #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
+        #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
+        #             :,
+        #         ]
+        #     elif len(img.shape) == 2:
+        #         img = img[
+        #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
+        #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
+        #         ]
+        #     else:
+        #         raise ValueError(err_msg)
 
         # resize to fit image frame
         origin_height = img.shape[0]
@@ -376,11 +379,11 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["score.text"] = self._color["gtvt.annotation"]
 
     def _init_ui_names(self):
-        self.__display_frame = Dict()
-        self.__display_frame["ct"] = self._display_frame_ct
-        self.__display_frame["pt"] = self._display_frame_pt
-        self.__display_frame["mrt1"] = self._display_frame_mrt1
-        self.__display_frame["mrt2"] = self._display_frame_mrt2
+        self._display_frame = Dict()
+        self._display_frame["ct"] = self._display_frame_ct
+        self._display_frame["pt"] = self._display_frame_pt
+        self._display_frame["mrt1"] = self._display_frame_mrt1
+        self._display_frame["mrt2"] = self._display_frame_mrt2
 
         self._text_label = Dict()
         self._text_label["baseline"] = self._text_label_baseline
@@ -434,9 +437,9 @@ class UiReplay(QMainWindow, Ui_Core):
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self.__display_frame[i].setObjectName("")
-            self.__display_frame[i].setAutoFillBackground(True)
-            self.__display_frame[i].setPalette(pal)
+            self._display_frame[i].setObjectName("")
+            self._display_frame[i].setAutoFillBackground(True)
+            self._display_frame[i].setPalette(pal)
 
     def _init_side_bar(self):
         # hide idl.gtvs controls
@@ -513,11 +516,11 @@ class UiReplay(QMainWindow, Ui_Core):
             )
 
         # fill the baseline combobox with baseline_ids
-        self._combox["baseline"].addItems(
-            Directory.get_sub_folders(
-                g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
-            )
+        baseline_id_list = Directory.get_sub_folders(
+            g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
+        baseline_id_list = [i for i in baseline_id_list if "1mm" in i]
+        self._combox["baseline"].addItems(baseline_id_list)
 
         # set initial state
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
@@ -581,7 +584,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
         self._arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
 
-        self._combox["idl.gtvn"].activated.connect(self.__choose_idl_gtvn)
+        self._combox["idl.gtvn"].activated.connect(self._choose_idl_gtvn)
         self._arrow_btn["prev.idl.gtvn"].clicked.connect(self.__choose_prev_idl_gtvn)
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self.__choose_next_idl_gtvn)
 
@@ -591,12 +594,8 @@ class UiReplay(QMainWindow, Ui_Core):
                     self._refresh_imgs
                 )
 
-        # for i in ["transverse", "coronal", "sagittal"]:
-        #     self.__radio_btn[i].toggled.connect(self.__set_img_plane)
         self.__btn_group_plane.buttonClicked.connect(self.__set_img_plane)
 
-        # for i in ["ct", "pt", "mrt1", "mrt2"]:
-        #     self.__radio_btn[i].toggled.connect(self.__set_bright_contrast_modality)
         self.__btn_group_bright_contrast.buttonClicked.connect(
             self.__set_bright_contrast_modality
         )
@@ -698,17 +697,6 @@ class UiReplay(QMainWindow, Ui_Core):
         # return the followings for UiIdl
         return left, top, width, gap, text_height, bar_height
 
-    def _load_img(self, path: str):
-        img = Nii.load(path, binary=False)
-        # ct windowing before normalization
-        if "CT" in path:
-            img = Img.ct_windowing(img)
-        img = Img.normalize(img)
-        # turn upside down
-        img = np.flip(m=img, axis=0)
-        # img = np.rot90(m=img, k=2, axes=(0, 1))
-        return img
-
     def __set_img_plane(self):
         for i in ["transverse", "coronal", "sagittal"]:
             if self.__radio_btn[i].isChecked():
@@ -720,7 +708,7 @@ class UiReplay(QMainWindow, Ui_Core):
         if slices_count > 0:
             self._cur_slice = round(slices_count / 2) - 1
             self._cur_slice = Value.limit_range(self._cur_slice, (0, slices_count - 1))
-        self._reset_zoomin()
+        # self._reset_zoomin()
         self._refresh_imgs()
         self._refresh_title()
 
@@ -749,17 +737,17 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def _clear_display_frames(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            width = self.__display_frame[i].width()
-            height = self.__display_frame[i].height()
+            width = self._display_frame[i].width()
+            height = self._display_frame[i].height()
             black_img = np.zeros([width, height, 3])
             qt_image = QImage(
                 black_img,
-                self.__display_frame[i].width(),
-                self.__display_frame[i].height(),
-                self.__display_frame[i].width() * 3,
+                self._display_frame[i].width(),
+                self._display_frame[i].height(),
+                self._display_frame[i].width() * 3,
                 QImage.Format_RGB888,
             )
-            self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
@@ -786,9 +774,10 @@ class UiReplay(QMainWindow, Ui_Core):
         fold_dir = Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         )[0]
-        slice_thick = Json.load(os.path.join(fold_dir, "hyper.json"))["slice.thick"]
-        self._dataset_dir = g.DATASET_DIR[slice_thick]
-        self._nii_spacing = g.NII_SPACING[slice_thick]
+        dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))["dataset.ver"]
+        # self._dataset_dir = g.DATASET_DIR[dataset_ver]
+        self._dataset_dir = g.DATASET_DIR["mda"]
+        self._nii_spacing = g.NII_SPACING[dataset_ver]
 
     def _fill_combox_patient(self):
         combox_patients = Directory.get_sub_folders(
@@ -804,7 +793,7 @@ class UiReplay(QMainWindow, Ui_Core):
         return combox_patients
 
     def _choose_baseline(self):
-        self._reset_zoomin()
+        # self._reset_zoomin()
         self._clear_img_data()
         self._clear_display_frames()
 
@@ -826,25 +815,46 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # choose patient automatically
         # try not to reset patient when idl.gtvt/gtvn_id are changed
-        if self._patient not in combox_patients:
+        if self._cur_patient not in combox_patients:
             reset_patient = True
         else:
             reset_patient = False
         self._choose_patient(idx=None, reset_patient=reset_patient)
 
+    def __load_3d_img(self, path: str, binary: bool = False):
+        img = Nii.load(path, binary=False)
+
+        # ct windowing before normalization
+        if "CT" in path:
+            img = Img.ct_windowing(img)
+
+        # normalization
+        img = Img.normalize(img)
+
+        # binarize img after normalization
+        if binary:
+            img = Img.binarize(img)
+
+        # turn upside down
+        img = np.flip(img, axis=0)
+
+        # flip left/right for 1mm data
+        if self._nii_spacing[2] == 1.0:
+            img = np.flip(img, axis=2)
+
+        return img
+
+    # ui_idl will inherit this function, do not make it private
     def _load_multi_modal_imgs(self):
-        self._3d_imgs["ct"] = self._load_img(
-            os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(self._patient))
-        )
-        self._3d_imgs["pt"] = self._load_img(
-            os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(self._patient))
-        )
-        self._3d_imgs["mrt1"] = self._load_img(
-            os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(self._patient))
-        )
-        self._3d_imgs["mrt2"] = self._load_img(
-            os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(self._patient))
-        )
+        paths = Dict()
+        paths["ct"] = "CT"
+        paths["pt"] = "PT"
+        paths["mrt1"] = "T1dr"
+        paths["mrt2"] = "T2dr"
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            paths[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, paths[i])
+            paths[i] = os.path.join(self._dataset_dir, paths[i])
+            self._3d_imgs[i] = self.__load_3d_img(paths[i])
 
     def _get_middle_slice_id(self):
         slices_count = self.__get_slices_count()
@@ -861,12 +871,12 @@ class UiReplay(QMainWindow, Ui_Core):
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
         if reset_patient is True:
-            self._patient = self._combox["patient"].currentText()
-            self._reset_zoomin()
+            self._cur_patient = self._combox["patient"].currentText()
+            # self._reset_zoomin()
 
         # triggered by baseline combox update, and find cur patient in new baseline dir
         else:
-            self._combox["patient"].setCurrentText(self._patient)
+            self._combox["patient"].setCurrentText(self._cur_patient)
 
         # run this after patient combox current text is set up
         self._enable_arrow_btns("patient")
@@ -887,19 +897,21 @@ class UiReplay(QMainWindow, Ui_Core):
                 key_word=i,
                 full_path=True,
             ):
-                round_folders = Directory.get_sub_folders(
-                    os.path.join(
-                        idl_result_dir,
-                        "patients",
-                        "patient={}".format(self._patient),
-                    ),
-                    key_word="round=",
-                    full_path=False,
+                patient_dir = os.path.join(
+                    idl_result_dir,
+                    "patients",
+                    "patient={}".format(self._cur_patient),
                 )
-                for round_folder in round_folders:
-                    combox_items.append(
-                        os.path.join(Path(idl_result_dir).name, round_folder)
+                if os.path.exists(patient_dir):
+                    round_folders = Directory.get_sub_folders(
+                        patient_dir,
+                        key_word="round=",
+                        full_path=False,
                     )
+                    for round_folder in round_folders:
+                        combox_items.append(
+                            os.path.join(Path(idl_result_dir).name, round_folder)
+                        )
 
             self._combox[i].addItems(combox_items)
 
@@ -917,217 +929,137 @@ class UiReplay(QMainWindow, Ui_Core):
         self._load_multi_modal_imgs()
 
         # load labels
-        for i in ["t", "n"]:
-            self._3d_imgs["gtv{}.label".format(i)] = self._load_img(
-                os.path.join(
-                    self._dataset_dir,
-                    "HNCDL_{}_GTV{}.nii".format(self._patient, i),
-                )
-            )
+        labels = Img.load_labels(
+            dataset_dir=self._dataset_dir,
+            patient=self._cur_patient,
+            load_func=self.__load_3d_img,
+        )
+        for gtv in ["gtvt", "gtvn"]:
+            self._3d_imgs["{}.label".format(gtv)] = labels[gtv]
 
         # get slice id (after multi-modal imgs are loaded)
         self._cur_slice = self._get_middle_slice_id()
 
-        # choose idl gtvt automatically
-        # try not to reset idl.gtvt id/round when patient is changed
-        if self._idl_gtvt_id == "baseline":
-            reset_idl_gtvt = False
-        elif (
-            os.path.join(self._idl_gtvt_id, self._idl_gtvt_round)
-            not in self._combox["idl.gtvt"].currentText()
-        ):
-            reset_idl_gtvt = True
-        else:
-            reset_idl_gtvt = False
-        # refresh imgs after idl.gtvn is chosen
-        self._choose_idl_gtvt(
-            idx=None, reset_idl_gtvt=reset_idl_gtvt, refresh_imgs=False
-        )
+        # choose idl automatically
+        # try not to reset idl id/round when patient is changed
+        for gtv in ["gtvt", "gtvn"]:
+            if self._idl_id[gtv] == "baseline":
+                reset_id = False
+            elif (
+                os.path.join(self._idl_id[gtv], self._idl_round[gtv])
+                not in self._combox["idl.{}".format(gtv)].currentText()
+            ):
+                reset_id = True
+            else:
+                reset_id = False
+            # refresh imgs after idl.gtvn is chosen
+            self.__choose_idl(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
-        # choose idl gtvn automatically
-        # try not to reset idl.gtvn id/round when patient is changed
-        if self._idl_gtvn_id == "baseline":
-            reset_idl_gtvn = False
-        elif (
-            os.path.join(self._idl_gtvn_id, self._idl_gtvn_round)
-            not in self._combox["idl.gtvn"].currentText()
-        ):
-            reset_idl_gtvn = True
-        else:
-            reset_idl_gtvn = False
-        # refresh imgs here
-        self.__choose_idl_gtvn(
-            idx=None, reset_idl_gtvn=reset_idl_gtvn, refresh_imgs=True
-        )
+        self._refresh_imgs()
+        self._refresh_title()
 
     def _choose_idl_gtvt(
-        self, idx: int = None, reset_idl_gtvt: bool = True, refresh_imgs=True
+        self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        # triggered by:
-        # (1) idl.gtvt combox update
-        # (2) patient combox update, but can not find cur patient in idl.gtvt dir
-        if reset_idl_gtvt is True:
-            combox_item = self._combox["idl.gtvt"].currentText()
-            if combox_item == "baseline":
-                self._idl_gtvt_id = "baseline"
-                self._idl_gtvt_round = "round=00"
-            else:
-                self._idl_gtvt_id = combox_item[: combox_item.index("/")]
-                self._idl_gtvt_round = combox_item[combox_item.index("/") + 1 :]
-            self._reset_zoomin()
+        self.__choose_idl(gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs)
 
-        # triggered by patient combox update, and find cur patient in idl.gtvt dir
-        else:
-            if self._idl_gtvt_id == "baseline":
-                self._combox["idl.gtvt"].setCurrentText("baseline")
-            else:
-                self._combox["idl.gtvt"].setCurrentText(
-                    os.path.join(self._idl_gtvt_id, self._idl_gtvt_round)
-                )
-
-        # run this after idl gtvt combox is filled
-        self._enable_arrow_btns("idl.gtvt")
-
-        # load gtvt pred
-        if self._idl_gtvt_id == "baseline":
-            gtvt_pred_path = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self._baseline_id,
-                "baseline",
-                "patients",
-                "patient={}".format(self._patient),
-            )
-        else:
-            gtvt_pred_path = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self._baseline_id,
-                self._idl_gtvt_id,
-                "patients",
-                "patient={}".format(self._patient),
-                self._idl_gtvt_round,
-            )
-        gtvt_pred_path = os.path.join(gtvt_pred_path, "gtvt_pred.nii")
-        self._3d_imgs["gtvt.pred"] = self._load_img(gtvt_pred_path)
-        self._3d_imgs["gtvt.pred"] = Img.binarize(self._3d_imgs["gtvt.pred"])
-
-        # load baseline gtvt scores
-        if self._idl_gtvt_id == "baseline":
-            gtvt_score = Json.load(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    self._baseline_id,
-                    "baseline",
-                    "inference_test_inter.json",
-                )
-            )
-            for metric in g.METRICS:
-                self.__scores["gtvt"][metric] = gtvt_score[
-                    "patient={}".format(self._patient)
-                ]["gtvt"][metric]
-
-        # load idl gtvt scores
-        else:
-            gtvt_score = Json.load(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    self._baseline_id,
-                    self._idl_gtvt_id,
-                    "inference_test_inter.json",
-                )
-            )
-            for metric in g.METRICS:
-                self.__scores["gtvt"][metric] = gtvt_score[
-                    "patient={}".format(self._patient)
-                ][metric][self._idl_gtvt_round]
-
-        if refresh_imgs:
-            self._refresh_imgs()
-            self._refresh_title()
-
-    def __choose_idl_gtvn(
-        self, idx: int = None, reset_idl_gtvn: bool = True, refresh_imgs=True
+    def _choose_idl_gtvn(
+        self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
+        self.__choose_idl(gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs)
+
+    def __choose_idl(self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True):
         # triggered by:
-        # (1) idl.gtvn combox update
-        # (2) patient combox update, but can not find cur patient in idl.gtvn dir
-        if reset_idl_gtvn is True:
-            combox_item = self._combox["idl.gtvn"].currentText()
+        # (1) idl combox update
+        # (2) patient combox update, but can not find cur patient in idl dir
+        if reset_id is True:
+            combox_item = self._combox["idl.{}".format(gtv)].currentText()
             if combox_item == "baseline":
-                self._idl_gtvn_id = "baseline"
-                self._idl_gtvn_round = "round=00"
+                self._idl_id[gtv] = "baseline"
+                self._idl_round[gtv] = "round=00"
             else:
-                self._idl_gtvn_id = combox_item[: combox_item.index("/")]
-                self._idl_gtvn_round = combox_item[combox_item.index("/") + 1 :]
-            self._reset_zoomin()
+                self._idl_id[gtv] = combox_item[: combox_item.index("/")]
+                self._idl_round[gtv] = combox_item[combox_item.index("/") + 1 :]
+            # self._reset_zoomin()
 
         # triggered by patient combox update, and find cur patient in idl.gtvn dir
         else:
-            if self._idl_gtvn_id == "baseline":
-                self._combox["idl.gtvn"].setCurrentText("baseline")
+            if self._idl_id[gtv] == "baseline":
+                self._combox["idl.{}".format(gtv)].setCurrentText("baseline")
             else:
-                self._combox["idl.gtvn"].setCurrentText(
-                    os.path.join(self._idl_gtvn_id, self._idl_gtvn_round)
+                self._combox["idl.{}".format(gtv)].setCurrentText(
+                    os.path.join(self._idl_id[gtv], self._idl_round[gtv])
                 )
 
         # run this after idl gtvn combox is filled
-        self._enable_arrow_btns("idl.gtvn")
+        self._enable_arrow_btns("idl.{}".format(gtv))
 
-        # load gtvn pred and clicks
-        if self._idl_gtvn_id == "baseline":
-            gtvn_pred_path = os.path.join(
+        # load pred (and gtvn clicks)
+        if self._idl_id[gtv] == "baseline":
+            pred_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 "baseline",
                 "patients",
-                "patient={}".format(self._patient),
+                "patient={}".format(self._cur_patient),
+                "{}_pred.nii".format(gtv),
             )
+            # clear gtvn clicks
+            if gtv == "gtvn":
+                self._3d_imgs["gtvn.clicks"] = None
         else:
-            gtvn_pred_path = gtvn_clicks_path = os.path.join(
+            pred_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
-                self._idl_gtvn_id,
+                self._idl_id[gtv],
                 "patients",
-                "patient={}".format(self._patient),
-                self._idl_gtvn_round,
+                "patient={}".format(self._cur_patient),
+                self._idl_round[gtv],
+                "{}_pred.nii".format(gtv),
             )
             # load gtvn clicks
-            gtvn_clicks_path = os.path.join(gtvn_clicks_path, "gtvn_clicks.nii")
-            self._3d_imgs["gtvn.clicks"] = self._load_img(gtvn_clicks_path)
-            self._3d_imgs["gtvn.clicks"] = Img.binarize(self._3d_imgs["gtvn.clicks"])
-        # load gtvn preds
-        gtvn_pred_path = os.path.join(gtvn_pred_path, "gtvn_pred.nii")
-        self._3d_imgs["gtvn.pred"] = self._load_img(gtvn_pred_path)
-        self._3d_imgs["gtvn.pred"] = Img.binarize(self._3d_imgs["gtvn.pred"])
-
-        # load baseline gtvn scores
-        if self._idl_gtvn_id == "baseline":
-            gtvn_score = Json.load(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    self._baseline_id,
-                    "baseline",
-                    "inference_test_inter.json",
+            if gtv == "gtvn":
+                gtvn_clicks_path = os.path.join(
+                    Path(pred_path).parent, "gtvn_clicks.nii"
                 )
+                self._3d_imgs["gtvn.clicks"] = self.__load_3d_img(
+                    gtvn_clicks_path, binary=True
+                )
+
+        # load preds
+        self._3d_imgs["{}.pred".format(gtv)] = self.__load_3d_img(
+            pred_path, binary=True
+        )
+
+        # load baseline scores
+        if self._idl_id[gtv] == "baseline":
+            gtvn_score_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                "baseline",
+                "inference_test_inter.json",
             )
-            for metric in g.METRICS:
-                self.__scores["gtvn"][metric] = gtvn_score[
-                    "patient={}".format(self._patient)
-                ]["gtvn"][metric]
+            if os.path.exists(gtvn_score_path):
+                gtvn_score = Json.load(gtvn_score_path)
+                for metric in g.METRICS:
+                    self.__scores[gtv][metric] = gtvn_score[
+                        "patient={}".format(self._cur_patient)
+                    ][gtv][metric]
 
         # load idl gtvn scores
         else:
-            gtvn_score = Json.load(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    self._baseline_id,
-                    self._idl_gtvn_id,
-                    "inference_test_inter.json",
-                )
+            gtvn_score_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_id[gtv],
+                "inference_test_inter.json",
             )
-            for metric in g.METRICS:
-                self.__scores["gtvn"][metric] = gtvn_score[
-                    "patient={}".format(self._patient)
-                ][metric][self._idl_gtvn_round]
+            if os.path.exists(gtvn_score_path):
+                gtvn_score = Json.load(gtvn_score_path)
+                for metric in g.METRICS:
+                    self.__scores[gtv][metric] = gtvn_score[
+                        "patient={}".format(self._cur_patient)
+                    ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
             self._refresh_imgs()
@@ -1155,7 +1087,7 @@ class UiReplay(QMainWindow, Ui_Core):
             return
         prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
-        self.__choose_idl_gtvn()
+        self._choose_idl_gtvn()
 
     def __choose_next_idl_gtvn(self):
         idx = self._combox["idl.gtvn"].currentIndex() + 1
@@ -1163,7 +1095,7 @@ class UiReplay(QMainWindow, Ui_Core):
             return
         next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
-        self.__choose_idl_gtvn()
+        self._choose_idl_gtvn()
 
     def __choose_prev_idl_gtvt(self):
         idx = self._combox["idl.gtvt"].currentIndex() - 1
@@ -1291,6 +1223,12 @@ class UiReplay(QMainWindow, Ui_Core):
                     # image is reversed in the transverse plane
                     if self.__img_plane != "transverse" and direction == "horizontal":
                         slice_pos = total_slices_num[direction] - selected_slice
+                    # only for 1mm
+                    elif self.__img_plane != "coronal" and direction == "vertical":
+                        slice_pos = total_slices_num[direction] - selected_slice
+                    # only for 1mm
+                    elif self.__img_plane != "sagittal" and direction == "vertical":
+                        slice_pos = total_slices_num[direction] - selected_slice
                     else:
                         slice_pos = selected_slice
 
@@ -1328,23 +1266,21 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # resize and fit img frame
             rgb_img, self.__resize_pos[i] = self.__fit_display_frame(
-                rgb_img, self.__display_frame[i]
+                rgb_img, self._display_frame[i]
             )
             # blur after __fit_display_frame will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
             for k in [
-                "gtvt.label",
-                "gtvt.pred",
                 "gtvn.label",
+                "gtvt.label",
                 "gtvn.pred",
+                "gtvt.pred",
                 "gtvn.clicks",
             ]:
                 if self._3d_imgs[k] is None:
                     continue
-                else:
-                    pass
 
                 # load data of current slice
                 if self.__img_plane == "sagittal":
@@ -1358,9 +1294,7 @@ class UiReplay(QMainWindow, Ui_Core):
                         (self.__get_slices_count() - 1 - self._cur_slice), :, :
                     ].astype(np.uint8)
 
-                contours, _ = self.__fit_display_frame(
-                    contours, self.__display_frame[i]
-                )
+                contours, _ = self.__fit_display_frame(contours, self._display_frame[i])
                 # blur after __fit_display_frame will make the contours looks better on the UI
                 if k != "gtvn.clicks":
                     contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
@@ -1399,7 +1333,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 rgb_img_width * rgb_img_chan,
                 QImage.Format_RGB888,
             )
-            self.__display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def _add_label_text_on_rgb_img(self, rgb_img):
         rgb_img_height = rgb_img.shape[0]
@@ -1504,17 +1438,17 @@ class UiReplay(QMainWindow, Ui_Core):
     def __get_gtvt_selected_slices(self, plane) -> List:
         # get current round
 
-        if self._idl_gtvt_round == "round=00":
+        if self._idl_round["gtvt"] == "round=00":
             return []
 
         # load annotated slices
         idl_gtvt_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_gtvt_id
+            g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvt"]
         )
         json_path = os.path.join(
             idl_gtvt_dir,
             "patients",
-            "patient={}".format(self._patient),
+            "patient={}".format(self._cur_patient),
             "selected_slices.json",
         )
         if not os.path.exists(json_path):
@@ -1526,7 +1460,7 @@ class UiReplay(QMainWindow, Ui_Core):
         for round_num in selected_slices_dict:
             selected_slices_list += List(selected_slices_dict[round_num])
 
-            if (round_num) == self._idl_gtvt_round:
+            if (round_num) == self._idl_round["gtvt"]:
                 break
 
         # change annotated slice from str to int
@@ -1595,7 +1529,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def _refresh_title(self):
         win_tital = "iDL.Tool "
-        # if self._idl_gtvt_round is not None:
+        # if self._idl_round["gtvt"] is not None:
         #     win_tital += "   Num.of.Annotated.Slices="
         #     win_tital += str(len(self.__get_gtvt_selected_slices(self.__img_plane)))
         if self._cur_slice is not None:
@@ -1628,16 +1562,16 @@ class UiReplay(QMainWindow, Ui_Core):
             pos[i][0] = gap
             pos[i][1] = size[i][0] + gap * 2
 
-        self.__display_frame["ct"].setGeometry(
+        self._display_frame["ct"].setGeometry(
             QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
         )
-        self.__display_frame["pt"].setGeometry(
+        self._display_frame["pt"].setGeometry(
             QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
         )
-        self.__display_frame["mrt1"].setGeometry(
+        self._display_frame["mrt1"].setGeometry(
             QRect(pos["x"][0], pos["y"][1], size["x"][0], size["y"][1])
         )
-        self.__display_frame["mrt2"].setGeometry(
+        self._display_frame["mrt2"].setGeometry(
             QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
         )
 
@@ -1646,3 +1580,10 @@ class UiReplay(QMainWindow, Ui_Core):
         file_name = filedialog.askopenfilename()
         if file_name == "" or file_name is None:
             pass
+
+    def _check_focus(self):
+        focused_widget = QApplication.focusWidget()
+        if focused_widget:
+            print("Current focus:", focused_widget.objectName())
+        else:
+            print("No focus at the moment.")

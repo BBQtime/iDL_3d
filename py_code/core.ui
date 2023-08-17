@@ -418,7 +418,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png</iconset>
+      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png</iconset>
     </property>
    </widget>
    <widget class="QTextEdit" name="_text_box_annotation_msg">

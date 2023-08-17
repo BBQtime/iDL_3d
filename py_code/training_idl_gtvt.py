@@ -31,14 +31,14 @@ class TrainingIDLGTVt(TrainingCore):
         else:
             hyper["lr.actual"].append(hyper["lr"][next_round - 1])
 
-        self._load_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][-1])
+        self._load_hyper_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][-1])
 
     # reset cnn/optimizer/scheduler before next patient
     def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
         # reload cnn
         hyper["cnn"] = self._load_exist_cnn(baseline_cnn_path)
 
-        self._load_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][0])
+        self._load_hyper_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][0])
 
     def _load_hyper(
         self, hyper: Dict, baseline_cnn_path: str, debug_mode: bool = False
@@ -123,7 +123,7 @@ class TrainingIDLGTVt(TrainingCore):
         # load patients, value of fold doesn't matter
         hyper["patients"] = self._load_patients(debug_mode=debug_mode)["test.inter"]
 
-        self._load_slice_thick(hyper)
+        self._load_hyper_dataset_version(hyper)
 
         self.__reset_cnn(hyper=hyper, baseline_cnn_path=baseline_cnn_path)
 
@@ -271,7 +271,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         label = Nii.load(
             os.path.join(
-                g.DATASET_DIR[hyper["slice.thick"]], "HNCDL_{}_GTVt.nii".format(patient)
+                g.DATASET_DIR[hyper["dataset.ver"]], "HNCDL_{}_GTVt.nii".format(patient)
             ),
             binary=True,
         )
@@ -357,7 +357,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         return new_round_slices
 
-    def __get_masked_label(self, round_dir: str, slice_thick: str):
+    def __get_masked_label(self, round_dir: str, dataset_ver: str):
         round_num = Path(round_dir).name
         patient_dir = Path(round_dir).parent
         patient = patient_dir.name
@@ -366,7 +366,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         label = Nii.load(
             os.path.join(
-                g.DATASET_DIR[slice_thick], "HNCDL_{}_GTVt.nii".format(patient)
+                g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
             ),
             binary=True,
         )
@@ -411,21 +411,21 @@ class TrainingIDLGTVt(TrainingCore):
         label *= slice_mask
         return label
 
-    def __inference_round(self, round_dir: str, cnn, slice_thick: str):
+    def __inference_round(self, round_dir: str, cnn, dataset_ver: str):
         round_num = Path(round_dir).name
 
         patient = Path(round_dir).parent.name
 
         # get annotation for post processing
         masked_label = self.__get_masked_label(
-            round_dir=round_dir, slice_thick=slice_thick
+            round_dir=round_dir, dataset_ver=dataset_ver
         )
 
         # result structure: gtvt: {pred, dsc, msd, hd95}
-        patient_result = self.__single_patient_inference(
+        patient_result = self._single_patient_inference(
             patient=patient[len("patient=") :],
             cnn=cnn,
-            slice_thick=slice_thick,
+            dataset_ver=dataset_ver,
             masked_label=masked_label,
         )
 
@@ -441,7 +441,7 @@ class TrainingIDLGTVt(TrainingCore):
         Nii.save(
             img=patient_result["gtvt"]["pred"],
             save_path=os.path.join(round_dir, "gtvt_pred.nii"),
-            spacing=g.NII_SPACING[slice_thick],
+            spacing=g.NII_SPACING[dataset_ver],
         )
 
     def __training_single_round(
@@ -496,7 +496,7 @@ class TrainingIDLGTVt(TrainingCore):
             selected_slices=selected_slices,
             label_dir=label_dir,
             pred_dir=pred_dir,
-            slice_thick=hyper["slice.thick"],
+            dataset_ver=hyper["dataset.ver"],
             augment=augment,
             weight=weight,
         )
@@ -577,7 +577,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         # inference
         self.__inference_round(
-            round_dir=round_dir, cnn=hyper["cnn"], slice_thick=hyper["slice.thick"]
+            round_dir=round_dir, cnn=hyper["cnn"], dataset_ver=hyper["dataset.ver"]
         )
 
         # save time spent
@@ -656,7 +656,7 @@ class TrainingIDLGTVt(TrainingCore):
             round_dir = os.path.join(patient_dir, "round={:02d}".format(round_num))
             self.__training_single_round(
                 round_dir=round_dir,
-                label_dir=g.DATASET_DIR[hyper["slice.thick"]],
+                label_dir=g.DATASET_DIR[hyper["dataset.ver"]],
                 hyper=hyper,
                 selected_slices=selected_slices,
             )
@@ -878,7 +878,7 @@ class TrainingIDLGTVt(TrainingCore):
             return
 
         # load slice thickness
-        slice_thick = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))["slice.thick"]
+        dataset_ver = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))["dataset.ver"]
 
         # get all patients
         patient_list = Directory.get_sub_folders(
@@ -925,68 +925,70 @@ class TrainingIDLGTVt(TrainingCore):
                 cnn = self._load_exist_cnn(cnn_path)
 
                 self.__inference_round(
-                    round_dir=round_dir, cnn=cnn, slice_thick=slice_thick
+                    round_dir=round_dir, cnn=cnn, dataset_ver=dataset_ver
                 )
 
         self.__calculate_median_and_avg_score(idl_gtvt_dir)
 
-    def __single_patient_inference(
-        self,
-        patient: str,
-        cnn,
-        slice_thick: str,
-        masked_label: ndarray,  # gtvt post processing
-    ) -> Dict:
-        # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-        result = Dict()
-        # original labels
-        origin = Dict()
+    # def _single_patient_inference(
+    #     self,
+    #     patient: str,
+    #     cnn,
+    #     dataset_ver: str,
+    #     masked_label: ndarray,  # gtvt post processing
+    # ) -> Dict:
+    # # result structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+    # result = Dict()
+    # # original labels
+    # origin = Dict()
 
-        dataset = DataSetBaseline(patients=[patient], slice_thick=slice_thick)
+    # dataset = DataSetBaseline(
+    #     patients=[patient], dataset_ver=dataset_ver, augment=None
+    # )
 
-        # load gtvt
-        origin["gtvt"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[slice_thick], "HNCDL_{}_GTVt.nii".format(patient)
-            ),
-            binary=True,
-        )
+    # # load gtvt
+    # origin["gtvt"] = Nii.load(
+    #     os.path.join(
+    #         g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
+    #     ),
+    #     binary=True,
+    # )
 
-        # get pred
-        cnn.eval()  # disable dropout / batch nomalize
-        with torch.no_grad():
-            item = dataset.get_item(patient)
-            input_imgs = item[0]
-            labels = item[1]
-            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
-            labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
-            preds = cnn.forward(input_imgs)
-            # squeeze "batch" channel
-            preds = torch.squeeze(preds, dim=0).cpu().numpy()
+    # get pred
+    # cnn.eval()  # disable dropout / batch nomalize
+    # with torch.no_grad():
+    # item = dataset.get_item(patient)
+    # input_imgs = item[0]
+    # labels = item[1]
+    # input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+    # labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+    # preds = cnn.forward(input_imgs)
+    # squeeze "batch" channel
+    # preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
-        result["gtvt"]["pred"] = preds[1]
-        gtv_list = ["gtvt"]
+    # result["gtvt"]["pred"] = preds[1]
+    # gtv_list = ["gtvt"]
 
-        # pad and crop to original size
-        # preds
-        for gtv in gtv_list:
-            result[gtv]["pred"] = Img.central_resize(
-                result[gtv]["pred"], origin[gtv].shape
-            )
+    # pad and crop to original size
+    # preds
+    # for gtv in gtv_list:
+    #     result[gtv]["pred"] = Img.central_pad_and_crop(
+    #         result[gtv]["pred"], origin[gtv].shape
+    #     )
 
-        # idl_gtvt post processing (before calculate scores)
-        if masked_label is not None:
-            cc_list = Img.connected_components(result["gtvt"]["pred"])
-            result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
-            for cur_cc in cc_list:
-                if (cur_cc * masked_label).sum() > 0:
-                    result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
+    # # idl_gtvt post processing (before calculate scores)
+    # if masked_label is not None:
+    #     cc_list = Img.connected_components(result["gtvt"]["pred"])
+    #     result["gtvt"]["pred"] = np.zeros_like(result["gtvt"]["pred"])
+    #     for cur_cc in cc_list:
+    #         if (cur_cc * masked_label).sum() > 0:
+    #             result["gtvt"]["pred"] = np.maximum(result["gtvt"]["pred"], cur_cc)
 
-        # calculate inference scores
-        segment_metrics = self._load_segment_metrics(slice_thick)
-        for gtv in gtv_list:
-            for metric in g.METRICS:
-                result[gtv][metric] = segment_metrics[metric](
-                    result[gtv]["pred"], origin[gtv]
-                )
-        return result
+    # calculate inference scores
+    # segment_metrics = self._load_segment_metrics(dataset_ver)
+    # for gtv in gtv_list:
+    #     for metric in g.METRICS:
+    #         result[gtv][metric] = segment_metrics[metric](
+    #             result[gtv]["pred"], origin[gtv]
+    #         )
+    # return result

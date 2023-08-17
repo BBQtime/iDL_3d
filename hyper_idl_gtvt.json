@@ -24,5 +24,6 @@
     "weight.distance.step": 3,
     "weight.fp.fn": 4.0,
     "weight.prev.round.decay": 0.5,
-    "weight.slice": 1.0
+    "weight.slice": 1.0,
+    "dataset.ver": "au.1mm"
 }

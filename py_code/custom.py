@@ -163,24 +163,92 @@ class Value:
             pass
         return False
 
-    def median(data):
-        return statistics.median(data)
-
-    def avg(data: Union[list, dict, tuple]) -> float:
-        if isinstance(data, dict):
-            data = Dict(data).to_list()
-        elif isinstance(data, tuple):
-            data = list(data)
-        elif isinstance(data, list):
-            data = data.copy()
+    # origin data will not be replaced in this function
+    def __is_valid_for_avg_median_calculation(origin_data: Union[list, dict, tuple]):
+        if isinstance(origin_data, dict):
+            data_list = Dict(origin_data).to_list()
+        elif isinstance(origin_data, tuple):
+            data_list = list(origin_data)
+        elif isinstance(origin_data, list):
+            data_list = origin_data.copy()
         else:
-            return data
+            Debug.error_exit("input data format should be list, dict or tuple")
+        return data_list
 
-        data = [i for i in data if Value.is_number(i)]
-        if len(data) == 0:
+    def median(origin_data: Union[list, dict, tuple]) -> float:
+        data_list = Value.__is_valid_for_avg_median_calculation(origin_data)
+        data_list = [i if i is not None else math.nan for i in data_list]
+        if len(data_list) == 0:
             return None
         else:
-            return statistics.mean(data)
+            answer = statistics.median(data_list)
+            if math.isnan(answer):
+                return None
+            else:
+                return answer
+
+    def avg(origin_data: Union[list, dict, tuple]) -> float:
+        data_list = Value.__is_valid_for_avg_median_calculation(origin_data)
+        # remove non-number in the list
+        data_list = [i for i in data_list if Value.is_number(i)]
+        if len(data_list) == 0:
+            return None
+        else:
+            return statistics.mean(data_list)
+
+    def is_valid_dataset_version(
+        dataset_ver,
+        dataset_ver_baseline_or_training=None,  # this is for inference and idl
+    ):
+        err_msg = "invalid dataset version"
+
+        if dataset_ver != "au.1mm" and dataset_ver != "au.3mm" and dataset_ver != "mda":
+            Debug.error_exit("invalid dataset version")
+
+        if dataset_ver_baseline_or_training is not None:
+            if dataset_ver_baseline_or_training == "mda":
+                if dataset_ver != "mda":
+                    Debug.error_exit(err_msg)
+
+            elif dataset_ver_baseline_or_training == "au.1mm":
+                if dataset_ver == "au.3mm":
+                    Debug.error_exit(err_msg)
+
+            elif dataset_ver_baseline_or_training == "au.3mm":
+                if dataset_ver != "au.3mm":
+                    Debug.error_exit(err_msg)
+            else:
+                Debug.error_exit("invalid baseline dataset version")
+
+    def is_valid_dataset_section(
+        dataset_section: str, dataset_ver: str = None, inference_type: str = None
+    ):
+        err_msg = "invalid dataset section"
+
+        if (
+            dataset_section != "train"
+            and dataset_section != "valid"
+            and dataset_section != "test"
+            and dataset_section != "test.inter"
+            and dataset_section != "test.exter"
+        ):
+            Debug.error_exit(err_msg)
+
+        # check dataset section based on dataset version
+        if dataset_ver is not None:
+            Value.is_valid_dataset_version(dataset_ver=dataset_ver)
+
+            if dataset_ver == "mda":
+                if dataset_section == "test.inter" or dataset_section == "test.exter":
+                    Debug.error_exit(err_msg)
+
+            elif "au" in dataset_ver:
+                if dataset_ver == "test":
+                    Debug.error_exit(err_msg)
+
+        # check dataset section based on inference_type
+        if inference_type == "idl.gtvn" and dataset_section == "train":
+            Debug.error_exit(err_msg)
 
 
 class Img:
@@ -284,7 +352,7 @@ class Img:
         )
         return img
 
-    def central_resize(img: ndarray, target_shape: tuple):
+    def central_pad_and_crop(img: ndarray, target_shape: tuple):
         img = Img.central_pad(img, target_shape)
         img = Img.central_crop(img, target_shape)
         return img
@@ -318,6 +386,36 @@ class Img:
 
         # Return the tuple (x, y, z) corresponding to the random coordinate
         return random_pos
+
+    # use this in case there is no gtvn or gtvs nii file
+    def load_labels(dataset_dir: str, patient: str, load_func=None):
+        # ui will use this function, with its own "load_func"
+        if load_func is None:
+            load_func = Nii.load
+
+        paths = Dict()
+        for i in ["s", "t", "n"]:
+            paths["gtv{}".format(i)] = os.path.join(
+                dataset_dir, "HNCDL_{}_GTV{}.nii".format(patient, i)
+            )
+        labels = Dict()
+
+        # load gtvt
+        labels["gtvt"] = load_func(paths["gtvt"], binary=True)
+
+        # load gtvn
+        if os.path.exists(paths["gtvn"]):
+            labels["gtvn"] = load_func(paths["gtvn"], binary=True)
+        else:
+            labels["gtvn"] = np.zeros_like(labels["gtvt"])
+
+        # load gtvs
+        if os.path.exists(paths["gtvs"]):
+            labels["gtvs"] = load_func(paths["gtvs"], binary=True)
+        else:
+            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+
+        return labels
 
     # def show(
     #     img: Union[ndarray, Tensor], win_title: str = "", print_info: bool = False
@@ -384,7 +482,6 @@ class Nii:
         save_path: str,
         spacing: tuple = None,
         origin: tuple = None,
-        copy_info_from: str = None,
     ):
         # tensor to ndarray
         if isinstance(img, Tensor):
@@ -401,13 +498,13 @@ class Nii:
 
         itk_img = sitk.GetImageFromArray(img)
 
-        if copy_info_from is not None:
-            itk_img.CopyInformation(sitk.ReadImage(copy_info_from))
-        else:
-            if spacing is not None:
-                itk_img.SetSpacing(spacing)
-            if origin is not None:
-                itk_img.SetOrigin(origin)
+        # if copy_info_from is not None:
+        #     itk_img.CopyInformation(sitk.ReadImage(copy_info_from))
+
+        if spacing is not None:
+            itk_img.SetSpacing(spacing)
+        if origin is not None:
+            itk_img.SetOrigin(origin)
 
         sitk.WriteImage(itk_img, save_path)
         return save_path
@@ -630,8 +727,7 @@ class GPU:
 
 class Debug:
     def error_exit(err_msg: str = ""):
-        print(err_msg)
-        sys.exit(1)
+        assert 0, err_msg
 
     def clear_debug_data():
         for i in Directory.walk_sub_dirs(
@@ -691,32 +787,53 @@ class Global:
 
     # Windows
     if platform.system().lower() == "windows":
-        for i in ["1mm", "3mm"]:
+        for i in ["au.3mm", "au.1mm", "mda"]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
 
     # Linux
     elif platform.system().lower() == "linux":
-        for i in ["1mm", "3mm"]:
+        for i in ["au.3mm", "au.1mm", "mda"]:
             DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
+    else:
+        Debug.error_exit("platform error, only support linux or windows")
+
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
+    IMG_SHAPE["au.3mm"] = List(__settings["img.shape.3mm"])
+    IMG_SHAPE["au.1mm"] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE["mda"] = List(__settings["img.shape.1mm"])
+
     # NII_SPACING (Width, Height, Depth)
     NII_SPACING = Dict()
-    for i in ["1mm", "3mm"]:
-        IMG_SHAPE[i] = List(__settings["img.shape.{}".format(i)])
+    NII_SPACING["au.3mm"] = List(__settings["nii.spacing.3mm"])
+    NII_SPACING["au.1mm"] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING["mda"] = List(__settings["nii.spacing.1mm"])
+
+    for i in ["au.3mm", "au.1mm", "mda"]:
         IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
-        NII_SPACING[i] = List(__settings["nii.spacing.{}".format(i)])
         NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
-    # Pytorch save/load entire cnn or weight only
+    # dataset splitting
+    DATASET_SPLIT_JSON_PATH = Dict()
+    DATASET_SPLIT_JSON_PATH["au.1mm"] = os.path.join(
+        PROJ_DIR, __settings["dataset.split.json.au"]
+    )
+    DATASET_SPLIT_JSON_PATH["au.3mm"] = os.path.join(
+        PROJ_DIR, __settings["dataset.split.json.au"]
+    )
+    DATASET_SPLIT_JSON_PATH["mda"] = os.path.join(
+        PROJ_DIR, __settings["dataset.split.json.mda"]
+    )
+
+    HYPER_JSON_PATH = Dict()
+    for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+        HYPER_JSON_PATH[i] = os.path.join(
+            PROJ_DIR, __settings["hyper.json.{}".format(i)]
+        )
+
     DATASET_FOLDS = __settings["dataset.folds"]
-    DATASET_SPLIT_JSON_PATH = os.path.join(PROJ_DIR, __settings["dataset.split.json"])
-    HYPER_JSON_PATH_BASELINE = os.path.join(PROJ_DIR, __settings["hyper.json.baseline"])
-    HYPER_JSON_PATH_IDL_GTVT = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvt"])
-    HYPER_JSON_PATH_IDL_GTVN = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvn"])
-    HYPER_JSON_PATH_IDL_GTVS = os.path.join(PROJ_DIR, __settings["hyper.json.idl.gtvs"])
     TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])

@@ -46,7 +46,7 @@ class UNetPPSlim(nn.Module):
         self,
         in_chan: int,
         out_chan: int,
-        slice_thick: str,
+        dataset_ver: str,
         edge_chan: list = [16, 32, 64, 96, 128],  # [16, 32, 48, 64, 80]
         skip_chan: int = 6,
         dropout: float = 0,
@@ -103,7 +103,7 @@ class UNetPPSlim(nn.Module):
         self.up["2"]["1"] = nn.ConvTranspose3d(skip_chan, skip_chan, 2, 2)
         self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan[2], edge_chan[2], 2, 2)
 
-        if slice_thick == "3mm":
+        if dataset_ver == "au.3mm":
             kernel = (1, 2, 2)
         else:
             kernel = 2

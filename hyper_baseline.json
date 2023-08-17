@@ -5,6 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 1,
     "cnn": "unet.slim",
+    "dataset.ver": "au.1mm",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 500,
@@ -17,6 +18,5 @@
     "lr": 0.0001,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
-    "lr.min": 1e-05,
-    "slice.thick": "1mm"
+    "lr.min": 1e-05
 }

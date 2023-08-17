@@ -18,13 +18,14 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         self,
         patients: list,
         baseline_id: str,
-        slice_thick: str,
+        dataset_ver: str,
         augment: Dict = None,
         random_click: bool = False,
     ):
         self.__patients = patients
         self.__baseline_id = baseline_id
-        self.__slice_thick = slice_thick
+        self.__img_shape = g.IMG_SHAPE[dataset_ver]
+        self.__dataset_dir = g.DATASET_DIR[dataset_ver]
         self.__augment = DataAugmentation(augment)
         self.__random_click = random_click
 
@@ -48,7 +49,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = Img.central_resize(img, g.IMG_SHAPE[self.__slice_thick])
+        img = Img.central_pad_and_crop(img, self.__img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)
@@ -79,9 +80,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
 
         # load label
         self.__origin["label"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
-            ),
+            os.path.join(self.__dataset_dir, "HNCDL_{}_GTVn.nii".format(patient)),
             binary=True,
         )
 
@@ -208,7 +207,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         # load ct/pt/mr1/mr2
         for i in ["CT", "PT", "T1dr", "T2dr"]:
             img_path = os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_{}.nii".format(patient, i)
+                self.__dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )
             img = Nii.load(img_path)
 

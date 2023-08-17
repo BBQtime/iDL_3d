@@ -13,9 +13,10 @@ from torch import Tensor
 
 
 class DataSetBaseline(torch.utils.data.Dataset):
-    def __init__(self, patients: list, slice_thick: str, augment: Dict = None):
+    def __init__(self, patients: list, dataset_ver: str, augment: Dict = None):
         self.__patients = patients
-        self.__slice_thick = slice_thick
+        self.__img_shape = g.IMG_SHAPE[dataset_ver]
+        self.__dataset_dir = g.DATASET_DIR[dataset_ver]
         self.__augment = DataAugmentation(augment)
 
     # must be overrided
@@ -38,7 +39,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = Img.central_resize(img, g.IMG_SHAPE[self.__slice_thick])
+        img = Img.central_pad_and_crop(img, self.__img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)
@@ -50,68 +51,50 @@ class DataSetBaseline(torch.utils.data.Dataset):
         return img
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
-        origin_gtvs = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVs.nii".format(patient)
-            ),
-            binary=True,
-        )
-        final_gtvs = None
-        final_augment_seed = None
+        final = Dict()
+
+        # load origin labels
+        origin = Img.load_labels(dataset_dir=self.__dataset_dir, patient=patient)
 
         # loop until target volume is big enough
+        tmp = Dict()
         for k in range(50):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp_augment_seed = random.randint(0, 2**16)
+            tmp["seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            tmp_gtvs = self.__preprocess(origin_gtvs, tmp_augment_seed)
-            tmp_gtvs = Img.binarize(tmp_gtvs)
+            tmp["gtvs"] = self.__preprocess(origin["gtvs"], tmp["seed"])
+            tmp["gtvs"] = Img.binarize(tmp["gtvs"])
 
             # target volume is not big enough
-            if tmp_gtvs.sum() < origin_gtvs.sum() * 0.999:
+            if tmp["gtvs"].sum() < origin["gtvs"].sum() * 0.999:
                 # keep the largest gtvs and the augment seed
-                if final_gtvs is None or tmp_gtvs.sum() > final_gtvs.sum():
-                    final_gtvs = tmp_gtvs
-                    final_augment_seed = tmp_augment_seed
+                if final["gtvs"] == {} or tmp["gtvs"].sum() > final["gtvs"].sum():
+                    final["gtvs"] = tmp["gtvs"]
+                    final["seed"] = tmp["seed"]
                 continue
             # target volume is large enough, break
             else:
-                final_gtvs = tmp_gtvs
-                final_augment_seed = tmp_augment_seed
+                final["gtvs"] = tmp["gtvs"]
+                final["seed"] = tmp["seed"]
                 break
 
-        # load gtvt
-        origin_gtvt = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVt.nii".format(patient)
-            ),
-            binary=True,
-        )
-        final_gtvt = self.__preprocess(origin_gtvt, final_augment_seed)
-        final_gtvt = Img.binarize(final_gtvt)
-
-        # load gtvn
-        origin_gtvn = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_GTVn.nii".format(patient)
-            ),
-            binary=True,
-        )
-        final_gtvn = self.__preprocess(origin_gtvn, final_augment_seed)
-        final_gtvn = Img.binarize(final_gtvn)
+        # preprocess gtvt and gtvn based on final augment seed
+        for gtv in ["gtvt", "gtvn"]:
+            final[gtv] = self.__preprocess(origin[gtv], final["seed"])
+            final[gtv] = Img.binarize(final[gtv])
 
         # load background
-        background = 1 - torch.maximum(final_gtvt, final_gtvn)
+        background = 1 - torch.maximum(final["gtvt"], final["gtvn"])
         # !!! background FIRST !!!
-        labels = torch.cat([background, final_gtvt, final_gtvn], dim=0)
+        labels = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
 
         input_imgs = None
         for i in ["CT", "PT", "T1dr", "T2dr"]:
             img_path = os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_{}.nii".format(patient, i)
+                self.__dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )
             img = Nii.load(img_path)
 
@@ -119,7 +102,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
             if i == "CT":
                 img = Img.ct_windowing(img)
 
-            img = self.__preprocess(img, final_augment_seed)
+            img = self.__preprocess(img, final["seed"])
 
             # concat multi-model img
             if input_imgs is None:

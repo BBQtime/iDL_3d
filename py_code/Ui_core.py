@@ -146,7 +146,7 @@ class Ui_Core(object):
         icon3 = QtGui.QIcon()
         icon3.addPixmap(
             QtGui.QPixmap(
-                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon-confirm.png"
+                "../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png"
             ),
             QtGui.QIcon.Normal,
             QtGui.QIcon.Off,

@@ -9,7 +9,10 @@ import numpy as np
 import torch
 from custom import GPU, Debug, Dict, Directory
 from custom import Global as g
-from custom import Json, List, Time, Value
+from custom import Img, Json, List, Time, Value
+from dataset_baseline import DataSetBaseline
+from dataset_idl_gtvn import DataSetIDLGTVn
+from dataset_idl_gtvt import DataSetIDLGTVt
 from numpy import ndarray
 from segment_metric import SegmentationMetric
 from torch import optim
@@ -20,32 +23,39 @@ from unet_slim import UNetSlim
 
 
 class TrainingCore:
-    def _load_patients(self, fold: int = 1, debug_mode: bool = False):
+    def _load_patients(self, dataset_ver: str, fold: int = 0, debug_mode: bool = False):
+        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
+
+        # calculate fold count
+        fold_count = 0
+        for key_name in dataset_split:
+            if "fold." in key_name:
+                fold_count += 1
+
+        if fold_count != g.DATASET_FOLDS:
+            dataset_split = self.__split_dataset()
+
         patients = Dict()
-
-        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
-
-        if len(dataset_split) - 1 != g.DATASET_FOLDS:
-            dataset_split = self._split_dataset()
-
-        patients["test.inter"] = List(dataset_split["test.inter"])
+        # test set
+        for key_name in ["test.inter", "test.exter", "test"]:
+            patients[key_name] = List(dataset_split[key_name])
+        # valid set
         patients["valid"] = List(dataset_split["fold.{}".format(fold)])
-
+        # train set
         patients["train"] = List()
-        for i in dataset_split:
-            if i != "test.inter" and i != "fold.{}".format(fold):
-                patients["train"] += List(dataset_split[i])
+        for key_name in dataset_split:
+            if "fold." in key_name and key_name != "fold.{}".format(fold):
+                patients["train"] += List(dataset_split[key_name])
 
         if debug_mode:
-            patients["train"] = patients["train"][:1]
-            # 2 patients in valid and test sets, to debug median score calculation
-            patients["valid"] = patients["valid"][:1]
-            patients["test.inter"] = patients["test.inter"][:1]
+            for key_name in patients:
+                # keep 2 patients to test median score calculation
+                patients[key_name] = patients[key_name][:2]
 
         return patients
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
+    def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
         # cnn architecture
         if hyper["cnn"] == "unet.pp.slim":
             cnn = UNetPPSlim
@@ -56,7 +66,7 @@ class TrainingCore:
         hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
-            slice_thick=hyper["slice.thick"],
+            dataset_ver=hyper["dataset.ver"],
             dropout=hyper["dropout"],
         )
         # set multi-GPU
@@ -72,11 +82,11 @@ class TrainingCore:
         cnn = cnn.to(g.DEVICE)
         return cnn
 
-    def _load_segment_metrics(self, slice_thick: str) -> Dict:
+    def _load_segment_metrics(self, dataset_ver: str) -> Dict:
         segment_metrics = Dict()
         for metric in g.METRICS:
             segment_metrics[metric] = SegmentationMetric(
-                metric=metric, slice_thick=slice_thick
+                metric=metric, dataset_ver=dataset_ver
             )
             # following line will cause bug, cant figure out why:
             # if GPU.used_count() > 1:
@@ -84,22 +94,26 @@ class TrainingCore:
             segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
         return segment_metrics
 
-    def _load_slice_thick(self, hyper: Dict):
-        if hyper["slice.thick"] == {}:
+    def _load_hyper_dataset_version(self, hyper: Dict):
+        # baseline
+        if hyper["baseline.id"] is None:
+            Value.is_valid_dataset_version(dataset_ver=hyper["dataset.ver"])
+
+        # idl
+        else:
             baseline_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
             )
-            fold_dirs = Directory.get_sub_folders(
+            baseline_fold_dir = Directory.get_sub_folders(
                 baseline_dir, key_word="fold=", full_path=True
+            )[0]
+            dataset_ver_baseline = Json.load(
+                os.path.join(baseline_fold_dir, "hyper.json")
+            )["dataset.ver"]
+            Value.is_valid_dataset_version(
+                dataset_ver=hyper["dataset.ver"],
+                dataset_ver_baseline_or_training=dataset_ver_baseline,
             )
-            hyper["slice.thick"] = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
-                "slice.thick"
-            ]
-        else:
-            pass
-
-        if hyper["slice.thick"] != "1mm" and hyper["slice.thick"] != "3mm":
-            Debug.error_exit("Invalid slice thickness")
 
     def _load_hyper(self, hyper: Dict) -> None:
         # device name
@@ -138,7 +152,7 @@ class TrainingCore:
         hyper["loss.weight"] = Value.limit_range(hyper["loss.weight"], (0.0, 1.0))
         hyper["loss.delta"] = Value.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
-    def _load_optim_and_scheduler(self, hyper: Dict, lr: float = None):
+    def _load_hyper_optim_and_scheduler(self, hyper: Dict, lr: float = None):
         if lr is None:
             lr = hyper["lr.actual"]
 
@@ -208,14 +222,14 @@ class TrainingCore:
             print(key + ":", value)
 
     # split dataset and save result into json file
-    def _split_dataset(self) -> Dict:
+    def __split_dataset(self) -> Dict:
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
         train_patients = List()
 
-        for fold in dataset_split.keys():
-            if fold != "test.inter":
-                train_patients += List(dataset_split[fold])
-                dataset_split.pop(fold)
+        for key_name in dataset_split.keys():
+            if "fold." in key_name:
+                train_patients += List(dataset_split[key_name])
+                dataset_split.pop(key_name)
 
         random.shuffle(train_patients)
 
@@ -306,11 +320,14 @@ class TrainingCore:
         return group_hyper
 
     # find train result directory full path using train_id
+    # for baseline, it will return the "baseline_xxxx/baseline" dir
     def _find_train_dir(self, train_id: str) -> str:
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
+
         # train id is a baseline
         if os.path.exists(baseline_dir):
             return baseline_dir
+
         # train id is a iDL
         else:
             for baseline_dir in Directory.get_sub_folders(
@@ -323,3 +340,113 @@ class TrainingCore:
                         return train_dir
             # cant find train_dir
             return None
+
+    def _single_patient_inference(
+        self,
+        inference_type: str,
+        patient: str,
+        cnn,
+        dataset_ver: str,
+        segment_metrics: Dict,
+        baseline_id: str = None,  # only for idl.gtvn
+        gtvt_masked_label: ndarray = None,  # gtvt post processing
+    ) -> Dict:
+        # results structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
+        results = Dict()
+
+        if inference_type == "baseline" or inference_type == "idl.gtvt":
+            dataset = DataSetBaseline(
+                patients=[patient], dataset_ver=dataset_ver, augment=None
+            )
+        elif inference_type == "idl.gtvn":
+            dataset = DataSetIDLGTVn(
+                patients=[patient],
+                baseline_id=baseline_id,
+                dataset_ver=dataset_ver,
+                augment=None,
+                random_click=False,
+            )
+        else:
+            Debug.error_exit("invalid inference type")
+
+        # load labels
+        labels = Img.load_labels(
+            dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
+        )
+        if inference_type == "baseline":
+            for gtv in ["gtvt", "gtvn", "gtvs"]:
+                results[gtv]["label"] = labels[gtv]
+        elif inference_type == "idl.gtvn":
+            results["gtvn"]["label"] = labels["gtvn"]
+        elif inference_type == "idl.gtvt":
+            results["gtvt"]["label"] = labels["gtvt"]
+
+        # get items from dataset
+        item = dataset.get_item(patient)
+        input_imgs = item[0]
+        labels = item[1]
+        if inference_type == "idl.gtvn":
+            gtvn_clicks = item[2]
+
+        # add "batch" (c/d/h/w -> b/c/d/h/w)
+        input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+        labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+
+        # get predictions from cnn
+        cnn.eval()  # disable dropout / batch nomalize
+        with torch.no_grad():
+            preds = cnn.forward(input_imgs)
+        # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
+        preds = torch.squeeze(preds, dim=0).cpu().numpy()
+
+        # record img into results
+        if inference_type == "baseline":
+            results["gtvt"]["pred"] = preds[1]
+            results["gtvn"]["pred"] = preds[2]
+            results["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
+
+        elif inference_type == "idl.gtvn":
+            results["gtvn"]["pred"] = preds[1]
+            input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
+            results["gtvn"]["distance.map"] = input_imgs[0]
+            results["gtvn"]["clicks"] = torch.squeeze(gtvn_clicks, dim=0).cpu().numpy()
+
+        elif inference_type == "idl.gtvt":
+            results["gtvt"]["pred"] = preds[1]
+
+        # pad and crop all imgs to original size
+        for gtv in results.keys():
+            for i in results[gtv].keys():
+                results[gtv][i] = Img.central_pad_and_crop(
+                    results[gtv][i], results[gtv]["label"].shape
+                )
+
+        # idl.gtvt post processing (after pad and crop, before calculate scores)
+        if gtvt_masked_label is not None:
+            cc_list = Img.connected_components(results["gtvt"]["pred"])
+            results["gtvt"]["pred"] = np.zeros_like(results["gtvt"]["pred"])
+            for cur_cc in cc_list:
+                if (cur_cc * gtvt_masked_label).sum() > 0:
+                    results["gtvt"]["pred"] = np.maximum(
+                        results["gtvt"]["pred"], cur_cc
+                    )
+
+        # idl.gtvn post processing (after pad and crop, before calculate scores)
+        if inference_type == "idl.gtvn" and 0:
+            cc_list = Img.connected_components(results["gtvn"]["pred"])
+            results["gtvn"]["pred"] = np.zeros_like(results["gtvn"]["pred"])
+            for cur_cc in cc_list:
+                if (cur_cc * results["gtvn"]["clicks"]).sum() > 0:
+                    results["gtvn"]["pred"] = np.maximum(
+                        results["gtvn"]["pred"], cur_cc
+                    )
+
+        # calculate scores of current patient
+        for gtv in results.keys():
+            for metric in g.METRICS:
+                results[gtv][metric] = segment_metrics[metric](
+                    results[gtv]["pred"],
+                    results[gtv]["label"],
+                )
+
+        return results

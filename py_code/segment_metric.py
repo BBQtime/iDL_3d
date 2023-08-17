@@ -415,7 +415,7 @@ def hausdorff_distance_95(
     test=None,
     reference=None,
     confusion_matrix=None,
-    nan_for_nonexisting=True,
+    none_for_nonexisting=True,
     voxel_spacing=None,
     connectivity=1,
     **kwargs
@@ -433,8 +433,8 @@ def hausdorff_distance_95(
     if test_empty and reference_empty:
         return 0.0
     elif test_empty or test_full or reference_empty or reference_full:
-        if nan_for_nonexisting:
-            return float("NaN")
+        if none_for_nonexisting:
+            return None
         else:
             return 0.0
 
@@ -477,7 +477,7 @@ def avg_surface_distance_symmetric(
     test=None,
     reference=None,
     confusion_matrix=None,
-    nan_for_nonexisting=True,
+    none_for_nonexisting=True,
     voxel_spacing=None,
     connectivity=1,
     **kwargs
@@ -495,8 +495,8 @@ def avg_surface_distance_symmetric(
     if test_empty and reference_empty:
         return 0.0
     elif test_empty or test_full or reference_empty or reference_full:
-        if nan_for_nonexisting:
-            return float("NaN")
+        if none_for_nonexisting:
+            return None
         else:
             return 0.0
 
@@ -533,11 +533,11 @@ class SegmentationMetric(nn.Module):
     def __init__(
         self,
         metric: str,  # dsc/msd/hd95
-        slice_thick: str,
+        dataset_ver: str,
     ):
         super().__init__()
         self.__metric = metric
-        self.__slice_thick = slice_thick
+        self.__nii_spacing = g.NII_SPACING[dataset_ver]
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
         if len(preds.shape) == 4:
@@ -574,16 +574,16 @@ class SegmentationMetric(nn.Module):
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
-                nan_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING[self.__slice_thick],
+                none_for_nonexisting=True,
+                voxel_spacing=self.__nii_spacing,
             )
 
         elif self.__metric == "hd95":
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,
-                nan_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING[self.__slice_thick],
+                none_for_nonexisting=True,
+                voxel_spacing=self.__nii_spacing,
             )
 
         else:

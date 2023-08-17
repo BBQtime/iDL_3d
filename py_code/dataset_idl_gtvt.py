@@ -20,11 +20,12 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         selected_slices: Dict,
         label_dir: str,  # dont use g.DATASET_DIR because of realtime training
         pred_dir: str,
-        slice_thick: str,
+        dataset_ver: str,
         augment: Dict,
         weight: Dict,
     ):
-        self.__slice_thick = slice_thick
+        self.__img_shape = g.IMG_SHAPE[dataset_ver]
+        self.__dataset_dir = g.DATASET_DIR[dataset_ver]
         self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
@@ -47,24 +48,16 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
         # load ct/pt/mrt1/mt2
         self.__origin["ct"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_CT.nii".format(patient)
-            )
+            os.path.join(self.__dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
         self.__origin["pt"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_PT.nii".format(patient)
-            )
+            os.path.join(self.__dataset_dir, "HNCDL_{}_PT.nii".format(patient))
         )
         self.__origin["mrt1"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_T1dr.nii".format(patient)
-            )
+            os.path.join(self.__dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
         self.__origin["mrt2"] = Nii.load(
-            os.path.join(
-                g.DATASET_DIR[self.__slice_thick], "HNCDL_{}_T2dr.nii".format(patient)
-            )
+            os.path.join(self.__dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
         )
         # ct windowing
         self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
@@ -211,7 +204,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = Img.central_resize(img, g.IMG_SHAPE[self.__slice_thick])
+        img = Img.central_pad_and_crop(img, self.__img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)
@@ -326,7 +319,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 # tmp_dataset = DataSetIDLGTVt(
 #     patient="336",
 #     selected_slices=selected_slices,
-#     label_dir=g.DATASET_DIR[self.__slice_thick],
+#     label_dir=self.__dataset_dir,
 #     pred_dir=pred_dir,
 #     augment=augment,
 #     weight=weight,
