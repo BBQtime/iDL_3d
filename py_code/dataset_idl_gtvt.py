@@ -21,11 +21,13 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         label_dir: str,  # dont use g.DATASET_DIR because of realtime training
         pred_dir: str,
         dataset_ver: str,
+        no_pt: bool,
         augment: Dict,
         weight: Dict,
     ):
         self.__img_shape = g.IMG_SHAPE[dataset_ver]
         self.__dataset_dir = g.DATASET_DIR[dataset_ver]
+        self.__no_pt = no_pt
         self.__augment = DataAugmentation(augment)
         self.__augment_times = augment["times"]
 
@@ -50,9 +52,10 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         self.__origin["ct"] = Nii.load(
             os.path.join(self.__dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
-        self.__origin["pt"] = Nii.load(
-            os.path.join(self.__dataset_dir, "HNCDL_{}_PT.nii".format(patient))
-        )
+        if not self.__no_pt:
+            self.__origin["pt"] = Nii.load(
+                os.path.join(self.__dataset_dir, "HNCDL_{}_PT.nii".format(patient))
+            )
         self.__origin["mrt1"] = Nii.load(
             os.path.join(self.__dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
@@ -265,9 +268,12 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final["label"]], dim=0)
 
-        # multi model imgs
+        # load multi-modal imgs
         input_imgs = None
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
+        multi_modal_list = ["ct", "pt", "mrt1", "mrt2"]
+        if self.__no_pt:
+            multi_modal_list.remove("pt")
+        for i in multi_modal_list:
             img = self.__preprocess(self.__origin[i], final["seed"])
 
             # concat multi-model img

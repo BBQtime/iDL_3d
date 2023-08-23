@@ -19,6 +19,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         patients: list,
         baseline_id: str,
         dataset_ver: str,
+        no_pt: bool,
         augment: Dict = None,
         random_click: bool = False,
     ):
@@ -26,6 +27,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         self.__baseline_id = baseline_id
         self.__img_shape = g.IMG_SHAPE[dataset_ver]
         self.__dataset_dir = g.DATASET_DIR[dataset_ver]
+        self.__no_pt = no_pt
         self.__augment = DataAugmentation(augment)
         self.__random_click = random_click
 
@@ -79,10 +81,9 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         )
 
         # load label
-        self.__origin["label"] = Nii.load(
-            os.path.join(self.__dataset_dir, "HNCDL_{}_GTVn.nii".format(patient)),
-            binary=True,
-        )
+        self.__origin["label"] = Img.load_labels(
+            dataset_dir=self.__dataset_dir, patient=patient
+        )["gtvn"]
 
         # find augment seed
         final = Dict()
@@ -204,8 +205,11 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
             else:
                 input_imgs = torch.cat([input_imgs, final[i]], dim=0)
 
-        # load ct/pt/mr1/mr2
-        for i in ["CT", "PT", "T1dr", "T2dr"]:
+        # load multi-modal imgs
+        multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
+        if self.__no_pt:
+            multi_modal_list.remove("PT")
+        for i in multi_modal_list:
             img_path = os.path.join(
                 self.__dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )

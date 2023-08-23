@@ -2,6 +2,7 @@ import math
 import os
 import random
 from collections import OrderedDict
+from curses import keyname
 from itertools import product
 from pathlib import Path
 from typing import Union
@@ -29,7 +30,7 @@ class TrainingCore:
 
         # calculate fold count
         fold_count = 0
-        for key_name in dataset_split:
+        for key_name in dataset_split.keys():
             if "fold." in key_name:
                 fold_count += 1
 
@@ -44,12 +45,12 @@ class TrainingCore:
         patients["valid"] = List(dataset_split["fold.{}".format(fold)])
         # train set
         patients["train"] = List()
-        for key_name in dataset_split:
+        for key_name in dataset_split.keys():
             if "fold." in key_name and key_name != "fold.{}".format(fold):
                 patients["train"] += List(dataset_split[key_name])
 
         if debug_mode:
-            for key_name in patients:
+            for key_name in patients.keys():
                 # keep 2 patients to test median score calculation
                 patients[key_name] = patients[key_name][:2]
 
@@ -95,25 +96,27 @@ class TrainingCore:
             segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
         return segment_metrics
 
-    def _load_hyper_dataset_version(self, hyper: Dict):
+    def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
         # baseline
-        if hyper["baseline.id"] is None:
-            Value.is_valid_dataset_version(dataset_ver=hyper["dataset.ver"])
+        if idl_baseline_id is None:
+            hyper["dataset.ver"] = self._is_valid_dataset_version(
+                dataset_ver=hyper["dataset.ver"]
+            )
 
         # idl
         else:
             baseline_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR, hyper["baseline.id"], "baseline"
+                g.TRAIN_RESULTS_DIR, idl_baseline_id, "baseline"
             )
             baseline_fold_dir = Directory.get_sub_folders(
                 baseline_dir, key_word="fold=", full_path=True
             )[0]
-            dataset_ver_baseline = Json.load(
+            baseline_dataset_ver = Json.load(
                 os.path.join(baseline_fold_dir, "hyper.json")
             )["dataset.ver"]
-            Value.is_valid_dataset_version(
+            hyper["dataset.ver"] = self._is_valid_dataset_version(
                 dataset_ver=hyper["dataset.ver"],
-                dataset_ver_baseline_or_training=dataset_ver_baseline,
+                origin_dataset_ver=baseline_dataset_ver,
             )
 
     def _load_hyper(self, hyper: Dict) -> None:
@@ -176,7 +179,7 @@ class TrainingCore:
     def _simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
 
-        for key_name in hyper:
+        for key_name in hyper.keys():
             # "augment.methods" is a list
             if key_name == "augment.methods":
                 simple_hyper[key_name] = hyper[key_name].to_str()
@@ -206,10 +209,6 @@ class TrainingCore:
             # only save scheduler name
             elif key_name == "scheduler":
                 simple_hyper[key_name] = "reduce.lr.on.plateau"
-
-            # ignore "baseline.id" and "fold"
-            elif key_name == "baseline.id" or key_name == "fold":
-                pass
 
             # others
             else:
@@ -257,7 +256,7 @@ class TrainingCore:
 
     # train_id = start_time + train_remark
     def _init_train_id(
-        self, train_remark: str, hyper_json_path: str, hyper: Dict, debug_mode: bool
+        self, hyper: Dict, hyper_json_path: str, train_remark: str, debug_mode: bool
     ) -> str:
         train_id = Time.get_cur_time_str()
 
@@ -296,8 +295,8 @@ class TrainingCore:
         else:
             hyper["batch.size"] = dataset.__len__()
 
-    def _load_hyper_sets_from_json(self, path: str) -> List:
-        group_hyper = List()
+    def _load_hyper_series_from_json(self, path: str) -> List:
+        hyper_series_list = List()
         origin_hyper_dict = Json.load(path)
         hyper_keys = origin_hyper_dict.keys()
 
@@ -316,9 +315,9 @@ class TrainingCore:
                     cur_hyper[hyper_keys[i]] = cur_values[i].copy()
                 else:
                     cur_hyper[hyper_keys[i]] = cur_values[i]
-            group_hyper.append(cur_hyper)
+            hyper_series_list.append(cur_hyper)
 
-        return group_hyper
+        return hyper_series_list
 
     # find train result directory full path using train_id
     # for baseline, it will return the "baseline_xxxx/baseline" dir
@@ -348,15 +347,17 @@ class TrainingCore:
         cnn,
         dataset_ver: str,
         dataset_section: str,
+        no_pt: str,
         segment_metrics: Dict,
-        baseline_id: str = None,  # only for idl.gtvn
-        gtvt_masked_label: ndarray = None,  # gtvt post processing
+        idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
+        idl_gtvt_masked_label: ndarray = None,  # gtvt post processing
     ) -> Dict:
         # load dataset
         dataset = self._inference_single_patient_load_dataset(
             patient=patient,
             dataset_ver=dataset_ver,
-            baseline_id=baseline_id,
+            no_pt=no_pt,
+            idl_gtvn_baseline_id=idl_gtvn_baseline_id,
         )
 
         # load labels
@@ -370,7 +371,7 @@ class TrainingCore:
         item = dataset.get_item(patient)
         input_imgs = item[0]
         labels = item[1]
-        gtvn_clicks = self._inference_single_patient_get_gtvn_clicks(item)
+        idl_gtvn_clicks = self._inference_single_patient_get_gtvn_clicks(item)
 
         # add "batch" (c/d/h/w -> b/c/d/h/w)
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
@@ -385,7 +386,10 @@ class TrainingCore:
 
         # record img into outputs
         self._inference_single_patient_record_outputs(
-            outputs=outputs, preds=preds, input_imgs=input_imgs, gtvn_clicks=gtvn_clicks
+            outputs=outputs,
+            preds=preds,
+            input_imgs=input_imgs,
+            idl_gtvn_clicks=idl_gtvn_clicks,
         )
 
         # pad and crop all imgs to original size
@@ -397,7 +401,7 @@ class TrainingCore:
 
         # post processing (after pad and crop, before calculate scores)
         self._inference_single_patient_gtvt_post_process(
-            outputs=outputs, gtvt_masked_label=gtvt_masked_label
+            outputs=outputs, idl_gtvt_masked_label=idl_gtvt_masked_label
         )
         self._inference_single_patient_gtvn_post_process(outputs)
 
@@ -413,10 +417,17 @@ class TrainingCore:
         return outputs
 
     def _inference_single_patient_load_dataset(
-        self, patient: str, dataset_ver: str, baseline_id: str = None
+        self,
+        patient: str,
+        dataset_ver: str,
+        no_pt: bool,
+        idl_gtvn_baseline_id: str = None,
     ):
         return DataSetBaseline(
-            patients=[patient], dataset_ver=dataset_ver, augment=None
+            patients=[patient],
+            dataset_ver=dataset_ver,
+            no_pt=no_pt,
+            augment=None,
         )
 
     def _inference_single_patient_record_labels(self, labels: Dict, outputs: Dict):
@@ -426,7 +437,7 @@ class TrainingCore:
         return None
 
     def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
     ):
         pass
 
@@ -434,6 +445,84 @@ class TrainingCore:
         pass
 
     def _inference_single_patient_gtvt_post_process(
-        self, outputs: Dict, gtvt_masked_label: ndarray
+        self, outputs: Dict, idl_gtvt_masked_label: ndarray
     ):
         pass
+
+    def _is_valid_baseline_id(self, baseline_id: str):
+        if not baseline_id.startswith("baseline_"):
+            Debug.error_exit("baseline id error")
+
+    def _is_valid_dataset_version(
+        self,
+        dataset_ver,
+        origin_dataset_ver=None,  # this is for inference and idl
+    ):
+        if origin_dataset_ver is not None:
+            # copy origin_dataset_ver if dataset_ver is None
+            if dataset_ver is None:
+                dataset_ver = origin_dataset_ver
+
+            if origin_dataset_ver == "mda":
+                if dataset_ver != "mda":
+                    Debug.error_exit(
+                        "due to existing train info, 'dataset_ver' is restricted to 'mda' only"
+                    )
+
+            elif origin_dataset_ver == "au.1mm":
+                if dataset_ver == "au.3mm":
+                    Debug.error_exit(
+                        "due to existing train info, 'dataset_ver' can not be 'au.3mm'"
+                    )
+
+            elif origin_dataset_ver == "au.3mm":
+                if dataset_ver != "au.3mm":
+                    Debug.error_exit(
+                        "due to existing train info, 'dataset_ver' is restricted to 'au.3mm' only"
+                    )
+            else:
+                Debug.error_exit(
+                    "'origin_dataset_ver' can not take on any values other than 'au.1mm/au.3mm/mda'"
+                )
+
+        # origin_dataset_ver is None
+        elif (
+            dataset_ver != "au.1mm" and dataset_ver != "au.3mm" and dataset_ver != "mda"
+        ):
+            Debug.error_exit(
+                "'dataset_ver' can not take on any values other than 'au.1mm/au.3mm/mda'"
+            )
+
+        return dataset_ver
+
+    def _is_valid_dataset_section(
+        self,
+        dataset_section: str,
+        dataset_ver: str = None,
+    ):
+        if dataset_section not in [
+            "train",
+            "valid",
+            "test",
+            "test.inter",
+            "test.exter",
+        ]:
+            Debug.error_exit(
+                "'dataset_section' can not take on any values other than 'train/valid/test/test.inter/test.exter'"
+            )
+
+        # check dataset section based on dataset version
+        if dataset_ver is not None:
+            dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
+
+            if dataset_ver == "mda":
+                if dataset_section == "test.inter" or dataset_section == "test.exter":
+                    Debug.error_exit(
+                        "use 'test' instead of 'test.inter/test.exter' for mda dataset"
+                    )
+
+            elif dataset_ver == "au.3mm" or dataset_ver == "au.1mm":
+                if dataset_ver == "test":
+                    Debug.error_exit(
+                        "use 'test.inter/test.exter' instead of 'test' for au dataset"
+                    )

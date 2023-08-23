@@ -15,6 +15,8 @@ from training_baseline import TrainingBaseline
 
 class TrainingIDLGTVn(TrainingBaseline):
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 5, out_chan: int = 2):
+        # no need to reduce cnn input channel here if no_pt=true
+        # it will be reduced in super()._load_hyper_new_cnn
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
@@ -25,7 +27,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
-    def _load_hyper_data_sets(self, hyper: Dict):
+    def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str):
         # load train/valid/test datasets
         for i in ["train", "valid"]:
             # only use data augmentation on training set
@@ -39,8 +41,9 @@ class TrainingIDLGTVn(TrainingBaseline):
                 augment = None
             hyper["{}.set".format(i)] = DataSetIDLGTVn(
                 patients=hyper["{}.patients".format(i)],
-                baseline_id=hyper["baseline.id"],
+                baseline_id=idl_gtvn_baseline_id,
                 dataset_ver=hyper["dataset.ver"],
+                no_pt=hyper["no.pt"],
                 augment=augment,
                 random_click=False,
             )
@@ -50,12 +53,12 @@ class TrainingIDLGTVn(TrainingBaseline):
     ):
         self._is_valid_baseline_id(baseline_id)
         self._new_training(
-            baseline_id=baseline_id,
+            idl_gtvn_baseline_id=baseline_id,
             train_remark=train_remark,
             debug_mode=debug_mode,
         )
 
-    def inference(
+    def fold_wise_inference(
         self,
         idl_gtvn_id: str,
         dataset_section: str,  # train/test.inter/test.exter/test
@@ -63,7 +66,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._inference(
+        self._fold_wise_inference(
             train_id=idl_gtvn_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
@@ -108,13 +111,17 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         return scores
 
-    def _inference_save_patient_preds(
+    def _fold_wise_inference_save_patient_preds(
         self,
         patient: str,
         epoch_dir: str,
         patient_outputs: Dict,
         dataset_ver: str,
+        dataset_section: str,
     ):
+        if dataset_section == "train" or dataset_section == "valid":
+            return
+
         epoch_patient_dir = os.path.join(
             epoch_dir,
             "patients",
@@ -150,7 +157,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     spacing=g.NII_SPACING[dataset_ver],
                 )
 
-    def _inference_record_patient_score(
+    def _fold_wise_inference_record_patient_score(
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for metric in g.METRICS:
@@ -164,7 +171,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     patient_outputs["gtvn"][metric]
                 )
 
-    def _calculate_and_save_avg_and_median(
+    def _inference_save_avg_and_median(
         self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
     ):
         for metric in g.METRICS:
@@ -184,7 +191,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):
-        if not idl_gtvn_id.startswith("idl.gtvn"):
+        if not idl_gtvn_id.startswith("idl.gtvn_"):
             Debug.error_exit("idl.gtvn id error")
 
     def remove_non_optimal_epochs(self, idl_gtvn_id: str):
@@ -207,22 +214,37 @@ class TrainingIDLGTVn(TrainingBaseline):
             scores=scores, gtv_list=gtv_list
         )
 
-    def cross_valid_evaluation(
+    def cross_valid_inference(
         self,
         idl_gtvn_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_section: str,  # test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._cross_valid_evaluation(
+        self._cross_valid_inference(
             train_id=idl_gtvn_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _cross_valid_evaluation_record_patient_score(
+    def _cross_valid_inference_is_valid_dataset_section(
+        self,
+        dataset_section: str,
+        dataset_ver: str,
+    ):
+        if dataset_section not in ["test", "test.inter", "test.exter"]:
+            Debug.error_exit(
+                "'dataset_section' can not take on any values other than 'test/test.inter/test.exter'"
+            )
+
+        self._is_valid_dataset_section(
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+
+    def _cross_valid_inference_record_patient_score(
         self,
         patient: str,
         preds: Dict,
@@ -239,12 +261,17 @@ class TrainingIDLGTVn(TrainingBaseline):
                 scores[stats][metric]["round=01"].append(score)
 
     def _inference_single_patient_load_dataset(
-        self, patient: str, dataset_ver: str, baseline_id: str
+        self,
+        patient: str,
+        dataset_ver: str,
+        no_pt: bool,
+        idl_gtvn_baseline_id: str,
     ):
         return DataSetIDLGTVn(
             patients=[patient],
-            baseline_id=baseline_id,
+            baseline_id=idl_gtvn_baseline_id,
             dataset_ver=dataset_ver,
+            no_pt=no_pt,
             augment=None,
             random_click=False,
         )
@@ -258,12 +285,12 @@ class TrainingIDLGTVn(TrainingBaseline):
         return item[2]
 
     def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
     ):
         outputs["gtvn"]["pred"] = preds[1]
         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
         outputs["gtvn"]["distance.map"] = input_imgs[0]
-        outputs["gtvn"]["clicks"] = torch.squeeze(gtvn_clicks, dim=0).cpu().numpy()
+        outputs["gtvn"]["clicks"] = torch.squeeze(idl_gtvn_clicks, dim=0).cpu().numpy()
 
     def _inference_single_patient_gtvn_post_process(self, outputs: Dict):
         if 0:

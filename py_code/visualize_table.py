@@ -22,7 +22,9 @@ def compare_idls_in_table(
 
     patient_list = Json.load(
         os.path.join(
-            idl_gtvt_main_dir, idl_results_list[0], "inference_test_inter.json"
+            idl_gtvt_main_dir,
+            idl_results_list[0],
+            "inference_{}_{}.json".format(dataset_ver, dataset_section),
         )
     )
     patient_list = patient_list.keys()
@@ -36,7 +38,11 @@ def compare_idls_in_table(
         for i in range(len(idl_results_list)):
             idl_id = idl_results_list[i]
             gtvt_score = Json.load(
-                os.path.join(idl_gtvt_main_dir, idl_id, "inference_test_inter.json")
+                os.path.join(
+                    idl_gtvt_main_dir,
+                    idl_id,
+                    "inference_{}_{}.json".format(dataset_ver, dataset_section),
+                )
             )
             for metric in ["DSC", "MSD", "HD95"]:
                 cur_patient_score["{}_{}".format(metric, i + 1)] = gtvt_score[patient][

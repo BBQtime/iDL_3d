@@ -10,10 +10,12 @@ from custom import Debug, Dict, Directory
 from custom import Global as g
 from custom import Img, Json, List, Nii, Value
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QPoint, QRect, Qt
+from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QImage, QPalette, QPixmap
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRubberBand
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow
 from Ui_core import Ui_Core
+
+# gravity center of gtvs
 
 
 class UiReplay(QMainWindow, Ui_Core):
@@ -38,16 +40,18 @@ class UiReplay(QMainWindow, Ui_Core):
         # load first baseline result
         self._choose_baseline()
 
-    # param: debug_mode is for subclass: UiIdl
-    def _init_member_var(self, debug_mode: bool = False):
-        # patients: "test.inter"
+    def _init_member_var(
+        self,
+        debug_mode: bool = False,  # param: debug_mode is for subclass: UiIdl
+    ):
+        # load test set patients of au and mda datasets
+        # DATASET_SPLIT_JSON_PATH["au.1mm"] and ["au.3mm"] are the same
+        dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH["au.1mm"])
+        dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH["mda"])
         self.__patients = Dict()
-        self.__patients["test.inter"] = Json.load(g.DATASET_SPLIT_JSON_PATH["mda"])[
-            "test"
-        ]
-        # str to List
-        self.__patients["test.inter"] = List(self.__patients["test.inter"])
-        self.__patients["test.inter"].sort()
+        self.__patients["au.test.inter"] = List(dataset_split_au["test.inter"])
+        self.__patients["au.test.exter"] = List(dataset_split_au["test.exter"])
+        self.__patients["mda.test"] = List(dataset_split_mda["test"])
 
         self._baseline_id = None
         self._cur_patient = None
@@ -59,17 +63,16 @@ class UiReplay(QMainWindow, Ui_Core):
             self._idl_id[i] = "baseline"
             self._idl_round[i] = "round=00"
 
+        self.__dataset_ver = None
+        self.__dataset_section = None
         self._nii_spacing = None  # (1,1,1) or (1,1,3)
-        self._dataset_dir = None  # 1mm or 3mm
+        self._dataset_dir = None  # au.1mm / au.1mm / mda
         self.__scores = Dict()
         self._3d_imgs = Dict()
         self.__resize_pos = Dict()
         self.__side_bar_width = 300
 
     def _clear_img_data(self):
-        # self.__patients["idl.gtvt"] = None
-        # self.__patients["idl.gtvn"] = None
-
         for i in ["gtvt", "gtvn"]:
             self.__scores[i]["dsc"] = None
             self.__scores[i]["msd"] = None
@@ -516,11 +519,7 @@ class UiReplay(QMainWindow, Ui_Core):
             )
 
         # fill the baseline combobox with baseline_ids
-        baseline_id_list = Directory.get_sub_folders(
-            g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
-        )
-        baseline_id_list = [i for i in baseline_id_list if "1mm" in i]
-        self._combox["baseline"].addItems(baseline_id_list)
+        self._fill_combox_baseline()
 
         # set initial state
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
@@ -599,6 +598,12 @@ class UiReplay(QMainWindow, Ui_Core):
         self.__btn_group_bright_contrast.buttonClicked.connect(
             self.__set_bright_contrast_modality
         )
+
+    def _fill_combox_baseline(self):
+        baseline_id_list = Directory.get_sub_folders(
+            g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
+        )
+        self._combox["baseline"].addItems(baseline_id_list)
 
     def _refresh_side_bar(
         self, widgets_to_display: list = ["baseline", "patient", "idl.gtvt", "idl.gtvn"]
@@ -774,10 +779,28 @@ class UiReplay(QMainWindow, Ui_Core):
         fold_dir = Directory.get_sub_folders(
             baseline_dir, key_word="fold=", full_path=True
         )[0]
-        dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))["dataset.ver"]
-        # self._dataset_dir = g.DATASET_DIR[dataset_ver]
-        self._dataset_dir = g.DATASET_DIR["mda"]
-        self._nii_spacing = g.NII_SPACING[dataset_ver]
+        baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
+            "dataset.ver"
+        ]
+
+        # set dataset dir based on current patient
+        if self._cur_patient in self.__patients["au.test.inter"]:
+            self.__dataset_ver = baseline_dataset_ver
+            self.__dataset_section = "test.inter"
+
+        elif self._cur_patient in self.__patients["au.test.exter"]:
+            self.__dataset_ver = baseline_dataset_ver
+            self.__dataset_section = "test.exter"
+
+        elif self._cur_patient in self.__patients["mda.test"]:
+            self.__dataset_ver = "mda"
+            self.__dataset_section = "test"
+        else:
+            Debug.error_exit("cant find current patient in test patients")
+
+        # set dataset dir and nii spacing
+        self._dataset_dir = g.DATASET_DIR[self.__dataset_ver]
+        self._nii_spacing = g.NII_SPACING[self.__dataset_ver]
 
     def _fill_combox_patient(self):
         combox_patients = Directory.get_sub_folders(
@@ -787,7 +810,8 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in range(len(combox_patients)):
             combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        combox_patients.find_identical_items(self.__patients["test.inter"])
+        combox_patients.find_identical_items(self.__patients.to_list())
+        combox_patients.sort()
         self._combox["patient"].addItems(combox_patients)
         self._combox["patient"].setEnabled(True)
         return combox_patients
@@ -809,8 +833,7 @@ class UiReplay(QMainWindow, Ui_Core):
             self._arrow_btn["prev.{}".format(i)].setEnabled(False)
             self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        # run these 2 lines after self._baseline_id is confirmed
-        self._load_dataset_dir_and_nii_spacing()
+        # run this after self._baseline_id is confirmed
         combox_patients = self._fill_combox_patient()
 
         # choose patient automatically
@@ -844,7 +867,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         return img
 
-    # ui_idl will inherit this function, do not make it private
+    # ui_idl will inherit this function, do not make it a private function
     def _load_multi_modal_imgs(self):
         paths = Dict()
         paths["ct"] = "CT"
@@ -878,8 +901,9 @@ class UiReplay(QMainWindow, Ui_Core):
         else:
             self._combox["patient"].setCurrentText(self._cur_patient)
 
-        # run this after patient combox current text is set up
+        # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
+        self._load_dataset_dir_and_nii_spacing()
 
         # reset comboboxes
         for i in ["idl.gtvt", "idl.gtvn"]:
@@ -932,7 +956,7 @@ class UiReplay(QMainWindow, Ui_Core):
         labels = Img.load_labels(
             dataset_dir=self._dataset_dir,
             patient=self._cur_patient,
-            load_func=self.__load_3d_img,
+            nii_load_func=self.__load_3d_img,
         )
         for gtv in ["gtvt", "gtvn"]:
             self._3d_imgs["{}.label".format(gtv)] = labels[gtv]
@@ -968,6 +992,7 @@ class UiReplay(QMainWindow, Ui_Core):
     ):
         self.__choose_idl(gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs)
 
+    # _choose_idl_gtvt and _choose_idl_gtvn will share this function
     def __choose_idl(self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True):
         # triggered by:
         # (1) idl combox update
@@ -1037,7 +1062,9 @@ class UiReplay(QMainWindow, Ui_Core):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 "baseline",
-                "inference_test_inter.json",
+                "inference_{}_{}.json".format(
+                    self.__dataset_ver, self.__dataset_section
+                ),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1046,13 +1073,15 @@ class UiReplay(QMainWindow, Ui_Core):
                         "patient={}".format(self._cur_patient)
                     ][gtv][metric]
 
-        # load idl gtvn scores
+        # load idl scores
         else:
             gtvn_score_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id[gtv],
-                "inference_test_inter.json",
+                "inference_{}_{}.json".format(
+                    self.__dataset_ver, self.__dataset_section
+                ),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1220,14 +1249,18 @@ class UiReplay(QMainWindow, Ui_Core):
             # annotated slices mask
             for direction in ["horizontal", "vertical"]:
                 for selected_slice in selected_slices[direction]:
-                    # image is reversed in the transverse plane
+                    # all images are reversed in transverse plane
                     if self.__img_plane != "transverse" and direction == "horizontal":
                         slice_pos = total_slices_num[direction] - selected_slice
-                    # only for 1mm
-                    elif self.__img_plane != "coronal" and direction == "vertical":
-                        slice_pos = total_slices_num[direction] - selected_slice
-                    # only for 1mm
-                    elif self.__img_plane != "sagittal" and direction == "vertical":
+                    # 1mm images are reversed in sagittal plane
+                    elif (
+                        self.__img_plane != "sagittal"
+                        and direction == "vertical"
+                        and (
+                            self.__dataset_ver == "au.1mm"
+                            or self.__dataset_ver == "mda"
+                        )
+                    ):
                         slice_pos = total_slices_num[direction] - selected_slice
                     else:
                         slice_pos = selected_slice

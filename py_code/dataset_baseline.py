@@ -13,10 +13,17 @@ from torch import Tensor
 
 
 class DataSetBaseline(torch.utils.data.Dataset):
-    def __init__(self, patients: list, dataset_ver: str, augment: Dict = None):
+    def __init__(
+        self,
+        patients: list,
+        dataset_ver: str,
+        no_pt: bool,
+        augment: Dict = None,
+    ):
         self.__patients = patients
         self.__img_shape = g.IMG_SHAPE[dataset_ver]
         self.__dataset_dir = g.DATASET_DIR[dataset_ver]
+        self.__no_pt = no_pt
         self.__augment = DataAugmentation(augment)
 
     # must be overrided
@@ -91,8 +98,13 @@ class DataSetBaseline(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
 
+        # load multi-modal imgs
+        multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
+        if self.__no_pt:
+            multi_modal_list.remove("PT")
+
         input_imgs = None
-        for i in ["CT", "PT", "T1dr", "T2dr"]:
+        for i in multi_modal_list:
             img_path = os.path.join(
                 self.__dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )

@@ -33,21 +33,16 @@ if 0:
         debug_mode=1,
     )
 if 0:
-    baseline.inference(
+    baseline.fold_wise_inference(
         "baseline_2023.07.05.16.49.25_1mm_best",
-        # "baseline_2023.02.27.07.08.09_3mm_best",
-        dataset_section="valid",
-        # dataset_ver="mda",
+        dataset_section="test",
+        dataset_ver="mda",
     )
 if 0:
-    baseline.remove_non_optimal_epochs(
-        "baseline_2023.02.27.07.08.09_3mm_best",
-    )
-if 0:
-    baseline.cross_valid_evaluation(
-        # "baseline_2023.07.05.16.49.25_1mm_best",
-        "baseline_2023.02.27.07.08.09_3mm_best",
-        dataset_section="test.inter",
+    baseline.cross_valid_inference(
+        "baseline_2023.07.05.16.49.25_1mm_best",
+        dataset_section="test",
+        dataset_ver="mda",
     )
 
 
@@ -56,20 +51,20 @@ idl_gtvn = TrainingIDLGTVn()
 if 0:
     idl_gtvn.new_training(
         baseline_id="baseline_2023.07.05.16.49.25_1mm_best",
-        train_remark="",
+        train_remark="no.pt",
         debug_mode=1,
     )
 if 0:
-    idl_gtvn.inference(
-        "idl.gtvn_2023.07.06.21.43.53",
-        # "idl.gtvn_2023.05.26.12.06.15_best",
-        dataset_section="test.inter",
+    idl_gtvn.fold_wise_inference(
+        idl_gtvn_id="idl.gtvn_2023.08.18.02.37.30_no.pt",
+        dataset_section="test",
+        dataset_ver="mda",
     )
 if 0:
-    idl_gtvn.cross_valid_evaluation(
-        "idl.gtvn_2023.07.06.21.43.53",
-        # "idl.gtvn_2023.05.26.12.06.15_best",
-        dataset_section="test.inter",
+    idl_gtvn.cross_valid_inference(
+        idl_gtvn_id="idl.gtvn_2023.08.18.02.37.30_no.pt",
+        dataset_section="test",
+        dataset_ver="mda",
     )
 
 
@@ -78,8 +73,11 @@ idl_gtvt = TrainingIDLGTVt()
 if 0:
     idl_gtvt.simulation(
         baseline_id="baseline_2023.07.05.16.49.25_1mm_best",
-        debug_mode=0,
+        dataset_section="test.inter",
+        debug_mode=1,
     )
+if 0:
+    idl_gtvt.inference("idl.gtvt_2023.07.21.01.40.28", dataset_section="test.inter")
 
 
 print("Done!")

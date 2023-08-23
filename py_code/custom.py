@@ -196,54 +196,6 @@ class Value:
         else:
             return statistics.mean(data_list)
 
-    def is_valid_dataset_version(
-        dataset_ver,
-        dataset_ver_baseline_or_training=None,  # this is for inference and idl
-    ):
-        err_msg = "invalid dataset version"
-
-        if dataset_ver != "au.1mm" and dataset_ver != "au.3mm" and dataset_ver != "mda":
-            Debug.error_exit("invalid dataset version")
-
-        if dataset_ver_baseline_or_training is not None:
-            if dataset_ver_baseline_or_training == "mda":
-                if dataset_ver != "mda":
-                    Debug.error_exit(err_msg)
-
-            elif dataset_ver_baseline_or_training == "au.1mm":
-                if dataset_ver == "au.3mm":
-                    Debug.error_exit(err_msg)
-
-            elif dataset_ver_baseline_or_training == "au.3mm":
-                if dataset_ver != "au.3mm":
-                    Debug.error_exit(err_msg)
-            else:
-                Debug.error_exit("invalid baseline dataset version")
-
-    def is_valid_dataset_section(dataset_section: str, dataset_ver: str = None):
-        err_msg = "invalid dataset section"
-
-        if (
-            dataset_section != "train"
-            and dataset_section != "valid"
-            and dataset_section != "test"
-            and dataset_section != "test.inter"
-            and dataset_section != "test.exter"
-        ):
-            Debug.error_exit(err_msg)
-
-        # check dataset section based on dataset version
-        if dataset_ver is not None:
-            Value.is_valid_dataset_version(dataset_ver=dataset_ver)
-
-            if dataset_ver == "mda":
-                if dataset_section == "test.inter" or dataset_section == "test.exter":
-                    Debug.error_exit(err_msg)
-
-            elif "au" in dataset_ver:
-                if dataset_ver == "test":
-                    Debug.error_exit(err_msg)
-
 
 class Img:
     def binarize(
@@ -382,10 +334,13 @@ class Img:
         return random_pos
 
     # use this in case there is no gtvn or gtvs nii file
-    def load_labels(dataset_dir: str, patient: str, load_func=None):
-        # ui will use this function, with its own "load_func"
-        if load_func is None:
-            load_func = Nii.load
+    def load_labels(
+        dataset_dir: str,
+        patient: str,
+        nii_load_func=None,  # ui will use this param, with its own nii load function
+    ):
+        if nii_load_func is None:
+            nii_load_func = Nii.load
 
         paths = Dict()
         for i in ["s", "t", "n"]:
@@ -395,17 +350,17 @@ class Img:
         labels = Dict()
 
         # load gtvt
-        labels["gtvt"] = load_func(paths["gtvt"], binary=True)
+        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
 
         # load gtvn
         if os.path.exists(paths["gtvn"]):
-            labels["gtvn"] = load_func(paths["gtvn"], binary=True)
+            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
         else:
             labels["gtvn"] = np.zeros_like(labels["gtvt"])
 
         # load gtvs
         if os.path.exists(paths["gtvs"]):
-            labels["gtvs"] = load_func(paths["gtvs"], binary=True)
+            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
         else:
             labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
 

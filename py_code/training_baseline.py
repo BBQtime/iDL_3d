@@ -18,9 +18,7 @@ from training_core import TrainingCore
 
 class TrainingBaseline(TrainingCore):
     def _load_hyper(
-        self,
-        hyper: Dict,
-        debug_mode: bool = False,  # debug_mode=True will only load 2 epoch and 2 patients
+        self, hyper: Dict, fold: int, idl_gtvn_baseline_id: str, debug_mode: bool
     ):
         # shared by baseline/idl.gtvn/idl.gtvt
         super()._load_hyper(hyper)
@@ -65,11 +63,15 @@ class TrainingBaseline(TrainingCore):
         # augment percent
         hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
-        self._load_hyper_dataset_version(hyper)
+        self._load_hyper_dataset_version(
+            hyper=hyper, idl_baseline_id=idl_gtvn_baseline_id
+        )
 
         # load patients after dataset version is selected
         patients = self._load_patients(
-            dataset_ver=hyper["dataset.ver"], fold=hyper["fold"], debug_mode=debug_mode
+            dataset_ver=hyper["dataset.ver"],
+            fold=fold,
+            debug_mode=debug_mode,
         )
         for key_name in ["train", "valid"]:
             hyper["{}.patients".format(key_name)] = patients[key_name]
@@ -77,7 +79,9 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_loss_func(hyper)
 
         # load datasets before load dataloaders
-        self._load_hyper_data_sets(hyper)
+        self._load_hyper_data_sets(
+            hyper=hyper, idl_gtvn_baseline_id=idl_gtvn_baseline_id
+        )
 
         self._load_hyper_data_loaders(hyper)
 
@@ -87,6 +91,8 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_optim_and_scheduler(hyper=hyper)
 
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
+        if hyper["no.pt"]:
+            in_chan -= 1
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
@@ -97,7 +103,7 @@ class TrainingBaseline(TrainingCore):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
-    def _load_hyper_data_sets(self, hyper: Dict):
+    def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str = None):
         # load train/valid/test datasets
         for i in ["train", "valid"]:
             # only use data augmentation on training set
@@ -112,6 +118,7 @@ class TrainingBaseline(TrainingCore):
             hyper["{}.set".format(i)] = DataSetBaseline(
                 patients=hyper["{}.patients".format(i)],
                 dataset_ver=hyper["dataset.ver"],
+                no_pt=hyper["no.pt"],
                 augment=augment,
             )
 
@@ -140,9 +147,11 @@ class TrainingBaseline(TrainingCore):
             ignore_list.append("{}.set".format(i))
             ignore_list.append("{}.loader".format(i))
 
+        ignore_list.append("fold")
+
         # here in this for loop, use "hyper" instead of "simple_hyper"
         # otherwise will cause error: dictionary changed size during iteration
-        for key_name in hyper:
+        for key_name in hyper.keys():
             if key_name in ignore_list:
                 simple_hyper.pop(key_name)
             else:
@@ -286,10 +295,7 @@ class TrainingBaseline(TrainingCore):
                         break
 
     def _training_all_folds(
-        self,
-        hyper: Dict,
-        train_dir: str,
-        debug_mode: bool = False,
+        self, hyper: Dict, train_dir: str, idl_gtvn_baseline_id: str, debug_mode: bool
     ):
         Folder.create(train_dir)
 
@@ -308,17 +314,22 @@ class TrainingBaseline(TrainingCore):
         origin_hyper = hyper.copy()
 
         # loop through each fold
-        for hyper["fold"] in fold_list:
-            fold_dir = os.path.join(train_dir, "fold={}".format(hyper["fold"]))
+        for fold in fold_list:
+            fold_dir = os.path.join(train_dir, "fold={}".format(fold))
             Folder.create(fold_dir)
 
             # load and print hyperparams
-            self._load_hyper(hyper=hyper, debug_mode=debug_mode)
+            self._load_hyper(
+                hyper=hyper,
+                fold=fold,
+                idl_gtvn_baseline_id=idl_gtvn_baseline_id,
+                debug_mode=debug_mode,
+            )
             print("")
             self._print_hyper(hyper)
 
             print("")
-            print("fold: {}".format(hyper["fold"]))
+            print("fold: {}".format(fold))
 
             # save an empty loss.json
             Json.save(Dict(), os.path.join(fold_dir, "loss.json"))
@@ -355,60 +366,63 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         self._new_training(
-            baseline_id=None, train_remark=train_remark, debug_mode=debug_mode
+            idl_gtvn_baseline_id=None,
+            train_remark=train_remark,
+            debug_mode=debug_mode,
         )
 
     def _new_training(
         self,
-        baseline_id: str = None,  # this is only for idl.gtvn
+        idl_gtvn_baseline_id: str = None,
         train_remark: str = "",
         debug_mode: bool = False,
     ):
-        if baseline_id is None:
+        if idl_gtvn_baseline_id is None:
             hyper_json_path = g.HYPER_JSON_PATH["baseline"]
         else:
             hyper_json_path = g.HYPER_JSON_PATH["idl.gtvn"]
 
-        for hyper in self._load_hyper_sets_from_json(hyper_json_path):
-            if baseline_id is None:
+        for hyper in self._load_hyper_series_from_json(hyper_json_path):
+            # init train id
+            if idl_gtvn_baseline_id is None:
                 train_id = "baseline_"
             else:
                 train_id = "idl.gtvn_"
-
             train_id += self._init_train_id(
-                train_remark=train_remark,
-                hyper_json_path=hyper_json_path,
                 hyper=hyper,
+                hyper_json_path=hyper_json_path,
+                train_remark=train_remark,
                 debug_mode=debug_mode,
             )
-
             print("")
             print(train_id)
 
-            if baseline_id is None:
+            if idl_gtvn_baseline_id is None:
                 train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
             else:
-                train_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, train_id)
-
-            # add baseline_id to hyper Dict, don't need extra param
-            hyper["baseline.id"] = baseline_id
+                train_dir = os.path.join(
+                    g.TRAIN_RESULTS_DIR, idl_gtvn_baseline_id, train_id
+                )
 
             self._training_all_folds(
-                hyper=hyper, train_dir=train_dir, debug_mode=debug_mode
+                hyper=hyper,
+                train_dir=train_dir,
+                idl_gtvn_baseline_id=idl_gtvn_baseline_id,
+                debug_mode=debug_mode,
             )
 
             # inference
-            Value.is_valid_dataset_version(dataset_ver=hyper["dataset.ver"])
             if hyper["dataset.ver"] == "mda":
                 dataset_section_list = ["valid", "test"]
             else:
                 dataset_section_list = ["valid", "test.inter"]
 
-            if baseline_id is None:
+            # if baseline, save pred of training set
+            if idl_gtvn_baseline_id is None:
                 dataset_section_list.append("train")
 
             for dataset_section in dataset_section_list:
-                self._inference(
+                self._fold_wise_inference(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_section=dataset_section,
@@ -421,18 +435,14 @@ class TrainingBaseline(TrainingCore):
             # cross validation evaluation after non optimal epochs removed
             dataset_section_list.remove("valid")
             for dataset_section in dataset_section_list:
-                self._cross_valid_evaluation(
+                self._cross_valid_inference(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_section=dataset_section,
                     debug_mode=debug_mode,
                 )
 
-    def _is_valid_baseline_id(self, baseline_id: str):
-        if not baseline_id.startswith("baseline"):
-            Debug.error_exit("baseline id error")
-
-    def inference(
+    def fold_wise_inference(
         self,
         baseline_id: str,
         dataset_section: str,  # train/valid/test.inter/test.exter/test
@@ -440,14 +450,14 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
-        self._inference(
+        self._fold_wise_inference(
             train_id=baseline_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _inference(
+    def _fold_wise_inference(
         self,
         train_id: str,
         dataset_section: str,  # train/valid/test.inter/test.exter/test
@@ -457,11 +467,33 @@ class TrainingBaseline(TrainingCore):
         print("")
         print("inference: {}".format(train_id))
 
-        dataset_ver, fold_dirs, segment_metrics = self.__inference_prepare(
-            train_id=train_id,
+        train_dir = self._find_train_dir(train_id)
+        if train_dir is None:
+            Debug.error_exit("training id not found")
+
+        baseline_id = Path(train_dir).parent.name
+
+        fold_dirs = Directory.get_sub_folders(
+            train_dir, key_word="fold=", full_path=True
+        )
+
+        hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
+        no_pt = hyper["no.pt"]
+        training_dataset_ver = hyper["dataset.ver"]
+
+        dataset_ver = self._is_valid_dataset_version(
+            dataset_ver=dataset_ver,
+            origin_dataset_ver=training_dataset_ver,
+        )
+        self._is_valid_dataset_section(
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
         )
+        print("dataset version: {}".format(dataset_ver))
+        print("dataset section: {}".format(dataset_section))
+
+        # load segmentation metrics
+        segment_metrics = self._load_segment_metrics(dataset_ver)
 
         # loop through fold dirs
         for fold_dir in fold_dirs:
@@ -471,7 +503,9 @@ class TrainingBaseline(TrainingCore):
 
             # load patients
             patients = self._load_patients(
-                dataset_ver=dataset_ver, fold=fold, debug_mode=debug_mode
+                dataset_ver=dataset_ver,
+                fold=fold,
+                debug_mode=debug_mode,
             )
 
             # loop through epoch dirs
@@ -488,7 +522,7 @@ class TrainingBaseline(TrainingCore):
                 # initialize scores dict (only for test sets)
                 if "test" in dataset_section or "valid" in dataset_section:
                     epoch_scores = self._inference_init_scores(
-                        baseline_id=Path(fold_dir).parent.parent.name,
+                        baseline_id=baseline_id,
                         dataset_ver=dataset_ver,
                         dataset_section=dataset_section,
                         patients=patients,
@@ -502,21 +536,23 @@ class TrainingBaseline(TrainingCore):
                         cnn=cnn,
                         dataset_ver=dataset_ver,
                         dataset_section=dataset_section,
+                        no_pt=no_pt,
                         segment_metrics=segment_metrics,
-                        baseline_id=Path(fold_dir).parent.parent.name,
+                        idl_gtvn_baseline_id=baseline_id,
                     )
 
                     # create folder and save preds of current patient
-                    self._inference_save_patient_preds(
+                    self._fold_wise_inference_save_patient_preds(
                         patient=patient,
                         epoch_dir=epoch_dir,
                         patient_outputs=patient_outputs,
                         dataset_ver=dataset_ver,
+                        dataset_section=dataset_section,
                     )
 
                     # record score of current patient (test and valid sets only)
                     if "test" in dataset_section or "valid" in dataset_section:
-                        self._inference_record_patient_score(
+                        self._fold_wise_inference_record_patient_score(
                             patient=patient,
                             patient_outputs=patient_outputs,
                             scores=epoch_scores,
@@ -525,7 +561,7 @@ class TrainingBaseline(TrainingCore):
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
                 if "test" in dataset_section or "valid" in dataset_section:
-                    self._calculate_and_save_avg_and_median(
+                    self._inference_save_avg_and_median(
                         scores=epoch_scores,
                         save_dir=epoch_dir,
                         dataset_ver=dataset_ver,
@@ -533,42 +569,6 @@ class TrainingBaseline(TrainingCore):
                     )
 
                 continue  # next epoch
-
-    def __inference_prepare(
-        self,
-        train_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
-    ):
-        train_dir = self._find_train_dir(train_id)
-        if train_dir is None:
-            Debug.error_exit("training id not found")
-
-        fold_dirs = Directory.get_sub_folders(
-            train_dir, key_word="fold=", full_path=True
-        )
-
-        # load dataset version
-        dataset_ver_training = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[
-            "dataset.ver"
-        ]
-        if dataset_ver is None:
-            dataset_ver = dataset_ver_training
-        Value.is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            dataset_ver_baseline_or_training=dataset_ver_training,
-        )
-        Value.is_valid_dataset_section(
-            dataset_section=dataset_section,
-            dataset_ver=dataset_ver,
-        )
-        print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_section))
-
-        # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
-
-        return dataset_ver, fold_dirs, segment_metrics
 
     def _inference_init_scores(
         self,
@@ -585,8 +585,13 @@ class TrainingBaseline(TrainingCore):
 
         return scores
 
-    def _inference_save_patient_preds(
-        self, patient: str, epoch_dir: str, patient_outputs: Dict, dataset_ver: str
+    def _fold_wise_inference_save_patient_preds(
+        self,
+        patient: str,
+        epoch_dir: str,
+        patient_outputs: Dict,
+        dataset_ver: str,
+        dataset_section: str,
     ):
         patient_dir = os.path.join(
             epoch_dir,
@@ -602,7 +607,7 @@ class TrainingBaseline(TrainingCore):
                 spacing=g.NII_SPACING[dataset_ver],
             )
 
-    def _inference_record_patient_score(
+    def _fold_wise_inference_record_patient_score(
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for gtv in patient_outputs.keys():
@@ -615,7 +620,7 @@ class TrainingBaseline(TrainingCore):
                 for stats in ["median", "avg"]:
                     scores[stats][gtv][metric].append(patient_outputs[gtv][metric])
 
-    def _calculate_and_save_avg_and_median(
+    def _inference_save_avg_and_median(
         self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -633,7 +638,7 @@ class TrainingBaseline(TrainingCore):
             ),
         )
 
-    def cross_valid_evaluation(
+    def cross_valid_inference(
         self,
         baseline_id: str,
         dataset_section: str,  # train/test.inter/test.exter/test
@@ -641,14 +646,14 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
-        self._cross_valid_evaluation(
+        self._cross_valid_inference(
             train_id=baseline_id,
             dataset_section=dataset_section,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _cross_valid_evaluation(
+    def _cross_valid_inference(
         self,
         train_id: str,
         dataset_section: str,  # train/test.inter/test.exter/test
@@ -658,12 +663,32 @@ class TrainingBaseline(TrainingCore):
         print("")
         print("cross valid evaluation: {}".format(train_id))
 
-        if "valid" in dataset_section:
-            Debug.error_exit("use 'train' instead of 'valid' in cross valid evaluation")
+        train_dir = self._find_train_dir(train_id)
+        if train_dir is None:
+            Debug.error_exit("training id not found")
 
-        dataset_ver, fold_dirs, segment_metrics = self.__inference_prepare(
-            train_id=train_id, dataset_section=dataset_section, dataset_ver=dataset_ver
+        baseline_id = Path(train_dir).parent.name
+
+        fold_dirs = Directory.get_sub_folders(
+            train_dir, key_word="fold=", full_path=True
         )
+
+        hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
+        training_dataset_ver = hyper["dataset.ver"]
+
+        dataset_ver = self._is_valid_dataset_version(
+            dataset_ver=dataset_ver,
+            origin_dataset_ver=training_dataset_ver,
+        )
+        self._cross_valid_inference_is_valid_dataset_section(
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+        print("dataset version: {}".format(dataset_ver))
+        print("dataset section: {}".format(dataset_section))
+
+        # load segmentation metrics
+        segment_metrics = self._load_segment_metrics(dataset_ver)
 
         # create folder in train_dir to save cross_valid preds
         Folder.create(os.path.join(Path(fold_dirs[0]).parent, "patients"))
@@ -675,12 +700,13 @@ class TrainingBaseline(TrainingCore):
         )
 
         # initialize scores dict
-        scores = self._inference_init_scores(
-            baseline_id=Path(fold_dirs[0]).parent.parent.name,
-            dataset_ver=dataset_ver,
-            dataset_section=dataset_section,
-            patients=patients,
-        )
+        if "test" in dataset_section:
+            scores = self._inference_init_scores(
+                baseline_id=baseline_id,
+                dataset_ver=dataset_ver,
+                dataset_section=dataset_section,
+                patients=patients,
+            )
 
         for patient in tqdm(patients[dataset_section]):
             # initialize preds
@@ -747,7 +773,7 @@ class TrainingBaseline(TrainingCore):
                 labels = Img.load_labels(
                     dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
                 )
-                self._cross_valid_evaluation_record_patient_score(
+                self._cross_valid_inference_record_patient_score(
                     patient=patient,
                     preds=preds,
                     labels=labels,
@@ -756,16 +782,29 @@ class TrainingBaseline(TrainingCore):
                 )
 
         # all patients have been traversed
+        # calculate avg and median score (on test set only)
         if "test" in dataset_section:
-            # calculate avg and median score
-            self._calculate_and_save_avg_and_median(
+            self._inference_save_avg_and_median(
                 scores=scores,
                 save_dir=Path(fold_dirs[0]).parent,
                 dataset_section=dataset_section,
                 dataset_ver=dataset_ver,
             )
 
-    def _cross_valid_evaluation_record_patient_score(
+    def _cross_valid_inference_is_valid_dataset_section(
+        self,
+        dataset_section: str,
+        dataset_ver: str,
+    ):
+        if "valid" in dataset_section:
+            Debug.error_exit("set dataset_section to 'train' instead of 'valid'")
+
+        self._is_valid_dataset_section(
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+
+    def _cross_valid_inference_record_patient_score(
         self,
         patient: str,
         preds: Dict,
@@ -797,7 +836,7 @@ class TrainingBaseline(TrainingCore):
 
         # load dataset version
         dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["dataset.ver"]
-        Value.is_valid_dataset_version(dataset_ver=dataset_ver)
+        dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
         inference_json_name = "inference_{}_valid.json".format(dataset_ver)
 
@@ -894,7 +933,7 @@ class TrainingBaseline(TrainingCore):
         return outputs
 
     def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, gtvn_clicks: Tensor
+        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
     ):
         outputs["gtvt"]["pred"] = preds[1]
         outputs["gtvn"]["pred"] = preds[2]

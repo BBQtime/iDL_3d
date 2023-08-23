@@ -4,6 +4,7 @@
     "augment.min": 2,
     "augment.times": 4,
     "batch.size": 1,
+    "dataset.ver": "au.1mm",
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,
@@ -24,6 +25,5 @@
     "weight.distance.step": 3,
     "weight.fp.fn": 4.0,
     "weight.prev.round.decay": 0.5,
-    "weight.slice": 1.0,
-    "dataset.ver": "au.1mm"
+    "weight.slice": 1.0
 }
