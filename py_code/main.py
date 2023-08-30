@@ -15,9 +15,9 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 0:
+if 1:
     app = QApplication(sys.argv)
-    if 0:
+    if 1:
         ui = UiIdl(debug_mode=1)
     else:
         ui = UiReplay()
@@ -29,14 +29,14 @@ if 0:
 baseline = TrainingBaseline()
 if 0:
     baseline.new_training(
-        train_remark="",
-        debug_mode=1,
+        train_remark="1mm_no.pt",
+        debug_mode=0,
     )
 if 0:
     baseline.fold_wise_inference(
-        "baseline_2023.07.05.16.49.25_1mm_best",
-        dataset_section="test",
-        dataset_ver="mda",
+        "baseline_real.idl",
+        dataset_section="test.inter",
+        # dataset_ver="mda",
     )
 if 0:
     baseline.cross_valid_inference(
@@ -72,12 +72,14 @@ if 0:
 idl_gtvt = TrainingIDLGTVt()
 if 0:
     idl_gtvt.simulation(
-        baseline_id="baseline_2023.07.05.16.49.25_1mm_best",
-        dataset_section="test.inter",
+        baseline_id="baseline_2023.08.23.15.32.07_1mm_no.pt",
         debug_mode=1,
     )
 if 0:
-    idl_gtvt.inference("idl.gtvt_2023.07.21.01.40.28", dataset_section="test.inter")
+    idl_gtvt.inference(
+        "idl.gtvt_2023.08.24.16.21.09_no.pt",
+        dataset_section="test.inter",
+    )
 
 
 print("Done!")

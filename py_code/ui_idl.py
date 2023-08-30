@@ -262,13 +262,12 @@ class UiIdl(UiReplay):
         self._clear_display_frames()
 
         self._baseline_id = "baseline_real.idl"
-        # run these 2 lines after self._baseline_id is confirmed
-        self._load_dataset_dir_and_nii_spacing()
+        # fill combobox patient after self._baseline_id is confirmed
         self._fill_combox_patient()
         self._combox["patient"].setCurrentIndex(-1)  # show nothing
 
-        # run this after patient combox current text is set up
-        self._enable_arrow_btns("patient")
+        # # run this after patient combox current text is set up
+        # self._enable_arrow_btns("patient")
 
         # create idl folders (after baseline_id is confirmed)
         for i in ["gtvt", "gtvn"]:
@@ -303,13 +302,16 @@ class UiIdl(UiReplay):
 
     def _choose_patient(self, idx: int = None):
         self._cur_patient = self._combox["patient"].currentText()
+        # run these after patient combox current text is set up
+        self._enable_arrow_btns("patient")
+        self._load_dataset_dir_and_nii_spacing()
+
         # self._reset_zoomin()
 
-        # load multi-modal imgs only, no need to load labels
+        # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()
 
-        # get slice id (after multi-modal imgs are loaded)
-        self._cur_slice = self._get_middle_slice_id()
+        self._reset_cur_slice_id()
 
         self._choose_idl_gtvt()
         self._choose_idl_gtvn()
@@ -336,6 +338,9 @@ class UiIdl(UiReplay):
                     "patient={}".format(self._cur_patient)
                 ]
                 self.__update_annotation_msg()
+
+    def _reset_cur_slice_id(self):
+        self._cur_slice = self._get_middle_slice_id()
 
     def __update_annotation_msg(self):
         if self.__idl_step == CLICK_GTVT_CENTER:

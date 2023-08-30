@@ -25,7 +25,12 @@ from unet_slim import UNetSlim
 
 
 class TrainingCore:
-    def _load_patients(self, dataset_ver: str, fold: int = 0, debug_mode: bool = False):
+    def _load_patients(
+        self,
+        dataset_ver: str,
+        fold: int = None,  # fold=None means no validation set, but use all folds as training set
+        debug_mode: bool = False,
+    ):
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
 
         # calculate fold count
@@ -449,6 +454,7 @@ class TrainingCore:
     ):
         pass
 
+    # make this function protected, idl will use it
     def _is_valid_baseline_id(self, baseline_id: str):
         if not baseline_id.startswith("baseline_"):
             Debug.error_exit("baseline id error")

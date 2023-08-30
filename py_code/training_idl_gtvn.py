@@ -171,7 +171,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     patient_outputs["gtvn"][metric]
                 )
 
-    def _inference_save_avg_and_median(
+    def _inference_calculate_save_avg_median(
         self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
     ):
         for metric in g.METRICS:

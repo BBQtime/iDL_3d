@@ -100,7 +100,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
         for plane in ["transverse", "coronal", "sagittal"]:
             # annotated slice mask
-            slice_mask[plane] = np.zeros(self.__origin["pt"].shape, dtype=np.float32)
+            slice_mask[plane] = np.zeros(self.__origin["ct"].shape, dtype=np.float32)
 
             for round_num in selected_slices[plane]:
                 # do NOT change weight["annotate.slice"], use another variable

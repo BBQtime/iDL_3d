@@ -13,6 +13,7 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QImage, QPalette, QPixmap
 from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow
+from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 
 # gravity center of gtvs
@@ -56,6 +57,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._baseline_id = None
         self._cur_patient = None
         self._cur_slice = 0  # starts from 0
+        self._gtvs_center = None
 
         self._idl_id = Dict()
         self._idl_round = Dict()
@@ -183,7 +185,7 @@ class UiReplay(QMainWindow, Ui_Core):
     #     # self.__zoomin["rubber.band"] = None
 
     #     # no data loaded
-    #     if self._3d_imgs["pt"] is None:
+    #     if self._3d_imgs["ct"] is None:
     #         self._reset_zoomin()
     #         return
 
@@ -248,20 +250,20 @@ class UiReplay(QMainWindow, Ui_Core):
 
     #     # get actual zoom position
     #     if self.__img_plane == "sagittal":
-    #         origin_width = self._3d_imgs["pt"].shape[1]
-    #         origin_height = self._3d_imgs["pt"].shape[0]
+    #         origin_width = self._3d_imgs["ct"].shape[1]
+    #         origin_height = self._3d_imgs["ct"].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
     #         )
     #     elif self.__img_plane == "coronal":
-    #         origin_width = self._3d_imgs["pt"].shape[2]
-    #         origin_height = self._3d_imgs["pt"].shape[0]
+    #         origin_width = self._3d_imgs["ct"].shape[2]
+    #         origin_height = self._3d_imgs["ct"].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[0]
     #         )
     #     else:
-    #         origin_width = self._3d_imgs["pt"].shape[2]
-    #         origin_height = self._3d_imgs["pt"].shape[1]
+    #         origin_width = self._3d_imgs["ct"].shape[2]
+    #         origin_height = self._3d_imgs["ct"].shape[1]
 
     #     start_x = round(start_x * origin_width / resize_pos["width"])
     #     end_x = round(end_x * origin_width / resize_pos["width"])
@@ -707,15 +709,19 @@ class UiReplay(QMainWindow, Ui_Core):
             if self.__radio_btn[i].isChecked():
                 self.__img_plane = i
                 break
-
-        # update and check slice_id (starts from 0)
-        slices_count = self.__get_slices_count()
-        if slices_count > 0:
-            self._cur_slice = round(slices_count / 2) - 1
-            self._cur_slice = Value.limit_range(self._cur_slice, (0, slices_count - 1))
+        self._reset_cur_slice_id()
         # self._reset_zoomin()
         self._refresh_imgs()
         self._refresh_title()
+
+    def _reset_cur_slice_id(self):
+        if self._gtvs_center is not None:
+            if self.__img_plane == "transverse":
+                self._cur_slice = self._gtvs_center[0]
+            if self.__img_plane == "coronal":
+                self._cur_slice = self._gtvs_center[1]
+            if self.__img_plane == "sagittal":
+                self._cur_slice = self._gtvs_center[2]
 
     def __set_bright_contrast_modality(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
@@ -880,6 +886,8 @@ class UiReplay(QMainWindow, Ui_Core):
             self._3d_imgs[i] = self.__load_3d_img(paths[i])
 
     def _get_middle_slice_id(self):
+        if self._3d_imgs["ct"] is None:
+            Debug.error_exit("get middle slice id after multi-modal imgs are loaded")
         slices_count = self.__get_slices_count()
         if slices_count > 0:
             # show the middle slice of whole 3D img,
@@ -951,18 +959,11 @@ class UiReplay(QMainWindow, Ui_Core):
                 self._combox[i].setCurrentIndex(1)
 
         self._load_multi_modal_imgs()
+        self.__load_labels()
 
-        # load labels
-        labels = Img.load_labels(
-            dataset_dir=self._dataset_dir,
-            patient=self._cur_patient,
-            nii_load_func=self.__load_3d_img,
-        )
-        for gtv in ["gtvt", "gtvn"]:
-            self._3d_imgs["{}.label".format(gtv)] = labels[gtv]
-
-        # get slice id (after multi-modal imgs are loaded)
-        self._cur_slice = self._get_middle_slice_id()
+        # reset slice id (after multi-modal imgs are loaded)
+        # self._cur_slice = self._get_middle_slice_id()
+        self._reset_cur_slice_id()
 
         # choose idl automatically
         # try not to reset idl id/round when patient is changed
@@ -981,6 +982,22 @@ class UiReplay(QMainWindow, Ui_Core):
 
         self._refresh_imgs()
         self._refresh_title()
+
+    # load labels and gtvs gravity center
+    def __load_labels(self):
+        labels = Img.load_labels(
+            dataset_dir=self._dataset_dir,
+            patient=self._cur_patient,
+            nii_load_func=self.__load_3d_img,
+        )
+        # load gtvt and gtvn
+        for gtv in ["gtvt", "gtvn"]:
+            self._3d_imgs["{}.label".format(gtv)] = labels[gtv]
+        # load gtvs gravity center: (d,h,w)
+        self._gtvs_center = list(measurements.center_of_mass(labels["gtvs"]))
+        # float to int
+        for i in range(len(self._gtvs_center)):
+            self._gtvs_center[i] = round(self._gtvs_center[i])
 
     def _choose_idl_gtvt(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
@@ -1160,7 +1177,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def _refresh_imgs(self):
         # no img data loaded
-        if self._3d_imgs["pt"] is None:
+        if self._3d_imgs["ct"] is None:
             return
 
         # check if cur slice is annotated
@@ -1215,29 +1232,29 @@ class UiReplay(QMainWindow, Ui_Core):
                 selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
                     "coronal"
                 )
-                total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[1]
+                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[1]
                 selected_slices["vertical"] = self.__get_gtvt_selected_slices(
                     "sagittal"
                 )
-                total_slices_num["vertical"] = self._3d_imgs["pt"].shape[2]
+                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[2]
 
             elif self.__img_plane == "coronal":
                 selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
                     "transverse"
                 )
-                total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[0]
+                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[0]
                 selected_slices["vertical"] = self.__get_gtvt_selected_slices(
                     "sagittal"
                 )
-                total_slices_num["vertical"] = self._3d_imgs["pt"].shape[2]
+                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[2]
 
             elif self.__img_plane == "sagittal":
                 selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
                     "transverse"
                 )
-                total_slices_num["horizontal"] = self._3d_imgs["pt"].shape[0]
+                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[0]
                 selected_slices["vertical"] = self.__get_gtvt_selected_slices("coronal")
-                total_slices_num["vertical"] = self._3d_imgs["pt"].shape[1]
+                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[1]
 
             else:
                 Debug.error_exit("self.__img_plane value error")
@@ -1503,7 +1520,7 @@ class UiReplay(QMainWindow, Ui_Core):
         return selected_slices_list
 
     def __is_cur_slice_annotated(self) -> bool:
-        if self._3d_imgs["pt"] is None:
+        if self._3d_imgs["ct"] is None:
             return False
 
         if int(self._cur_slice) in self.__get_gtvt_selected_slices(self.__img_plane):
@@ -1549,14 +1566,14 @@ class UiReplay(QMainWindow, Ui_Core):
             self._refresh_title()
 
     def __get_slices_count(self) -> int:
-        if (self._3d_imgs["pt"] is None) or (self.__img_plane is None):
+        if (self._3d_imgs["ct"] is None) or (self.__img_plane is None):
             return 0
         elif self.__img_plane == "sagittal":
-            return self._3d_imgs["pt"].shape[2]
+            return self._3d_imgs["ct"].shape[2]
         elif self.__img_plane == "coronal":
-            return self._3d_imgs["pt"].shape[1]
+            return self._3d_imgs["ct"].shape[1]
         elif self.__img_plane == "transverse":
-            return self._3d_imgs["pt"].shape[0]
+            return self._3d_imgs["ct"].shape[0]
         else:
             Debug.error_exit("self.__img_plane value error")
 

@@ -64,7 +64,8 @@ class TrainingBaseline(TrainingCore):
         hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         self._load_hyper_dataset_version(
-            hyper=hyper, idl_baseline_id=idl_gtvn_baseline_id
+            hyper=hyper,
+            idl_baseline_id=idl_gtvn_baseline_id,
         )
 
         # load patients after dataset version is selected
@@ -300,13 +301,13 @@ class TrainingBaseline(TrainingCore):
         Folder.create(train_dir)
 
         # cross validation
-        hyper["fold"] = int(hyper["fold"])
-        hyper["fold"] = Value.limit_range(hyper["fold"], (0, g.DATASET_FOLDS))
+        fold = int(hyper["fold"])
+        fold = Value.limit_range(fold, (0, g.DATASET_FOLDS))
         # fold=0 will activate cross validation
-        if hyper["fold"] == 0:
+        if fold == 0:
             fold_list = List(range(1, g.DATASET_FOLDS + 1))
         else:
-            fold_list = [hyper["fold"]]
+            fold_list = [fold]
 
         # backup origin hyper for resetting hyper on next fold
         # (after "fold" removed from hyper Dict)
@@ -561,7 +562,7 @@ class TrainingBaseline(TrainingCore):
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
                 if "test" in dataset_section or "valid" in dataset_section:
-                    self._inference_save_avg_and_median(
+                    self._inference_calculate_save_avg_median(
                         scores=epoch_scores,
                         save_dir=epoch_dir,
                         dataset_ver=dataset_ver,
@@ -620,7 +621,7 @@ class TrainingBaseline(TrainingCore):
                 for stats in ["median", "avg"]:
                     scores[stats][gtv][metric].append(patient_outputs[gtv][metric])
 
-    def _inference_save_avg_and_median(
+    def _inference_calculate_save_avg_median(
         self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -695,7 +696,6 @@ class TrainingBaseline(TrainingCore):
 
         patients = self._load_patients(
             dataset_ver=dataset_ver,
-            fold=0,  # fold=0 means no validation set, but put all folds in training set
             debug_mode=debug_mode,
         )
 
@@ -784,7 +784,7 @@ class TrainingBaseline(TrainingCore):
         # all patients have been traversed
         # calculate avg and median score (on test set only)
         if "test" in dataset_section:
-            self._inference_save_avg_and_median(
+            self._inference_calculate_save_avg_median(
                 scores=scores,
                 save_dir=Path(fold_dirs[0]).parent,
                 dataset_section=dataset_section,
