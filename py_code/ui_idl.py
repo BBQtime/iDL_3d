@@ -1,18 +1,16 @@
 import os
+import random
 
-import cv2
 import numpy as np
 from custom import Debug, Dict, Directory, Folder
 from custom import Global as g
 from custom import Img, Json, List, Nii, Time, Value
-from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QColor, QImage, QKeyEvent, QPainter, QPixmap
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QWidget
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPixmap
+from PyQt5.QtWidgets import QLabel, QWidget
 from ui_replay import UiReplay
 
 # idl step
-CHOOSE_PATIENT = "choose.patient"
 CLICK_GTVT_CENTER = "click.gtvt.center"
 DELINEATE_GTVT = "delineate.gtvt"
 CLICK_GTVN_CENTER = "click.gtvn.center"
@@ -21,9 +19,8 @@ CORRECTION = "correction"
 # icon path
 CROSS_DIR_SELECTED = os.path.join(g.PROJ_DIR, "icons", "cross_selected.png")
 CROSS_DIR = os.path.join(g.PROJ_DIR, "icons", "cross.png")
+CROSS_SIZE = 20
 
-
-# 2.select cross_png on 4 modals
 
 # 4.record cross_pos into json file
 
@@ -31,35 +28,89 @@ CROSS_DIR = os.path.join(g.PROJ_DIR, "icons", "cross.png")
 
 
 class DraggableCross(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent, cross_id: int):
         super().__init__(parent)
-        self.__WIDTH = 20
-        self.__HEIGHT = 20
+        self.cross_id = cross_id
 
+        self.__WIDTH = CROSS_SIZE
+        self.__HEIGHT = CROSS_SIZE
         self.setFixedSize(self.__WIDTH, self.__HEIGHT)
+
         self.setMouseTracking(True)
-        self.dragging = False
+
         self.selected = False
+        self.dragging = False
+        self.offset = None
 
         self.png_label = QLabel(self)
         self.png_label.setGeometry(0, 0, self.__WIDTH, self.__HEIGHT)
 
-    def mousePressEvent(self, event: QKeyEvent):
-        if event.button() == Qt.LeftButton:
-            self.dragging = True
-            self.offset = event.pos()
-            self.parent().select_cross(self)
+    def get_pos_in_nii(self):
+        rgb_img_relative_pos = self.parent().window().get_rgb_img_relative_pos()
+        img_plane = self.parent().window().get_img_plane()
+        cur_slice = self.parent().window().get_cur_slice()
+        img_shape = self.parent().window().get_3d_img_shape()
+        nii_spacing = self.parent().window().get_nii_spacing()
 
-    def mouseMoveEvent(self, event):
+        if rgb_img_relative_pos is None:
+            return None
+
+        x = self.pos().x() + round(CROSS_SIZE / 2) - rgb_img_relative_pos["x"]
+        y = self.pos().y() + round(CROSS_SIZE / 2) - rgb_img_relative_pos["y"]
+
+        x = x / rgb_img_relative_pos["width"]
+        y = y / rgb_img_relative_pos["height"]
+
+        d, h, w = img_shape
+
+        # 2d to 3d
+        if img_plane == "transverse":
+            w *= x
+            h *= y
+            d = cur_slice
+        elif img_plane == "coronal":
+            w *= x
+            h = cur_slice
+            d *= y
+        elif img_plane == "sagittal":
+            w = cur_slice
+            h *= x
+            d *= y
+
+        w = round(w)
+        h = round(h)
+        d = round(d)
+        w = Value.limit_range(w, (0, img_shape[2] - 1))
+        h = Value.limit_range(h, (0, img_shape[1] - 1))
+        d = Value.limit_range(d, (0, img_shape[0] - 1))
+
+        # dont neet to turn upside down
+        # d = img_shape[0] - d
+
+        # flip left/right back for 1mm data
+        if nii_spacing == 1.0:
+            w = img_shape[2] - w
+
+        return d, h, w
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.parent().window().select_4_crosses(self.cross_id)
+            self.parent().window().set_4_crosses_dragging_state(True)
+            self.parent().window().set_4_crosses_dragging_offset(event.pos())
+            self.parent().window().delete_click_in_nii(self)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
         if self.dragging:
             new_pos = self.mapToParent(event.pos() - self.offset)
-            self.move(new_pos)
+            self.parent().window().move_4_crosses(new_pos)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
-            self.dragging = False
+            self.parent().window().set_4_crosses_dragging_state(False)
+            self.parent().window().add_click_in_nii(self)
 
-    def select(self, selected):
+    def select(self, selected: bool):
         self.selected = selected
         if selected:
             self.load_png(CROSS_DIR_SELECTED)
@@ -68,7 +119,7 @@ class DraggableCross(QWidget):
         else:
             self.load_png(CROSS_DIR)
 
-    def load_png(self, png_path):
+    def load_png(self, png_path: str):
         if os.path.exists(png_path):
             pixmap = QPixmap(png_path)
             pixmap = pixmap.scaled(
@@ -81,37 +132,185 @@ class CustomQLabel(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
         self.selected_cross = None
+        self.crosses_list = []
 
-    def select_cross(self, cross):
+    def get_cross_by_id(self, cross_id: int) -> DraggableCross:
+        for cross in self.crosses_list:
+            if cross.cross_id == cross_id:
+                return cross
+        # no id found, return None
+        return None
+
+    def get_crosses_id_list(self) -> list:
+        crosses_id_list = []
+        for cross in self.crosses_list:
+            crosses_id_list.append(cross.cross_id)
+        return crosses_id_list
+
+    def deselect_cross(self):
         if self.selected_cross:
             self.selected_cross.select(False)
-        self.selected_cross = cross
-        if self.selected_cross:
-            self.selected_cross.select(True)
+            self.selected_cross = None
+
+    def select_cross(self, cross_id: int):
+        self.deselect_cross()
+        # select new cross
+        for cross in self.crosses_list:
+            if cross.cross_id == cross_id:
+                self.selected_cross = cross
+                self.selected_cross.select(True)
+
+    def delete_all_crosses(self):
+        for cross in self.crosses_list:
+            cross.setParent(None)
+            cross.deleteLater()
+        self.crosses_list = []
+        self.selected_cross = None
 
     def delete_selected_cross(self):
         if self.selected_cross:
+            self.crosses_list.remove(self.selected_cross)
             self.selected_cross.setParent(None)
             self.selected_cross.deleteLater()
             self.selected_cross = None
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent):
         super().mousePressEvent(event)
-        ui_idl = self.window()
-        ui_idl.add_all_crosses(event)
+        self.window().add_4_crosses(event.pos(), add_gtvn_click=True)
 
-    def add_cross(self, event):
-        cross = DraggableCross(self)
-        cross.setGeometry(event.pos().x() - 10, event.pos().y() - 10, 20, 20)
-        cross.load_png(CROSS_DIR)
-        cross.show()
+    def add_cross(self, pos: QPoint, cross_id: int):
+        self.deselect_cross()
+        # create new cross
+        new_cross = DraggableCross(parent=self, cross_id=cross_id)
+        new_cross.setGeometry(
+            pos.x() - round(CROSS_SIZE / 2),
+            pos.y() - round(CROSS_SIZE / 2),
+            CROSS_SIZE,
+            CROSS_SIZE,
+        )
+        new_cross.load_png(CROSS_DIR)
+        new_cross.show()
+        self.crosses_list.append(new_cross)
 
 
 class UiIdl(UiReplay):
-    # make this function public, CustomQLabel will use it
-    def add_all_crosses(self, event):
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+        self.__refresh_crosses_on_rgb_imgs()
+
+    def _set_img_plane(self):
+        super()._set_img_plane()
+        self.__refresh_crosses_on_rgb_imgs()
+
+    def __refresh_crosses_on_rgb_imgs(self):
+        # remove old crosses
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self._display_frame[i].add_cross(event)
+            self._img_qlabel[i].delete_all_crosses()
+
+        # draw new crosses based on self.__gtvn_clicks
+        img_shape = self.get_3d_img_shape()
+
+        for d, h, w in self.__gtvn_clicks:
+            x = y = None
+            if self._img_plane == "transverse":
+                if self._cur_slice == d:
+                    x = w / img_shape[2]
+                    y = h / img_shape[1]
+
+            elif self._img_plane == "coronal":
+                if self._cur_slice == h:
+                    x = w / img_shape[2]
+                    y = d / img_shape[0]
+
+            elif self._img_plane == "sagittal":
+                if self._cur_slice == w:
+                    x = h / img_shape[1]
+                    y = d / img_shape[0]
+
+            # find click on current slice
+            if x is not None and y is not None:
+                x *= self._rgb_img_relative_pos["width"]
+                y *= self._rgb_img_relative_pos["height"]
+                x = round(x)
+                y = round(y)
+                x += self._rgb_img_relative_pos["x"]  # - round(CROSS_SIZE / 2)
+                y += self._rgb_img_relative_pos["y"]  # - round(CROSS_SIZE / 2)
+                self.add_4_crosses(QPoint(x, y), add_gtvn_click=False)
+
+    def delete_click_in_nii(self, cross: DraggableCross):
+        pos = cross.get_pos_in_nii()
+        self._3d_imgs["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 0
+        self.__gtvn_clicks.remove(pos)
+        print("remove:", self.__gtvn_clicks, pos)
+
+    def add_click_in_nii(self, cross: DraggableCross):
+        pos = cross.get_pos_in_nii()
+        self._3d_imgs["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
+        self.__gtvn_clicks.append(pos)
+        print("add:", self.__gtvn_clicks, pos)
+
+    def set_4_crosses_dragging_offset(self, pos: QPoint):
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].selected_cross.offset = pos
+
+    def set_4_crosses_dragging_state(self, dragging: bool):
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].selected_cross.dragging = dragging
+
+    def move_4_crosses(self, pos: QPoint):
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].selected_cross.move(pos)
+
+    def delete_4_crosses(self):
+        cross = self._img_qlabel["ct"].selected_cross
+        self.delete_click_in_nii(cross)
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].delete_selected_cross()
+
+    # make this function public, CustomQLabel will use it
+    def add_4_crosses(self, pos: QPoint, add_gtvn_click: bool):
+        if self._3d_imgs["ct"] is None:
+            return
+
+        # make sure new cross id is unique
+        crosses_id_list = self._img_qlabel["ct"].get_crosses_id_list()
+        while 1:
+            cross_id = random.randint(0, 2**16)
+            if cross_id not in crosses_id_list:
+                break
+        # add crosses
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].add_cross(pos=pos, cross_id=cross_id)
+
+        # add clicks into 3d img
+        if add_gtvn_click:
+            new_cross = self._img_qlabel["ct"].get_cross_by_id(cross_id)
+            pos = new_cross.get_pos_in_nii()
+            self._3d_imgs["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
+            self.__gtvn_clicks.append(pos)
+            print("add:", self.__gtvn_clicks, pos)
+
+    def select_4_crosses(self, cross_id: int):
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].select_cross(cross_id)
+
+    def get_rgb_img_relative_pos(self):
+        return self._rgb_img_relative_pos
+
+    def get_nii_spacing(self):
+        return self._nii_spacing
+
+    def get_img_plane(self):
+        return self._img_plane
+
+    def get_cur_slice(self):
+        return self._cur_slice
+
+    def get_3d_img_shape(self):
+        if self._3d_imgs["ct"] is not None:
+            return self._3d_imgs["ct"].shape
+        else:
+            return None
 
     def __init__(self, debug_mode: bool):
         # pass debug_mode parameter to the parent class
@@ -119,10 +318,10 @@ class UiIdl(UiReplay):
 
     def _init_ui_names(self):
         # before _init_ui_names()
-        self._display_frame_ct = CustomQLabel(self._central_widget)
-        self._display_frame_pt = CustomQLabel(self._central_widget)
-        self._display_frame_mrt1 = CustomQLabel(self._central_widget)
-        self._display_frame_mrt2 = CustomQLabel(self._central_widget)
+        self._img_qlabel_ct = CustomQLabel(self._central_widget)
+        self._img_qlabel_pt = CustomQLabel(self._central_widget)
+        self._img_qlabel_mrt1 = CustomQLabel(self._central_widget)
+        self._img_qlabel_mrt2 = CustomQLabel(self._central_widget)
 
         super()._init_ui_names()
 
@@ -138,14 +337,25 @@ class UiIdl(UiReplay):
     def _init_member_var(self, debug_mode: bool):
         super()._init_member_var(debug_mode)
 
-        self.__idl_step = CHOOSE_PATIENT
-
-        # keep idl.gtvt/gtvn id unchanged
+        # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.get_cur_time_str()
         for i in ["gtvt", "gtvn"]:
             self._idl_id[i] = "idl.{}_".format(i) + cur_time
             if debug_mode:
                 self._idl_id[i] += "_" + g.DELETE_FLAG
+
+        self.__idl_step = Dict()
+        for patient in self._patients.to_list():
+            self.__idl_step["patient={}".format(patient)] = CLICK_GTVN_CENTER
+
+        self.__gtvn_clicks = List()
+
+    def __save_idl_step(self):
+        for i in ["gtvt", "gtvn"]:
+            idl_step_json_path = os.path.join(
+                g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i], "idl_step.json"
+            )
+            Json.save(self.__idl_step, idl_step_json_path)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_F12:
@@ -153,8 +363,7 @@ class UiIdl(UiReplay):
 
         # delete selected cross
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
-            for i in ["ct", "pt", "mrt1", "mrt2"]:
-                self._display_frame[i].delete_selected_cross()
+            self.delete_4_crosses()
 
         super().keyPressEvent(event)
 
@@ -259,9 +468,11 @@ class UiIdl(UiReplay):
     def _choose_baseline(self):
         # self._reset_zoomin()
         self._clear_img_data()
-        self._clear_display_frames()
+        self._clear_img_qlabels()
 
         self._baseline_id = "baseline_real.idl"
+        # self._baseline_id = "baseline_2023.02.27.07.08.09_3mm"
+
         # fill combobox patient after self._baseline_id is confirmed
         self._fill_combox_patient()
         self._combox["patient"].setCurrentIndex(-1)  # show nothing
@@ -310,69 +521,63 @@ class UiIdl(UiReplay):
 
         # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()
-
+        # reset current slice id after ct img loaded
         self._reset_cur_slice_id()
-
         self._choose_idl_gtvt()
         self._choose_idl_gtvn()
-        self._refresh_imgs()
+        self._refresh_rgb_imgs()
         self._refresh_title()
-
-        # load idl step
-        for i in ["gtvt", "gtvn"]:
-            idl_step_json_path = os.path.join(
-                g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i], "idl_step.json"
-            )
-
-            # if idl step json file does not exist, create it
-            if not os.path.exists(idl_step_json_path):
-                self.__idl_step = CLICK_GTVT_CENTER
-                self.__update_annotation_msg()
-                idl_step_dict = Dict()
-                idl_step_dict["patient={}".format(self._cur_patient)] = self.__idl_step
-                Json.save(idl_step_dict, idl_step_json_path)
-
-            else:
-                # load idl step from json file
-                self.__idl_step = Json.load(idl_step_json_path)[
-                    "patient={}".format(self._cur_patient)
-                ]
-                self.__update_annotation_msg()
+        self.__save_idl_step()
+        self.__update_annotation_msg()
 
     def _reset_cur_slice_id(self):
         self._cur_slice = self._get_middle_slice_id()
 
     def __update_annotation_msg(self):
-        if self.__idl_step == CLICK_GTVT_CENTER:
+        cur_patient_idl_step = self.__idl_step["patient={}".format(self._cur_patient)]
+
+        if cur_patient_idl_step == CLICK_GTVT_CENTER:
             self._text_box_annotation_msg.setText(
                 "Please click the center of GTVt, then press OK"
             )
 
-        elif self.__idl_step == DELINEATE_GTVT:
+        elif cur_patient_idl_step == DELINEATE_GTVT:
             self._text_box_annotation_msg.setText(
                 "Please delineate the countour of GTVt on transvers/coronal/sagittal plane, then press OK"
             )
 
-        elif self.__idl_step == CLICK_GTVN_CENTER:
+        elif cur_patient_idl_step == CLICK_GTVN_CENTER:
             self._text_box_annotation_msg.setText(
                 "Please click the center of GTVns, then press OK"
             )
 
-        elif self.__idl_step == CORRECTION:
+        elif cur_patient_idl_step == CORRECTION:
             self._text_box_annotation_msg.setText(
                 "Please correct the predictions, then press OK"
             )
 
         else:
-            Debug.error_exit("self.__idl_step value error")
+            Debug.error_exit("idl step value error")
 
     def _choose_idl_gtvt(self):
         self.__choose_idl(gtv="gtvt")
 
     def _choose_idl_gtvn(self):
-        self.__choose_idl(gtv="gtvn")
+        patient_dir = self.__choose_idl(gtv="gtvn")
 
-    def __choose_idl(self, gtv: str):
+        gtvn_clicks_nii_path = os.path.join(patient_dir, "gtvn_clicks.nii")
+        if os.path.exists(gtvn_clicks_nii_path):
+            self._3d_imgs["gtvn.clicks"] = Nii.load(path=gtvn_clicks_nii_path)
+        else:
+            self._3d_imgs["gtvn.clicks"] = np.zeros(
+                self._3d_imgs["ct"].shape, dtype=np.float32
+            )
+            Nii.save(
+                img=self._3d_imgs["gtvn.clicks"],
+                save_path=gtvn_clicks_nii_path,
+            )
+
+    def __choose_idl(self, gtv: str) -> str:
         patient_dir = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
@@ -400,4 +605,7 @@ class UiIdl(UiReplay):
 
         # cant find cur patient dir
         else:
+            Folder.create(patient_dir)
             self._3d_imgs["{}.pred".format(gtv)] = None
+
+        return patient_dir

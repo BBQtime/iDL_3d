@@ -14,7 +14,7 @@
    <string>Interactive Learning Tool</string>
   </property>
   <widget class="QWidget" name="_central_widget">
-   <widget class="QLabel" name="_display_frame_ct">
+   <widget class="QLabel" name="_img_qlabel_ct">
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -27,7 +27,7 @@
      <string>ct_img</string>
     </property>
    </widget>
-   <widget class="QLabel" name="_display_frame_pt">
+   <widget class="QLabel" name="_img_qlabel_pt">
     <property name="geometry">
      <rect>
       <x>150</x>
@@ -40,7 +40,7 @@
      <string>pt_img</string>
     </property>
    </widget>
-   <widget class="QLabel" name="_display_frame_mrt1">
+   <widget class="QLabel" name="_img_qlabel_mrt1">
     <property name="geometry">
      <rect>
       <x>40</x>
@@ -53,7 +53,7 @@
      <string>mrt1_img</string>
     </property>
    </widget>
-   <widget class="QLabel" name="_display_frame_mrt2">
+   <widget class="QLabel" name="_img_qlabel_mrt2">
     <property name="geometry">
      <rect>
       <x>160</x>

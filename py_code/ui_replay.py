@@ -26,7 +26,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         self._init_ui_names()
         self._init_member_var(debug_mode)
-        self.__set_display_frames_background()
+        self.__set_img_qlabels_background()
         # self.__init_zoomin()
         self.__init_color()
         self._init_side_bar()  # after _init_member_var(), function connection needed
@@ -49,14 +49,15 @@ class UiReplay(QMainWindow, Ui_Core):
         # DATASET_SPLIT_JSON_PATH["au.1mm"] and ["au.3mm"] are the same
         dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH["au.1mm"])
         dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH["mda"])
-        self.__patients = Dict()
-        self.__patients["au.test.inter"] = List(dataset_split_au["test.inter"])
-        self.__patients["au.test.exter"] = List(dataset_split_au["test.exter"])
-        self.__patients["mda.test"] = List(dataset_split_mda["test"])
+        self._patients = Dict()
+        self._patients["au.test.inter"] = List(dataset_split_au["test.inter"])
+        self._patients["au.test.exter"] = List(dataset_split_au["test.exter"])
+        self._patients["mda.test"] = List(dataset_split_mda["test"])
 
         self._baseline_id = None
         self._cur_patient = None
         self._cur_slice = 0  # starts from 0
+        self._img_plane = None
         self._gtvs_center = None
 
         self._idl_id = Dict()
@@ -71,8 +72,16 @@ class UiReplay(QMainWindow, Ui_Core):
         self._dataset_dir = None  # au.1mm / au.1mm / mda
         self.__scores = Dict()
         self._3d_imgs = Dict()
-        self.__resize_pos = Dict()
+        self._rgb_img_relative_pos = None
         self.__side_bar_width = 300
+
+        self.__gtvt_selected_slices_2d = Dict()
+        self.__gtvt_selected_slices_2d["horizontal"] = []
+        self.__gtvt_selected_slices_2d["vertical"] = []
+
+        self.__total_slices_count_2d = Dict()
+        self.__total_slices_count_2d["horizontal"] = 0
+        self.__total_slices_count_2d["vertical"] = 0
 
     def _clear_img_data(self):
         for i in ["gtvt", "gtvn"]:
@@ -93,14 +102,10 @@ class UiReplay(QMainWindow, Ui_Core):
         ]:
             self._3d_imgs[i] = None
 
-        # resize position of ct/pt/mrt1/mrt2
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self.__resize_pos[i] = None
-
         # set image plane
         for i in ["transverse", "coronal", "sagittal"]:
             if self.__radio_btn[i].isChecked():
-                self.__img_plane = i
+                self._img_plane = i
 
     # def __init_zoomin(self):
     #     self.__zoomin = Dict()
@@ -118,10 +123,10 @@ class UiReplay(QMainWindow, Ui_Core):
 
     #     # loop 4 img frames
     #     for i in ["ct", "pt", "mrt1", "mrt2"]:
-    #         left = self._display_frame[i].x()
-    #         top = self._display_frame[i].y()
-    #         width = self._display_frame[i].width()
-    #         height = self._display_frame[i].height()
+    #         left = self._img_qlabel[i].x()
+    #         top = self._img_qlabel[i].y()
+    #         width = self._img_qlabel[i].width()
+    #         height = self._img_qlabel[i].height()
     #         # if start pos is in current img frame
     #         if (
     #             event.x() >= left
@@ -132,7 +137,7 @@ class UiReplay(QMainWindow, Ui_Core):
     #             # already zoomed in, clear zoomin (only click in img frame area)
     #             if self.__zoomin["start"] is not None:
     #                 self._reset_zoomin()
-    #                 self._refresh_imgs()
+    #                 self._refresh_rgb_imgs()
     #                 return
     #             # zoom in
     #             else:
@@ -151,19 +156,19 @@ class UiReplay(QMainWindow, Ui_Core):
 
     # def __mouse_move_event(self, event):
     #     # limit zoomin frame in img frame
-    #     display_frame = self._display_frame[self.__zoomin["img"]]
-    #     display_frame_right = display_frame.x() + display_frame.width() - 1
-    #     if event.x() < display_frame.x():
-    #         event_x = display_frame.x()
-    #     elif event.x() > display_frame_right:
-    #         event_x = display_frame_right
+    #     img_qlabel = self._img_qlabel[self.__zoomin["img"]]
+    #     img_qlabel_right = img_qlabel.x() + img_qlabel.width() - 1
+    #     if event.x() < img_qlabel.x():
+    #         event_x = img_qlabel.x()
+    #     elif event.x() > img_qlabel_right:
+    #         event_x = img_qlabel_right
     #     else:
     #         event_x = event.x()
-    #     display_frame_buttom = display_frame.y() + display_frame.height() - 1
-    #     if event.y() < display_frame.y():
-    #         event_y = display_frame.y()
-    #     elif event.y() > display_frame_buttom:
-    #         event_y = display_frame_buttom
+    #     img_qlabel_buttom = img_qlabel.y() + img_qlabel.height() - 1
+    #     if event.y() < img_qlabel.y():
+    #         event_y = img_qlabel.y()
+    #     elif event.y() > img_qlabel_buttom:
+    #         event_y = img_qlabel_buttom
     #     else:
     #         event_y = event.y()
     #     # resize zoomin frame
@@ -213,28 +218,28 @@ class UiReplay(QMainWindow, Ui_Core):
     #         y = start_y
     #         start_y = end_y
     #         end_y = y
-    #     # get display_frame related position
-    #     display_frame_left = self._display_frame[self.__zoomin["img"]].x()
-    #     display_frame_top = self._display_frame[self.__zoomin["img"]].y()
-    #     start_x -= display_frame_left
-    #     end_x -= display_frame_left
-    #     start_y -= display_frame_top
-    #     end_y -= display_frame_top
+    #     # get img_qlabel related position
+    #     img_qlabel_left = self._img_qlabel[self.__zoomin["img"]].x()
+    #     img_qlabel_top = self._img_qlabel[self.__zoomin["img"]].y()
+    #     start_x -= img_qlabel_left
+    #     end_x -= img_qlabel_left
+    #     start_y -= img_qlabel_top
+    #     end_y -= img_qlabel_top
 
     #     # get actual_img_area related position
-    #     resize_pos = self.__resize_pos[self.__zoomin["img"]]
-    #     start_x -= resize_pos["x"]
-    #     start_y -= resize_pos["y"]
-    #     end_x -= resize_pos["x"]
-    #     end_y -= resize_pos["y"]
+    #     relative_pos = self._rgb_img_relative_pos
+    #     start_x -= relative_pos["x"]
+    #     start_y -= relative_pos["y"]
+    #     end_x -= relative_pos["x"]
+    #     end_y -= relative_pos["y"]
     #     # out of range
     #     if (start_x < 0 and end_x < 0) or (
-    #         start_x > resize_pos["width"] and end_x > resize_pos["width"]
+    #         start_x > relative_pos["width"] and end_x > relative_pos["width"]
     #     ):
     #         self._reset_zoomin()
     #         return
     #     if (start_y < 0 and end_y < 0) or (
-    #         start_y > resize_pos["height"] and end_y > resize_pos["height"]
+    #         start_y > relative_pos["height"] and end_y > relative_pos["height"]
     #     ):
     #         self._reset_zoomin()
     #         return
@@ -243,19 +248,19 @@ class UiReplay(QMainWindow, Ui_Core):
     #         start_x = 0
     #     if start_y < 0:
     #         start_y = 0
-    #     if end_x > resize_pos["width"]:
-    #         end_x = resize_pos["width"]
-    #     if end_y > resize_pos["height"]:
-    #         end_y = resize_pos["height"]
+    #     if end_x > relative_pos["width"]:
+    #         end_x = relative_pos["width"]
+    #     if end_y > relative_pos["height"]:
+    #         end_y = relative_pos["height"]
 
     #     # get actual zoom position
-    #     if self.__img_plane == "sagittal":
+    #     if self._img_plane == "sagittal":
     #         origin_width = self._3d_imgs["ct"].shape[1]
     #         origin_height = self._3d_imgs["ct"].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
     #         )
-    #     elif self.__img_plane == "coronal":
+    #     elif self._img_plane == "coronal":
     #         origin_width = self._3d_imgs["ct"].shape[2]
     #         origin_height = self._3d_imgs["ct"].shape[0]
     #         origin_height = round(
@@ -265,20 +270,20 @@ class UiReplay(QMainWindow, Ui_Core):
     #         origin_width = self._3d_imgs["ct"].shape[2]
     #         origin_height = self._3d_imgs["ct"].shape[1]
 
-    #     start_x = round(start_x * origin_width / resize_pos["width"])
-    #     end_x = round(end_x * origin_width / resize_pos["width"])
-    #     start_y = round(start_y * origin_height / resize_pos["height"])
-    #     end_y = round(end_y * origin_height / resize_pos["height"])
+    #     start_x = round(start_x * origin_width / relative_pos["width"])
+    #     end_x = round(end_x * origin_width / relative_pos["width"])
+    #     start_y = round(start_y * origin_height / relative_pos["height"])
+    #     end_y = round(end_y * origin_height / relative_pos["height"])
 
     #     self.__zoomin["start"] = QPoint(start_x, start_y)
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
-    #     self._refresh_imgs()
+    #     self._refresh_rgb_imgs()
 
-    def __fit_display_frame(self, img, display_frame: QtWidgets.QLabel):
-        err_msg = "MainWindow.__fit_display_frame(), img.shape should == 2 or 3"
+    def __fit_img_qlabel(self, img, img_qlabel: QtWidgets.QLabel):
+        err_msg = "MainWindow.__fit_img_qlabel(), img.shape should == 2 or 3"
 
         # image spacing resize
-        if self.__img_plane == "sagittal":
+        if self._img_plane == "sagittal":
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
             )
@@ -290,7 +295,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 ),
                 interpolation=cv2.INTER_AREA,
             )
-        elif self.__img_plane == "coronal":
+        elif self._img_plane == "coronal":
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
             )
@@ -322,56 +327,56 @@ class UiReplay(QMainWindow, Ui_Core):
         # resize to fit image frame
         origin_height = img.shape[0]
         origin_width = img.shape[1]
-        resize_pos = Dict()
-        resize_pos["x"], resize_pos["y"] = None, None
-        resize_pos["width"], resize_pos["height"] = None, None
-        final_width = display_frame.width()
-        final_height = display_frame.height()
+        relative_pos = Dict()
+        relative_pos["x"], relative_pos["y"] = None, None
+        relative_pos["width"], relative_pos["height"] = None, None
+        final_width = img_qlabel.width()
+        final_height = img_qlabel.height()
 
-        # border on left and right side
+        # border on left and right
         if origin_height * final_width > final_height * origin_width:
-            resize_pos["width"] = int(final_height * origin_width / origin_height)
-            resize_pos["height"] = final_height
-            resize_pos["x"] = int((final_width - resize_pos["width"]) / 2)
-            if resize_pos["x"] < 0:
-                resize_pos["x"] = 0
-            resize_pos["y"] = 0
+            relative_pos["width"] = int(final_height * origin_width / origin_height)
+            relative_pos["height"] = final_height
+            relative_pos["x"] = int((final_width - relative_pos["width"]) / 2)
+            if relative_pos["x"] < 0:
+                relative_pos["x"] = 0
+            relative_pos["y"] = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((final_height, resize_pos["x"], 3), np.uint8)
+                black_border = np.zeros((final_height, relative_pos["x"], 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((final_height, resize_pos["x"]), np.uint8)
+                black_border = np.zeros((final_height, relative_pos["x"]), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (resize_pos["width"], resize_pos["height"]),
+                (relative_pos["width"], relative_pos["height"]),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=1)
 
-        # border on up and down side
+        # border on up and down
         else:
-            resize_pos["width"] = final_width
-            resize_pos["height"] = int(final_width * origin_height / origin_width)
-            resize_pos["y"] = int((final_height - resize_pos["height"]) / 2)
-            if resize_pos["y"] < 0:
-                resize_pos["y"] = 0
-            resize_pos["x"] = 0
+            relative_pos["width"] = final_width
+            relative_pos["height"] = int(final_width * origin_height / origin_width)
+            relative_pos["y"] = int((final_height - relative_pos["height"]) / 2)
+            if relative_pos["y"] < 0:
+                relative_pos["y"] = 0
+            relative_pos["x"] = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((resize_pos["y"], final_width, 3), np.uint8)
+                black_border = np.zeros((relative_pos["y"], final_width, 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((resize_pos["y"], final_width), np.uint8)
+                black_border = np.zeros((relative_pos["y"], final_width), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (resize_pos["width"], resize_pos["height"]),
+                (relative_pos["width"], relative_pos["height"]),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=0)
 
         # smooth img
-        return img, resize_pos
+        return img, relative_pos
 
     def __init_color(self):
         self._color = Dict()
@@ -384,11 +389,11 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["score.text"] = self._color["gtvt.annotation"]
 
     def _init_ui_names(self):
-        self._display_frame = Dict()
-        self._display_frame["ct"] = self._display_frame_ct
-        self._display_frame["pt"] = self._display_frame_pt
-        self._display_frame["mrt1"] = self._display_frame_mrt1
-        self._display_frame["mrt2"] = self._display_frame_mrt2
+        self._img_qlabel = Dict()
+        self._img_qlabel["ct"] = self._img_qlabel_ct
+        self._img_qlabel["pt"] = self._img_qlabel_pt
+        self._img_qlabel["mrt1"] = self._img_qlabel_mrt1
+        self._img_qlabel["mrt2"] = self._img_qlabel_mrt2
 
         self._text_label = Dict()
         self._text_label["baseline"] = self._text_label_baseline
@@ -438,13 +443,13 @@ class UiReplay(QMainWindow, Ui_Core):
         self.__slider["zoom"] = self._slider_zoom
 
     # set display frames background black
-    def __set_display_frames_background(self):
+    def __set_img_qlabels_background(self):
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            self._display_frame[i].setObjectName("")
-            self._display_frame[i].setAutoFillBackground(True)
-            self._display_frame[i].setPalette(pal)
+            self._img_qlabel[i].setObjectName("")
+            self._img_qlabel[i].setAutoFillBackground(True)
+            self._img_qlabel[i].setPalette(pal)
 
     def _init_side_bar(self):
         # hide idl.gtvs controls
@@ -592,10 +597,10 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in ["bright", "contrast"]:
             for j in ["ct", "pt", "mrt1", "mrt2"]:
                 self.__slider["{}.{}".format(i, j)].valueChanged.connect(
-                    self._refresh_imgs
+                    self._refresh_rgb_imgs
                 )
 
-        self.__btn_group_plane.buttonClicked.connect(self.__set_img_plane)
+        self.__btn_group_plane.buttonClicked.connect(self._set_img_plane)
 
         self.__btn_group_bright_contrast.buttonClicked.connect(
             self.__set_bright_contrast_modality
@@ -704,23 +709,57 @@ class UiReplay(QMainWindow, Ui_Core):
         # return the followings for UiIdl
         return left, top, width, gap, text_height, bar_height
 
-    def __set_img_plane(self):
+    def _set_img_plane(self):
         for i in ["transverse", "coronal", "sagittal"]:
             if self.__radio_btn[i].isChecked():
-                self.__img_plane = i
+                self._img_plane = i
                 break
+
+        if self._img_plane == "transverse":
+            self.__gtvt_selected_slices_2d[
+                "horizontal"
+            ] = self.__get_gtvt_selected_slices_on_2d("coronal")
+            self.__total_slices_count_2d["horizontal"] = self._3d_imgs["ct"].shape[1]
+            self.__gtvt_selected_slices_2d[
+                "vertical"
+            ] = self.__get_gtvt_selected_slices_on_2d("sagittal")
+            self.__total_slices_count_2d["vertical"] = self._3d_imgs["ct"].shape[2]
+
+        elif self._img_plane == "coronal":
+            self.__gtvt_selected_slices_2d[
+                "horizontal"
+            ] = self.__get_gtvt_selected_slices_on_2d("transverse")
+            self.__total_slices_count_2d["horizontal"] = self._3d_imgs["ct"].shape[0]
+            self.__gtvt_selected_slices_2d[
+                "vertical"
+            ] = self.__get_gtvt_selected_slices_on_2d("sagittal")
+            self.__total_slices_count_2d["vertical"] = self._3d_imgs["ct"].shape[2]
+
+        elif self._img_plane == "sagittal":
+            self.__gtvt_selected_slices_2d[
+                "horizontal"
+            ] = self.__get_gtvt_selected_slices_on_2d("transverse")
+            self.__total_slices_count_2d["horizontal"] = self._3d_imgs["ct"].shape[0]
+            self.__gtvt_selected_slices_2d[
+                "vertical"
+            ] = self.__get_gtvt_selected_slices_on_2d("coronal")
+            self.__total_slices_count_2d["vertical"] = self._3d_imgs["ct"].shape[1]
+
+        else:
+            Debug.error_exit("self._img_plane value error")
+
         self._reset_cur_slice_id()
         # self._reset_zoomin()
-        self._refresh_imgs()
+        self._refresh_rgb_imgs()
         self._refresh_title()
 
     def _reset_cur_slice_id(self):
         if self._gtvs_center is not None:
-            if self.__img_plane == "transverse":
+            if self._img_plane == "transverse":
                 self._cur_slice = self._gtvs_center[0]
-            if self.__img_plane == "coronal":
+            if self._img_plane == "coronal":
                 self._cur_slice = self._gtvs_center[1]
-            if self.__img_plane == "sagittal":
+            if self._img_plane == "sagittal":
                 self._cur_slice = self._gtvs_center[2]
 
     def __set_bright_contrast_modality(self):
@@ -746,19 +785,19 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["bright"].setText("Brightness ({})".format(key_word))
         self._text_label["contrast"].setText("Contrast ({})".format(key_word))
 
-    def _clear_display_frames(self):
+    def _clear_img_qlabels(self):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            width = self._display_frame[i].width()
-            height = self._display_frame[i].height()
+            width = self._img_qlabel[i].width()
+            height = self._img_qlabel[i].height()
             black_img = np.zeros([width, height, 3])
             qt_image = QImage(
                 black_img,
-                self._display_frame[i].width(),
-                self._display_frame[i].height(),
-                self._display_frame[i].width() * 3,
+                self._img_qlabel[i].width(),
+                self._img_qlabel[i].height(),
+                self._img_qlabel[i].width() * 3,
                 QImage.Format_RGB888,
             )
-            self._display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._img_qlabel[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
@@ -790,15 +829,15 @@ class UiReplay(QMainWindow, Ui_Core):
         ]
 
         # set dataset dir based on current patient
-        if self._cur_patient in self.__patients["au.test.inter"]:
+        if self._cur_patient in self._patients["au.test.inter"]:
             self.__dataset_ver = baseline_dataset_ver
             self.__dataset_section = "test.inter"
 
-        elif self._cur_patient in self.__patients["au.test.exter"]:
+        elif self._cur_patient in self._patients["au.test.exter"]:
             self.__dataset_ver = baseline_dataset_ver
             self.__dataset_section = "test.exter"
 
-        elif self._cur_patient in self.__patients["mda.test"]:
+        elif self._cur_patient in self._patients["mda.test"]:
             self.__dataset_ver = "mda"
             self.__dataset_section = "test"
         else:
@@ -816,7 +855,7 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in range(len(combox_patients)):
             combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        combox_patients.find_identical_items(self.__patients.to_list())
+        combox_patients.find_identical_items(self._patients.to_list())
         combox_patients.sort()
         self._combox["patient"].addItems(combox_patients)
         self._combox["patient"].setEnabled(True)
@@ -825,7 +864,7 @@ class UiReplay(QMainWindow, Ui_Core):
     def _choose_baseline(self):
         # self._reset_zoomin()
         self._clear_img_data()
-        self._clear_display_frames()
+        self._clear_img_qlabels()
 
         # run this after current text of baseline combox is confirmed
         self._enable_arrow_btns("baseline")
@@ -980,7 +1019,7 @@ class UiReplay(QMainWindow, Ui_Core):
             # refresh imgs after idl.gtvn is chosen
             self.__choose_idl(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
-        self._refresh_imgs()
+        self._refresh_rgb_imgs()
         self._refresh_title()
 
     # load labels and gtvs gravity center
@@ -1108,7 +1147,7 @@ class UiReplay(QMainWindow, Ui_Core):
                     ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
-            self._refresh_imgs()
+            self._refresh_rgb_imgs()
             self._refresh_title()
 
     def __choose_prev_baseline(self):
@@ -1175,7 +1214,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._combox["patient"].setCurrentText(next_patient)
         self._choose_patient()
 
-    def _refresh_imgs(self):
+    def _refresh_rgb_imgs(self):
         # no img data loaded
         if self._3d_imgs["ct"] is None:
             return
@@ -1198,18 +1237,20 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # load rgb imgs
         for i in ["ct", "pt", "mrt1", "mrt2"]:
-            if self.__img_plane == "sagittal":
+            if self._img_plane == "sagittal":
                 rgb_img = self._3d_imgs[i][:, :, self._cur_slice]
-            elif self.__img_plane == "coronal":
+            elif self._img_plane == "coronal":
                 rgb_img = self._3d_imgs[i][:, self._cur_slice, :]
-            elif self.__img_plane == "transverse":
-                # for transverse plane, img is upside down,
-                # true slice id is: slices_count - 1 - slice_id
-                rgb_img = self._3d_imgs[i][
-                    (self.__get_slices_count() - 1 - self._cur_slice), :, :
-                ]
+            elif self._img_plane == "transverse":
+                rgb_img = self._3d_imgs[i][self._cur_slice, :, :]
+
+                # # for transverse plane, img is upside down,
+                # # true slice id is: slices_count - 1 - slice_id
+                # rgb_img = self._3d_imgs[i][
+                #     (self.__get_slices_count() - 1 - self._cur_slice), :, :
+                # ]
             else:
-                Debug.error_exit("self.__img_plane value error")
+                Debug.error_exit("self._img_plane value error")
 
             rgb_img = np.uint8((rgb_img - rgb_img.min()) / rgb_img.ptp() * 255.0)
             # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
@@ -1224,63 +1265,32 @@ class UiReplay(QMainWindow, Ui_Core):
                 gamma=self.__slider["bright.{}".format(i)].value(),
             )
 
-            # add mask to annotated slices
-            selected_slices = Dict()
-            total_slices_num = Dict()
-
-            if self.__img_plane == "transverse":
-                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
-                    "coronal"
-                )
-                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[1]
-                selected_slices["vertical"] = self.__get_gtvt_selected_slices(
-                    "sagittal"
-                )
-                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[2]
-
-            elif self.__img_plane == "coronal":
-                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
-                    "transverse"
-                )
-                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[0]
-                selected_slices["vertical"] = self.__get_gtvt_selected_slices(
-                    "sagittal"
-                )
-                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[2]
-
-            elif self.__img_plane == "sagittal":
-                selected_slices["horizontal"] = self.__get_gtvt_selected_slices(
-                    "transverse"
-                )
-                total_slices_num["horizontal"] = self._3d_imgs["ct"].shape[0]
-                selected_slices["vertical"] = self.__get_gtvt_selected_slices("coronal")
-                total_slices_num["vertical"] = self._3d_imgs["ct"].shape[1]
-
-            else:
-                Debug.error_exit("self.__img_plane value error")
-
+            # add mask to gtvt selected slices
             rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
-
             selected_slices_mask = None
-
-            # annotated slices mask
             for direction in ["horizontal", "vertical"]:
-                for selected_slice in selected_slices[direction]:
+                for gtvt_selected_slice_2d in self.__gtvt_selected_slices_2d[direction]:
                     # all images are reversed in transverse plane
-                    if self.__img_plane != "transverse" and direction == "horizontal":
-                        slice_pos = total_slices_num[direction] - selected_slice
+                    if self._img_plane != "transverse" and direction == "horizontal":
+                        slice_pos = (
+                            self.__total_slices_count_2d[direction]
+                            - gtvt_selected_slice_2d
+                        )
                     # 1mm images are reversed in sagittal plane
                     elif (
-                        self.__img_plane != "sagittal"
+                        self._img_plane != "sagittal"
                         and direction == "vertical"
                         and (
                             self.__dataset_ver == "au.1mm"
                             or self.__dataset_ver == "mda"
                         )
                     ):
-                        slice_pos = total_slices_num[direction] - selected_slice
+                        slice_pos = (
+                            self.__total_slices_count_2d[direction]
+                            - gtvt_selected_slice_2d
+                        )
                     else:
-                        slice_pos = selected_slice
+                        slice_pos = gtvt_selected_slice_2d
 
                     if direction == "horizontal":
                         x1 = 0
@@ -1314,11 +1324,12 @@ class UiReplay(QMainWindow, Ui_Core):
                     gamma=0,
                 )
 
-            # resize and fit img frame
-            rgb_img, self.__resize_pos[i] = self.__fit_display_frame(
-                rgb_img, self._display_frame[i]
+            # resize and fit img qlabel
+            rgb_img, self._rgb_img_relative_pos = self.__fit_img_qlabel(
+                rgb_img, self._img_qlabel[i]
             )
-            # blur after __fit_display_frame will gain better effect
+
+            # blur after __fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
@@ -1333,19 +1344,23 @@ class UiReplay(QMainWindow, Ui_Core):
                     continue
 
                 # load data of current slice
-                if self.__img_plane == "sagittal":
+                if self._img_plane == "sagittal":
                     contours = self._3d_imgs[k][:, :, self._cur_slice].astype(np.uint8)
-                elif self.__img_plane == "coronal":
+                elif self._img_plane == "coronal":
                     contours = self._3d_imgs[k][:, self._cur_slice, :].astype(np.uint8)
-                else:  # img_plane == "transverse":
-                    # for transverse plane, img is upside down,
-                    # true slice id is: slices_count - 1 - slice_id
-                    contours = self._3d_imgs[k][
-                        (self.__get_slices_count() - 1 - self._cur_slice), :, :
-                    ].astype(np.uint8)
+                elif self._img_plane == "transverse":
+                    contours = self._3d_imgs[k][self._cur_slice, :, :].astype(np.uint8)
 
-                contours, _ = self.__fit_display_frame(contours, self._display_frame[i])
-                # blur after __fit_display_frame will make the contours looks better on the UI
+                    # # for transverse plane, img is upside down,
+                    # # true slice id is: slices_count - 1 - slice_id
+                    # contours = self._3d_imgs[k][
+                    #     (self.__get_slices_count() - 1 - self._cur_slice), :, :
+                    # ].astype(np.uint8)
+                else:
+                    Debug.error_exit("self._img_plane value error")
+
+                contours, _ = self.__fit_img_qlabel(contours, self._img_qlabel[i])
+                # blur after __fit_img_qlabel will make the contours looks better on the UI
                 if k != "gtvn.clicks":
                     contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
                 contours, _ = cv2.findContours(
@@ -1383,7 +1398,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 rgb_img_width * rgb_img_chan,
                 QImage.Format_RGB888,
             )
-            self._display_frame[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._img_qlabel[i].setPixmap(QPixmap.fromImage(qt_image))
 
     def _add_label_text_on_rgb_img(self, rgb_img):
         rgb_img_height = rgb_img.shape[0]
@@ -1485,7 +1500,7 @@ class UiReplay(QMainWindow, Ui_Core):
             color=self._color["score.text"],
         )
 
-    def __get_gtvt_selected_slices(self, plane) -> List:
+    def __get_gtvt_selected_slices_on_2d(self, img_plane) -> List:
         # get current round
 
         if self._idl_round["gtvt"] == "round=00":
@@ -1504,7 +1519,7 @@ class UiReplay(QMainWindow, Ui_Core):
         if not os.path.exists(json_path):
             return []
 
-        selected_slices_dict = Json.load(json_path)[plane]
+        selected_slices_dict = Json.load(json_path)[img_plane]
         selected_slices_list = List()
 
         for round_num in selected_slices_dict:
@@ -1523,7 +1538,9 @@ class UiReplay(QMainWindow, Ui_Core):
         if self._3d_imgs["ct"] is None:
             return False
 
-        if int(self._cur_slice) in self.__get_gtvt_selected_slices(self.__img_plane):
+        if int(self._cur_slice) in self.__get_gtvt_selected_slices_on_2d(
+            self._img_plane
+        ):
             return True
         else:
             return False
@@ -1557,31 +1574,31 @@ class UiReplay(QMainWindow, Ui_Core):
             if slices_count == 0:
                 return
             slice_delta = event.angleDelta().y() // 120
-            if self.__img_plane == "coronal":
+            if self._img_plane == "coronal":
                 slice_delta = -slice_delta
             self._cur_slice -= slice_delta
             # limite slice_id in range(0,slices_count)
             self._cur_slice %= slices_count
-            self._refresh_imgs()
+            self._refresh_rgb_imgs()
             self._refresh_title()
 
     def __get_slices_count(self) -> int:
-        if (self._3d_imgs["ct"] is None) or (self.__img_plane is None):
+        if (self._3d_imgs["ct"] is None) or (self._img_plane is None):
             return 0
-        elif self.__img_plane == "sagittal":
+        elif self._img_plane == "sagittal":
             return self._3d_imgs["ct"].shape[2]
-        elif self.__img_plane == "coronal":
+        elif self._img_plane == "coronal":
             return self._3d_imgs["ct"].shape[1]
-        elif self.__img_plane == "transverse":
+        elif self._img_plane == "transverse":
             return self._3d_imgs["ct"].shape[0]
         else:
-            Debug.error_exit("self.__img_plane value error")
+            Debug.error_exit("self._img_plane value error")
 
     def _refresh_title(self):
         win_tital = "iDL.Tool "
         # if self._idl_round["gtvt"] is not None:
         #     win_tital += "   Num.of.Annotated.Slices="
-        #     win_tital += str(len(self.__get_gtvt_selected_slices(self.__img_plane)))
+        #     win_tital += str(len(self.__get_gtvt_selected_slices_on_2d(self._img_plane)))
         if self._cur_slice is not None:
             slices_count = self.__get_slices_count()
             if slices_count > 0:
@@ -1590,11 +1607,11 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.__resize_display_frames()
+        self.__resize_img_qlabels()
         self._refresh_side_bar()
-        self._refresh_imgs()
+        self._refresh_rgb_imgs()
 
-    def __resize_display_frames(self):
+    def __resize_img_qlabels(self):
         gap = 1
         size = Dict()
         size["x"] = self.geometry().width() - self.__side_bar_width
@@ -1612,16 +1629,16 @@ class UiReplay(QMainWindow, Ui_Core):
             pos[i][0] = gap
             pos[i][1] = size[i][0] + gap * 2
 
-        self._display_frame["ct"].setGeometry(
+        self._img_qlabel["ct"].setGeometry(
             QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
         )
-        self._display_frame["pt"].setGeometry(
+        self._img_qlabel["pt"].setGeometry(
             QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
         )
-        self._display_frame["mrt1"].setGeometry(
+        self._img_qlabel["mrt1"].setGeometry(
             QRect(pos["x"][0], pos["y"][1], size["x"][0], size["y"][1])
         )
-        self._display_frame["mrt2"].setGeometry(
+        self._img_qlabel["mrt2"].setGeometry(
             QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
         )
 
