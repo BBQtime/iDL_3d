@@ -21,6 +21,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         dataset_ver: str,
         no_pt: bool,
         augment: Dict = None,
+        gtvn_clicks: ndarray = None,
         random_click: bool = False,
     ):
         self.__patients = patients
@@ -29,6 +30,7 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         self.__dataset_dir = g.DATASET_DIR[dataset_ver]
         self.__no_pt = no_pt
         self.__augment = DataAugmentation(augment)
+        self.__gtvn_clicks = gtvn_clicks
         self.__random_click = random_click
 
     # must be overrided
@@ -138,38 +140,41 @@ class DataSetIDLGTVn(torch.utils.data.Dataset):
         # !!! background FIRST !!!
         labels = torch.cat([background, final["label"]], dim=0)
 
-        # simulate click
-        self.__origin["clicks"] = np.zeros(
-            self.__origin["label"].shape, dtype=np.float32
-        )
-        # loop through each connected components
-        # cc_count = 1
-        for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
-            if self.__random_click:
-                # random point (d,h,w)
-                pos = Img.find_random_point(cur_gtvn_cc)
-            else:
-                # gravity center: (d,h,w)
-                pos = list(measurements.center_of_mass(cur_gtvn_cc))
-                # float to int
-                for i in range(len(pos)):
-                    pos[i] = round(pos[i])
-            self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
-
-        # dilation
-        if 0:
-            # Nii.save(
-            #     self.__origin["clicks"],
-            #     os.path.join(g.PROJ_DIR, "debug", "before_dilation.nii"),
-            # )
-            structure = np.ones((5, 5, 5), dtype=np.float32)
-            self.__origin["clicks"] = binary_dilation(
-                self.__origin["clicks"], structure
-            ).astype(np.float32)
-            # Nii.save(
-            #     self.__origin["clicks"],
-            #     os.path.join(g.PROJ_DIR, "debug", "after_dilation.nii"),
-            # )
+        # gtvn_clicks
+        if self.__gtvn_clicks is not None:
+            self.__origin["clicks"] = self.__gtvn_clicks
+        else:
+            # simulate click
+            self.__origin["clicks"] = np.zeros(
+                self.__origin["label"].shape, dtype=np.float32
+            )
+            # loop through each connected components
+            # cc_count = 1
+            for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
+                if self.__random_click:
+                    # random point (d,h,w)
+                    pos = Img.find_random_point(cur_gtvn_cc)
+                else:
+                    # gravity center: (d,h,w)
+                    pos = list(measurements.center_of_mass(cur_gtvn_cc))
+                    # float to int
+                    for i in range(len(pos)):
+                        pos[i] = round(pos[i])
+                self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
+            # dilation
+            if 0:
+                # Nii.save(
+                #     self.__origin["clicks"],
+                #     os.path.join(g.PROJ_DIR, "debug", "before_dilation.nii"),
+                # )
+                structure = np.ones((5, 5, 5), dtype=np.float32)
+                self.__origin["clicks"] = binary_dilation(
+                    self.__origin["clicks"], structure
+                ).astype(np.float32)
+                # Nii.save(
+                #     self.__origin["clicks"],
+                #     os.path.join(g.PROJ_DIR, "debug", "after_dilation.nii"),
+                # )
 
         # # debug save img
         # cur_click_nii = np.zeros_like(self.__origin["clicks"])

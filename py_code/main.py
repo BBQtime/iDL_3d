@@ -18,7 +18,10 @@ Debug.clear_linux_trash()
 if 1:
     app = QApplication(sys.argv)
     if 1:
-        ui = UiIdl(debug_mode=1)
+        ui = UiIdl(
+            idl_remark="team.meeting",
+            debug_mode=1,
+        )
     else:
         ui = UiReplay()
     ui.show()
@@ -65,6 +68,13 @@ if 0:
         idl_gtvn_id="idl.gtvn_2023.08.18.02.37.30_no.pt",
         dataset_section="test",
         dataset_ver="mda",
+    )
+if 0:
+    idl_gtvn.real_idl(
+        idl_gtvn_id="idl.gtvn_test",
+        patient="106",
+        dataset_section="test.inter",
+        dataset_ver="au.1mm",
     )
 
 

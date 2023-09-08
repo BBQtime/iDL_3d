@@ -8,6 +8,7 @@ from custom import Img, Json, List, Nii, Time, Value
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
+from training_idl_gtvn import TrainingIDLGTVn
 from ui_replay import UiReplay
 
 # idl step
@@ -194,6 +195,38 @@ class CustomQLabel(QLabel):
 
 
 class UiIdl(UiReplay):
+    def __confirm_annotation(self):
+        if self.__idl_step["patient={}".format(self._cur_patient)] == CLICK_GTVN_CENTER:
+            # copy data (dont change origin ndarray)
+            idl_gtvn_clicks = self._3d_imgs["gtvn.clicks"].copy()
+
+            # flip left/right for 1mm data
+            if self._nii_spacing[2] == 1.0:
+                idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
+
+            # turn upside down
+            idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
+
+            # start real idl gtvn
+            training_idl_gtvn = TrainingIDLGTVn()
+            training_idl_gtvn.real_idl(
+                idl_gtvn_id=self._idl_id["gtvn"],
+                patient=self._cur_patient,
+                idl_gtvn_clicks=idl_gtvn_clicks,
+                dataset_section=self._dataset_section,
+                dataset_ver=self._dataset_ver,
+            )
+            # update idl step for current patient
+            self.__idl_step["patient={}".format(self._cur_patient)] = CORRECTION
+
+            self._choose_idl_gtvt()
+            self._choose_idl_gtvn()
+            self._refresh_rgb_imgs()
+            self._refresh_title()
+            self.__refresh_crosses_on_rgb_imgs()
+            self.__save_idl_step()
+            self.__update_annotation_msg()
+
     def wheelEvent(self, event):
         super().wheelEvent(event)
         self.__refresh_crosses_on_rgb_imgs()
@@ -208,34 +241,36 @@ class UiIdl(UiReplay):
             self._img_qlabel[i].delete_all_crosses()
 
         # draw new crosses based on self.__gtvn_clicks
-        img_shape = self.get_3d_img_shape()
+        cur_patient_idl_step = self.__idl_step["patient={}".format(self._cur_patient)]
+        if cur_patient_idl_step == CLICK_GTVN_CENTER:
+            img_shape = self.get_3d_img_shape()
 
-        for d, h, w in self.__gtvn_clicks:
-            x = y = None
-            if self._img_plane == "transverse":
-                if self._cur_slice == d:
-                    x = w / img_shape[2]
-                    y = h / img_shape[1]
+            for d, h, w in self.__gtvn_clicks:
+                x = y = None
+                if self._img_plane == "transverse":
+                    if self._cur_slice == d:
+                        x = w / img_shape[2]
+                        y = h / img_shape[1]
 
-            elif self._img_plane == "coronal":
-                if self._cur_slice == h:
-                    x = w / img_shape[2]
-                    y = d / img_shape[0]
+                elif self._img_plane == "coronal":
+                    if self._cur_slice == h:
+                        x = w / img_shape[2]
+                        y = d / img_shape[0]
 
-            elif self._img_plane == "sagittal":
-                if self._cur_slice == w:
-                    x = h / img_shape[1]
-                    y = d / img_shape[0]
+                elif self._img_plane == "sagittal":
+                    if self._cur_slice == w:
+                        x = h / img_shape[1]
+                        y = d / img_shape[0]
 
-            # find click on current slice
-            if x is not None and y is not None:
-                x *= self._rgb_img_relative_pos["width"]
-                y *= self._rgb_img_relative_pos["height"]
-                x = round(x)
-                y = round(y)
-                x += self._rgb_img_relative_pos["x"]  # - round(CROSS_SIZE / 2)
-                y += self._rgb_img_relative_pos["y"]  # - round(CROSS_SIZE / 2)
-                self.add_4_crosses(QPoint(x, y), add_gtvn_click=False)
+                # find click on current slice
+                if x is not None and y is not None:
+                    x *= self._rgb_img_relative_pos["width"]
+                    y *= self._rgb_img_relative_pos["height"]
+                    x = round(x)
+                    y = round(y)
+                    x += self._rgb_img_relative_pos["x"]  # - round(CROSS_SIZE / 2)
+                    y += self._rgb_img_relative_pos["y"]  # - round(CROSS_SIZE / 2)
+                    self.add_4_crosses(QPoint(x, y), add_gtvn_click=False)
 
     def delete_click_in_nii(self, cross: DraggableCross):
         pos = cross.get_pos_in_nii()
@@ -312,9 +347,13 @@ class UiIdl(UiReplay):
         else:
             return None
 
-    def __init__(self, debug_mode: bool):
+    def __init__(
+        self,
+        idl_remark: str = None,
+        debug_mode: bool = False,
+    ):
         # pass debug_mode parameter to the parent class
-        super().__init__(debug_mode)
+        super().__init__(idl_remark=idl_remark, debug_mode=debug_mode)
 
     def _init_ui_names(self):
         # before _init_ui_names()
@@ -334,8 +373,8 @@ class UiIdl(UiReplay):
         self.__btn["clear"] = self._btn_clear
         self.__btn["confirm"] = self._btn_confirm
 
-    def _init_member_var(self, debug_mode: bool):
-        super()._init_member_var(debug_mode)
+    def _init_member_var(self, idl_remark: str = None, debug_mode: bool = False):
+        super()._init_member_var()
 
         # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.get_cur_time_str()
@@ -343,6 +382,13 @@ class UiIdl(UiReplay):
             self._idl_id[i] = "idl.{}_".format(i) + cur_time
             if debug_mode:
                 self._idl_id[i] += "_" + g.DELETE_FLAG
+
+            if idl_remark != "" and idl_remark is not None:
+                while idl_remark.startswith("_"):
+                    idl_remark = idl_remark[1:]
+                while idl_remark.endswith("_"):
+                    idl_remark = idl_remark[:-1]
+                self._idl_id[i] += "_" + idl_remark
 
         self.__idl_step = Dict()
         for patient in self._patients.to_list():
@@ -375,9 +421,6 @@ class UiIdl(UiReplay):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
-
-    def __confirm_annotation(self):
-        print("OK")
 
     def __clear_annotation(self):
         print("clear annotation")
@@ -527,6 +570,7 @@ class UiIdl(UiReplay):
         self._choose_idl_gtvn()
         self._refresh_rgb_imgs()
         self._refresh_title()
+        self.__refresh_crosses_on_rgb_imgs()
         self.__save_idl_step()
         self.__update_annotation_msg()
 
@@ -565,17 +609,19 @@ class UiIdl(UiReplay):
     def _choose_idl_gtvn(self):
         patient_dir = self.__choose_idl(gtv="gtvn")
 
-        gtvn_clicks_nii_path = os.path.join(patient_dir, "gtvn_clicks.nii")
+        gtvn_clicks_nii_path = os.path.join(patient_dir, "round=01", "gtvn_clicks.nii")
         if os.path.exists(gtvn_clicks_nii_path):
-            self._3d_imgs["gtvn.clicks"] = Nii.load(path=gtvn_clicks_nii_path)
+            self._3d_imgs["gtvn.clicks"] = self._load_3d_img(
+                path=gtvn_clicks_nii_path, binary=True
+            )
         else:
             self._3d_imgs["gtvn.clicks"] = np.zeros(
                 self._3d_imgs["ct"].shape, dtype=np.float32
             )
-            Nii.save(
-                img=self._3d_imgs["gtvn.clicks"],
-                save_path=gtvn_clicks_nii_path,
-            )
+            # Nii.save(
+            #     img=self._3d_imgs["gtvn.clicks"],
+            #     save_path=gtvn_clicks_nii_path,
+            # )
 
     def __choose_idl(self, gtv: str) -> str:
         patient_dir = os.path.join(
@@ -588,24 +634,30 @@ class UiIdl(UiReplay):
 
         # current patient dir exists
         if os.path.exists(patient_dir):
-            # choose the last round
-            pred_path = Directory.get_sub_folders(
+            round_dirs = Directory.get_sub_folders(
                 patient_dir, key_word="round=", full_path=True
-            )[-1]
-            pred_path = os.path.join(pred_path, "{}_pred.nii".format(gtv))
+            )
+            # choose the last round
+            if len(round_dirs) > 0:
+                round_dir = round_dirs[-1]
+                pred_path = os.path.join(round_dir, "{}_pred.nii".format(gtv))
 
-            # find idl pred, load it
-            if os.path.exists(pred_path):
-                self._3d_imgs["{}.pred".format(gtv)] = Img.binarize(
-                    self._load_img(pred_path)
-                )
-            # cant find idl pred, clear 3d img
+                # find idl pred, load it
+                if os.path.exists(pred_path):
+                    self._3d_imgs["{}.pred".format(gtv)] = Img.binarize(
+                        self._load_3d_img(pred_path)
+                    )
+                # cant find idl pred, clear 3d img
+                else:
+                    self._3d_imgs["{}.pred".format(gtv)] = None
+
+            # no round dirs found
             else:
                 self._3d_imgs["{}.pred".format(gtv)] = None
 
         # cant find cur patient dir
         else:
-            Folder.create(patient_dir)
+            # Folder.create(patient_dir)
             self._3d_imgs["{}.pred".format(gtv)] = None
 
         return patient_dir

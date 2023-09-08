@@ -20,12 +20,16 @@ from Ui_core import Ui_Core
 
 
 class UiReplay(QMainWindow, Ui_Core):
-    def __init__(self, debug_mode: bool = False):
+    def __init__(
+        self,
+        idl_remark: str = None,  # param: idl_remark is for subclass: UiIdl
+        debug_mode: bool = False,  # param: debug_mode is for subclass: UiIdl
+    ):
         super().__init__()
         self.setupUi(self)
 
         self._init_ui_names()
-        self._init_member_var(debug_mode)
+        self._init_member_var(idl_remark=idl_remark, debug_mode=debug_mode)
         self.__set_img_qlabels_background()
         # self.__init_zoomin()
         self.__init_color()
@@ -43,6 +47,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def _init_member_var(
         self,
+        idl_remark: str = None,  # param: idl_remark is for subclass: UiIdl
         debug_mode: bool = False,  # param: debug_mode is for subclass: UiIdl
     ):
         # load test set patients of au and mda datasets
@@ -66,8 +71,8 @@ class UiReplay(QMainWindow, Ui_Core):
             self._idl_id[i] = "baseline"
             self._idl_round[i] = "round=00"
 
-        self.__dataset_ver = None
-        self.__dataset_section = None
+        self._dataset_ver = None
+        self._dataset_section = None
         self._nii_spacing = None  # (1,1,1) or (1,1,3)
         self._dataset_dir = None  # au.1mm / au.1mm / mda
         self.__scores = Dict()
@@ -830,22 +835,22 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # set dataset dir based on current patient
         if self._cur_patient in self._patients["au.test.inter"]:
-            self.__dataset_ver = baseline_dataset_ver
-            self.__dataset_section = "test.inter"
+            self._dataset_ver = baseline_dataset_ver
+            self._dataset_section = "test.inter"
 
         elif self._cur_patient in self._patients["au.test.exter"]:
-            self.__dataset_ver = baseline_dataset_ver
-            self.__dataset_section = "test.exter"
+            self._dataset_ver = baseline_dataset_ver
+            self._dataset_section = "test.exter"
 
         elif self._cur_patient in self._patients["mda.test"]:
-            self.__dataset_ver = "mda"
-            self.__dataset_section = "test"
+            self._dataset_ver = "mda"
+            self._dataset_section = "test"
         else:
             Debug.error_exit("cant find current patient in test patients")
 
         # set dataset dir and nii spacing
-        self._dataset_dir = g.DATASET_DIR[self.__dataset_ver]
-        self._nii_spacing = g.NII_SPACING[self.__dataset_ver]
+        self._dataset_dir = g.DATASET_DIR[self._dataset_ver]
+        self._nii_spacing = g.NII_SPACING[self._dataset_ver]
 
     def _fill_combox_patient(self):
         combox_patients = Directory.get_sub_folders(
@@ -889,7 +894,7 @@ class UiReplay(QMainWindow, Ui_Core):
             reset_patient = False
         self._choose_patient(idx=None, reset_patient=reset_patient)
 
-    def __load_3d_img(self, path: str, binary: bool = False):
+    def _load_3d_img(self, path: str, binary: bool = False):
         img = Nii.load(path, binary=False)
 
         # ct windowing before normalization
@@ -922,7 +927,7 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in ["ct", "pt", "mrt1", "mrt2"]:
             paths[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, paths[i])
             paths[i] = os.path.join(self._dataset_dir, paths[i])
-            self._3d_imgs[i] = self.__load_3d_img(paths[i])
+            self._3d_imgs[i] = self._load_3d_img(paths[i])
 
     def _get_middle_slice_id(self):
         if self._3d_imgs["ct"] is None:
@@ -1027,7 +1032,7 @@ class UiReplay(QMainWindow, Ui_Core):
         labels = Img.load_labels(
             dataset_dir=self._dataset_dir,
             patient=self._cur_patient,
-            nii_load_func=self.__load_3d_img,
+            nii_load_func=self._load_3d_img,
         )
         # load gtvt and gtvn
         for gtv in ["gtvt", "gtvn"]:
@@ -1103,14 +1108,12 @@ class UiReplay(QMainWindow, Ui_Core):
                 gtvn_clicks_path = os.path.join(
                     Path(pred_path).parent, "gtvn_clicks.nii"
                 )
-                self._3d_imgs["gtvn.clicks"] = self.__load_3d_img(
+                self._3d_imgs["gtvn.clicks"] = self._load_3d_img(
                     gtvn_clicks_path, binary=True
                 )
 
         # load preds
-        self._3d_imgs["{}.pred".format(gtv)] = self.__load_3d_img(
-            pred_path, binary=True
-        )
+        self._3d_imgs["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
 
         # load baseline scores
         if self._idl_id[gtv] == "baseline":
@@ -1118,9 +1121,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 "baseline",
-                "inference_{}_{}.json".format(
-                    self.__dataset_ver, self.__dataset_section
-                ),
+                "inference_{}_{}.json".format(self._dataset_ver, self._dataset_section),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1135,9 +1136,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id[gtv],
-                "inference_{}_{}.json".format(
-                    self.__dataset_ver, self.__dataset_section
-                ),
+                "inference_{}_{}.json".format(self._dataset_ver, self._dataset_section),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1281,8 +1280,7 @@ class UiReplay(QMainWindow, Ui_Core):
                         self._img_plane != "sagittal"
                         and direction == "vertical"
                         and (
-                            self.__dataset_ver == "au.1mm"
-                            or self.__dataset_ver == "mda"
+                            self._dataset_ver == "au.1mm" or self._dataset_ver == "mda"
                         )
                     ):
                         slice_pos = (

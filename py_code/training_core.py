@@ -355,7 +355,8 @@ class TrainingCore:
         no_pt: str,
         segment_metrics: Dict,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
-        idl_gtvt_masked_label: ndarray = None,  # gtvt post processing
+        idl_gtvn_clicks: ndarray = None,  # only for idl.gtvn
+        idl_gtvt_masked_label: ndarray = None,  # only for idl.gtvt post processing
     ) -> Dict:
         # load dataset
         dataset = self._inference_single_patient_load_dataset(
@@ -363,6 +364,7 @@ class TrainingCore:
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             idl_gtvn_baseline_id=idl_gtvn_baseline_id,
+            idl_gtvn_clicks=idl_gtvn_clicks,
         )
 
         # load labels
@@ -427,6 +429,7 @@ class TrainingCore:
         dataset_ver: str,
         no_pt: bool,
         idl_gtvn_baseline_id: str = None,
+        idl_gtvn_clicks: ndarray = None,
     ):
         return DataSetBaseline(
             patients=[patient],
@@ -528,7 +531,7 @@ class TrainingCore:
                     )
 
             elif dataset_ver == "au.3mm" or dataset_ver == "au.1mm":
-                if dataset_ver == "test":
+                if dataset_section == "test":
                     Debug.error_exit(
                         "use 'test.inter/test.exter' instead of 'test' for au dataset"
                     )

@@ -8,6 +8,7 @@ from custom import Global as g
 from custom import Img, Json, List, Nii, Value
 from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
+from numpy import ndarray
 from torch import Tensor
 from tqdm import tqdm
 from training_baseline import TrainingBaseline
@@ -57,6 +58,211 @@ class TrainingIDLGTVn(TrainingBaseline):
             train_remark=train_remark,
             debug_mode=debug_mode,
         )
+
+    def real_idl(
+        self,
+        idl_gtvn_id: str,
+        patient: str,
+        idl_gtvn_clicks: ndarray,
+        dataset_section: str,  # train/valid/test.inter/test.exter/test
+        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+    ):
+        print("")
+        print("real idl: {}".format(idl_gtvn_id))
+
+        baseline_id = "baseline_real.idl"
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
+
+        cnn_idl_gtvn_dir = os.path.join(baseline_dir, "idl.gtvn_real.idl")
+        if not os.path.exists(cnn_idl_gtvn_dir):
+            Debug.error_exit("'idl.gtvn_real.idl' folder not found")
+
+        output_idl_gtvn_dir = os.path.join(baseline_dir, idl_gtvn_id)
+        if not os.path.exists(output_idl_gtvn_dir):
+            Folder.create(output_idl_gtvn_dir)
+
+        cnn_fold_dirs = Directory.get_sub_folders(
+            cnn_idl_gtvn_dir, key_word="fold=", full_path=True
+        )
+        hyper = Json.load(os.path.join(cnn_fold_dirs[0], "hyper.json"))
+        no_pt = hyper["no.pt"]
+        training_dataset_ver = hyper["dataset.ver"]
+
+        dataset_ver = self._is_valid_dataset_version(
+            dataset_ver=dataset_ver,
+            origin_dataset_ver=training_dataset_ver,
+        )
+        self._is_valid_dataset_section(
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+        print("dataset version: {}".format(dataset_ver))
+        print("dataset section: {}".format(dataset_section))
+
+        # load segmentation metrics
+        segment_metrics = self._load_segment_metrics(dataset_ver)
+
+        # loop through fold dirs
+        for cnn_fold_dir in tqdm(cnn_fold_dirs):
+            # fold = int(Path(cnn_fold_dir).name[len("fold=") :])
+            # print("")
+            # print("fold: ", fold)
+
+            output_fold_dir = os.path.join(output_idl_gtvn_dir, Path(cnn_fold_dir).name)
+            Folder.create(output_fold_dir)
+
+            # loop through epoch dirs
+            for cnn_epoch_dir in Directory.get_sub_folders(
+                cnn_fold_dir, key_word="epoch=", full_path=True
+            ):
+                epoch = int(Path(cnn_epoch_dir).name[len("epoch=") :])
+                # print("epoch: ", epoch)
+
+                output_epoch_dir = os.path.join(
+                    output_fold_dir, Path(cnn_epoch_dir).name
+                )
+                Folder.create(output_epoch_dir)
+
+                # load cnn
+                cnn_path = os.path.join(cnn_epoch_dir, "epoch={:03d}.pt".format(epoch))
+                cnn = self._load_exist_cnn(cnn_path)
+
+                # initialize scores dict
+                patients = Dict()
+                patients[dataset_section] = [patient]
+                epoch_scores = self._inference_init_scores(
+                    baseline_id=baseline_id,
+                    dataset_ver=dataset_ver,
+                    dataset_section=dataset_section,
+                    patients=patients,
+                )
+
+                # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+                patient_outputs = self._inference_single_patient(
+                    patient=patient,
+                    cnn=cnn,
+                    dataset_ver=dataset_ver,
+                    dataset_section=dataset_section,
+                    no_pt=no_pt,
+                    segment_metrics=segment_metrics,
+                    idl_gtvn_baseline_id=baseline_id,
+                    idl_gtvn_clicks=idl_gtvn_clicks,
+                )
+
+                # create folder and save preds of current patient
+                self._fold_wise_inference_save_patient_preds(
+                    patient=patient,
+                    epoch_dir=output_epoch_dir,
+                    patient_outputs=patient_outputs,
+                    dataset_ver=dataset_ver,
+                    dataset_section=dataset_section,
+                )
+
+                # record score of current patient (test and valid sets only)
+                self._fold_wise_inference_record_patient_score(
+                    patient=patient,
+                    patient_outputs=patient_outputs,
+                    scores=epoch_scores,
+                )
+
+                # all patients under current epoch have been traversed
+                # calculate median and avg score of current epoch
+                self._inference_calculate_save_avg_median(
+                    scores=epoch_scores,
+                    save_dir=output_epoch_dir,
+                    dataset_ver=dataset_ver,
+                    dataset_section=dataset_section,
+                )
+
+                continue  # next epoch
+
+        # cross valid
+        # initialize scores dict
+        patients = Dict()
+        patients[dataset_section] = [patient]
+        cross_valid_scores = self._inference_init_scores(
+            baseline_id=baseline_id,
+            dataset_ver=dataset_ver,
+            dataset_section=dataset_section,
+            patients=patients,
+        )
+
+        # initialize preds
+        preds = Dict()
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            preds[gtv] = None
+
+        output_fold_dirs = Directory.get_sub_folders(
+            output_idl_gtvn_dir, key_word="fold=", full_path=True
+        )
+        for output_fold_dir in output_fold_dirs:
+            # find epoch dir
+            output_epoch_dir = Directory.get_sub_folders(
+                output_fold_dir, key_word="epoch=", full_path=True
+            )[0]
+
+            # load preds
+            output_patient_dir = os.path.join(
+                output_epoch_dir, "patients", "patient={}".format(patient)
+            )
+            for gtv in ["gtvt", "gtvn"]:
+                pred_path = os.path.join(output_patient_dir, "{}_pred.nii".format(gtv))
+                if os.path.exists(pred_path):
+                    img = Nii.load(path=pred_path, binary=False)
+                    if preds[gtv] is None:
+                        preds[gtv] = img
+                    else:
+                        preds[gtv] += img
+
+        # all folds is traversed
+        # for idl.gtvn pred["gtvt"] will be None
+        if preds["gtvt"] is not None:
+            preds["gtvs"] = preds["gtvt"] + preds["gtvn"]
+
+        for gtv in preds.keys():
+            if preds[gtv] is None:
+                preds.pop(gtv)
+            else:
+                preds[gtv] /= len(output_fold_dirs)
+
+        # create cross_valid dir
+        pred_dir = os.path.join(
+            output_idl_gtvn_dir, "patients", "patient={}".format(patient)
+        )
+        pred_dir = os.path.join(pred_dir, "round=01")
+        Folder.create(pred_dir)
+
+        # save cross_valid preds (only save gtvt and gtvn)
+        for gtv in preds.keys():
+            if gtv != "gtvs":
+                Nii.save(
+                    img=preds[gtv],
+                    save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
+                    spacing=g.NII_SPACING[dataset_ver],
+                )
+
+        # load labels and calculate metrics
+        labels = Img.load_labels(
+            dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
+        )
+        self._cross_valid_inference_record_patient_score(
+            patient=patient,
+            preds=preds,
+            labels=labels,
+            segment_metrics=segment_metrics,
+            scores=cross_valid_scores,
+        )
+
+        # calculate avg and median score
+        self._inference_calculate_save_avg_median(
+            scores=cross_valid_scores,
+            save_dir=output_idl_gtvn_dir,
+            dataset_section=dataset_section,
+            dataset_ver=dataset_ver,
+        )
+
+        print("")
+        print("real idl done!")
 
     def fold_wise_inference(
         self,
@@ -266,6 +472,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset_ver: str,
         no_pt: bool,
         idl_gtvn_baseline_id: str,
+        idl_gtvn_clicks: ndarray,
     ):
         return DataSetIDLGTVn(
             patients=[patient],
@@ -273,6 +480,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             augment=None,
+            gtvn_clicks=idl_gtvn_clicks,
             random_click=False,
         )
 

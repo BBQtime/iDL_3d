@@ -629,7 +629,7 @@ class Directory:
         full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
-    ):
+    ) -> List:
         sub_list = Directory.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
