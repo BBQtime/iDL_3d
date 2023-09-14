@@ -2,17 +2,13 @@ import os
 import random
 from typing import Tuple
 
-import numpy as np
 import torch
-from custom import Dict
-from custom import Global as g
-from custom import Img, Nii
-from data_augment import DataAugmentation
-from numpy import ndarray
+from custom import Dict, Img, Nii
+from dataset_core import DatasetCore
 from torch import Tensor
 
 
-class DataSetBaseline(torch.utils.data.Dataset):
+class DataSetBaseline(DatasetCore):
     def __init__(
         self,
         patients: list,
@@ -20,48 +16,18 @@ class DataSetBaseline(torch.utils.data.Dataset):
         no_pt: bool,
         augment: Dict = None,
     ):
+        super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
         self.__patients = patients
-        self.__img_shape = g.IMG_SHAPE[dataset_ver]
-        self.__dataset_dir = g.DATASET_DIR[dataset_ver]
-        self.__no_pt = no_pt
-        self.__augment = DataAugmentation(augment)
 
     # must be overrided
     def __len__(self):
         return len(self.__patients)
 
-    def __preprocess(self, img: ndarray, augment_seed: int):
-        # DO NOT alter origin img
-        img = img.copy()
-
-        # normalize before augmentation
-        if not img.max() == img.min() == 0:
-            img = Img.normalize(img)
-
-        # data augmentation
-        img = self.__augment.transform(input_data=img, seed=augment_seed)
-
-        # no normalization after augmentation
-        # because when rotating img
-        # nomalization might give background a positive value
-
-        # crop and pad after augmentation, max size: 89 283 280
-        img = Img.central_pad_and_crop(img, self.__img_shape)
-
-        # clip, because data augmentation will sometime make img >1 or <0
-        img = np.clip(img, 0, 1)
-
-        # unsqueeze img to 4 dim before convert to Tensor
-        img = np.expand_dims(img, axis=0)
-        # do NOT use "T.ToTensor()" in 3D, it will make (d,h,w) to (h,d,w)
-        img = torch.from_numpy(img)
-        return img
-
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
         final = Dict()
 
         # load origin labels
-        origin = Img.load_labels(dataset_dir=self.__dataset_dir, patient=patient)
+        origin = Img.load_labels(dataset_dir=self._dataset_dir, patient=patient)
 
         # loop until target volume is big enough
         tmp = Dict()
@@ -72,7 +38,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
             tmp["seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            tmp["gtvs"] = self.__preprocess(origin["gtvs"], tmp["seed"])
+            tmp["gtvs"] = self._preprocess(origin["gtvs"], tmp["seed"])
             tmp["gtvs"] = Img.binarize(tmp["gtvs"])
 
             # target volume is not big enough
@@ -90,7 +56,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
         # preprocess gtvt and gtvn based on final augment seed
         for gtv in ["gtvt", "gtvn"]:
-            final[gtv] = self.__preprocess(origin[gtv], final["seed"])
+            final[gtv] = self._preprocess(origin[gtv], final["seed"])
             final[gtv] = Img.binarize(final[gtv])
 
         # load background
@@ -100,13 +66,13 @@ class DataSetBaseline(torch.utils.data.Dataset):
 
         # load multi-modal imgs
         multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
-        if self.__no_pt:
+        if self._no_pt:
             multi_modal_list.remove("PT")
 
         input_imgs = None
         for i in multi_modal_list:
             img_path = os.path.join(
-                self.__dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
+                self._dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )
             img = Nii.load(img_path)
 
@@ -114,7 +80,7 @@ class DataSetBaseline(torch.utils.data.Dataset):
             if i == "CT":
                 img = Img.ct_windowing(img)
 
-            img = self.__preprocess(img, final["seed"])
+            img = self._preprocess(img, final["seed"])
 
             # concat multi-model img
             if input_imgs is None:

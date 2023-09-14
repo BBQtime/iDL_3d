@@ -459,8 +459,13 @@ class TrainingCore:
 
     # make this function protected, idl will use it
     def _is_valid_baseline_id(self, baseline_id: str):
+        err_msg = "baseline id error"
+
         if not baseline_id.startswith("baseline_"):
-            Debug.error_exit("baseline id error")
+            Debug.error_exit(err_msg)
+
+        if not os.path.exists(os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)):
+            Debug.error_exit(err_msg)
 
     def _is_valid_dataset_version(
         self,

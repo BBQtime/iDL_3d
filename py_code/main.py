@@ -15,11 +15,11 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 1:
+if 0:
     app = QApplication(sys.argv)
     if 1:
         ui = UiIdl(
-            idl_remark="team.meeting",
+            idl_remark="",
             debug_mode=1,
         )
     else:
@@ -33,7 +33,7 @@ baseline = TrainingBaseline()
 if 0:
     baseline.new_training(
         train_remark="1mm_no.pt",
-        debug_mode=0,
+        debug_mode=1,
     )
 if 0:
     baseline.fold_wise_inference(
@@ -53,7 +53,7 @@ if 0:
 idl_gtvn = TrainingIDLGTVn()
 if 0:
     idl_gtvn.new_training(
-        baseline_id="baseline_2023.07.05.16.49.25_1mm_best",
+        baseline_id="baseline_2023.07.05.16.49.25_1mm",
         train_remark="no.pt",
         debug_mode=1,
     )

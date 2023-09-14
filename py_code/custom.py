@@ -149,7 +149,13 @@ class Value:
         return value
 
     def is_number(i) -> bool:
-        if i is None or math.isnan(i):
+        if (
+            i is None
+            or math.isnan(i)
+            or isinstance(i, list)
+            or isinstance(i, dict)
+            or isinstance(i, str)
+        ):
             return False
         try:
             float(i)

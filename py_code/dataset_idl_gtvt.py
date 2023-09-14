@@ -4,16 +4,14 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from custom import Dict
-from custom import Global as g
-from custom import Img, Nii
-from data_augment import DataAugmentation
+from custom import Dict, Img, Nii
+from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
 from torch import Tensor
 
 
-class DataSetIDLGTVt(torch.utils.data.Dataset):
+class DataSetIDLGTVt(DatasetCore):
     def __init__(
         self,
         patient: str,
@@ -25,10 +23,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         augment: Dict,
         weight: Dict,
     ):
-        self.__img_shape = g.IMG_SHAPE[dataset_ver]
-        self.__dataset_dir = g.DATASET_DIR[dataset_ver]
-        self.__no_pt = no_pt
-        self.__augment = DataAugmentation(augment)
+        super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
         self.__augment_times = augment["times"]
 
         # origin images
@@ -50,17 +45,17 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
         # load ct/pt/mrt1/mt2
         self.__origin["ct"] = Nii.load(
-            os.path.join(self.__dataset_dir, "HNCDL_{}_CT.nii".format(patient))
+            os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
-        if not self.__no_pt:
+        if not self._no_pt:
             self.__origin["pt"] = Nii.load(
-                os.path.join(self.__dataset_dir, "HNCDL_{}_PT.nii".format(patient))
+                os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(patient))
             )
         self.__origin["mrt1"] = Nii.load(
-            os.path.join(self.__dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
+            os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
         self.__origin["mrt2"] = Nii.load(
-            os.path.join(self.__dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
+            os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
         )
         # ct windowing
         self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
@@ -185,7 +180,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
     def __len__(self):
         return self.__augment_times
 
-    def __preprocess(
+    def _preprocess(
         self,
         img: ndarray,
         augment_seed: int,
@@ -200,14 +195,14 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
             img = Img.normalize(img)
 
         # data augmentation
-        img = self.__augment.transform(input_data=img, seed=augment_seed)
+        img = self._augment.transform(input_data=img, seed=augment_seed)
 
         # no normalization after augmentation
         # because when rotating img
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = Img.central_pad_and_crop(img, self.__img_shape)
+        img = Img.central_pad_and_crop(img, self._img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)
@@ -236,7 +231,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 
             # load gtvs
             for i in ["label", "pred"]:
-                tmp[i] = self.__preprocess(
+                tmp[i] = self._preprocess(
                     img=self.__origin[i], augment_seed=tmp["seed"]
                 )
                 tmp[i] = Img.binarize(tmp[i])
@@ -271,10 +266,10 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
         # load multi-modal imgs
         input_imgs = None
         multi_modal_list = ["ct", "pt", "mrt1", "mrt2"]
-        if self.__no_pt:
+        if self._no_pt:
             multi_modal_list.remove("pt")
         for i in multi_modal_list:
-            img = self.__preprocess(self.__origin[i], final["seed"])
+            img = self._preprocess(self.__origin[i], final["seed"])
 
             # concat multi-model img
             if input_imgs is None:
@@ -283,7 +278,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
                 input_imgs = torch.cat([input_imgs, img], dim=0)
 
         # weight map
-        weight_map = self.__preprocess(
+        weight_map = self._preprocess(
             img=self.__origin["weight.map"],
             augment_seed=final["seed"],
             normalize=False,
@@ -325,7 +320,7 @@ class DataSetIDLGTVt(torch.utils.data.Dataset):
 # tmp_dataset = DataSetIDLGTVt(
 #     patient="336",
 #     selected_slices=selected_slices,
-#     label_dir=self.__dataset_dir,
+#     label_dir=self._dataset_dir,
 #     pred_dir=pred_dir,
 #     augment=augment,
 #     weight=weight,
