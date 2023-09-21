@@ -141,15 +141,14 @@ class CustomQLabel(QLabel):
         self.setMouseTracking(True)
         self.paint_pos = None  # Store the last painted point
         self.pen_color = Qt.green
-        self.pen_width = 10
         self.drawing_layer = QPixmap(self.size())
         self.drawing_layer.fill(Qt.transparent)
 
     def resizeEvent(self, event):
         # Resize the drawing layer pixmap to match the new size of the QLabel
         self.drawing_layer = self.drawing_layer.scaled(self.size())
-        print("qlabel:", self.size())
-        print("layer:", self.drawing_layer.size())
+        # print("qlabel:", self.size())
+        # print("layer:", self.drawing_layer.size())
 
     def mousePressEvent(self, event: QMouseEvent):
         super().mousePressEvent(event)
@@ -170,17 +169,18 @@ class CustomQLabel(QLabel):
 
     def mouseMoveEvent(self, event):
         if self.paint_pos:
+            pen_size = self.window().get_pen_size()
             painter = QPainter(self.drawing_layer)
             # left button: pen
             if event.buttons() == Qt.LeftButton:
                 painter.setPen(
-                    QPen(self.pen_color, self.pen_width, Qt.SolidLine, Qt.RoundCap)
+                    QPen(self.pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
                 )
             # right button: eraser
             elif event.buttons() == Qt.RightButton:
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
                 painter.setPen(
-                    QPen(Qt.transparent, self.pen_width, Qt.SolidLine, Qt.RoundCap)
+                    QPen(Qt.transparent, pen_size, Qt.SolidLine, Qt.RoundCap)
                 )
             painter.drawLine(self.paint_pos, event.pos())
             self.paint_pos = event.pos()
@@ -416,7 +416,8 @@ class UiIdl(UiReplay):
         super()._init_ui_names()
 
         self._text_label["annotation.tools"] = self._text_label_annotation_tools
-        self._text_label["idl.gtvt.progress"] = self._text_label_idl_gtvt_progress
+        self._text_label["idl.progress"] = self._text_label_idl_progress
+        self._text_label["pen.size"] = self._text_label_pen_size
 
         self.__btn = Dict()
         self.__btn["pen"] = self._btn_pen
@@ -494,8 +495,9 @@ class UiIdl(UiReplay):
 
         # show annotation controls
         self._text_box_annotation_msg.show()
-        self._progress_bar_idl_gtvt.show()
-        for i in ["annotation.tools", "idl.gtvt.progress"]:
+        self._progress_bar_idl.show()
+        self._slider_pen_size.show()
+        for i in ["annotation.tools", "idl.progress", "pen.size"]:
             self._text_label[i].show()
         for i in ["pen", "eraser", "clear", "confirm"]:
             self.__btn[i].show()
@@ -503,14 +505,14 @@ class UiIdl(UiReplay):
         # set text
         self._text_box_annotation_msg.setText("Please Select a Patient")
         self._text_label["annotation.tools"].setText("Annotation Tools")
-        self._text_label["idl.gtvt.progress"].setText("GTVt Retraining Progress")
+        self._text_label["idl.progress"].setText("Retraining Progress")
 
         # set fonts
-        for i in ["annotation.tools", "idl.gtvt.progress"]:
+        for i in ["annotation.tools", "idl.progress", "pen.size"]:
             self._text_label[i].setFont(self._font_bold)
         self._text_box_annotation_msg.setFont(self._font_bold)
 
-        # set read only
+        # set textbox read only
         self._text_box_annotation_msg.setReadOnly(True)
 
         # connect ui to functions
@@ -520,19 +522,26 @@ class UiIdl(UiReplay):
         self.__btn["clear"].clicked.connect(self.__clear_annotation)
         self.__btn["confirm"].clicked.connect(self.__confirm_annotation)
 
+        self._slider_pen_size.setMinimum(1)
+        self._slider_pen_size.setMaximum(10)
+        self._slider_pen_size.setValue(5)
+
+    def get_pen_size(self):
+        return self._slider_pen_size.value()
+
     def _refresh_side_bar(self):
-        left, top, width, gap, text_height, bar_height = super()._refresh_side_bar(
-            widgets_to_display=["patient"]
-        )
+        (
+            left,
+            top,
+            width,
+            gap,
+            text_height,
+            bar_height,
+            slider_height,
+        ) = super()._refresh_side_bar(widgets_to_display=["patient"])
 
         annotation_msg_box_height = 80
         annotation_btn_width = 50
-
-        # annotation message box
-        top += gap
-        rect = QRect(left, top, width, annotation_msg_box_height)
-        self._text_box_annotation_msg.setGeometry(rect)
-        top += annotation_msg_box_height
 
         # annotation tools
         top += gap
@@ -549,15 +558,30 @@ class UiIdl(UiReplay):
             tmp_left += tmp_gap + annotation_btn_width
         top += bar_height
 
-        # idl gtvt retraining progress bar
+        # pen size
+        rect = QRect(left, top, width, text_height)
+        self._text_label["pen.size"].setGeometry(rect)
+        top += text_height
+        rect = QRect(left, top, width, slider_height)
+        self._slider_pen_size.setGeometry(rect)
+        top += slider_height
+
+        # idl retraining progress bar
         top += gap
         rect = QRect(left, top, width, text_height)
-        self._text_label_idl_gtvt_progress.setGeometry(rect)
-        self._text_label_idl_gtvt_progress.show()
+        self._text_label_idl_progress.setGeometry(rect)
+        self._text_label_idl_progress.show()
         top += text_height
         rect = QRect(left, top, width, bar_height)
-        self._progress_bar_idl_gtvt.setGeometry(rect)
-        self._progress_bar_idl_gtvt.show()
+        self._progress_bar_idl.setGeometry(rect)
+        self._progress_bar_idl.show()
+        top += bar_height
+
+        # annotation message box
+        top += gap
+        rect = QRect(left, top, width, annotation_msg_box_height)
+        self._text_box_annotation_msg.setGeometry(rect)
+        top += annotation_msg_box_height
 
     def _choose_baseline(self):
         # self._reset_zoomin()

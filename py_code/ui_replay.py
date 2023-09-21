@@ -409,7 +409,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["contrast"] = self._text_label_contrast
         self._text_label["zoom"] = self._text_label_zoom
         self._text_label["annotation.tools"] = self._text_label_annotation_tools
-        self._text_label["idl.gtvt.progress"] = self._text_label_idl_gtvt_progress
+        self._text_label["idl.progress"] = self._text_label_idl_progress
 
         self._combox = Dict()
         self._combox["baseline"] = self._combox_baseline
@@ -470,8 +470,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._btn_eraser.hide()
         self._btn_clear.hide()
         self._btn_confirm.hide()
-        self._text_label_idl_gtvt_progress.hide()
-        self._progress_bar_idl_gtvt.hide()
+        self._text_label_idl_progress.hide()
+        self._progress_bar_idl.hide()
+        self._text_label_pen_size.hide()
+        self._slider_pen_size.hide()
 
         # set text
         self._text_label["baseline"].setText("Choose Baseline")
@@ -674,8 +676,16 @@ class UiReplay(QMainWindow, Ui_Core):
             # next element
             top += bar_height
 
-        # brightness and contrast sliders
+        # brightness and contrast radio btns
         top += gap
+        tmp_left = left
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
+            self.__radio_btn[i].setGeometry(rect)
+            tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
+        top += radio_btn_height
+
+        # brightness and contrast sliders
         for i in ["bright", "contrast"]:
             rect = QRect(left, top, width, text_height)
             self._text_label[i].setGeometry(rect)
@@ -684,14 +694,6 @@ class UiReplay(QMainWindow, Ui_Core):
             for j in ["ct", "pt", "mrt1", "mrt2"]:
                 self.__slider["{}.{}".format(i, j)].setGeometry(rect)
             top += slider_height
-
-        # brightness and contrast radio btns
-        tmp_left = left
-        for i in ["ct", "pt", "mrt1", "mrt2"]:
-            rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
-            self.__radio_btn[i].setGeometry(rect)
-            tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
-        top += radio_btn_height
 
         # img plane
         top += gap
@@ -712,7 +714,7 @@ class UiReplay(QMainWindow, Ui_Core):
         top += slider_height
 
         # return the followings for UiIdl
-        return left, top, width, gap, text_height, bar_height
+        return left, top, width, gap, text_height, bar_height, slider_height
 
     def _set_img_plane(self):
         for i in ["transverse", "coronal", "sagittal"]:
