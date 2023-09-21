@@ -15,7 +15,7 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 0:
+if 1:
     app = QApplication(sys.argv)
     if 1:
         ui = UiIdl(

@@ -6,14 +6,14 @@ from custom import Debug, Dict, Directory, Folder
 from custom import Global as g
 from custom import Img, Json, List, Nii, Time, Value
 from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPixmap
+from PyQt5.QtGui import QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
 from training_idl_gtvn import TrainingIDLGTVn
 from ui_replay import UiReplay
 
 # idl step
 CLICK_GTVT_CENTER = "click.gtvt.center"
-DELINEATE_GTVT = "delineate.gtvt"
+DRAW_GTVT = "draw.gtvt"
 CLICK_GTVN_CENTER = "click.gtvn.center"
 CORRECTION = "correction"
 
@@ -132,8 +132,64 @@ class DraggableCross(QWidget):
 class CustomQLabel(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
+
+        # clicks
         self.selected_cross = None
         self.crosses_list = []
+
+        # gtvt painting
+        self.setMouseTracking(True)
+        self.paint_pos = None  # Store the last painted point
+        self.pen_color = Qt.green
+        self.pen_width = 10
+        self.drawing_layer = QPixmap(self.size())
+        self.drawing_layer.fill(Qt.transparent)
+
+    def resizeEvent(self, event):
+        # Resize the drawing layer pixmap to match the new size of the QLabel
+        self.drawing_layer = self.drawing_layer.scaled(self.size())
+        print("qlabel:", self.size())
+        print("layer:", self.drawing_layer.size())
+
+    def mousePressEvent(self, event: QMouseEvent):
+        super().mousePressEvent(event)
+
+        if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
+            if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
+                self.paint_pos = event.pos()
+
+        elif self.window().get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
+            self.window().add_4_crosses(event.pos(), add_gtvn_click=True)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+
+        if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
+            if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
+                self.paint_pos = None
+
+    def mouseMoveEvent(self, event):
+        if self.paint_pos:
+            painter = QPainter(self.drawing_layer)
+            # left button: pen
+            if event.buttons() == Qt.LeftButton:
+                painter.setPen(
+                    QPen(self.pen_color, self.pen_width, Qt.SolidLine, Qt.RoundCap)
+                )
+            # right button: eraser
+            elif event.buttons() == Qt.RightButton:
+                painter.setCompositionMode(QPainter.CompositionMode_Clear)
+                painter.setPen(
+                    QPen(Qt.transparent, self.pen_width, Qt.SolidLine, Qt.RoundCap)
+                )
+            painter.drawLine(self.paint_pos, event.pos())
+            self.paint_pos = event.pos()
+            self.update()  # Schedule a repaint
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.drawPixmap(self.rect(), self.drawing_layer)
 
     def get_cross_by_id(self, cross_id: int) -> DraggableCross:
         for cross in self.crosses_list:
@@ -175,10 +231,6 @@ class CustomQLabel(QLabel):
             self.selected_cross.deleteLater()
             self.selected_cross = None
 
-    def mousePressEvent(self, event: QMouseEvent):
-        super().mousePressEvent(event)
-        self.window().add_4_crosses(event.pos(), add_gtvn_click=True)
-
     def add_cross(self, pos: QPoint, cross_id: int):
         self.deselect_cross()
         # create new cross
@@ -196,7 +248,7 @@ class CustomQLabel(QLabel):
 
 class UiIdl(UiReplay):
     def __confirm_annotation(self):
-        if self.__idl_step["patient={}".format(self._cur_patient)] == CLICK_GTVN_CENTER:
+        if self.get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
             # copy data (dont change origin ndarray)
             idl_gtvn_clicks = self._3d_imgs["gtvn.clicks"].copy()
 
@@ -217,7 +269,7 @@ class UiIdl(UiReplay):
                 dataset_ver=self._dataset_ver,
             )
             # update idl step for current patient
-            self.__idl_step["patient={}".format(self._cur_patient)] = CORRECTION
+            self.set_cur_patient_idl_step(CORRECTION)
 
             self._choose_idl_gtvt()
             self._choose_idl_gtvn()
@@ -241,8 +293,7 @@ class UiIdl(UiReplay):
             self._img_qlabel[i].delete_all_crosses()
 
         # draw new crosses based on self.__gtvn_clicks
-        cur_patient_idl_step = self.__idl_step["patient={}".format(self._cur_patient)]
-        if cur_patient_idl_step == CLICK_GTVN_CENTER:
+        if self.get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
             img_shape = self.get_3d_img_shape()
 
             for d, h, w in self.__gtvn_clicks:
@@ -392,7 +443,7 @@ class UiIdl(UiReplay):
 
         self.__idl_step = Dict()
         for patient in self._patients.to_list():
-            self.__idl_step["patient={}".format(patient)] = CLICK_GTVN_CENTER
+            self.__idl_step["patient={}".format(patient)] = DRAW_GTVT
 
         self.__gtvn_clicks = List()
 
@@ -577,15 +628,21 @@ class UiIdl(UiReplay):
     def _reset_cur_slice_id(self):
         self._cur_slice = self._get_middle_slice_id()
 
+    def get_cur_patient_idl_step(self):
+        return self.__idl_step["patient={}".format(self._cur_patient)]
+
+    def set_cur_patient_idl_step(self, step: str):
+        self.__idl_step["patient={}".format(self._cur_patient)] = step
+
     def __update_annotation_msg(self):
-        cur_patient_idl_step = self.__idl_step["patient={}".format(self._cur_patient)]
+        cur_patient_idl_step = self.get_cur_patient_idl_step()
 
         if cur_patient_idl_step == CLICK_GTVT_CENTER:
             self._text_box_annotation_msg.setText(
                 "Please click the center of GTVt, then press OK"
             )
 
-        elif cur_patient_idl_step == DELINEATE_GTVT:
+        elif cur_patient_idl_step == DRAW_GTVT:
             self._text_box_annotation_msg.setText(
                 "Please delineate the countour of GTVt on transvers/coronal/sagittal plane, then press OK"
             )

@@ -24,13 +24,12 @@ class DataSetBaseline(DatasetCore):
         return len(self.__patients)
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
-        final = Dict()
-
         # load origin labels
         origin = Img.load_labels(dataset_dir=self._dataset_dir, patient=patient)
+        tmp = Dict()
+        final = Dict()
 
         # loop until target volume is big enough
-        tmp = Dict()
         for k in range(50):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!

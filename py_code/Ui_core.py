@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file '/mnt/faststorage/alan/iDL_3d/py_code/core.ui'
+# Form implementation generated from reading ui file '/home/alan/alan/iDL_3d/py_code/core.ui'
 #
 # Created by: PyQt5 UI code generator 5.9.2
 #
@@ -16,16 +16,16 @@ class Ui_Core(object):
         self._central_widget = QtWidgets.QWidget(Core)
         self._central_widget.setObjectName("_central_widget")
         self._img_qlabel_ct = QtWidgets.QLabel(self._central_widget)
-        self._img_qlabel_ct.setGeometry(QtCore.QRect(50, 10, 41, 81))
+        self._img_qlabel_ct.setGeometry(QtCore.QRect(40, 20, 71, 71))
         self._img_qlabel_ct.setObjectName("_img_qlabel_ct")
         self._img_qlabel_pt = QtWidgets.QLabel(self._central_widget)
-        self._img_qlabel_pt.setGeometry(QtCore.QRect(150, 20, 81, 71))
+        self._img_qlabel_pt.setGeometry(QtCore.QRect(150, 20, 71, 71))
         self._img_qlabel_pt.setObjectName("_img_qlabel_pt")
         self._img_qlabel_mrt1 = QtWidgets.QLabel(self._central_widget)
         self._img_qlabel_mrt1.setGeometry(QtCore.QRect(40, 110, 71, 71))
         self._img_qlabel_mrt1.setObjectName("_img_qlabel_mrt1")
         self._img_qlabel_mrt2 = QtWidgets.QLabel(self._central_widget)
-        self._img_qlabel_mrt2.setGeometry(QtCore.QRect(160, 120, 71, 61))
+        self._img_qlabel_mrt2.setGeometry(QtCore.QRect(150, 110, 71, 71))
         self._img_qlabel_mrt2.setObjectName("_img_qlabel_mrt2")
         self._text_label_idl_gtvt = QtWidgets.QLabel(self._central_widget)
         self._text_label_idl_gtvt.setGeometry(QtCore.QRect(300, 150, 101, 15))

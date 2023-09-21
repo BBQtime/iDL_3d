@@ -244,6 +244,8 @@ class DataSetIDLGTVt(DatasetCore):
                 if final == {}:
                     for i in ["label", "pred", "seed"]:
                         final[i] = tmp[i]
+                    if origin_label_pred_sum == 0:
+                        break
 
                 # keep the seed/label/pred with largest target volume
                 final_label_pred_sum = final["label"].sum() + final["pred"].sum()
