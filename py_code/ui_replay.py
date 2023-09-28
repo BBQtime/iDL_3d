@@ -466,8 +466,7 @@ class UiReplay(QMainWindow, Ui_Core):
         # hide annotation controls
         self._text_box_annotation_msg.hide()
         self._text_label_annotation_tools.hide()
-        self._btn_pen.hide()
-        self._btn_eraser.hide()
+        self._btn_drawing_mode.hide()
         self._btn_clear.hide()
         self._btn_confirm.hide()
         self._text_label_idl_progress.hide()
@@ -630,9 +629,9 @@ class UiReplay(QMainWindow, Ui_Core):
         arrow_btn_width = 30
 
         if platform.system().lower() == "linux":
-            gap = 30
+            gap = 20
         else:  # windows
-            gap = 50
+            gap = 40
 
         radio_btn_height = 25
         radio_btn_width = Dict()
