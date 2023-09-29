@@ -803,7 +803,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 self._img_qlabel[i].width() * 3,
                 QImage.Format_RGB888,
             )
-            self._img_qlabel[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._img_qlabel[i].set_background(qt_image)
 
     def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
@@ -1397,7 +1397,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 rgb_img_width * rgb_img_chan,
                 QImage.Format_RGB888,
             )
-            self._img_qlabel[i].setPixmap(QPixmap.fromImage(qt_image))
+            self._img_qlabel[i].set_background(qt_image)
 
     def _add_label_text_on_rgb_img(self, rgb_img):
         rgb_img_height = rgb_img.shape[0]

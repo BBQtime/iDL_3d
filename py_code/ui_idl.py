@@ -6,7 +6,7 @@ from custom import Debug, Dict, Directory, Folder
 from custom import Global as g
 from custom import Img, Json, List, Nii, Time, Value
 from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QIcon, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt5.QtGui import QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
 from training_idl_gtvn import TrainingIDLGTVn
 from ui_replay import UiReplay
@@ -139,8 +139,7 @@ class CustomQLabel(QLabel):
 
         # gtvt painting
         self.setMouseTracking(True)
-        self.paint_pos = None  # Store the last painted point
-        self.pen_color = Qt.green
+        self.background_img = None
         self.drawing_layer = QPixmap(self.size())
         self.drawing_layer.fill(Qt.transparent)
 
@@ -148,50 +147,45 @@ class CustomQLabel(QLabel):
         super().resizeEvent(event)
         # Resize the drawing layer pixmap to match the new size of the QLabel
         self.drawing_layer = self.drawing_layer.scaled(self.size())
-        # print("qlabel:", self.size())
-        # print("layer:", self.drawing_layer.size())
 
     def mousePressEvent(self, event: QMouseEvent):
         super().mousePressEvent(event)
 
-        if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
-            if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
-                self.paint_pos = event.pos()
+        if event.button() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
+                self.window().draw_on_4_qlabels_press(event)
 
-        elif self.window().get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
-            self.window().add_4_crosses(event.pos(), add_gtvn_click=True)
+            elif self.window().get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
+                self.window().add_4_crosses(event.pos(), add_gtvn_click=True)
 
-    def mouseReleaseEvent(self, event):
+    def mouseMoveEvent(self, event: QMouseEvent):
+        super().mouseMoveEvent(event)
+
+        # use event.buttons() instead of event.button()
+        # button() returns the mouse button that caused the event, which is Qt::NoButton
+        if event.buttons() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
+                self.window().draw_on_4_qlabels_move(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
-        if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
-            if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
-                self.paint_pos = None
-
-    def mouseMoveEvent(self, event):
-        if self.paint_pos and (
-            event.buttons() == Qt.LeftButton or event.buttons() == Qt.RightButton
-        ):
-            pen_size = self.window().get_pen_size()
-            painter = QPainter(self.drawing_layer)
-
-            if self.window().eraser_mode:
-                painter.setCompositionMode(QPainter.CompositionMode_Clear)
-                painter.setPen(
-                    QPen(Qt.transparent, pen_size + 2, Qt.SolidLine, Qt.RoundCap)
-                )
-            else:
-                painter.setPen(
-                    QPen(self.pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
-                )
-            painter.drawLine(self.paint_pos, event.pos())
-            self.paint_pos = event.pos()
-            self.update()  # Schedule a repaint
+        if event.button() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == DRAW_GTVT:
+                self.window().draw_on_4_qlabels_release()
 
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
-        painter.drawPixmap(self.rect(), self.drawing_layer)
+        if self.background_img:
+            painter.drawPixmap(self.rect(), self.background_img)
+            # 0 for fully transparent, 255 for fully opaque
+            painter.setOpacity(100 / 255)
+            painter.drawPixmap(self.rect(), self.drawing_layer)
+
+    def set_background(self, img: QImage):
+        self.background_img = QPixmap.fromImage(img)
+        self.update()
 
     def get_cross_by_id(self, cross_id: int) -> DraggableCross:
         for cross in self.crosses_list:
@@ -249,6 +243,39 @@ class CustomQLabel(QLabel):
 
 
 class UiIdl(UiReplay):
+    def draw_on_4_qlabels_press(self, event: QMouseEvent):
+        self.paint_pos = event.pos()
+
+    def draw_on_4_qlabels_move(self, event: QMouseEvent):
+        if self.paint_pos is None:
+            return
+        pen_size = self.get_pen_size()
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            painter = QPainter(self._img_qlabel[i].drawing_layer)
+
+            if self.eraser_mode:
+                painter.setCompositionMode(QPainter.CompositionMode_Clear)
+                painter.setPen(
+                    QPen(Qt.transparent, pen_size + 2, Qt.SolidLine, Qt.RoundCap)
+                )
+            else:
+                # smooth
+                painter.setRenderHint(QPainter.Antialiasing)
+                # Set the composition mode to control alpha blending
+                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                painter.setPen(
+                    QPen(self.pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
+                )
+
+            painter.drawLine(self.paint_pos, event.pos())
+
+            self._img_qlabel[i].update()  # schedule a repaint
+
+        self.paint_pos = event.pos()  # update paint pos
+
+    def draw_on_4_qlabels_release(self):
+        self.paint_pos = None
+
     def __confirm_annotation(self):
         if self.get_cur_patient_idl_step() == CLICK_GTVN_CENTER:
             # copy data (dont change origin ndarray)
@@ -450,8 +477,12 @@ class UiIdl(UiReplay):
         # save the position of gtvn clicks
         self.__gtvn_clicks = List()
 
-        # drawing using eraser or pen
+        # drawing
         self.eraser_mode = False
+        self.paint_pos = None  # Store the last painted point
+
+        # r/g/b/transparency, all range from 0 to 255
+        self.pen_color = Qt.green  # QColor(0, 255, 0, 150)
 
     def __save_idl_step(self):
         for i in ["gtvt", "gtvn"]:
