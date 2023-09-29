@@ -511,7 +511,11 @@ class UiIdl(UiReplay):
         super().mouseReleaseEvent(event)
 
     def __clear_annotation(self):
-        print("clear annotation")
+        # clear drawing layer of each img_qlabel
+        for i in ["ct", "pt", "mrt1", "mrt2"]:
+            self._img_qlabel[i].drawing_layer = QPixmap(self.size())
+            self._img_qlabel[i].drawing_layer.fill(Qt.transparent)
+            self._img_qlabel[i].update()
 
     def __switch_drawing_mode(self):
         if self.get_cur_patient_idl_step() == DRAW_GTVT:
@@ -722,7 +726,7 @@ class UiIdl(UiReplay):
 
         elif cur_patient_idl_step == CLICK_GTVN_CENTER:
             self._text_box_annotation_msg.setText(
-                "Please click the center of GTVns, then press OK"
+                "Please click the center of each involved lymph nodes, then press OK."
             )
 
         elif cur_patient_idl_step == CORRECTION:
