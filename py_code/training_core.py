@@ -9,7 +9,7 @@ from typing import Union
 
 import numpy as np
 import torch
-from custom import GPU, Debug, Dict, Directory
+from custom import GPU, Debug, Dict, DirExplorer
 from custom import Global as g
 from custom import Img, Json, List, Time, Value
 from dataset_baseline import DataSetBaseline
@@ -17,6 +17,7 @@ from dataset_idl_gtvn import DataSetIDLGTVn
 from dataset_idl_gtvt import DataSetIDLGTVt
 from numpy import ndarray
 from segment_metric import SegmentationMetric
+from str_lib import StrLib as s
 from torch import Tensor, optim
 from torch.nn import DataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -44,15 +45,15 @@ class TrainingCore:
 
         patients = Dict()
         # test set
-        for key_name in ["test.inter", "test.exter", "test"]:
+        for key_name in [s.TEST_INTER, s.TEST_EXTER, s.TEST]:
             patients[key_name] = List(dataset_split[key_name])
         # valid set
-        patients["valid"] = List(dataset_split["fold.{}".format(fold)])
+        patients[s.VALID] = List(dataset_split["fold.{}".format(fold)])
         # train set
-        patients["train"] = List()
+        patients[s.TRAIN] = List()
         for key_name in dataset_split.keys():
             if "fold." in key_name and key_name != "fold.{}".format(fold):
-                patients["train"] += List(dataset_split[key_name])
+                patients[s.TRAIN] += List(dataset_split[key_name])
 
         if debug_mode:
             for key_name in patients.keys():
@@ -73,7 +74,7 @@ class TrainingCore:
         hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
-            dataset_ver=hyper["dataset.ver"],
+            dataset_ver=hyper[s.DATASET_VER],
             dropout=hyper["dropout"],
         )
         # set multi-GPU
@@ -91,7 +92,7 @@ class TrainingCore:
 
     def _load_segment_metrics(self, dataset_ver: str) -> Dict:
         segment_metrics = Dict()
-        for metric in g.METRICS:
+        for metric in [s.DSC, s.MSD, s.HD95]:
             segment_metrics[metric] = SegmentationMetric(
                 metric=metric, dataset_ver=dataset_ver
             )
@@ -104,23 +105,23 @@ class TrainingCore:
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
         # baseline
         if idl_baseline_id is None:
-            hyper["dataset.ver"] = self._is_valid_dataset_version(
-                dataset_ver=hyper["dataset.ver"]
+            hyper[s.DATASET_VER] = self._is_valid_dataset_version(
+                dataset_ver=hyper[s.DATASET_VER]
             )
 
         # idl
         else:
             baseline_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR, idl_baseline_id, "baseline"
+                g.TRAIN_RESULTS_DIR, idl_baseline_id, s.BASELINE
             )
-            baseline_fold_dir = Directory.get_sub_folders(
+            baseline_fold_dir = DirExplorer.get_sub_folders(
                 baseline_dir, key_word="fold=", full_path=True
             )[0]
             baseline_dataset_ver = Json.load(
                 os.path.join(baseline_fold_dir, "hyper.json")
-            )["dataset.ver"]
-            hyper["dataset.ver"] = self._is_valid_dataset_version(
-                dataset_ver=hyper["dataset.ver"],
+            )[s.DATASET_VER]
+            hyper[s.DATASET_VER] = self._is_valid_dataset_version(
+                dataset_ver=hyper[s.DATASET_VER],
                 origin_dataset_ver=baseline_dataset_ver,
             )
 
@@ -190,7 +191,7 @@ class TrainingCore:
                 simple_hyper[key_name] = hyper[key_name].to_str()
 
             # only save loss function name
-            elif key_name == "loss.func":
+            elif key_name == s.LOSS_FUNC:
                 simple_hyper[key_name] = "unified.focal.loss"
 
             # only save cnn name
@@ -267,7 +268,7 @@ class TrainingCore:
 
         if debug_mode:
             train_id += "_"
-            train_id += g.DELETE_FLAG
+            train_id += s.DELETE_FLAG
 
         if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
@@ -327,7 +328,7 @@ class TrainingCore:
     # find train result directory full path using train_id
     # for baseline, it will return the "baseline_xxxx/baseline" dir
     def _find_train_dir(self, train_id: str) -> str:
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, s.BASELINE)
 
         # train id is a baseline
         if os.path.exists(baseline_dir):
@@ -335,10 +336,10 @@ class TrainingCore:
 
         # train id is a iDL
         else:
-            for baseline_dir in Directory.get_sub_folders(
+            for baseline_dir in DirExplorer.get_sub_folders(
                 g.TRAIN_RESULTS_DIR, full_path=True
             ):
-                for train_dir in Directory.get_sub_folders(
+                for train_dir in DirExplorer.get_sub_folders(
                     baseline_dir, full_path=True
                 ):
                     if Path(train_dir).name == train_id:
@@ -403,7 +404,7 @@ class TrainingCore:
         for gtv in outputs.keys():
             for i in outputs[gtv].keys():
                 outputs[gtv][i] = Img.central_pad_and_crop(
-                    outputs[gtv][i], outputs[gtv]["label"].shape
+                    outputs[gtv][i], outputs[gtv][s.LABEL].shape
                 )
 
         # post processing (after pad and crop, before calculate scores)
@@ -413,12 +414,12 @@ class TrainingCore:
         self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate scores of current patient
-        if dataset_section != "train":
+        if dataset_section != s.TRAIN:
             for gtv in outputs.keys():
-                for metric in g.METRICS:
+                for metric in [s.DSC, s.MSD, s.HD95]:
                     outputs[gtv][metric] = segment_metrics[metric](
-                        outputs[gtv]["pred"],
-                        outputs[gtv]["label"],
+                        outputs[gtv][s.PRED],
+                        outputs[gtv][s.LABEL],
                     )
 
         return outputs
@@ -477,20 +478,20 @@ class TrainingCore:
             if dataset_ver is None:
                 dataset_ver = origin_dataset_ver
 
-            if origin_dataset_ver == "mda":
-                if dataset_ver != "mda":
+            if origin_dataset_ver == s.MDA:
+                if dataset_ver != s.MDA:
                     Debug.error_exit(
                         "due to existing train info, 'dataset_ver' is restricted to 'mda' only"
                     )
 
-            elif origin_dataset_ver == "au.1mm":
-                if dataset_ver == "au.3mm":
+            elif origin_dataset_ver == s.AU_1MM:
+                if dataset_ver == s.AU_3MM:
                     Debug.error_exit(
                         "due to existing train info, 'dataset_ver' can not be 'au.3mm'"
                     )
 
-            elif origin_dataset_ver == "au.3mm":
-                if dataset_ver != "au.3mm":
+            elif origin_dataset_ver == s.AU_3MM:
+                if dataset_ver != s.AU_3MM:
                     Debug.error_exit(
                         "due to existing train info, 'dataset_ver' is restricted to 'au.3mm' only"
                     )
@@ -501,7 +502,7 @@ class TrainingCore:
 
         # origin_dataset_ver is None
         elif (
-            dataset_ver != "au.1mm" and dataset_ver != "au.3mm" and dataset_ver != "mda"
+            dataset_ver != s.AU_1MM and dataset_ver != s.AU_3MM and dataset_ver != s.MDA
         ):
             Debug.error_exit(
                 "'dataset_ver' can not take on any values other than 'au.1mm/au.3mm/mda'"
@@ -515,11 +516,11 @@ class TrainingCore:
         dataset_ver: str = None,
     ):
         if dataset_section not in [
-            "train",
-            "valid",
-            "test",
-            "test.inter",
-            "test.exter",
+            s.TRAIN,
+            s.VALID,
+            s.TEST,
+            s.TEST_INTER,
+            s.TEST_EXTER,
         ]:
             Debug.error_exit(
                 "'dataset_section' can not take on any values other than 'train/valid/test/test.inter/test.exter'"
@@ -529,14 +530,14 @@ class TrainingCore:
         if dataset_ver is not None:
             dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
-            if dataset_ver == "mda":
-                if dataset_section == "test.inter" or dataset_section == "test.exter":
+            if dataset_ver == s.MDA:
+                if dataset_section == s.TEST_INTER or dataset_section == s.TEST_EXTER:
                     Debug.error_exit(
                         "use 'test' instead of 'test.inter/test.exter' for mda dataset"
                     )
 
-            elif dataset_ver == "au.3mm" or dataset_ver == "au.1mm":
-                if dataset_section == "test":
+            elif dataset_ver == s.AU_3MM or dataset_ver == s.AU_1MM:
+                if dataset_section == s.TEST:
                     Debug.error_exit(
                         "use 'test.inter/test.exter' instead of 'test' for au dataset"
                     )

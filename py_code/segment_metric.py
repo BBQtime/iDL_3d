@@ -7,6 +7,7 @@ from custom import Global as g
 from custom import Img
 from medpy.metric import asd, assd, hd, hd95
 from numpy import ndarray
+from str_lib import StrLib as s
 from torch import Tensor
 
 
@@ -563,14 +564,14 @@ class SegmentationMetric(nn.Module):
         else:
             pass
 
-        if self.__metric == "dsc":
+        if self.__metric == s.DSC:
             return dice(
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=False,
             )
 
-        elif self.__metric == "msd":
+        elif self.__metric == s.MSD:
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
@@ -578,7 +579,7 @@ class SegmentationMetric(nn.Module):
                 voxel_spacing=self.__nii_spacing,
             )
 
-        elif self.__metric == "hd95":
+        elif self.__metric == s.HD95:
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,

@@ -2,9 +2,10 @@ import os
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from custom import Dict, Directory, Folder
+from custom import Dict, DirExplorer, Folder
 from custom import Global as g
 from custom import Json, List, Nii
+from str_lib import StrLib as s
 from tqdm import tqdm
 
 FIGURE_IDX_FONT_SIZE = 20
@@ -21,23 +22,25 @@ def patients_overview(
     # plt.style.use("bmh")  # put this line before drawing figure
 
     patient_tumor_size_dict = Dict()
-    for patient_dir in Directory.get_sub_folders(train_result_dir, key_word="patient="):
+    for patient_dir in DirExplorer.get_sub_folders(
+        train_result_dir, key_word="patient="
+    ):
         patient_tumor_size_dict[patient_dir] = 0
 
     # iterate through patients folders
     for patient_dir in patient_tumor_size_dict.keys():
         # create list of round folders
-        round_dir_list = ["baseline"]
-        round_dir_list += Directory.get_sub_folders(
+        round_dir_list = [s.BASELINE]
+        round_dir_list += DirExplorer.get_sub_folders(
             os.path.join(train_result_dir, patient_dir),
             key_word="round=",
         )
         # initialize score_dict of cur patient
-        for metric in g.METRICS:
+        for metric in [s.DSC, s.MSD, s.HD95]:
             score_dict[patient_dir][metric] = List()
         # iterate through round folders
         for round_dir in round_dir_list:
-            iter_json_list = Directory.get_sub_files(
+            iter_json_list = DirExplorer.get_sub_files(
                 os.path.join(train_result_dir, patient_dir, round_dir),
                 key_word=".json",
             )
@@ -50,13 +53,13 @@ def patients_overview(
                     best_iter_json,
                 )
             )
-            for metric in g.METRICS:
+            for metric in [s.DSC, s.MSD, s.HD95]:
                 scores = best_score_dict[metric]["3d"]
                 score_dict[patient_dir][metric].append(scores)
 
         # get tumor size of current patient
         label_nii_path = os.path.join(
-            train_result_dir, patient_dir, "baseline", "label.nii"
+            train_result_dir, patient_dir, s.BASELINE, "label.nii"
         )
         label_data = Nii.load(label_nii_path, binary=True)
         label_size = label_data.sum()
@@ -89,22 +92,22 @@ def patients_overview(
     #     line_colors.append((cur_color, cur_color, 1))
 
     # draw line chart
-    for metric in g.METRICS:
+    for metric in [s.DSC, s.MSD, s.HD95]:
         print("draw " + metric + " plt:")
         plt.figure(figsize=(10, 5))
         fig_title = "Performance of iDL ("
 
-        if metric == "dsc":
+        if metric == s.DSC:
             plt.ylim(top=1.0)
             plt.ylabel("DSC")
             fig_title += "Dice similarity coefficient)"
 
-        elif metric == "msd":
+        elif metric == s.MSD:
             # plt.ylim(bottom=0)
             plt.ylabel("MSD (mm)")
             fig_title += "Mean surface distance)"
 
-        elif metric == "hd95":
+        elif metric == s.HD95:
             # plt.ylim(bottom=0)
             plt.ylabel("HD95 (mm)")
             fig_title += "95% Hausdorff distance)"
@@ -139,7 +142,7 @@ def patients_overview(
 
         # plt.plot(x1,y1,'ro-',x2,y2,'g+-',x3,y3,'b^-')
 
-        if metric == "dsc":
+        if metric == s.DSC:
             plt.text(
                 x=0,
                 y=0.08,
@@ -147,7 +150,7 @@ def patients_overview(
                 fontsize=FIGURE_IDX_FONT_SIZE,
                 weight="bold",
             )
-        elif metric == "msd":
+        elif metric == s.MSD:
             plt.text(
                 x=2.9,
                 y=18.85,
@@ -198,7 +201,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
         select_step = List(hyper_dict["select.step"])
 
         # after all patients data recorded
-        for metric in g.METRICS:
+        for metric in [s.DSC, s.MSD, s.HD95]:
             # transfer avg scores from dict to list
             score_list = List()
 
@@ -226,21 +229,21 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
 
             avg_score_dict[cur_idl_id][metric] = score_list
 
-    for metric in g.METRICS:
+    for metric in [s.DSC, s.MSD, s.HD95]:
         plt.figure(figsize=(10, 5))
         fig_title = "Performance of iDL ("
 
-        if metric == "dsc":
+        if metric == s.DSC:
             plt.ylim(DSC_LOW_LIMIT, 1.0)
             plt.ylabel("DSC")
             fig_title += "Dice similarity coefficient)"
 
-        elif metric == "msd":
+        elif metric == s.MSD:
             plt.ylim(0.0, 6)
             plt.ylabel("MSD (mm)")
             fig_title += "Mean surface distance)"
 
-        elif metric == "hd95":
+        elif metric == s.HD95:
             plt.ylim(0.0, 50)
             plt.ylabel("HD95 (mm)")
             fig_title += "95% Hausdorff distance)"
@@ -265,7 +268,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 plt_label = "N = "
                 plt_label += avg_score_dict[cur_idl_id][key_hyper]
 
-            elif key_hyper == "select.scenario":
+            elif key_hyper == s.SELECT_SCENARIO:
                 plt_label = "Scenario = "
 
                 if avg_score_dict[cur_idl_id][key_hyper] == "equal.divide":
@@ -301,7 +304,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
 
         plt.grid()
 
-        if metric == "dsc":
+        if metric == s.DSC:
             plt.text(
                 x=0,
                 y=DSC_LOW_LIMIT + 0.03,
@@ -310,7 +313,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 weight="bold",
             )
             plt.legend(loc="lower right")
-        elif metric == "msd":
+        elif metric == s.MSD:
             plt.text(
                 x=0,
                 y=0.4,
@@ -319,7 +322,7 @@ def compare_idl_results(key_hyper: str, idl_id_list: list):
                 weight="bold",
             )
             plt.legend(loc="upper right")
-        elif metric == "hd95":
+        elif metric == s.HD95:
             plt.legend(loc="upper right")
 
         img_path = Folder.create(os.path.join(g.PROJ_DIR, "idl_figs"))

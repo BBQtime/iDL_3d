@@ -1,8 +1,8 @@
 import sys
 
-from custom import GPU, Debug, Directory
-from custom import Global as g
+from custom import GPU, Debug
 from PyQt5.QtWidgets import QApplication
+from str_lib import StrLib as s
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
@@ -38,14 +38,14 @@ if 0:
 if 0:
     baseline.fold_wise_inference(
         "baseline_real.idl",
-        dataset_section="test.inter",
-        # dataset_ver="mda",
+        dataset_section=s.TEST_INTER,
+        # dataset_ver=s.MDA,
     )
 if 0:
     baseline.cross_valid_inference(
         "baseline_2023.07.05.16.49.25_1mm_best",
-        dataset_section="test",
-        dataset_ver="mda",
+        dataset_section=s.TEST,
+        dataset_ver=s.MDA,
     )
 
 
@@ -54,27 +54,27 @@ idl_gtvn = TrainingIDLGTVn()
 if 0:
     idl_gtvn.new_training(
         baseline_id="baseline_2023.07.05.16.49.25_1mm",
-        train_remark="no.pt",
+        train_remark=s.NO_PT,
         debug_mode=1,
     )
 if 0:
     idl_gtvn.fold_wise_inference(
         idl_gtvn_id="idl.gtvn_2023.08.18.02.37.30_no.pt",
-        dataset_section="test",
-        dataset_ver="mda",
+        dataset_section=s.TEST,
+        dataset_ver=s.MDA,
     )
 if 0:
     idl_gtvn.cross_valid_inference(
         idl_gtvn_id="idl.gtvn_2023.08.18.02.37.30_no.pt",
-        dataset_section="test",
-        dataset_ver="mda",
+        dataset_section=s.TEST,
+        dataset_ver=s.MDA,
     )
 if 0:
     idl_gtvn.real_idl(
         idl_gtvn_id="idl.gtvn_test",
         patient="106",
-        dataset_section="test.inter",
-        dataset_ver="au.1mm",
+        dataset_section=s.TEST_INTER,
+        dataset_ver=s.AU_1MM,
     )
 
 
@@ -88,7 +88,7 @@ if 0:
 if 0:
     idl_gtvt.inference(
         "idl.gtvt_2023.08.24.16.21.09_no.pt",
-        dataset_section="test.inter",
+        dataset_section=s.TEST_INTER,
     )
 
 

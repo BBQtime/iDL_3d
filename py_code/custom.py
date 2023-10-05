@@ -19,6 +19,7 @@ import SimpleITK as sitk
 import torch
 from natsort import natsorted
 from numpy import ndarray
+from str_lib import StrLib as s
 from torch import Tensor
 
 
@@ -356,68 +357,21 @@ class Img:
         labels = Dict()
 
         # load gtvt
-        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
+        labels[s.GTVT] = nii_load_func(paths[s.GTVT], binary=True)
 
         # load gtvn
-        if os.path.exists(paths["gtvn"]):
-            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
+        if os.path.exists(paths[s.GTVN]):
+            labels[s.GTVN] = nii_load_func(paths[s.GTVN], binary=True)
         else:
-            labels["gtvn"] = np.zeros_like(labels["gtvt"])
+            labels[s.GTVN] = np.zeros_like(labels[s.GTVT])
 
         # load gtvs
-        if os.path.exists(paths["gtvs"]):
-            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
+        if os.path.exists(paths[s.GTVS]):
+            labels[s.GTVS] = nii_load_func(paths[s.GTVS], binary=True)
         else:
-            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+            labels[s.GTVS] = np.maximum(labels[s.GTVT], labels[s.GTVN])
 
         return labels
-
-    # def show(
-    #     img: Union[ndarray, Tensor], win_title: str = "", print_info: bool = False
-    # ):
-    #     if print_info:
-    #         print("image data type:", type(img))
-    #         print("image shape:", img.shape)
-    #         print("image max value:", img.max())
-    #         print("image min value:", img.min())
-
-    #     if isinstance(img, Tensor):
-    #         # detach: return a tensor share the same memory but without grad
-    #         img = img.detach().cpu().numpy()
-
-    #     if len(img.shape) == 3:
-    #         img = img[img.shape[0] // 2]
-    #     elif len(img.shape) == 4:
-    #         img = img[img.shape[0] // 2][img.shape[1] // 2]
-
-    #     cv2.imshow(win_title, img)
-    #     cv2.waitKey(0)
-
-    # def save(
-    #     img: Union[ndarray, Tensor],
-    #     img_name: str = "",
-    #     save_dir: str = "",
-    #     extension_name: str = ".png",
-    # ):
-    #     if isinstance(img, Tensor):
-    #         # detach: return a tensor share the same memory but without grad
-    #         img = img.detach().cpu().numpy()
-
-    #     if len(img.shape) == 3:
-    #         img = img[img.shape[0] // 2]
-    #     elif len(img.shape) == 4:
-    #         img = img[img.shape[0] // 2][img.shape[1] // 2]
-
-    #     if save_dir == "":
-    #         save_dir = os.path.join(Global.PROJ_DIR, "debug")
-    #     if img_name == "":
-    #         img_name = "debug"
-    #     if not img_name.endswith(extension_name):
-    #         img_name += extension_name
-    #     save_path = os.path.join(save_dir, img_name)
-
-    #     imageio.imwrite(save_path, img)
-    #     return save_path
 
 
 class Nii:
@@ -559,7 +513,7 @@ class Folder:
             return False
 
 
-class Directory:
+class DirExplorer:
     def __get_sub_items(
         input_dir: str,
         full_path: bool,
@@ -602,7 +556,7 @@ class Directory:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = Directory.__get_sub_items(
+        sub_list = DirExplorer.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -619,7 +573,7 @@ class Directory:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = Directory.__get_sub_items(
+        sub_list = DirExplorer.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -636,7 +590,7 @@ class Directory:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = Directory.__get_sub_items(
+        sub_list = DirExplorer.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -649,12 +603,12 @@ class Directory:
     def __walk_sub_dirs(input_dir: str) -> List:
         sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
         for input_dir in sub_dirs:
-            sub_dirs.extend(Directory.__walk_sub_dirs(input_dir))
+            sub_dirs.extend(DirExplorer.__walk_sub_dirs(input_dir))
         return sub_dirs
 
     def walk_sub_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
         sub_dirs = List()
-        for i in Directory.__walk_sub_dirs(input_dir):
+        for i in DirExplorer.__walk_sub_dirs(input_dir):
             if key_word == "" or key_word in i:
                 sub_dirs.append(i)
         sub_dirs.remove_duplicates()
@@ -685,8 +639,8 @@ class Debug:
         assert 0, err_msg
 
     def clear_debug_data():
-        for i in Directory.walk_sub_dirs(
-            Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
+        for i in DirExplorer.walk_sub_dirs(
+            Global.TRAIN_RESULTS_DIR, key_word=s.DELETE_FLAG
         ):
             Folder.delete(i)
         Folder.clear(os.path.join(Global.PROJ_DIR, "debug"))
@@ -709,8 +663,6 @@ class Time:
 class Global:
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
     EPS = sys.float_info.epsilon
-    DELETE_FLAG = "to.delete"
-    METRICS = ["dsc", "msd", "hd95"]
 
     __settings = Json.load(os.path.join(PROJ_DIR, "settings.json"))
 
@@ -742,14 +694,14 @@ class Global:
 
     # Windows
     if platform.system().lower() == "windows":
-        for i in ["au.3mm", "au.1mm", "mda"]:
+        for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
 
     # Linux
     elif platform.system().lower() == "linux":
-        for i in ["au.3mm", "au.1mm", "mda"]:
+        for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
@@ -758,37 +710,42 @@ class Global:
 
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
-    IMG_SHAPE["au.3mm"] = List(__settings["img.shape.3mm"])
-    IMG_SHAPE["au.1mm"] = List(__settings["img.shape.1mm"])
-    IMG_SHAPE["mda"] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[s.AU_3MM] = List(__settings["img.shape.3mm"])
+    IMG_SHAPE[s.AU_1MM] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[s.MDA] = List(__settings["img.shape.1mm"])
 
     # NII_SPACING (Width, Height, Depth)
     NII_SPACING = Dict()
-    NII_SPACING["au.3mm"] = List(__settings["nii.spacing.3mm"])
-    NII_SPACING["au.1mm"] = List(__settings["nii.spacing.1mm"])
-    NII_SPACING["mda"] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[s.AU_3MM] = List(__settings["nii.spacing.3mm"])
+    NII_SPACING[s.AU_1MM] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[s.MDA] = List(__settings["nii.spacing.1mm"])
 
-    for i in ["au.3mm", "au.1mm", "mda"]:
+    for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
         IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
         NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
     # dataset splitting
     DATASET_SPLIT_JSON_PATH = Dict()
-    DATASET_SPLIT_JSON_PATH["au.1mm"] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[s.AU_1MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH["au.3mm"] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[s.AU_3MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH["mda"] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[s.MDA] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.mda"]
     )
 
     HYPER_JSON_PATH = Dict()
-    for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+    for i in [s.BASELINE, s.IDL_GTVT, s.IDL_GTVN]:
         HYPER_JSON_PATH[i] = os.path.join(
             PROJ_DIR, __settings["hyper.json.{}".format(i)]
         )
 
     DATASET_FOLDS = __settings["dataset.folds"]
     TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])
+
+    # icon path
+    CROSS_DIR_SELECTED = os.path.join(PROJ_DIR, "icons", "cross_selected.png")
+    CROSS_DIR = os.path.join(PROJ_DIR, "icons", "cross.png")
+    CROSS_SIZE = 20
