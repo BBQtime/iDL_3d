@@ -4,13 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from custom import GPU, Debug, Dict, DirExplorer, Folder
+from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, DirExplorer, Folder
 from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom import Img, Json, List, Metric, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from str_lib import StrLib as s
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -71,11 +70,11 @@ class TrainingBaseline(TrainingCore):
 
         # load patients after dataset version is selected
         patients = self._load_patients(
-            dataset_ver=hyper[s.DATASET_VER],
+            dataset_ver=hyper["dataset.ver"],
             fold=fold,
             debug_mode=debug_mode,
         )
-        for key_name in [s.TRAIN, s.VALID]:
+        for key_name in [DatasetPart.TRAIN, DatasetPart.VALID]:
             hyper["{}.patients".format(key_name)] = patients[key_name]
 
         self._load_hyper_loss_func(hyper)
@@ -93,12 +92,12 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_optim_and_scheduler(hyper=hyper)
 
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
-        if hyper[s.NO_PT]:
+        if hyper["no.pt"]:
             in_chan -= 1
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
-        hyper[s.LOSS_FUNC] = UnifiedFocalLoss(
+        hyper["loss.func"] = UnifiedFocalLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
@@ -107,9 +106,9 @@ class TrainingBaseline(TrainingCore):
 
     def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str = None):
         # load train/valid/test datasets
-        for i in [s.TRAIN, s.VALID]:
+        for i in [DatasetPart.TRAIN, DatasetPart.VALID]:
             # only use data augmentation on training set
-            if i == s.TRAIN:
+            if i == DatasetPart.TRAIN:
                 augment = Dict()
                 augment["methods"] = hyper["augment.methods"]
                 augment["pct"] = hyper["augment.pct"]
@@ -119,16 +118,16 @@ class TrainingBaseline(TrainingCore):
                 augment = None
             hyper["{}.set".format(i)] = DataSetBaseline(
                 patients=hyper["{}.patients".format(i)],
-                dataset_ver=hyper[s.DATASET_VER],
-                no_pt=hyper[s.NO_PT],
+                dataset_ver=hyper["dataset.ver"],
+                no_pt=hyper["no.pt"],
                 augment=augment,
             )
 
     # baseline/idl.gtvn/idl.gtvs share this function
     def _load_hyper_data_loaders(self, hyper: Dict):
-        for i in [s.TRAIN, s.VALID]:
+        for i in [DatasetPart.TRAIN, DatasetPart.VALID]:
             # only shuffle train loader
-            if i == s.TRAIN:
+            if i == DatasetPart.TRAIN:
                 shuffle = True
             else:
                 shuffle = False
@@ -144,7 +143,13 @@ class TrainingBaseline(TrainingCore):
         simple_hyper = super()._simplify_hyper(hyper)
 
         ignore_list = []
-        for i in [s.TRAIN, s.VALID, s.TEST_INTER, s.TEST_EXTER, s.TEST]:
+        for i in [
+            DatasetPart.TRAIN,
+            DatasetPart.VALID,
+            DatasetPart.TEST_INTER,
+            DatasetPart.TEST_EXTER,
+            DatasetPart.TEST,
+        ]:
             ignore_list.append("{}.patients".format(i))
             ignore_list.append("{}.set".format(i))
             ignore_list.append("{}.loader".format(i))
@@ -188,14 +193,14 @@ class TrainingBaseline(TrainingCore):
         valid_loss = List()
 
         for i in loss_dict:
-            train_loss.append(loss_dict[i][s.TRAIN])
-            valid_loss.append(loss_dict[i][s.VALID])
+            train_loss.append(loss_dict[i][DatasetPart.TRAIN])
+            valid_loss.append(loss_dict[i][DatasetPart.VALID])
 
         # draw figure
         plt.figure().clear()
         plt.ylim(min(train_loss) - 0.05, max(train_loss) + 0.05)
-        plt.plot(range(1, len(loss_dict) + 1), train_loss, label=s.TRAIN)
-        plt.plot(range(1, len(loss_dict) + 1), valid_loss, label=s.VALID)
+        plt.plot(range(1, len(loss_dict) + 1), train_loss, label=DatasetPart.TRAIN)
+        plt.plot(range(1, len(loss_dict) + 1), valid_loss, label=DatasetPart.VALID)
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
@@ -203,7 +208,7 @@ class TrainingBaseline(TrainingCore):
         input_imgs = item[0].to(g.DEVICE)
         labels = item[1].to(g.DEVICE)
         preds = hyper["cnn"](input_imgs)
-        loss = hyper[s.LOSS_FUNC](preds, labels)
+        loss = hyper["loss.func"](preds, labels)
         return loss
 
     def _training_all_epochs(self, hyper: Dict, fold_dir: str):
@@ -250,8 +255,8 @@ class TrainingBaseline(TrainingCore):
             # save loss in json
             loss_dict = Json.load(loss_json_path)
             epoch_loss = Dict()
-            epoch_loss[s.TRAIN] = train_loss
-            epoch_loss[s.VALID] = valid_loss
+            epoch_loss[DatasetPart.TRAIN] = train_loss
+            epoch_loss[DatasetPart.VALID] = valid_loss
             loss_dict["epoch={:03d}".format(hyper["epochs.actual"])] = epoch_loss
             Json.save(loss_dict, loss_json_path)
             # draw loss figure
@@ -380,9 +385,9 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         if idl_gtvn_baseline_id is None:
-            hyper_json_path = g.HYPER_JSON_PATH[s.BASELINE]
+            hyper_json_path = g.HYPER_JSON_PATH["baseline"]
         else:
-            hyper_json_path = g.HYPER_JSON_PATH[s.IDL_GTVN]
+            hyper_json_path = g.HYPER_JSON_PATH["idl.gtvn"]
 
         for hyper in self._load_hyper_series_from_json(hyper_json_path):
             # init train id
@@ -400,7 +405,7 @@ class TrainingBaseline(TrainingCore):
             print(train_id)
 
             if idl_gtvn_baseline_id is None:
-                train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, s.BASELINE)
+                train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
             else:
                 train_dir = os.path.join(
                     g.TRAIN_RESULTS_DIR, idl_gtvn_baseline_id, train_id
@@ -414,20 +419,20 @@ class TrainingBaseline(TrainingCore):
             )
 
             # inference
-            if hyper[s.DATASET_VER] == s.MDA:
-                dataset_section_list = [s.VALID, s.TEST]
+            if hyper["dataset.ver"] == DatasetVer.MDA:
+                dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST]
             else:
-                dataset_section_list = [s.VALID, s.TEST_INTER]
+                dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST_INTER]
 
             # if baseline, save pred of training set
             if idl_gtvn_baseline_id is None:
-                dataset_section_list.append(s.TRAIN)
+                dataset_part_list.append(DatasetPart.TRAIN)
 
-            for dataset_section in dataset_section_list:
+            for dataset_part in dataset_part_list:
                 self._fold_wise_inference(
                     train_id=train_id,
-                    dataset_ver=hyper[s.DATASET_VER],
-                    dataset_section=dataset_section,
+                    dataset_ver=hyper["dataset.ver"],
+                    dataset_part=dataset_part,
                     debug_mode=debug_mode,
                 )
 
@@ -435,26 +440,26 @@ class TrainingBaseline(TrainingCore):
             self._remove_non_optimal_epochs(train_id)
 
             # cross validation evaluation after non optimal epochs removed
-            dataset_section_list.remove(s.VALID)
-            for dataset_section in dataset_section_list:
+            dataset_part_list.remove(DatasetPart.VALID)
+            for dataset_part in dataset_part_list:
                 self._cross_valid_inference(
                     train_id=train_id,
-                    dataset_ver=hyper[s.DATASET_VER],
-                    dataset_section=dataset_section,
+                    dataset_ver=hyper["dataset.ver"],
+                    dataset_part=dataset_part,
                     debug_mode=debug_mode,
                 )
 
     def fold_wise_inference(
         self,
         baseline_id: str,
-        dataset_section: str,  # train/valid/test.inter/test.exter/test
+        dataset_part: str,  # train/valid/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._fold_wise_inference(
             train_id=baseline_id,
-            dataset_section=dataset_section,
+            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
@@ -462,7 +467,7 @@ class TrainingBaseline(TrainingCore):
     def _fold_wise_inference(
         self,
         train_id: str,
-        dataset_section: str,  # train/valid/test.inter/test.exter/test
+        dataset_part: str,  # train/valid/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
@@ -480,19 +485,19 @@ class TrainingBaseline(TrainingCore):
         )
 
         hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
-        no_pt = hyper[s.NO_PT]
-        training_dataset_ver = hyper[s.DATASET_VER]
+        no_pt = hyper["no.pt"]
+        training_dataset_ver = hyper["dataset.ver"]
 
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        self._is_valid_dataset_section(
-            dataset_section=dataset_section,
+        self._is_valid_dataset_part(
+            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
         )
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_section))
+        print("dataset section: {}".format(dataset_part))
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics(dataset_ver)
@@ -522,22 +527,25 @@ class TrainingBaseline(TrainingCore):
                 cnn = self._load_exist_cnn(cnn_path)
 
                 # initialize scores dict (only for test sets)
-                if s.TEST in dataset_section or s.VALID in dataset_section:
+                if (
+                    DatasetPart.TEST in dataset_part
+                    or DatasetPart.VALID in dataset_part
+                ):
                     epoch_scores = self._inference_init_scores(
                         baseline_id=baseline_id,
                         dataset_ver=dataset_ver,
-                        dataset_section=dataset_section,
+                        dataset_part=dataset_part,
                         patients=patients,
                     )
 
                 # loop through each patient
-                for patient in tqdm(patients[dataset_section]):
+                for patient in tqdm(patients[dataset_part]):
                     # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                     patient_outputs = self._inference_single_patient(
                         patient=patient,
                         cnn=cnn,
                         dataset_ver=dataset_ver,
-                        dataset_section=dataset_section,
+                        dataset_part=dataset_part,
                         no_pt=no_pt,
                         segment_metrics=segment_metrics,
                         idl_gtvn_baseline_id=baseline_id,
@@ -549,11 +557,14 @@ class TrainingBaseline(TrainingCore):
                         epoch_dir=epoch_dir,
                         patient_outputs=patient_outputs,
                         dataset_ver=dataset_ver,
-                        dataset_section=dataset_section,
+                        dataset_part=dataset_part,
                     )
 
                     # record score of current patient (test and valid sets only)
-                    if s.TEST in dataset_section or s.VALID in dataset_section:
+                    if (
+                        DatasetPart.TEST in dataset_part
+                        or DatasetPart.VALID in dataset_part
+                    ):
                         self._fold_wise_inference_record_patient_score(
                             patient=patient,
                             patient_outputs=patient_outputs,
@@ -562,12 +573,15 @@ class TrainingBaseline(TrainingCore):
 
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
-                if s.TEST in dataset_section or s.VALID in dataset_section:
+                if (
+                    DatasetPart.TEST in dataset_part
+                    or DatasetPart.VALID in dataset_part
+                ):
                     self._inference_calculate_save_avg_median(
                         scores=epoch_scores,
                         save_dir=epoch_dir,
                         dataset_ver=dataset_ver,
-                        dataset_section=dataset_section,
+                        dataset_part=dataset_part,
                     )
 
                 continue  # next epoch
@@ -576,13 +590,13 @@ class TrainingBaseline(TrainingCore):
         self,
         baseline_id: str = None,
         dataset_ver: str = None,
-        dataset_section: str = None,
+        dataset_part: str = None,
         patients: Dict = None,
     ) -> Dict:
         scores = Dict()
-        for stats in [s.MEDIAN, s.AVG]:
-            for gtv in [s.GTVS, s.GTVT, s.GTVN]:
-                for metric in [s.DSC, s.MSD, s.HD95]:
+        for stats in ["median", "avg"]:
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     scores[stats][gtv][metric] = List()
 
         return scores
@@ -593,18 +607,18 @@ class TrainingBaseline(TrainingCore):
         epoch_dir: str,
         patient_outputs: Dict,
         dataset_ver: str,
-        dataset_section: str,
+        dataset_part: str,
     ):
         patient_dir = os.path.join(
             epoch_dir,
-            s.PATIENTS,
+            "patients",
             "patient={}".format(patient),
         )
         Folder.create(patient_dir)
 
-        for gtv in [s.GTVT, s.GTVN]:
+        for gtv in ["gtvt", "gtvn"]:
             Nii.save(
-                img=patient_outputs[gtv][s.PRED],
+                img=patient_outputs[gtv]["pred"],
                 save_path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
                 spacing=g.NII_SPACING[dataset_ver],
             )
@@ -613,44 +627,44 @@ class TrainingBaseline(TrainingCore):
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for gtv in patient_outputs.keys():
-            for metric in [s.DSC, s.MSD, s.HD95]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 # save cur patient score
                 scores["patient={}".format(patient)][gtv][metric] = patient_outputs[
                     gtv
                 ][metric]
                 # add scores of current patient into avg and median
-                for stats in [s.MEDIAN, s.AVG]:
+                for stats in ["median", "avg"]:
                     scores[stats][gtv][metric].append(patient_outputs[gtv][metric])
 
     def _inference_calculate_save_avg_median(
-        self, scores: Dict, save_dir: str, dataset_ver: str, dataset_section: str
+        self, scores: Dict, save_dir: str, dataset_ver: str, dataset_part: str
     ):
-        for gtv in [s.GTVS, s.GTVT, s.GTVN]:
-            for metric in [s.DSC, s.MSD, s.HD95]:
-                scores[s.MEDIAN][gtv][metric] = Value.median(
-                    scores[s.MEDIAN][gtv][metric]
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                scores["median"][gtv][metric] = Value.median(
+                    scores["median"][gtv][metric]
                 )
-                scores[s.AVG][gtv][metric] = Value.avg(scores[s.AVG][gtv][metric])
+                scores["avg"][gtv][metric] = Value.avg(scores["avg"][gtv][metric])
 
         # save scores in json
         Json.save(
             data=scores,
             path=os.path.join(
-                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_section)
+                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
             ),
         )
 
     def cross_valid_inference(
         self,
         baseline_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_part: str,  # train/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._cross_valid_inference(
             train_id=baseline_id,
-            dataset_section=dataset_section,
+            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
@@ -658,7 +672,7 @@ class TrainingBaseline(TrainingCore):
     def _cross_valid_inference(
         self,
         train_id: str,
-        dataset_section: str,  # train/test.inter/test.exter/test
+        dataset_part: str,  # train/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
         debug_mode: bool = False,
     ):
@@ -676,24 +690,24 @@ class TrainingBaseline(TrainingCore):
         )
 
         hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
-        training_dataset_ver = hyper[s.DATASET_VER]
+        training_dataset_ver = hyper["dataset.ver"]
 
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        self._cross_valid_inference_is_valid_dataset_section(
-            dataset_section=dataset_section,
+        self._cross_valid_inference_is_valid_dataset_part(
+            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
         )
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_section))
+        print("dataset section: {}".format(dataset_part))
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics(dataset_ver)
 
         # create folder in train_dir to save cross_valid preds
-        Folder.create(os.path.join(Path(fold_dirs[0]).parent, s.PATIENTS))
+        Folder.create(os.path.join(Path(fold_dirs[0]).parent, "patients"))
 
         patients = self._load_patients(
             dataset_ver=dataset_ver,
@@ -701,18 +715,18 @@ class TrainingBaseline(TrainingCore):
         )
 
         # initialize scores dict
-        if s.TEST in dataset_section:
+        if DatasetPart.TEST in dataset_part:
             scores = self._inference_init_scores(
                 baseline_id=baseline_id,
                 dataset_ver=dataset_ver,
-                dataset_section=dataset_section,
+                dataset_part=dataset_part,
                 patients=patients,
             )
 
-        for patient in tqdm(patients[dataset_section]):
+        for patient in tqdm(patients[dataset_part]):
             # initialize preds
             preds = Dict()
-            for gtv in [s.GTVS, s.GTVT, s.GTVN]:
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
                 preds[gtv] = None
 
             for fold_dir in fold_dirs:
@@ -730,9 +744,9 @@ class TrainingBaseline(TrainingCore):
 
                 # load preds
                 patient_dir = os.path.join(
-                    epoch_dir, s.PATIENTS, "patient={}".format(patient)
+                    epoch_dir, "patients", "patient={}".format(patient)
                 )
-                for gtv in [s.GTVT, s.GTVN]:
+                for gtv in ["gtvt", "gtvn"]:
                     pred_path = os.path.join(patient_dir, "{}_pred.nii".format(gtv))
                     if os.path.exists(pred_path):
                         img = Nii.load(path=pred_path, binary=False)
@@ -742,9 +756,9 @@ class TrainingBaseline(TrainingCore):
                             preds[gtv] += img
 
             # all folds is traversed
-            # for idl.gtvn pred[s.GTVT] will be None
-            if preds[s.GTVT] is not None:
-                preds[s.GTVS] = preds[s.GTVT] + preds[s.GTVN]
+            # for idl.gtvn pred["gtvt"] will be None
+            if preds["gtvt"] is not None:
+                preds["gtvs"] = preds["gtvt"] + preds["gtvn"]
 
             for gtv in preds.keys():
                 if preds[gtv] is None:
@@ -754,15 +768,15 @@ class TrainingBaseline(TrainingCore):
 
             # create cross_valid dir
             pred_dir = os.path.join(
-                Path(fold_dirs[0]).parent, s.PATIENTS, "patient={}".format(patient)
+                Path(fold_dirs[0]).parent, "patients", "patient={}".format(patient)
             )
             if len(preds.keys()) == 1:
-                pred_dir = os.path.join(pred_dir, s.ROUND_01)
+                pred_dir = os.path.join(pred_dir, "round=01")
             Folder.create(pred_dir)
 
             # save cross_valid preds (only save gtvt and gtvn)
             for gtv in preds.keys():
-                if gtv != s.GTVS:
+                if gtv != "gtvs":
                     Nii.save(
                         img=preds[gtv],
                         save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
@@ -770,7 +784,7 @@ class TrainingBaseline(TrainingCore):
                     )
 
             # load labels and calculate metrics (on test set only)
-            if s.TEST in dataset_section:
+            if DatasetPart.TEST in dataset_part:
                 labels = Img.load_labels(
                     dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
                 )
@@ -784,24 +798,24 @@ class TrainingBaseline(TrainingCore):
 
         # all patients have been traversed
         # calculate avg and median score (on test set only)
-        if s.TEST in dataset_section:
+        if DatasetPart.TEST in dataset_part:
             self._inference_calculate_save_avg_median(
                 scores=scores,
                 save_dir=Path(fold_dirs[0]).parent,
-                dataset_section=dataset_section,
+                dataset_part=dataset_part,
                 dataset_ver=dataset_ver,
             )
 
-    def _cross_valid_inference_is_valid_dataset_section(
+    def _cross_valid_inference_is_valid_dataset_part(
         self,
-        dataset_section: str,
+        dataset_part: str,
         dataset_ver: str,
     ):
-        if s.VALID in dataset_section:
-            Debug.error_exit("set dataset_section to 'train' instead of 'valid'")
+        if DatasetPart.VALID in dataset_part:
+            Debug.error_exit("set dataset_part to 'train' instead of 'valid'")
 
-        self._is_valid_dataset_section(
-            dataset_section=dataset_section,
+        self._is_valid_dataset_part(
+            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
         )
 
@@ -814,12 +828,12 @@ class TrainingBaseline(TrainingCore):
         scores: Dict,
     ):
         for gtv in preds.keys():
-            for metric in [s.DSC, s.MSD, s.HD95]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 score = segment_metrics[metric](preds[gtv], labels[gtv])
                 # record current score
                 scores["patient={}".format(patient)][gtv][metric] = score
                 # record scores for avg and median score calculation
-                for stats in [s.MEDIAN, s.AVG]:
+                for stats in ["median", "avg"]:
                     scores[stats][gtv][metric].append(score)
 
     def remove_non_optimal_epochs(self, baseline_id: str):
@@ -836,7 +850,7 @@ class TrainingBaseline(TrainingCore):
         )
 
         # load dataset version
-        dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[s.DATASET_VER]
+        dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
         inference_json_name = "inference_{}_valid.json".format(dataset_ver)
@@ -871,16 +885,16 @@ class TrainingBaseline(TrainingCore):
     def _remove_non_optimal_epochs_record_epoch_scores(
         self, fold_scores: Dict, epoch_scores: Dict, epoch: str
     ):
-        for stats in [s.MEDIAN, s.AVG]:
+        for stats in ["median", "avg"]:
             fold_scores[epoch][stats] = epoch_scores[stats]
 
     # a sub function of _remove_non_optimal_epochs()
     def _remove_non_optimal_epochs_find_best_epoch(
-        self, scores: Dict, gtv_list: list = [s.GTVS, s.GTVT, s.GTVN]
+        self, scores: Dict, gtv_list: list = ["gtvs", "gtvt", "gtvn"]
     ):
-        for stats in [s.MEDIAN, s.AVG]:
+        for stats in ["median", "avg"]:
             for gtv in gtv_list:
-                for metric in [s.DSC, s.MSD, s.HD95]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     # create a tmp list to sort
                     list_to_sort = List()
 
@@ -893,7 +907,7 @@ class TrainingBaseline(TrainingCore):
                         list_to_sort.append(cur_score)
 
                     # sort the list
-                    if metric == s.DSC:
+                    if metric == Metric.DSC:
                         list_to_sort.sort(reverse=False)
                     else:
                         list_to_sort.sort(reverse=True)
@@ -906,7 +920,7 @@ class TrainingBaseline(TrainingCore):
                             cur_score = scores[epoch][stats][metric]
 
                         new_value = list_to_sort.index(cur_score)
-                        if metric == s.DSC:
+                        if metric == Metric.DSC:
                             new_value *= 2
 
                         if len(gtv_list) > 1:
@@ -917,9 +931,9 @@ class TrainingBaseline(TrainingCore):
         evaluation = Dict()
         for epoch in scores:
             evaluation[epoch] = 0
-            for stats in [s.AVG, s.MEDIAN]:
+            for stats in ["avg", "median"]:
                 for gtv in gtv_list:
-                    for metric in [s.DSC, s.MSD, s.HD95]:
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                         if len(gtv_list) > 1:
                             evaluation[epoch] += scores[epoch][stats][gtv][metric]
                         else:
@@ -929,13 +943,13 @@ class TrainingBaseline(TrainingCore):
 
     def _inference_single_patient_record_labels(self, labels: Dict):
         outputs = Dict()
-        for gtv in [s.GTVT, s.GTVN, s.GTVS]:
-            outputs[gtv][s.LABEL] = labels[gtv]
+        for gtv in ["gtvt", "gtvn", "gtvs"]:
+            outputs[gtv]["label"] = labels[gtv]
         return outputs
 
     def _inference_single_patient_record_outputs(
         self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
     ):
-        outputs[s.GTVT][s.PRED] = preds[1]
-        outputs[s.GTVN][s.PRED] = preds[2]
-        outputs[s.GTVS][s.PRED] = np.maximum(preds[1], preds[2])
+        outputs["gtvt"]["pred"] = preds[1]
+        outputs["gtvn"]["pred"] = preds[2]
+        outputs["gtvs"]["pred"] = np.maximum(preds[1], preds[2])

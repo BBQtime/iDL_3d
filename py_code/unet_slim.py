@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from custom import GPU
+from custom import GPU, DatasetVer
 from custom import Global as g
-from str_lib import StrLib as s
 from torch import Tensor
 
 
@@ -81,7 +80,7 @@ class UNetSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        if dataset_ver == s.AU_3MM:
+        if dataset_ver == DatasetVer.AU_3MM:
             kernel = (1, 2, 2)
         else:
             kernel = 2

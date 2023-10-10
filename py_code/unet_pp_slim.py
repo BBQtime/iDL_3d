@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from custom import GPU
+from custom import GPU, DatasetVer
 from custom import Global as g
-from str_lib import StrLib as s
 from torch import Tensor
 
 
@@ -104,7 +103,7 @@ class UNetPPSlim(nn.Module):
         self.up["2"]["1"] = nn.ConvTranspose3d(skip_chan, skip_chan, 2, 2)
         self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan[2], edge_chan[2], 2, 2)
 
-        if dataset_ver == s.AU_3MM:
+        if dataset_ver == DatasetVer.AU_3MM:
             kernel = (1, 2, 2)
         else:
             kernel = 2

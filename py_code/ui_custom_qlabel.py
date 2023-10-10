@@ -1,0 +1,127 @@
+from custom import Global as g
+from custom import IDLStep, List
+from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
+from PyQt5.QtWidgets import QLabel
+from ui_draggable_cross import DraggableCross
+
+
+class CustomQLabel(QLabel):
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        # clicks
+        self.selected_cross = None
+        self.crosses_list = []
+
+        # gtvt painting
+        self.setMouseTracking(True)
+        self.background_img = None
+        self.drawing_layer = QPixmap(self.size())
+        self.drawing_layer.fill(Qt.transparent)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Resize the drawing layer pixmap to match the new size of the QLabel
+        self.drawing_layer = self.drawing_layer.scaled(self.size())
+
+    def mousePressEvent(self, event: QMouseEvent):
+        super().mousePressEvent(event)
+
+        if event.button() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
+                # remove old crosses
+                for i in ["ct", "pt", "mr1", "mr2"]:
+                    self.window().img_qlabel[i].delete_all_crosses()
+                self.window().clicks_pos = List()
+                # add new crosses
+                self.window().add_4_crosses(event.pos(), record_click_pos=True)
+
+            elif self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+                self.window().draw_on_4_qlabels_press(event)
+
+            elif self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+                self.window().add_4_crosses(event.pos(), record_click_pos=True)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        super().mouseMoveEvent(event)
+
+        # use event.buttons() instead of event.button()
+        # button() returns the mouse button that caused the event, which is Qt::NoButton
+        if event.buttons() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+                self.window().draw_on_4_qlabels_move(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        super().mouseReleaseEvent(event)
+
+        if event.button() == Qt.LeftButton:
+            if self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+                self.window().draw_on_4_qlabels_release()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        if self.background_img:
+            painter.drawPixmap(self.rect(), self.background_img)
+            # 0 for fully transparent, 255 for fully opaque
+            painter.setOpacity(100 / 255)
+            painter.drawPixmap(self.rect(), self.drawing_layer)
+
+    def set_background(self, img: QImage):
+        self.background_img = QPixmap.fromImage(img)
+        self.update()
+
+    def get_cross_by_id(self, cross_id: int) -> DraggableCross:
+        for cross in self.crosses_list:
+            if cross.cross_id == cross_id:
+                return cross
+        # no id found, return None
+        return None
+
+    def get_crosses_id_list(self) -> list:
+        crosses_id_list = []
+        for cross in self.crosses_list:
+            crosses_id_list.append(cross.cross_id)
+        return crosses_id_list
+
+    def deselect_cross(self):
+        if self.selected_cross:
+            self.selected_cross.select(False)
+            self.selected_cross = None
+
+    def select_cross(self, cross_id: int):
+        self.deselect_cross()
+        # select new cross
+        for cross in self.crosses_list:
+            if cross.cross_id == cross_id:
+                self.selected_cross = cross
+                self.selected_cross.select(True)
+
+    def delete_all_crosses(self):
+        for cross in self.crosses_list:
+            cross.setParent(None)
+            cross.deleteLater()
+        self.crosses_list = []
+        self.selected_cross = None
+
+    def delete_selected_cross(self):
+        if self.selected_cross:
+            self.crosses_list.remove(self.selected_cross)
+            self.selected_cross.setParent(None)
+            self.selected_cross.deleteLater()
+            self.selected_cross = None
+
+    def add_cross(self, pos: QPoint, cross_id: int):
+        self.deselect_cross()
+        # create new cross
+        new_cross = DraggableCross(parent=self, cross_id=cross_id)
+        new_cross.setGeometry(
+            pos.x() - round(g.CROSS_SIZE / 2),
+            pos.y() - round(g.CROSS_SIZE / 2),
+            g.CROSS_SIZE,
+            g.CROSS_SIZE,
+        )
+        new_cross.load_png(g.CROSS_DIR)
+        new_cross.show()
+        self.crosses_list.append(new_cross)

@@ -1,17 +1,16 @@
-import csv
-import os
+# import csv
+# import os
 
-from custom import DirExplorer
-from custom import Global as g
-from custom import Json, List
-from str_lib import StrLib as s
+# from custom import DirExplorer
+# from custom import Global as g
+# from custom import Json, List
 
 # def compare_idls_in_table(
 #     baseline_id: str, idl_results_list: list, table_name: str = "idl_compare"
 # ):
 #     # field names
 #     fields = ["Patient"]
-#     for metric in [s.DSC, s.MSD, s.HD95]:
+#     for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 #         for i in range(len(idl_results_list)):
 #             fields.append("{}_{}".format(metric, i + 1))
 
@@ -24,7 +23,7 @@ from str_lib import StrLib as s
 #         os.path.join(
 #             idl_gtvt_main_dir,
 #             idl_results_list[0],
-#             "inference_{}_{}.json".format(dataset_ver, dataset_section),
+#             "inference_{}_{}.json".format(dataset_ver, dataset_part),
 #         )
 #     )
 #     patient_list = patient_list.keys()
@@ -41,13 +40,13 @@ from str_lib import StrLib as s
 #                 os.path.join(
 #                     idl_gtvt_main_dir,
 #                     idl_id,
-#                     "inference_{}_{}.json".format(dataset_ver, dataset_section),
+#                     "inference_{}_{}.json".format(dataset_ver, dataset_part),
 #                 )
 #             )
 #             for metric in ["DSC", "MSD", "HD95"]:
 #                 cur_patient_score["{}_{}".format(metric, i + 1)] = gtvt_score[patient][
 #                     metric.lower()
-#                 ][s.ROUND_01]
+#                 ]["round=01"]
 
 #         score.append(cur_patient_score)
 

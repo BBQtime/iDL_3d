@@ -19,7 +19,6 @@ import SimpleITK as sitk
 import torch
 from natsort import natsorted
 from numpy import ndarray
-from str_lib import StrLib as s
 from torch import Tensor
 
 
@@ -357,19 +356,19 @@ class Img:
         labels = Dict()
 
         # load gtvt
-        labels[s.GTVT] = nii_load_func(paths[s.GTVT], binary=True)
+        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
 
         # load gtvn
-        if os.path.exists(paths[s.GTVN]):
-            labels[s.GTVN] = nii_load_func(paths[s.GTVN], binary=True)
+        if os.path.exists(paths["gtvn"]):
+            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
         else:
-            labels[s.GTVN] = np.zeros_like(labels[s.GTVT])
+            labels["gtvn"] = np.zeros_like(labels["gtvt"])
 
         # load gtvs
-        if os.path.exists(paths[s.GTVS]):
-            labels[s.GTVS] = nii_load_func(paths[s.GTVS], binary=True)
+        if os.path.exists(paths["gtvs"]):
+            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
         else:
-            labels[s.GTVS] = np.maximum(labels[s.GTVT], labels[s.GTVN])
+            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
 
         return labels
 
@@ -640,7 +639,7 @@ class Debug:
 
     def clear_debug_data():
         for i in DirExplorer.walk_sub_dirs(
-            Global.TRAIN_RESULTS_DIR, key_word=s.DELETE_FLAG
+            Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
         ):
             Folder.delete(i)
         Folder.clear(os.path.join(Global.PROJ_DIR, "debug"))
@@ -660,10 +659,48 @@ class Time:
         return cur_time
 
 
+class Plane:
+    TRANSVERSE = "transverse"
+    CORONAL = "coronal"
+    SAGITTAL = "sagittal"
+
+
+class Orient:
+    HORIZONTAL = "horizontal"
+    VERTICAL = "vertical"
+
+
+class Metric:
+    DSC = "dsc"
+    MSD = "msd"
+    HD95 = "hd95"
+
+
+class IDLStep:
+    CLICK_GTVT_CENTER = "click.gtvt.center"
+    DRAW_GTVT = "draw.gtvt"
+    CLICK_GTVN_CENTER = "click.gtvn.center"
+    CORRECTION = "correction"
+
+
+class DatasetVer:
+    AU_3MM = "au.3mm"
+    AU_1MM = "au.1mm"
+    MDA = "mda"
+
+
+class DatasetPart:
+    TRAIN = "train"
+    VALID = "valid"
+    TEST = "test"
+    TEST_INTER = "test.inter"
+    TEST_EXTER = "test.exter"
+
+
 class Global:
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
     EPS = sys.float_info.epsilon
-
+    DELETE_FLAG = "delete.flag"
     __settings = Json.load(os.path.join(PROJ_DIR, "settings.json"))
 
     # use CPU
@@ -694,14 +731,14 @@ class Global:
 
     # Windows
     if platform.system().lower() == "windows":
-        for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
+        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
 
     # Linux
     elif platform.system().lower() == "linux":
-        for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
+        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
@@ -710,34 +747,34 @@ class Global:
 
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
-    IMG_SHAPE[s.AU_3MM] = List(__settings["img.shape.3mm"])
-    IMG_SHAPE[s.AU_1MM] = List(__settings["img.shape.1mm"])
-    IMG_SHAPE[s.MDA] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[DatasetVer.AU_3MM] = List(__settings["img.shape.3mm"])
+    IMG_SHAPE[DatasetVer.AU_1MM] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[DatasetVer.MDA] = List(__settings["img.shape.1mm"])
 
     # NII_SPACING (Width, Height, Depth)
     NII_SPACING = Dict()
-    NII_SPACING[s.AU_3MM] = List(__settings["nii.spacing.3mm"])
-    NII_SPACING[s.AU_1MM] = List(__settings["nii.spacing.1mm"])
-    NII_SPACING[s.MDA] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[DatasetVer.AU_3MM] = List(__settings["nii.spacing.3mm"])
+    NII_SPACING[DatasetVer.AU_1MM] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[DatasetVer.MDA] = List(__settings["nii.spacing.1mm"])
 
-    for i in [s.AU_3MM, s.AU_1MM, s.MDA]:
+    for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
         IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
         NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
     # dataset splitting
     DATASET_SPLIT_JSON_PATH = Dict()
-    DATASET_SPLIT_JSON_PATH[s.AU_1MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[s.AU_3MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_3MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[s.MDA] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.MDA] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.mda"]
     )
 
     HYPER_JSON_PATH = Dict()
-    for i in [s.BASELINE, s.IDL_GTVT, s.IDL_GTVN]:
+    for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
         HYPER_JSON_PATH[i] = os.path.join(
             PROJ_DIR, __settings["hyper.json.{}".format(i)]
         )
