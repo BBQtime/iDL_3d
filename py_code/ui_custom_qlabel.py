@@ -33,7 +33,7 @@ class CustomQLabel(QLabel):
                 # remove old crosses
                 for i in ["ct", "pt", "mr1", "mr2"]:
                     self.window().img_qlabel[i].delete_all_crosses()
-                self.window().clicks_pos = List()
+                self.window().click_pos_list = List()
                 # add new crosses
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 

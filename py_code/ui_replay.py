@@ -387,14 +387,20 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def __init_color(self):
         self._color = Dict()
-        self._color["gtvt.label"] = (0, 255, 255)  # light blue
-        self._color["gtvn.label"] = (0, 150, 255)  # dark blue
-        self._color["gtvt.pred"] = (255, 255, 0)  # yellow
-        self._color["gtvn.pred"] = (255, 128, 0)  # orange
-        self._color["gtvt.annotation"] = (0, 255, 64)  # green
-        self._color["gtvt.click"] = (0, 255, 64)  # green
-        self._color["gtvn.clicks"] = (255, 70, 200)  # pink
-        self._color["score.text"] = self._color["gtvt.annotation"]
+        green = (0, 255, 64)
+        pink = (255, 70, 200)
+        light_blue = (0, 255, 255)
+        dark_blue = (0, 150, 255)
+        yellow = (255, 255, 0)
+        orange = (255, 128, 0)
+        self._color["gtvt.label"] = light_blue
+        self._color["gtvn.label"] = dark_blue
+        self._color["gtvt.pred"] = yellow
+        self._color["gtvn.pred"] = orange
+        self._color["gtvt.annotation"] = green
+        self._color["gtvt.click"] = pink
+        self._color["gtvn.clicks"] = pink
+        self._color["score.text"] = green
 
     def _init_ui_names(self):
         self._img_qlabel_ct = CustomQLabel(self._central_widget)
@@ -1298,39 +1304,36 @@ class UiReplay(QMainWindow, Ui_Core):
             # add mask to gtvt selected slices
             rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
             selected_slices_mask = None
-            for direction in [Orient.HORIZONTAL, Orient.VERTICAL]:
-                for gtvt_selected_slice_2d in self.__gtvt_selected_slices_2d[direction]:
+            for orient in [Orient.HORIZONTAL, Orient.VERTICAL]:
+                for gtvt_selected_slice_2d in self.__gtvt_selected_slices_2d[orient]:
                     # all images are reversed in transverse plane
-                    if (
-                        self._plane != Plane.TRANSVERSE
-                        and direction == Orient.HORIZONTAL
-                    ):
+                    if self._plane != Plane.TRANSVERSE and orient == Orient.HORIZONTAL:
                         slice_pos = (
-                            self.__total_slices_count_2d[direction]
+                            self.__total_slices_count_2d[orient]
                             - gtvt_selected_slice_2d
                         )
                     # 1mm images are reversed in sagittal plane
                     elif (
                         self._plane != Plane.SAGITTAL
-                        and direction == Orient.VERTICAL
+                        and orient == Orient.VERTICAL
                         and (
                             self._dataset_ver == DatasetVer.AU_1MM
                             or self._dataset_ver == DatasetVer.MDA
                         )
                     ):
                         slice_pos = (
-                            self.__total_slices_count_2d[direction]
+                            self.__total_slices_count_2d[orient]
                             - gtvt_selected_slice_2d
                         )
                     else:
                         slice_pos = gtvt_selected_slice_2d
 
-                    if direction == Orient.HORIZONTAL:
+                    if orient == Orient.HORIZONTAL:
                         x1 = 0
                         y1 = slice_pos
                         x2 = rgb_img.shape[1] - 1
                         y2 = slice_pos
-                    elif direction == Orient.VERTICAL:
+                    elif orient == Orient.VERTICAL:
                         x1 = slice_pos
                         y1 = 0
                         x2 = slice_pos
@@ -1394,17 +1397,19 @@ class UiReplay(QMainWindow, Ui_Core):
                     Debug.error_exit("self._plane value error")
 
                 contours, _ = self.__fit_img_qlabel(contours, self.img_qlabel[i])
-                # blur after __fit_img_qlabel will make the contours looks better on the UI
-                if k != "gtvn.clicks":
-                    contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
-                contours, _ = cv2.findContours(
-                    contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
-                )
 
                 if k == "gtvt.click" or k == "gtvn.clicks":
                     thickness = 7
                 else:
                     thickness = 2
+                    # blur, make the contours looks better on the UI
+                    # blur after __fit_img_qlabel()
+                    contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
+
+                contours, _ = cv2.findContours(
+                    contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+                )
+
                 rgb_img = cv2.drawContours(
                     image=rgb_img,
                     contours=contours,
