@@ -2,7 +2,7 @@ import os
 import random
 
 import numpy as np
-from custom import Debug, Dict, DirExplorer, Folder
+from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Nii, Plane, Time
 from PyQt5.QtCore import QPoint, QRect, Qt
@@ -64,7 +64,7 @@ class UiIDL(UiReplay):
                 "patient={}".format(self._cur_patient),
                 "round=01",
             )
-            Folder.create(round_dir)
+            Dir.create(round_dir)
             idl_gtvt_click = self._3d_imgs["gtvt.click"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
@@ -174,8 +174,8 @@ class UiIDL(UiReplay):
                     y *= self._rgb_img_relative_pos["height"]
                     x = round(x)
                     y = round(y)
-                    x += self._rgb_img_relative_pos["x"]  # - round(g.CROSS_SIZE / 2)
-                    y += self._rgb_img_relative_pos["y"]  # - round(g.CROSS_SIZE / 2)
+                    x += self._rgb_img_relative_pos["x"]
+                    y += self._rgb_img_relative_pos["y"]
 
                     # do not record click pos when refreshing
                     self.add_4_crosses(QPoint(x, y), record_click_pos=False)
@@ -273,11 +273,11 @@ class UiIDL(UiReplay):
         super()._init_member_var()
 
         # keep idl.gtvt and idl.gtvn id unchanged
-        cur_time = Time.get_cur_time_str()
+        cur_time = Time.cur_time_str()
         for i in ["gtvt", "gtvn"]:
             self._idl_id[i] = "idl.{}_".format(i) + cur_time
             if debug_mode:
-                self._idl_id[i] += "_" + g.DELETE_FLAG
+                self._idl_id[i] += "_" + Debug.DELETE_FLAG
 
             if idl_remark != "" and idl_remark is not None:
                 while idl_remark.startswith("_"):
@@ -472,7 +472,7 @@ class UiIDL(UiReplay):
 
         # create idl folders (after baseline_id is confirmed)
         for i in ["gtvt", "gtvn"]:
-            Folder.create(
+            Dir.create(
                 os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i])
             )
 
@@ -593,7 +593,7 @@ class UiIDL(UiReplay):
 
         # current patient dir exists
         if os.path.exists(patient_dir):
-            round_dirs = DirExplorer.get_sub_folders(
+            round_dirs = Dir.get_sub_dirs(
                 patient_dir, key_word="round=", full_path=True
             )
             # choose the last round
@@ -616,7 +616,7 @@ class UiIDL(UiReplay):
 
         # cant find cur patient dir
         else:
-            # Folder.create(patient_dir)
+            # Dir.create(patient_dir)
             self._3d_imgs["{}.pred".format(gtv)] = None
 
         return patient_dir

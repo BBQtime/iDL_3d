@@ -6,7 +6,7 @@ from itertools import product
 from pathlib import Path
 
 import torch
-from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, DirExplorer
+from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Time, Value
 from dataset_baseline import DataSetBaseline
@@ -112,7 +112,7 @@ class TrainingCore:
             baseline_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, idl_baseline_id, "baseline"
             )
-            baseline_fold_dir = DirExplorer.get_sub_folders(
+            baseline_fold_dir = Dir.get_sub_dirs(
                 baseline_dir, key_word="fold=", full_path=True
             )[0]
             baseline_dataset_ver = Json.load(
@@ -142,7 +142,7 @@ class TrainingCore:
 
         # = 1 will cause error
         hyper["lr.decay.factor"] = Value.limit_range(
-            hyper["lr.decay.factor"], (g.EPS, 1 - g.EPS)
+            hyper["lr.decay.factor"], (Value.EPS, 1 - Value.EPS)
         )
 
         # augment methods
@@ -262,11 +262,11 @@ class TrainingCore:
     def _init_train_id(
         self, hyper: Dict, hyper_json_path: str, train_remark: str, debug_mode: bool
     ) -> str:
-        train_id = Time.get_cur_time_str()
+        train_id = Time.cur_time_str()
 
         if debug_mode:
             train_id += "_"
-            train_id += g.DELETE_FLAG
+            train_id += Debug.DELETE_FLAG
 
         if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
@@ -334,12 +334,8 @@ class TrainingCore:
 
         # train id is a iDL
         else:
-            for baseline_dir in DirExplorer.get_sub_folders(
-                g.TRAIN_RESULTS_DIR, full_path=True
-            ):
-                for train_dir in DirExplorer.get_sub_folders(
-                    baseline_dir, full_path=True
-                ):
+            for baseline_dir in Dir.get_sub_dirs(g.TRAIN_RESULTS_DIR, full_path=True):
+                for train_dir in Dir.get_sub_dirs(baseline_dir, full_path=True):
                     if Path(train_dir).name == train_id:
                         return train_dir
             # cant find train_dir

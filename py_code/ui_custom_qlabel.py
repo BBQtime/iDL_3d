@@ -117,11 +117,11 @@ class CustomQLabel(QLabel):
         # create new cross
         new_cross = DraggableCross(parent=self, cross_id=cross_id)
         new_cross.setGeometry(
-            pos.x() - round(g.CROSS_SIZE / 2),
-            pos.y() - round(g.CROSS_SIZE / 2),
-            g.CROSS_SIZE,
-            g.CROSS_SIZE,
+            pos.x() - round(new_cross.CROSS_SIZE / 2),
+            pos.y() - round(new_cross.CROSS_SIZE / 2),
+            new_cross.CROSS_SIZE,
+            new_cross.CROSS_SIZE,
         )
-        new_cross.load_png(g.CROSS_DIR)
+        new_cross.load_png(new_cross.CROSS_ICON_DIR_UNSELECTED)
         new_cross.show()
         self.crosses_list.append(new_cross)

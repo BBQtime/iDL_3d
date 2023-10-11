@@ -4,8 +4,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from custom import (GPU, DatasetPart, DatasetVer, Debug, Dict, DirExplorer,
-                    Folder)
+from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Nii, Plane, Value
 from dataset_idl_gtvt import DataSetIDLGTVt
@@ -61,10 +60,10 @@ class TrainingIDLGTVt(TrainingCore):
         hyper["lr"] = List(hyper["lr"])
         for i in range(len(hyper["lr"])):
             hyper["lr"][i] = float(hyper["lr"][i])
-            hyper["lr"][i] = Value.limit_range(hyper["lr"][i], (g.EPS, 1))
+            hyper["lr"][i] = Value.limit_range(hyper["lr"][i], (Value.EPS, 1))
             # check min lr, make sure it is lower than any lr in the lr list
             hyper["lr.min"] = Value.limit_range(
-                hyper["lr.min"], (g.EPS, hyper["lr"][i])
+                hyper["lr.min"], (Value.EPS, hyper["lr"][i])
             )
 
         # actual lr
@@ -230,7 +229,7 @@ class TrainingIDLGTVt(TrainingCore):
     #     )
     #     selected_slices = Dict()
     #     selected_slices["round=01"] = List()  # doesn't matter what the dict key is
-    #     for file_name in DirExplorer.get_sub_files(round_dir, key_word="_label.npy"):
+    #     for file_name in Dir.get_sub_files(round_dir, key_word="_label.npy"):
     #         slice_id = file_name[len("slice_") : -len("_label.npy")]
     #         slice_id = slice_id.zfill(3)
     #         selected_slices["round=01"].append(slice_id)
@@ -468,7 +467,7 @@ class TrainingIDLGTVt(TrainingCore):
         segment_metrics: Dict,
         dataset_part: str,
     ):
-        Folder.create(round_dir)
+        Dir.create(round_dir)
 
         round_num = Path(round_dir).name
         round_num = int(round_num[len("round=") :])
@@ -568,9 +567,7 @@ class TrainingIDLGTVt(TrainingCore):
                 "iter={:03d}".format((round_num - 1) * hyper["iter"] + (iter_num + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
-            patient_dirs_list = DirExplorer.get_sub_folders(
-                os.path.join(idl_gtvt_dir, "patients")
-            )
+            patient_dirs_list = Dir.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))
             if len(patient_dirs_list) <= 1:
                 Json.save(loss_dict, loss_json_path)
                 self._plot_loss_fig(idl_gtvt_dir)
@@ -630,7 +627,7 @@ class TrainingIDLGTVt(TrainingCore):
         patient_dir = os.path.join(
             idl_gtvt_dir, "patients", "patient={}".format(patient)
         )
-        Folder.create(patient_dir)
+        Dir.create(patient_dir)
         # create an empty loss.json
         Json.save(Dict(), os.path.join(patient_dir, "loss.json"))
 
@@ -708,7 +705,7 @@ class TrainingIDLGTVt(TrainingCore):
         self._plot_loss_fig(idl_gtvt_dir)
 
     def plot_loss_fig(self, idl_gtvt_id: str):
-        for i in DirExplorer.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
+        for i in Dir.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
             if i.endswith("/"):
                 i = i[:-1]
@@ -720,7 +717,7 @@ class TrainingIDLGTVt(TrainingCore):
     def _plot_loss_fig(self, idl_gtvt_dir: str):
         # avg loss dict
         avg_loss = Dict()
-        for patient_dir in DirExplorer.get_sub_folders(
+        for patient_dir in Dir.get_sub_dirs(
             os.path.join(idl_gtvt_dir, "patients"), full_path=True
         ):
             cur_patient_loss = Json.load(os.path.join(patient_dir, "loss.json"))
@@ -747,16 +744,14 @@ class TrainingIDLGTVt(TrainingCore):
     ) -> str:
         scores = Dict()
 
-        fold_dirs = DirExplorer.get_sub_folders(
+        fold_dirs = Dir.get_sub_dirs(
             input_dir=os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline"),
             key_word="fold=",
             full_path=True,
         )
         for fold_dir in fold_dirs:
             fold = Path(fold_dir).name
-            epoch_dir = DirExplorer.get_sub_folders(
-                fold_dir, key_word="epoch=", full_path=True
-            )[0]
+            epoch_dir = Dir.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
             epoch_scores = Json.load(
                 os.path.join(
                     epoch_dir,
@@ -800,10 +795,10 @@ class TrainingIDLGTVt(TrainingCore):
         best_fold_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, baseline_id, "baseline", best_fold
         )
-        best_epoch_dir = DirExplorer.get_sub_folders(
+        best_epoch_dir = Dir.get_sub_dirs(
             best_fold_dir, key_word="epoch=", full_path=True
         )[0]
-        best_cnn_path = DirExplorer.get_sub_files(
+        best_cnn_path = Dir.get_sub_files(
             best_epoch_dir, key_word=".pt", full_path=True
         )[0]
         return best_cnn_path
@@ -821,7 +816,7 @@ class TrainingIDLGTVt(TrainingCore):
         if baseline_dir is None:
             Debug.error_exit("training id not found")
 
-        baseline_fold_dirs = DirExplorer.get_sub_folders(
+        baseline_fold_dirs = Dir.get_sub_dirs(
             baseline_dir, key_word="fold=", full_path=True
         )
 
@@ -869,7 +864,7 @@ class TrainingIDLGTVt(TrainingCore):
 
             # create idl result dir
             idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
-            Folder.create(idl_gtvt_dir)
+            Dir.create(idl_gtvt_dir)
 
             # save hyper before training
             hyper_save_path = os.path.join(idl_gtvt_dir, "hyper.json")
@@ -1050,13 +1045,13 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
             # loop through each round
-            for round_dir in DirExplorer.get_sub_folders(
+            for round_dir in Dir.get_sub_dirs(
                 patient_dir, key_word="round=", full_path=True
             ):
                 # load current round cnn
-                cnn_path = DirExplorer.get_sub_files(
-                    round_dir, key_word=".pt", full_path=True
-                )[0]
+                cnn_path = Dir.get_sub_files(round_dir, key_word=".pt", full_path=True)[
+                    0
+                ]
                 cnn = self._load_exist_cnn(cnn_path)
 
                 self.__inference_round(

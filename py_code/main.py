@@ -19,7 +19,7 @@ if 0:
     app = QApplication(sys.argv)
     if 0:
         ui = UiIDL(
-            idl_remark=g.DELETE_FLAG,
+            idl_remark="",
             debug_mode=1,
         )
     else:

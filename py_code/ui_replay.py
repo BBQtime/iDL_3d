@@ -6,7 +6,7 @@ from typing import Tuple
 
 import cv2
 import numpy as np
-from custom import DatasetPart, DatasetVer, Debug, Dict, DirExplorer
+from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
@@ -629,7 +629,7 @@ class UiReplay(QMainWindow, Ui_Core):
         )
 
     def _fill_combox_baseline(self):
-        baseline_id_list = DirExplorer.get_sub_folders(
+        baseline_id_list = Dir.get_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
         self._combox["baseline"].addItems(baseline_id_list)
@@ -849,9 +849,7 @@ class UiReplay(QMainWindow, Ui_Core):
     def _load_dataset_dir_and_nii_spacing(self):
         # load slice thickness from baseline hyper
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
-        fold_dir = DirExplorer.get_sub_folders(
-            baseline_dir, key_word="fold=", full_path=True
-        )[0]
+        fold_dir = Dir.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
         baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
             "dataset.ver"
         ]
@@ -876,7 +874,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._nii_spacing = g.NII_SPACING[self._dataset_ver]
 
     def _fill_combox_patient(self):
-        combox_patients = DirExplorer.get_sub_folders(
+        combox_patients = Dir.get_sub_dirs(
             os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
         )
         # from "patient=123" to "123"
@@ -991,7 +989,7 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in ["idl.gtvt", "idl.gtvn"]:
             combox_items = ["baseline"]
             # get all round folder under current patient folder
-            for idl_result_dir in DirExplorer.get_sub_folders(
+            for idl_result_dir in Dir.get_sub_dirs(
                 os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id),
                 key_word=i,
                 full_path=True,
@@ -1002,7 +1000,7 @@ class UiReplay(QMainWindow, Ui_Core):
                     "patient={}".format(self._cur_patient),
                 )
                 if os.path.exists(patient_dir):
-                    round_folders = DirExplorer.get_sub_folders(
+                    round_folders = Dir.get_sub_dirs(
                         patient_dir,
                         key_word="round=",
                         full_path=False,

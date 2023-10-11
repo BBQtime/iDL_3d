@@ -115,6 +115,8 @@ class List(list):
 
 
 class Value:
+    EPS = sys.float_info.epsilon
+
     def replace_char(input_str: str, idx: int, new_char: str) -> str:
         return input_str[:idx] + new_char + input_str[idx + 1 :]
 
@@ -442,77 +444,54 @@ class Json:
         return data
 
 
-class File:
-    def rename(base_path: str, old_name: str, new_name: str):
-        old_path = os.path.join(base_path, old_name)
-        new_path = os.path.join(base_path, new_name)
+class Dir:
+    def create(path: str):
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+
+    def clear(path: str):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            os.makedirs(path, exist_ok=True)
+        else:
+            Debug.error_exit("path is not a dir")
+
+    def rename(parent_dir: str, old_name: str, new_name: str):
+        old_path = os.path.join(parent_dir, old_name)
+        new_path = os.path.join(parent_dir, new_name)
         if os.path.exists(old_path) and not os.path.exists(new_path):
             os.rename(old_path, new_path)
-            return True
+
+    def get_file_md5(file_path: str):
+        if os.path.isfile(file_path):
+            with open(file_path, "rb") as fp:
+                md5_obj = hashlib.md5()
+                md5_obj.update(fp.read())
+                file_md5 = md5_obj.hexdigest()
+                # print(file_md5)
+                return file_md5
         else:
-            return False
+            Debug.error_exit("path is not a file")
+
+    def get_file_sha1(file_path: str):
+        if os.path.isfile(file_path):
+            with open(file_path, "rb") as fp:
+                sha1_obj = hashlib.sha1()
+                sha1_obj.update(fp.read())
+                file_sha1 = sha1_obj.hexdigest()
+                # print(file_sha1)
+                return file_sha1
+        else:
+            Debug.error_exit("path is not a file")
 
     def delete(path: str):
-        if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.isfile(path):
             os.remove(path)
-            return True
         else:
-            return False
+            Debug.error_exit("path is not a file or dir")
 
-    def get_md5(file_path: str):
-        with open(file_path, "rb") as fp:
-            md5_obj = hashlib.md5()
-            md5_obj.update(fp.read())
-            file_md5 = md5_obj.hexdigest()
-            # print(file_md5)
-            return file_md5
-
-    def get_sha1(file_path: str):
-        with open(file_path, "rb") as fp:
-            sha1_obj = hashlib.sha1()
-            sha1_obj.update(fp.read())
-            file_sha1 = sha1_obj.hexdigest()
-            # print(file_sha1)
-            return file_sha1
-
-
-class Folder:
-    def create(path: str, overwrite: bool = False):
-        if overwrite:
-            if os.path.exists(path):
-                shutil.rmtree(path)
-            os.makedirs(path)
-        else:
-            if not os.path.exists(path):
-                os.makedirs(path)
-        return path
-
-    def clear(path):
-        if os.path.exists(path):
-            shutil.rmtree(path)
-            os.mkdir(path)
-            return True
-        else:
-            return False
-
-    def rename(base_path: str, old_name: str, new_name: str) -> bool:
-        old_path = os.path.join(base_path, old_name)
-        new_path = os.path.join(base_path, new_name)
-        if os.path.exists(old_path) and not os.path.exists(new_path):
-            os.rename(old_path, new_path)
-            return True
-        else:
-            return False
-
-    def delete(path: str):
-        if os.path.exists(path):
-            shutil.rmtree(path)
-            return True
-        else:
-            return False
-
-
-class DirExplorer:
     def __get_sub_items(
         input_dir: str,
         full_path: bool,
@@ -555,7 +534,7 @@ class DirExplorer:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = DirExplorer.__get_sub_items(
+        sub_list = Dir.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -572,7 +551,7 @@ class DirExplorer:
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = DirExplorer.__get_sub_items(
+        sub_list = Dir.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -582,14 +561,14 @@ class DirExplorer:
         )
         return sub_list
 
-    def get_sub_folders(
+    def get_sub_dirs(
         input_dir: str,
         key_word: str = "",
         full_path: bool = False,
         shuffle: bool = False,
         seed: int = None,
     ) -> List:
-        sub_list = DirExplorer.__get_sub_items(
+        sub_list = Dir.__get_sub_items(
             input_dir=input_dir,
             full_path=full_path,
             key_word=key_word,
@@ -602,12 +581,12 @@ class DirExplorer:
     def __walk_sub_dirs(input_dir: str) -> List:
         sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
         for input_dir in sub_dirs:
-            sub_dirs.extend(DirExplorer.__walk_sub_dirs(input_dir))
+            sub_dirs.extend(Dir.__walk_sub_dirs(input_dir))
         return sub_dirs
 
     def walk_sub_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
         sub_dirs = List()
-        for i in DirExplorer.__walk_sub_dirs(input_dir):
+        for i in Dir.__walk_sub_dirs(input_dir):
             if key_word == "" or key_word in i:
                 sub_dirs.append(i)
         sub_dirs.remove_duplicates()
@@ -634,24 +613,26 @@ class GPU:
 
 
 class Debug:
+    DELETE_FLAG = "delete.flag"
+
     def error_exit(err_msg: str = ""):
         assert 0, err_msg
 
     def clear_debug_data():
-        for i in DirExplorer.walk_sub_dirs(
-            Global.TRAIN_RESULTS_DIR, key_word=Global.DELETE_FLAG
+        for i in Dir.walk_sub_dirs(
+            Global.TRAIN_RESULTS_DIR, key_word=Debug.DELETE_FLAG
         ):
-            Folder.delete(i)
-        Folder.clear(os.path.join(Global.PROJ_DIR, "debug"))
+            Dir.delete(i)
+        Dir.clear(os.path.join(Global.PROJ_DIR, "debug"))
 
     def clear_linux_trash():
         if platform.system().lower() == "linux":
-            Folder.clear("/home/alan/.local/share/Trash/files/")
-            Folder.clear("/home/alan/.local/share/Trash/info/")
+            Dir.clear("/home/alan/.local/share/Trash/files/")
+            Dir.clear("/home/alan/.local/share/Trash/info/")
 
 
 class Time:
-    def get_cur_time_str() -> str:
+    def cur_time_str() -> str:
         cur_time = str(datetime.now().replace(microsecond=0))
         cur_time = cur_time.replace(":", ".")
         cur_time = cur_time.replace("-", ".")
@@ -699,8 +680,7 @@ class DatasetPart:
 
 class Global:
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
-    EPS = sys.float_info.epsilon
-    DELETE_FLAG = "delete.flag"
+
     __settings = Json.load(os.path.join(PROJ_DIR, "settings.json"))
 
     # use CPU
@@ -781,8 +761,3 @@ class Global:
 
     DATASET_FOLDS = __settings["dataset.folds"]
     TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])
-
-    # icon path
-    CROSS_DIR_SELECTED = os.path.join(PROJ_DIR, "icons", "cross_selected.png")
-    CROSS_DIR = os.path.join(PROJ_DIR, "icons", "cross.png")
-    CROSS_SIZE = 20

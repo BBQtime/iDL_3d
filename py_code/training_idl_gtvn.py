@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from custom import DatasetPart, Debug, Dict, DirExplorer, Folder
+from custom import DatasetPart, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Nii, Value
 from dataset_idl_gtvn import DataSetIDLGTVn
@@ -79,9 +79,9 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         output_idl_gtvn_dir = os.path.join(baseline_dir, idl_gtvn_id)
         if not os.path.exists(output_idl_gtvn_dir):
-            Folder.create(output_idl_gtvn_dir)
+            Dir.create(output_idl_gtvn_dir)
 
-        cnn_fold_dirs = DirExplorer.get_sub_folders(
+        cnn_fold_dirs = Dir.get_sub_dirs(
             cnn_idl_gtvn_dir, key_word="fold=", full_path=True
         )
         hyper = Json.load(os.path.join(cnn_fold_dirs[0], "hyper.json"))
@@ -109,10 +109,10 @@ class TrainingIDLGTVn(TrainingBaseline):
             # print("fold: ", fold)
 
             output_fold_dir = os.path.join(output_idl_gtvn_dir, Path(cnn_fold_dir).name)
-            Folder.create(output_fold_dir)
+            Dir.create(output_fold_dir)
 
             # loop through epoch dirs
-            for cnn_epoch_dir in DirExplorer.get_sub_folders(
+            for cnn_epoch_dir in Dir.get_sub_dirs(
                 cnn_fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = int(Path(cnn_epoch_dir).name[len("epoch=") :])
@@ -121,7 +121,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 output_epoch_dir = os.path.join(
                     output_fold_dir, Path(cnn_epoch_dir).name
                 )
-                Folder.create(output_epoch_dir)
+                Dir.create(output_epoch_dir)
 
                 # load cnn
                 cnn_path = os.path.join(cnn_epoch_dir, "epoch={:03d}.pt".format(epoch))
@@ -192,12 +192,12 @@ class TrainingIDLGTVn(TrainingBaseline):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             preds[gtv] = None
 
-        output_fold_dirs = DirExplorer.get_sub_folders(
+        output_fold_dirs = Dir.get_sub_dirs(
             output_idl_gtvn_dir, key_word="fold=", full_path=True
         )
         for output_fold_dir in output_fold_dirs:
             # find epoch dir
-            output_epoch_dir = DirExplorer.get_sub_folders(
+            output_epoch_dir = Dir.get_sub_dirs(
                 output_fold_dir, key_word="epoch=", full_path=True
             )[0]
 
@@ -230,7 +230,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             output_idl_gtvn_dir, "patients", "patient={}".format(patient)
         )
         pred_dir = os.path.join(pred_dir, "round=01")
-        Folder.create(pred_dir)
+        Dir.create(pred_dir)
 
         # save cross_valid preds (only save gtvt and gtvn)
         for gtv in preds.keys():
@@ -333,7 +333,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             "patients",
             "patient={}".format(patient),
         )
-        Folder.create(epoch_patient_dir)
+        Dir.create(epoch_patient_dir)
 
         # create cross validation dir to save distance maps and clicks
         cross_valid_patient_dir = os.path.join(
@@ -342,7 +342,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             "patient={}".format(patient),
             "round=01",
         )
-        Folder.create(cross_valid_patient_dir)
+        Dir.create(cross_valid_patient_dir)
 
         # save pred
         Nii.save(

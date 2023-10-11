@@ -2,7 +2,7 @@
 
 # import matplotlib as mpl
 # import matplotlib.pyplot as plt
-# from custom import Dict, DirExplorer, Folder
+# from custom import Dict, Dir
 # from custom import Global as g
 # from custom import Json, List, Metric, Nii
 # from tqdm import tqdm
@@ -21,7 +21,7 @@
 #     # plt.style.use("bmh")  # put this line before drawing figure
 
 #     patient_tumor_size_dict = Dict()
-#     for patient_dir in DirExplorer.get_sub_folders(
+#     for patient_dir in Dir.get_sub_dirs(
 #         train_result_dir, key_word="patient="
 #     ):
 #         patient_tumor_size_dict[patient_dir] = 0
@@ -30,7 +30,7 @@
 #     for patient_dir in patient_tumor_size_dict.keys():
 #         # create list of round folders
 #         round_dir_list = ["baseline"]
-#         round_dir_list += DirExplorer.get_sub_folders(
+#         round_dir_list += Dir.get_sub_dirs(
 #             os.path.join(train_result_dir, patient_dir),
 #             key_word="round=",
 #         )
@@ -39,7 +39,7 @@
 #             score_dict[patient_dir][metric] = List()
 #         # iterate through round folders
 #         for round_dir in round_dir_list:
-#             iter_json_list = DirExplorer.get_sub_files(
+#             iter_json_list = Dir.get_sub_files(
 #                 os.path.join(train_result_dir, patient_dir, round_dir),
 #                 key_word=".json",
 #             )
@@ -324,7 +324,7 @@
 #         elif metric == Metric.HD95:
 #             plt.legend(loc="upper right")
 
-#         img_path = Folder.create(os.path.join(g.PROJ_DIR, "idl_figs"))
+#         img_path = Dir.create(os.path.join(g.PROJ_DIR, "idl_figs"))
 #         img_path = os.path.join(
 #             img_path,
 #             key_hyper + "." + metric + ".png",

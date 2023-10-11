@@ -1,7 +1,7 @@
 # import csv
 # import os
 
-# from custom import DirExplorer
+# from custom import Dir
 # from custom import Global as g
 # from custom import Json, List
 
@@ -15,8 +15,8 @@
 #             fields.append("{}_{}".format(metric, i + 1))
 
 #     baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
-#     fold_dir = DirExplorer.get_sub_folders(baseline_dir, "fold=", full_path=True)[0]
-#     epoch_dir = DirExplorer.get_sub_folders(fold_dir, "epoch=", full_path=True)[0]
+#     fold_dir = Dir.get_sub_dirs(baseline_dir, "fold=", full_path=True)[0]
+#     epoch_dir = Dir.get_sub_dirs(fold_dir, "epoch=", full_path=True)[0]
 #     idl_gtvt_main_dir = os.path.join(epoch_dir, "idl_gtvt")
 
 #     patient_list = Json.load(

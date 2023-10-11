@@ -12,9 +12,15 @@ class DraggableCross(QWidget):
         super().__init__(parent)
         self.cross_id = cross_id
 
-        self.__WIDTH = g.CROSS_SIZE
-        self.__HEIGHT = g.CROSS_SIZE
-        self.setFixedSize(self.__WIDTH, self.__HEIGHT)
+        self.CROSS_SIZE = 20
+        self.CROSS_ICON_DIR_SELECTED = os.path.join(
+            g.PROJ_DIR, "icons", "cross_selected.png"
+        )
+        self.CROSS_ICON_DIR_UNSELECTED = os.path.join(
+            g.PROJ_DIR, "icons", "cross_unselected.png"
+        )
+
+        self.setFixedSize(self.CROSS_SIZE, self.CROSS_SIZE)
 
         self.setMouseTracking(True)
 
@@ -23,7 +29,7 @@ class DraggableCross(QWidget):
         self.offset = None
 
         self.png_label = QLabel(self)
-        self.png_label.setGeometry(0, 0, self.__WIDTH, self.__HEIGHT)
+        self.png_label.setGeometry(0, 0, self.CROSS_SIZE, self.CROSS_SIZE)
 
     def get_pos_in_3d(self):
         rgb_img_relative_pos = self.parent().window().get_rgb_img_relative_pos()
@@ -35,8 +41,8 @@ class DraggableCross(QWidget):
         if rgb_img_relative_pos is None:
             return None
 
-        x = self.pos().x() + round(g.CROSS_SIZE / 2) - rgb_img_relative_pos["x"]
-        y = self.pos().y() + round(g.CROSS_SIZE / 2) - rgb_img_relative_pos["y"]
+        x = self.pos().x() + round(self.CROSS_SIZE / 2) - rgb_img_relative_pos["x"]
+        y = self.pos().y() + round(self.CROSS_SIZE / 2) - rgb_img_relative_pos["y"]
 
         x = x / rgb_img_relative_pos["width"]
         y = y / rgb_img_relative_pos["height"]
@@ -93,16 +99,19 @@ class DraggableCross(QWidget):
     def select(self, selected: bool):
         self.selected = selected
         if selected:
-            self.load_png(g.CROSS_DIR_SELECTED)
+            self.load_png(self.CROSS_ICON_DIR_SELECTED)
             # set focus, otherwise key_delete/key_backspace wont work
             self.setFocus()
         else:
-            self.load_png(g.CROSS_DIR)
+            self.load_png(self.CROSS_ICON_DIR_UNSELECTED)
 
     def load_png(self, png_path: str):
         if os.path.exists(png_path):
             pixmap = QPixmap(png_path)
             pixmap = pixmap.scaled(
-                self.__WIDTH, self.__HEIGHT, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                self.CROSS_SIZE,
+                self.CROSS_SIZE,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
             )
             self.png_label.setPixmap(pixmap)
