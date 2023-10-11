@@ -15,9 +15,9 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 0:
+if 1:
     app = QApplication(sys.argv)
-    if 0:
+    if 1:
         ui = UiIDL(
             idl_remark="",
             debug_mode=1,
@@ -80,7 +80,7 @@ if 0:
 
 ############# IDL.GTVt #############
 idl_gtvt = TrainingIDLGTVt()
-if 1:
+if 0:
     idl_gtvt.simulation(
         baseline_id="baseline_2023.08.23.15.32.07_1mm_no.pt",
         debug_mode=1,

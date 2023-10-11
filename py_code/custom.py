@@ -489,8 +489,6 @@ class Dir:
             shutil.rmtree(path)
         elif os.path.isfile(path):
             os.remove(path)
-        else:
-            Debug.error_exit("path is not a file or dir")
 
     def __get_sub_items(
         input_dir: str,
@@ -580,16 +578,15 @@ class Dir:
 
     def __walk_sub_dirs(input_dir: str) -> List:
         sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
-        for input_dir in sub_dirs:
-            sub_dirs.extend(Dir.__walk_sub_dirs(input_dir))
+        for sub_dir in sub_dirs.copy():
+            sub_dirs.extend(Dir.__walk_sub_dirs(sub_dir))
         return sub_dirs
 
     def walk_sub_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
         sub_dirs = List()
-        for i in Dir.__walk_sub_dirs(input_dir):
-            if key_word == "" or key_word in i:
-                sub_dirs.append(i)
-        sub_dirs.remove_duplicates()
+        for sub_dir in Dir.__walk_sub_dirs(input_dir):
+            if key_word == "" or key_word in sub_dir:
+                sub_dirs.append(sub_dir)
         if suffle:
             sub_dirs.shuffle()
         else:
