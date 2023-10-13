@@ -1,33 +1,30 @@
 import os
 import random
 
+import cv2
 import numpy as np
+import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Nii, Plane, Time
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QIcon, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
+from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
 from ui_draggable_cross import DraggableCross
 from ui_replay import UiReplay
 
-# always fill gtvt
-
 
 class UiIDL(UiReplay):
     def draw_on_4_qlabels_press(self, event: QMouseEvent):
-        if self._plane == Plane.TRANSVERSE:
-            center_slice = self.gtv_clicks_pos[0][0]
-        elif self._plane == Plane.CORONAL:
-            center_slice = self.gtv_clicks_pos[0][1]
-        elif self._plane == Plane.SAGITTAL:
-            center_slice = self.gtv_clicks_pos[0][2]
+        center_slice_id = self.__get_gtvt_center_slice_id()
 
-        if self._cur_slice == center_slice:
+        if self._cur_slice_id == center_slice_id:
             self.paint_pos = event.pos()
         else:
-            self._cur_slice = center_slice
+            self._cur_slice_id = center_slice_id
             self._refresh_rgb_imgs()
+            self.__refresh_annotation_on_4_qlabels()
             self._refresh_title()
 
     def draw_on_4_qlabels_move(self, event: QMouseEvent):
@@ -61,10 +58,94 @@ class UiIDL(UiReplay):
         if self.paint_pos is not None:
             self.paint_pos = None
 
-    def __confirm_annotation(self):
+            # save drawing layer in to 2d ndarray
+            # qpixmap to a qimage
+            qimg = self.img_qlabel["ct"].drawing_layer.toImage()
+            # qimage to ndarray
+            annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
+            annotation_2d /= 255
+
+            # resize np array based on reletive pos
+            x = self._rgb_img_relative_pos["x"]
+            y = self._rgb_img_relative_pos["y"]
+            width = self._rgb_img_relative_pos["width"]
+            height = self._rgb_img_relative_pos["height"]
+
+            # crop roi
+            annotation_2d = annotation_2d[y : y + height, x : x + width]
+
+            # resize to actual size
+            if self._plane == Plane.SAGITTAL:
+                actual_shape = self._3d_imgs["ct"][:, :, 0].shape
+            elif self._plane == Plane.CORONAL:
+                actual_shape = self._3d_imgs["ct"][:, 0, :].shape
+            elif self._plane == Plane.TRANSVERSE:
+                actual_shape = self._3d_imgs["ct"][0, :, :].shape
+            annotation_2d = cv2.resize(
+                annotation_2d,
+                (actual_shape[1], actual_shape[0]),
+                interpolation=cv2.INTER_AREA,
+            )
+
+            # fill holes if pen mode
+            if not self.eraser_mode:
+                annotation_2d = ndimage.binary_fill_holes(annotation_2d).astype(
+                    np.float32
+                )
+
+            # save annotation into 3d ndarray
+            center_slice_id = self.__get_gtvt_center_slice_id()
+            if self._plane == Plane.SAGITTAL:
+                self.__annotation_3d[:, :, center_slice_id] = annotation_2d
+            elif self._plane == Plane.CORONAL:
+                self.__annotation_3d[:, center_slice_id, :] = annotation_2d
+            elif self._plane == Plane.TRANSVERSE:
+                self.__annotation_3d[center_slice_id, :, :] = annotation_2d
+
+            Nii.save(
+                self.__annotation_3d,
+                os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation.nii"),
+            )
+
+            self.__refresh_annotation_on_4_qlabels()
+
+    def __refresh_annotation_on_4_qlabels(self):
+        if self.get_cur_patient_idl_step() != IDLStep.DRAW_GTVT:
+            return
+
+        center_slice_id = self.__get_gtvt_center_slice_id()
+
+        if self._cur_slice_id != center_slice_id:
+            self.__clear_annotation_3d()
+            return
+
+        if self._plane == Plane.SAGITTAL:
+            annotation_2d = self.__annotation_3d[:, :, center_slice_id]
+        elif self._plane == Plane.CORONAL:
+            annotation_2d = self.__annotation_3d[:, center_slice_id, :]
+        elif self._plane == Plane.TRANSVERSE:
+            annotation_2d = self.__annotation_3d[center_slice_id, :, :]
+
+        for i in ["ct", "pt", "mr1", "mr2"]:
+            annotation_2d, _ = self._fit_img_qlabel(annotation_2d, self.img_qlabel[i])
+
+            # binary array to rgb array
+            color_array = np.zeros(
+                # 4channels r/g/b/alpha
+                shape=(annotation_2d.shape[0], annotation_2d.shape[1], 4),
+                dtype=np.uint8,
+            )
+            rgb_alpha = self._color["gtvt.annotation"] + (255,)
+            color_array[annotation_2d == 1] = rgb_alpha
+
+            qimg = qimage2ndarray.array2qimage(color_array)
+            self.img_qlabel[i].drawing_layer = QPixmap.fromImage(qimg)
+            self.img_qlabel[i].update()
+
+    def __click_btn_confirm(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
             # add clicks into 3d img
-            pos = self.gtv_clicks_pos[0]
+            pos = self.__clicks_pos_3d[0]
             # pos 0-transverse 1-coronal 2-saggital
             self._3d_imgs["gtvt.click"][pos[0]][pos[1]][pos[2]] = 1
 
@@ -89,31 +170,43 @@ class UiIDL(UiReplay):
                 save_path=os.path.join(round_dir, "gtvt_click.nii"),
                 spacing=self._nii_spacing,
             )
+            # clean current step elements
+            self.delete_all_crosses_on_4_qlabels()
+            # DO NOT clear self.__clicks_pos_3d, IDLStep.DRAW_GTVT will use it
 
+            # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
+            self.__save_idl_step()
+            self.__update_msg()
             self._refresh_rgb_imgs()
             self._refresh_title()
-            self.__refresh_crosses_on_rgb_imgs()
-            self.__save_idl_step()
-            self.__update_annotation_msg()
+            self.__clear_annotation_3d()
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            # clean current step elements
+            self.__clear_annotation_3d()
+            self.__clear_all_drawing_layers_on_4_qlabels()
+            # new step
             self.set_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
-            self.__clear_annotation()
+            self.__save_idl_step()
+            self.__update_msg()
             self._refresh_rgb_imgs()
             self._refresh_title()
-            self.__save_idl_step()
-            self.__update_annotation_msg()
-            # clear gtvt click pos
-            self.gtv_clicks_pos = List()
+            self.clear_clicks_pos_3d()
 
         elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
             # add clicks into 3d img
-            for pos in self.gtv_clicks_pos:
+            for pos in self.__clicks_pos_3d:
                 # pos 0-transverse 1-coronal 2-saggital
                 self._3d_imgs["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
-            # clear gtvn clicks pos
-            self.gtv_clicks_pos = List()
+
+            # clean current step elements
+            self.clear_clicks_pos_3d()
+            self.delete_all_crosses_on_4_qlabels()
+
+            # show gtvn center
+            self._refresh_rgb_imgs()
+            self._refresh_title()
 
             # copy data (dont change origin ndarray)
             idl_gtvn_clicks = self._3d_imgs["gtvn.clicks"].copy()
@@ -132,50 +225,84 @@ class UiIDL(UiReplay):
                 dataset_part=self._dataset_part,
                 dataset_ver=self._dataset_ver,
             )
-            # update idl step for current patient
+
+            # new step
             self.set_cur_patient_idl_step(IDLStep.CORRECTION)
-            self._choose_idl_gtvt()
-            self._choose_idl_gtvn()
+            self.__save_idl_step()
+            self.__update_msg()
             self._refresh_rgb_imgs()
             self._refresh_title()
-            self.__refresh_crosses_on_rgb_imgs()
-            self.__save_idl_step()
-            self.__update_annotation_msg()
+
+    def __click_btn_clear(self):
+        if (
+            self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER
+            or self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER
+        ):
+            self.delete_all_crosses_on_4_qlabels()
+            self.clear_clicks_pos_3d()
+            self.__refresh_crosses_on_4_qlabels()
+
+        elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            self.__clear_all_drawing_layers_on_4_qlabels()
+            self.__clear_annotation_3d()
+            self.__refresh_annotation_on_4_qlabels()
+
+    def __get_gtvt_center_slice_id(self):
+        if len(self.__clicks_pos_3d) == 0:
+            return None
+        if self._plane == Plane.TRANSVERSE:
+            center_slice_id = self.__clicks_pos_3d[0][0]
+        elif self._plane == Plane.CORONAL:
+            center_slice_id = self.__clicks_pos_3d[0][1]
+        elif self._plane == Plane.SAGITTAL:
+            center_slice_id = self.__clicks_pos_3d[0][2]
+        return center_slice_id
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
-        self.__refresh_crosses_on_rgb_imgs()
+        self.__refresh_crosses_on_4_qlabels()
+        self.__refresh_annotation_on_4_qlabels()
 
     def _set_img_plane(self):
         super()._set_img_plane()
-        self.__refresh_crosses_on_rgb_imgs()
+        self.__refresh_crosses_on_4_qlabels()
+        self.__refresh_annotation_on_4_qlabels()
 
-    def __refresh_crosses_on_rgb_imgs(self):
-        # remove old crosses
+    def delete_all_crosses_on_4_qlabels(self):
         for i in ["ct", "pt", "mr1", "mr2"]:
             self.img_qlabel[i].delete_all_crosses()
 
-        # load crosses position from self.gtv_clicks_pos
+    def __refresh_crosses_on_4_qlabels(self):
+        if (
+            self.get_cur_patient_idl_step() != IDLStep.CLICK_GTVT_CENTER
+            and self.get_cur_patient_idl_step() != IDLStep.CLICK_GTVN_CENTER
+        ):
+            return
+
+        # remove old crosses
+        self.delete_all_crosses_on_4_qlabels()
+
+        # load crosses position from self.__clicks_pos_3d
         if (
             self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER
             or self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER
         ):
             img_shape = self.get_3d_img_shape()
 
-            for d, h, w in self.gtv_clicks_pos:
+            for d, h, w in self.__clicks_pos_3d:
                 x = y = None
                 if self._plane == Plane.TRANSVERSE:
-                    if self._cur_slice == d:
+                    if self._cur_slice_id == d:
                         x = w / img_shape[2]
                         y = h / img_shape[1]
 
                 elif self._plane == Plane.CORONAL:
-                    if self._cur_slice == h:
+                    if self._cur_slice_id == h:
                         x = w / img_shape[2]
                         y = d / img_shape[0]
 
                 elif self._plane == Plane.SAGITTAL:
-                    if self._cur_slice == w:
+                    if self._cur_slice_id == w:
                         x = h / img_shape[1]
                         y = d / img_shape[0]
 
@@ -191,13 +318,13 @@ class UiIDL(UiReplay):
                     # do not record click pos when refreshing
                     self.add_4_crosses(QPoint(x, y), record_click_pos=False)
 
-    def delete_click_in_3d(self, cross: DraggableCross):
+    def delete_click_pos(self, cross: DraggableCross):
         pos = cross.get_pos_in_3d()
-        self.gtv_clicks_pos.remove(pos)
+        self.__clicks_pos_3d.remove(pos)
 
-    def add_click_in_3d(self, cross: DraggableCross):
+    def add_click_pos(self, cross: DraggableCross):
         pos = cross.get_pos_in_3d()
-        self.gtv_clicks_pos.append(pos)
+        self.__clicks_pos_3d.append(pos)
 
     def set_4_crosses_dragging_offset(self, pos: QPoint):
         for i in ["ct", "pt", "mr1", "mr2"]:
@@ -213,7 +340,7 @@ class UiIDL(UiReplay):
 
     def delete_4_crosses(self):
         cross = self.img_qlabel["ct"].selected_cross
-        self.delete_click_in_3d(cross)
+        self.delete_click_pos(cross)
         for i in ["ct", "pt", "mr1", "mr2"]:
             self.img_qlabel[i].delete_selected_cross()
 
@@ -236,7 +363,7 @@ class UiIDL(UiReplay):
         if record_click_pos:
             new_cross = self.img_qlabel["ct"].get_cross_by_id(cross_id)
             pos = new_cross.get_pos_in_3d()
-            self.gtv_clicks_pos.append(pos)
+            self.__clicks_pos_3d.append(pos)
 
     def select_4_crosses(self, cross_id: int):
         for i in ["ct", "pt", "mr1", "mr2"]:
@@ -252,7 +379,7 @@ class UiIDL(UiReplay):
         return self._plane
 
     def get_cur_slice(self):
-        return self._cur_slice
+        return self._cur_slice_id
 
     def get_3d_img_shape(self):
         if self._3d_imgs["ct"] is not None:
@@ -280,8 +407,16 @@ class UiIDL(UiReplay):
         self.__btn["clear"] = self._btn_clear
         self.__btn["confirm"] = self._btn_confirm
 
+    def __clear_annotation_3d(self):
+        self.__annotation_3d = np.zeros_like(self._3d_imgs["ct"])
+
+    def clear_clicks_pos_3d(self):
+        self.__clicks_pos_3d = List()
+
     def _init_member_var(self, idl_remark: str = None, debug_mode: bool = False):
         super()._init_member_var()
+
+        self.__clear_annotation_3d()
 
         # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.cur_time_str()
@@ -302,7 +437,7 @@ class UiIDL(UiReplay):
             self.__idl_step["patient={}".format(patient)] = IDLStep.CLICK_GTVT_CENTER
 
         # save the position of gtvt/gtvn clicks
-        self.gtv_clicks_pos = List()
+        self.clear_clicks_pos_3d()
 
         # drawing
         self.eraser_mode = False
@@ -337,14 +472,10 @@ class UiIDL(UiReplay):
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
 
-    def __clear_annotation(self):
-        # clear drawing layer of each img_qlabel
+    def __clear_all_drawing_layers_on_4_qlabels(self):
         for i in ["ct", "pt", "mr1", "mr2"]:
-            self.img_qlabel[i].drawing_layer = QPixmap(self.size())
+            self.img_qlabel[i].drawing_layer = QPixmap(self.img_qlabel[i].size())
             self.img_qlabel[i].drawing_layer.fill(Qt.transparent)
-            self.img_qlabel[i].drawing_layer = self.img_qlabel[i].drawing_layer.scaled(
-                self.img_qlabel[i].size()
-            )
             self.img_qlabel[i].update()
 
     def __switch_drawing_mode(self):
@@ -406,8 +537,8 @@ class UiIDL(UiReplay):
         # connect ui to functions
         # (put this at the end, because these functions will need the initialization above)
         self.__btn["drawing.mode"].clicked.connect(self.__switch_drawing_mode)
-        self.__btn["clear"].clicked.connect(self.__clear_annotation)
-        self.__btn["confirm"].clicked.connect(self.__confirm_annotation)
+        self.__btn["clear"].clicked.connect(self.__click_btn_clear)
+        self.__btn["confirm"].clicked.connect(self.__click_btn_confirm)
 
     def get_pen_size(self):
         return self._slider_pen_size.value()
@@ -513,8 +644,8 @@ class UiIDL(UiReplay):
                 )
 
     def _choose_patient(self, idx: int = None):
-        # clear gtv clicks pos
-        self.gtv_clicks_pos = List()
+        self.clear_clicks_pos_3d()
+        self.__clear_annotation_3d()
 
         self._cur_patient = self._combox["patient"].currentText()
         # run these after patient combox current text is set up
@@ -531,12 +662,13 @@ class UiIDL(UiReplay):
         self._choose_idl_gtvn()
         self._refresh_rgb_imgs()
         self._refresh_title()
-        self.__refresh_crosses_on_rgb_imgs()
+        self.__refresh_crosses_on_4_qlabels()
+        self.__refresh_annotation_on_4_qlabels()
         self.__save_idl_step()
-        self.__update_annotation_msg()
+        self.__update_msg()
 
     def _reset_cur_slice_id(self):
-        self._cur_slice = self._get_middle_slice_id()
+        self._cur_slice_id = self._get_middle_slice_id()
 
     def get_cur_patient_idl_step(self):
         return self.__idl_step["patient={}".format(self._cur_patient)]
@@ -544,7 +676,7 @@ class UiIDL(UiReplay):
     def set_cur_patient_idl_step(self, step: str):
         self.__idl_step["patient={}".format(self._cur_patient)] = step
 
-    def __update_annotation_msg(self):
+    def __update_msg(self):
         cur_patient_idl_step = self.get_cur_patient_idl_step()
 
         if cur_patient_idl_step == IDLStep.CLICK_GTVT_CENTER:

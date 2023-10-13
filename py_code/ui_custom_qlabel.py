@@ -1,5 +1,4 @@
-from custom import Global as g
-from custom import IDLStep, List
+from custom import IDLStep
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
@@ -31,9 +30,8 @@ class CustomQLabel(QLabel):
         if event.button() == Qt.LeftButton:
             if self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
                 # remove old crosses
-                for i in ["ct", "pt", "mr1", "mr2"]:
-                    self.window().img_qlabel[i].delete_all_crosses()
-                self.window().gtv_clicks_pos = List()
+                self.window().delete_all_crosses_on_4_qlabels()
+                self.window().clear_clicks_pos_3d()
                 # add new crosses
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 
@@ -62,8 +60,12 @@ class CustomQLabel(QLabel):
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
+
         if self.background_img:
+            painter.setOpacity(1.0)
             painter.drawPixmap(self.rect(), self.background_img)
+
+        if self.drawing_layer:
             # 0 for fully transparent, 255 for fully opaque
             painter.setOpacity(100 / 255)
             painter.drawPixmap(self.rect(), self.drawing_layer)

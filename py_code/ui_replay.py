@@ -17,8 +17,6 @@ from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 from ui_custom_qlabel import CustomQLabel
 
-# gravity center of gtvs
-
 
 class UiReplay(QMainWindow, Ui_Core):
     def __init__(
@@ -62,7 +60,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         self._baseline_id = None
         self._cur_patient = None
-        self._cur_slice = 0  # starts from 0
+        self._cur_slice_id = 0  # starts from 0
         self._plane = None
         self._gtvs_center = None
 
@@ -286,8 +284,8 @@ class UiReplay(QMainWindow, Ui_Core):
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
     #     self._refresh_rgb_imgs()
 
-    def __fit_img_qlabel(self, img, img_qlabel: QtWidgets.QLabel):
-        err_msg = "MainWindow.__fit_img_qlabel(), img.shape should == 2 or 3"
+    def _fit_img_qlabel(self, img, img_qlabel: QtWidgets.QLabel):
+        err_msg = "MainWindow._fit_img_qlabel(), img.shape should == 2 or 3"
 
         # image spacing resize
         if self._plane == Plane.SAGITTAL:
@@ -790,11 +788,11 @@ class UiReplay(QMainWindow, Ui_Core):
     def _reset_cur_slice_id(self):
         if self._gtvs_center is not None:
             if self._plane == Plane.TRANSVERSE:
-                self._cur_slice = self._gtvs_center[0]
+                self._cur_slice_id = self._gtvs_center[0]
             if self._plane == Plane.CORONAL:
-                self._cur_slice = self._gtvs_center[1]
+                self._cur_slice_id = self._gtvs_center[1]
             if self._plane == Plane.SAGITTAL:
-                self._cur_slice = self._gtvs_center[2]
+                self._cur_slice_id = self._gtvs_center[2]
 
     def __set_bright_contrast_modality(self):
         for i in ["ct", "pt", "mr1", "mr2"]:
@@ -1033,7 +1031,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self.__load_labels()
 
         # reset slice id (after multi-modal imgs are loaded)
-        # self._cur_slice = self._get_middle_slice_id()
+        # self._cur_slice_id = self._get_middle_slice_id()
         self._reset_cur_slice_id()
 
         # choose idl automatically
@@ -1274,16 +1272,16 @@ class UiReplay(QMainWindow, Ui_Core):
         # load rgb imgs
         for i in ["ct", "pt", "mr1", "mr2"]:
             if self._plane == Plane.SAGITTAL:
-                rgb_img = self._3d_imgs[i][:, :, self._cur_slice]
+                rgb_img = self._3d_imgs[i][:, :, self._cur_slice_id]
             elif self._plane == Plane.CORONAL:
-                rgb_img = self._3d_imgs[i][:, self._cur_slice, :]
+                rgb_img = self._3d_imgs[i][:, self._cur_slice_id, :]
             elif self._plane == Plane.TRANSVERSE:
-                rgb_img = self._3d_imgs[i][self._cur_slice, :, :]
+                rgb_img = self._3d_imgs[i][self._cur_slice_id, :, :]
 
                 # # for transverse plane, img is upside down,
                 # # true slice id is: slices_count - 1 - slice_id
                 # rgb_img = self._3d_imgs[i][
-                #     (self.__get_slices_count() - 1 - self._cur_slice), :, :
+                #     (self.__get_slices_count() - 1 - self._cur_slice_id), :, :
                 # ]
             else:
                 Debug.error_exit("self._plane value error")
@@ -1361,11 +1359,11 @@ class UiReplay(QMainWindow, Ui_Core):
                 )
 
             # resize and fit img qlabel
-            rgb_img, self._rgb_img_relative_pos = self.__fit_img_qlabel(
-                rgb_img, self.img_qlabel[i]
-            )
+            rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[i])
+            if i == "ct":
+                self._rgb_img_relative_pos = _
 
-            # blur after __fit_img_qlabel will gain better effect
+            # blur after _fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
@@ -1382,28 +1380,34 @@ class UiReplay(QMainWindow, Ui_Core):
 
                 # load data of current slice
                 if self._plane == Plane.SAGITTAL:
-                    contours = self._3d_imgs[k][:, :, self._cur_slice].astype(np.uint8)
+                    contours = self._3d_imgs[k][:, :, self._cur_slice_id].astype(
+                        np.uint8
+                    )
                 elif self._plane == Plane.CORONAL:
-                    contours = self._3d_imgs[k][:, self._cur_slice, :].astype(np.uint8)
+                    contours = self._3d_imgs[k][:, self._cur_slice_id, :].astype(
+                        np.uint8
+                    )
                 elif self._plane == Plane.TRANSVERSE:
-                    contours = self._3d_imgs[k][self._cur_slice, :, :].astype(np.uint8)
+                    contours = self._3d_imgs[k][self._cur_slice_id, :, :].astype(
+                        np.uint8
+                    )
 
                     # # for transverse plane, img is upside down,
                     # # true slice id is: slices_count - 1 - slice_id
                     # contours = self._3d_imgs[k][
-                    #     (self.__get_slices_count() - 1 - self._cur_slice), :, :
+                    #     (self.__get_slices_count() - 1 - self._cur_slice_id), :, :
                     # ].astype(np.uint8)
                 else:
                     Debug.error_exit("self._plane value error")
 
-                contours, _ = self.__fit_img_qlabel(contours, self.img_qlabel[i])
+                contours, _ = self._fit_img_qlabel(contours, self.img_qlabel[i])
 
                 if k == "gtvt.click" or k == "gtvn.clicks":
                     thickness = 7
                 else:
                     thickness = 2
                     # blur, make the contours looks better on the UI
-                    # blur after __fit_img_qlabel()
+                    # blur after _fit_img_qlabel()
                     contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
 
                 contours, _ = cv2.findContours(
@@ -1577,7 +1581,9 @@ class UiReplay(QMainWindow, Ui_Core):
         if self._3d_imgs["ct"] is None:
             return False
 
-        if int(self._cur_slice) in self.__get_gtvt_selected_slices_on_2d(self._plane):
+        if int(self._cur_slice_id) in self.__get_gtvt_selected_slices_on_2d(
+            self._plane
+        ):
             return True
         else:
             return False
@@ -1606,16 +1612,16 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
-        if self._cur_slice is not None:
+        if self._cur_slice_id is not None:
             slices_count = self.__get_slices_count()
             if slices_count == 0:
                 return
             slice_delta = event.angleDelta().y() // 120
             if self._plane == Plane.CORONAL:
                 slice_delta = -slice_delta
-            self._cur_slice -= slice_delta
+            self._cur_slice_id -= slice_delta
             # limite slice_id in range(0,slices_count)
-            self._cur_slice %= slices_count
+            self._cur_slice_id %= slices_count
             self._refresh_rgb_imgs()
             self._refresh_title()
 
@@ -1636,10 +1642,12 @@ class UiReplay(QMainWindow, Ui_Core):
         # if self._idl_round["gtvt"] is not None:
         #     win_tital += "   Num.of.Annotated.Slices="
         #     win_tital += str(len(self.__get_gtvt_selected_slices_on_2d(self._plane)))
-        if self._cur_slice is not None:
+        if self._cur_slice_id is not None:
             slices_count = self.__get_slices_count()
             if slices_count > 0:
-                win_tital += "   Slice={}/{}".format(self._cur_slice + 1, slices_count)
+                win_tital += "   Slice={}/{}".format(
+                    self._cur_slice_id + 1, slices_count
+                )
         self.setWindowTitle(win_tital)
 
     def resizeEvent(self, event):

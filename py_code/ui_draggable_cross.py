@@ -84,7 +84,7 @@ class DraggableCross(QWidget):
             self.parent().window().select_4_crosses(self.cross_id)
             self.parent().window().set_4_crosses_dragging_state(True)
             self.parent().window().set_4_crosses_dragging_offset(event.pos())
-            self.parent().window().delete_click_in_3d(self)
+            self.parent().window().delete_click_pos(self)
 
     def mouseMoveEvent(self, event: QMouseEvent):
         if self.dragging:
@@ -94,7 +94,7 @@ class DraggableCross(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
             self.parent().window().set_4_crosses_dragging_state(False)
-            self.parent().window().add_click_in_3d(self)
+            self.parent().window().add_click_pos(self)
 
     def select(self, selected: bool):
         self.selected = selected
