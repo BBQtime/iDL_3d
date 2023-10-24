@@ -58,6 +58,11 @@ class UiIDL(UiReplay):
         if self.paint_pos is not None:
             self.paint_pos = None
 
+            # binarize threshold
+            # (this is for saving qimage as ndarray,
+            # need binarization before and after resize the ndarray)
+            binary_threshold = 0.15
+
             # save drawing layer in to 2d ndarray
             # qpixmap to a qimage
             qimg = self.img_qlabel[Modal.CT].drawing_layer.toImage()
@@ -65,13 +70,14 @@ class UiIDL(UiReplay):
             annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
             annotation_2d /= 255
 
-            # resize np array based on reletive pos
+            # binarization (before resize)
+            annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+
+            # crop np array based on roi
             x = self._rgb_img_relative_pos["x"]
             y = self._rgb_img_relative_pos["y"]
             width = self._rgb_img_relative_pos["width"]
             height = self._rgb_img_relative_pos["height"]
-
-            # crop roi
             annotation_2d = annotation_2d[y : y + height, x : x + width]
 
             # resize to actual size
@@ -86,6 +92,9 @@ class UiIDL(UiReplay):
                 (actual_shape[1], actual_shape[0]),
                 interpolation=cv2.INTER_AREA,
             )
+
+            # binarization (after resize)
+            annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
             # fill holes if pen mode
             if not self.eraser_mode:
@@ -104,7 +113,7 @@ class UiIDL(UiReplay):
 
             Nii.save(
                 self.__annotation_3d,
-                os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation.nii"),
+                os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation_3d.nii"),
             )
 
             self.__refresh_annotation_on_4_qlabels()
@@ -268,6 +277,11 @@ class UiIDL(UiReplay):
         elif self._plane == Plane.SAGITTAL:
             center_slice_id = self.__gtvn_clicks_pos_3d[-1][2]
         return center_slice_id
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.__refresh_crosses_on_4_qlabels()
+        self.__refresh_annotation_on_4_qlabels()
 
     def wheelEvent(self, event):
         super().wheelEvent(event)

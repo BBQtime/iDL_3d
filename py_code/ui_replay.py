@@ -28,13 +28,22 @@ class UiReplay(QMainWindow, Ui_Core):
         self.setupUi(self)
 
         self._init_ui_names()
+
         self._init_member_var(idl_remark=idl_remark, debug_mode=debug_mode)
+
+        # after _init_member_var()
+        self.setMinimumSize(self.__side_bar_width + 600, 600)
+
         self.__set_img_qlabels_background()
+
         # self.__init_zoomin()
+
         self.__init_color()
+
         self._init_side_bar()  # after _init_member_var(), function connection needed
 
         self._clear_img_data()
+
         self._refresh_title()  # after _init_member_var()
 
         # resize
