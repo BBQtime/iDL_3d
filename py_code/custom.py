@@ -648,6 +648,13 @@ class Orient:
     VERTICAL = "vertical"
 
 
+class Modal:
+    CT = "ct"
+    PT = "pt"
+    MR1 = "mr1"
+    MR2 = "mr2"
+
+
 class Metric:
     DSC = "dsc"
     MSD = "msd"

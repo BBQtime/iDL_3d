@@ -4,7 +4,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from custom import Dict, Img, Nii, Plane
+from custom import Dict, Img, Modal, Nii, Plane
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
@@ -44,21 +44,21 @@ class DataSetIDLGTVt(DatasetCore):
         )
 
         # load ct/pt/mr1/mr2
-        self.__origin["ct"] = Nii.load(
+        self.__origin[Modal.CT] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
         if not self._no_pt:
-            self.__origin["pt"] = Nii.load(
+            self.__origin[Modal.PT] = Nii.load(
                 os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(patient))
             )
-        self.__origin["mr1"] = Nii.load(
+        self.__origin[Modal.MR1] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
-        self.__origin["mr2"] = Nii.load(
+        self.__origin[Modal.MR2] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
         )
         # ct windowing
-        self.__origin["ct"] = Img.ct_windowing(self.__origin["ct"])
+        self.__origin[Modal.CT] = Img.ct_windowing(self.__origin[Modal.CT])
 
         # load weight map
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
@@ -95,7 +95,9 @@ class DataSetIDLGTVt(DatasetCore):
 
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             # annotated slice mask
-            slice_mask[plane] = np.zeros(self.__origin["ct"].shape, dtype=np.float32)
+            slice_mask[plane] = np.zeros(
+                self.__origin[Modal.CT].shape, dtype=np.float32
+            )
 
             for round_num in selected_slices[plane]:
                 # do NOT change weight["annotate.slice"], use another variable
@@ -267,9 +269,9 @@ class DataSetIDLGTVt(DatasetCore):
 
         # load multi-modal imgs
         input_imgs = None
-        multi_modal_list = ["ct", "pt", "mr1", "mr2"]
+        multi_modal_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         if self._no_pt:
-            multi_modal_list.remove("pt")
+            multi_modal_list.remove(Modal.PT)
         for i in multi_modal_list:
             img = self._preprocess(self.__origin[i], final["seed"])
 

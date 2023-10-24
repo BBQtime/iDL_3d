@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Metric, Nii, Orient, Plane, Value
+from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QImage, QPalette
@@ -42,7 +42,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self.showMaximized()
 
         # load first baseline result
-        self._choose_baseline()
+        self._load_baseline_3d_imgs()
 
     def _init_member_var(
         self,
@@ -94,10 +94,10 @@ class UiReplay(QMainWindow, Ui_Core):
             self.__scores[i][Metric.HD95] = None
 
         for i in [
-            "ct",
-            "pt",
-            "mr1",
-            "mr2",
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
             "gtvt.label",
             "gtvn.label",
             "gtvt.pred",
@@ -127,7 +127,7 @@ class UiReplay(QMainWindow, Ui_Core):
     #     super().mousePressEvent(event)
 
     #     # loop 4 img frames
-    #     for i in ["ct", "pt", "mr1", "mr2"]:
+    #     for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
     #         left = self.img_qlabel[i].x()
     #         top = self.img_qlabel[i].y()
     #         width = self.img_qlabel[i].width()
@@ -195,7 +195,7 @@ class UiReplay(QMainWindow, Ui_Core):
     #     # self.__zoomin["rubber.band"] = None
 
     #     # no data loaded
-    #     if self._3d_imgs["ct"] is None:
+    #     if self._3d_imgs[Modal.CT] is None:
     #         self._reset_zoomin()
     #         return
 
@@ -260,20 +260,20 @@ class UiReplay(QMainWindow, Ui_Core):
 
     #     # get actual zoom position
     #     if self._plane == Plane.SAGITTAL:
-    #         origin_width = self._3d_imgs["ct"].shape[1]
-    #         origin_height = self._3d_imgs["ct"].shape[0]
+    #         origin_width = self._3d_imgs[Modal.CT].shape[1]
+    #         origin_height = self._3d_imgs[Modal.CT].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
     #         )
     #     elif self._plane == Plane.CORONAL:
-    #         origin_width = self._3d_imgs["ct"].shape[2]
-    #         origin_height = self._3d_imgs["ct"].shape[0]
+    #         origin_width = self._3d_imgs[Modal.CT].shape[2]
+    #         origin_height = self._3d_imgs[Modal.CT].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[0]
     #         )
     #     else:
-    #         origin_width = self._3d_imgs["ct"].shape[2]
-    #         origin_height = self._3d_imgs["ct"].shape[1]
+    #         origin_width = self._3d_imgs[Modal.CT].shape[2]
+    #         origin_height = self._3d_imgs[Modal.CT].shape[1]
 
     #     start_x = round(start_x * origin_width / relative_pos["width"])
     #     end_x = round(end_x * origin_width / relative_pos["width"])
@@ -407,10 +407,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._img_qlabel_mr2 = CustomQLabel(self._central_widget)
 
         self.img_qlabel = Dict()
-        self.img_qlabel["ct"] = self._img_qlabel_ct
-        self.img_qlabel["pt"] = self._img_qlabel_pt
-        self.img_qlabel["mr1"] = self._img_qlabel_mr1
-        self.img_qlabel["mr2"] = self._img_qlabel_mr2
+        self.img_qlabel[Modal.CT] = self._img_qlabel_ct
+        self.img_qlabel[Modal.PT] = self._img_qlabel_pt
+        self.img_qlabel[Modal.MR1] = self._img_qlabel_mr1
+        self.img_qlabel[Modal.MR2] = self._img_qlabel_mr2
 
         self._text_label = Dict()
         self._text_label["baseline"] = self._text_label_baseline
@@ -440,10 +440,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
 
         self.__radio_btn = Dict()
-        self.__radio_btn["ct"] = self._radio_btn_ct
-        self.__radio_btn["pt"] = self._radio_btn_pt
-        self.__radio_btn["mr1"] = self._radio_btn_mr1
-        self.__radio_btn["mr2"] = self._radio_btn_mr2
+        self.__radio_btn[Modal.CT] = self._radio_btn_ct
+        self.__radio_btn[Modal.PT] = self._radio_btn_pt
+        self.__radio_btn[Modal.MR1] = self._radio_btn_mr1
+        self.__radio_btn[Modal.MR2] = self._radio_btn_mr2
         self.__radio_btn[Plane.TRANSVERSE] = self._radio_btn_transverse
         self.__radio_btn[Plane.CORONAL] = self._radio_btn_coronal
         self.__radio_btn[Plane.SAGITTAL] = self._radio_btn_sagittal
@@ -463,7 +463,7 @@ class UiReplay(QMainWindow, Ui_Core):
     def __set_img_qlabels_background(self):
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self.img_qlabel[i].setObjectName("")
             self.img_qlabel[i].setAutoFillBackground(True)
             self.img_qlabel[i].setPalette(pal)
@@ -496,10 +496,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["contrast"].setText("Contrast (CT)")
         self._text_label["zoom"].setText("Zoom In")
 
-        self.__radio_btn["ct"].setText("CT")
-        self.__radio_btn["pt"].setText("PT")
-        self.__radio_btn["mr1"].setText("MR-T1")
-        self.__radio_btn["mr2"].setText("MR-T2")
+        self.__radio_btn[Modal.CT].setText("CT")
+        self.__radio_btn[Modal.PT].setText("PT")
+        self.__radio_btn[Modal.MR1].setText("MR-T1")
+        self.__radio_btn[Modal.MR2].setText("MR-T2")
         self.__radio_btn[Plane.TRANSVERSE].setText("Transverse")
         self.__radio_btn[Plane.CORONAL].setText("Coronal")
         self.__radio_btn[Plane.SAGITTAL].setText("Sagittal")
@@ -529,10 +529,10 @@ class UiReplay(QMainWindow, Ui_Core):
             Plane.TRANSVERSE,
             Plane.CORONAL,
             Plane.SAGITTAL,
-            "ct",
-            "pt",
-            "mr1",
-            "mr2",
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
         ]:
             self.__radio_btn[i].setFont(self._font_bold)
 
@@ -566,26 +566,26 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # Add radio buttons to the button group
         self.__btn_group_bright_contrast = QButtonGroup()
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn["ct"])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn["pt"])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn["mr1"])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn["mr2"])
+        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.CT])
+        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.PT])
+        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.MR1])
+        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.MR2])
         self.__btn_group_plane = QButtonGroup()
         self.__btn_group_plane.addButton(self.__radio_btn[Plane.TRANSVERSE])
         self.__btn_group_plane.addButton(self.__radio_btn[Plane.CORONAL])
         self.__btn_group_plane.addButton(self.__radio_btn[Plane.SAGITTAL])
 
         # radio btns checked or not
-        self.__radio_btn["ct"].setChecked(True)
-        self.__radio_btn["pt"].setChecked(False)
-        self.__radio_btn["mr1"].setChecked(False)
-        self.__radio_btn["mr2"].setChecked(False)
+        self.__radio_btn[Modal.CT].setChecked(True)
+        self.__radio_btn[Modal.PT].setChecked(False)
+        self.__radio_btn[Modal.MR1].setChecked(False)
+        self.__radio_btn[Modal.MR2].setChecked(False)
         self.__radio_btn[Plane.TRANSVERSE].setChecked(True)
         self.__radio_btn[Plane.CORONAL].setChecked(False)
         self.__radio_btn[Plane.SAGITTAL].setChecked(False)
 
         # set slider range and default value
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self.__slider["bright.{}".format(i)].setMinimum(-128)
             self.__slider["bright.{}".format(i)].setMaximum(128)
             self.__slider["bright.{}".format(i)].setValue(0)
@@ -594,7 +594,7 @@ class UiReplay(QMainWindow, Ui_Core):
             self.__slider["contrast.{}".format(i)].setValue(100)
 
         # only show ct bright/contrast slider bars
-        for i in ["pt", "mr1", "mr2"]:
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
             self.__slider["bright.{}".format(i)].hide()
             self.__slider["contrast.{}".format(i)].hide()
 
@@ -604,24 +604,36 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # connect ui to functions
         # (put the connections at last, because these functions will need the initialization above)
-        self._combox["baseline"].activated.connect(self._choose_baseline)
-        self._arrow_btn["prev.baseline"].clicked.connect(self.__choose_prev_baseline)
-        self._arrow_btn["next.baseline"].clicked.connect(self.__choose_next_baseline)
+        self._combox["baseline"].activated.connect(self._load_baseline_3d_imgs)
+        self._arrow_btn["prev.baseline"].clicked.connect(
+            self._load_prev_baseline_3d_imgs
+        )
+        self._arrow_btn["next.baseline"].clicked.connect(
+            self._load_next_baseline_3d_imgs
+        )
 
-        self._combox["patient"].activated.connect(self._choose_patient)
-        self._arrow_btn["prev.patient"].clicked.connect(self.__choose_prev_patient)
-        self._arrow_btn["next.patient"].clicked.connect(self.__choose_next_patient)
+        self._combox["patient"].activated.connect(self._load_patient_3d_imgs)
+        self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_3d_imgs)
+        self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_3d_imgs)
 
-        self._combox["idl.gtvt"].activated.connect(self._choose_idl_gtvt)
-        self._arrow_btn["prev.idl.gtvt"].clicked.connect(self.__choose_prev_idl_gtvt)
-        self._arrow_btn["next.idl.gtvt"].clicked.connect(self.__choose_next_idl_gtvt)
+        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_3d_imgs)
+        self._arrow_btn["prev.idl.gtvt"].clicked.connect(
+            self._load_prev_idl_gtvt_3d_imgs
+        )
+        self._arrow_btn["next.idl.gtvt"].clicked.connect(
+            self._load_next_idl_gtvt_3d_imgs
+        )
 
-        self._combox["idl.gtvn"].activated.connect(self._choose_idl_gtvn)
-        self._arrow_btn["prev.idl.gtvn"].clicked.connect(self.__choose_prev_idl_gtvn)
-        self._arrow_btn["next.idl.gtvn"].clicked.connect(self.__choose_next_idl_gtvn)
+        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_3d_imgs)
+        self._arrow_btn["prev.idl.gtvn"].clicked.connect(
+            self._load_prev_idl_gtvn_3d_imgs
+        )
+        self._arrow_btn["next.idl.gtvn"].clicked.connect(
+            self._load_next_idl_gtvn_3d_imgs
+        )
 
         for i in ["bright", "contrast"]:
-            for j in ["ct", "pt", "mr1", "mr2"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self.__slider["{}.{}".format(i, j)].valueChanged.connect(
                     self._refresh_rgb_imgs
                 )
@@ -655,8 +667,8 @@ class UiReplay(QMainWindow, Ui_Core):
 
         radio_btn_height = 25
         radio_btn_width = Dict()
-        radio_btn_width["ct"] = radio_btn_width["pt"] = 45
-        radio_btn_width["mr1"] = radio_btn_width["mr2"] = 60
+        radio_btn_width[Modal.CT] = radio_btn_width[Modal.PT] = 45
+        radio_btn_width[Modal.MR1] = radio_btn_width[Modal.MR2] = 60
         radio_btn_width[Plane.TRANSVERSE] = 90
         radio_btn_width[Plane.CORONAL] = 70
         radio_btn_width[Plane.SAGITTAL] = 70
@@ -698,7 +710,7 @@ class UiReplay(QMainWindow, Ui_Core):
         # brightness and contrast radio btns
         top += gap
         tmp_left = left
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
             self.__radio_btn[i].setGeometry(rect)
             tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
@@ -710,7 +722,7 @@ class UiReplay(QMainWindow, Ui_Core):
             self._text_label[i].setGeometry(rect)
             top += text_height
             rect = QRect(left, top, width, slider_height)
-            for j in ["ct", "pt", "mr1", "mr2"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self.__slider["{}.{}".format(i, j)].setGeometry(rect)
             top += slider_height
 
@@ -745,37 +757,43 @@ class UiReplay(QMainWindow, Ui_Core):
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.CORONAL)
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs["ct"].shape[
-                1
-            ]
+            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[1]
             self.__gtvt_selected_slices_2d[
                 Orient.VERTICAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.SAGITTAL)
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs["ct"].shape[2]
+            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[2]
 
         elif self._plane == Plane.CORONAL:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.TRANSVERSE)
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs["ct"].shape[
-                0
-            ]
+            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[0]
             self.__gtvt_selected_slices_2d[
                 Orient.VERTICAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.SAGITTAL)
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs["ct"].shape[2]
+            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[2]
 
         elif self._plane == Plane.SAGITTAL:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.TRANSVERSE)
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs["ct"].shape[
-                0
-            ]
+            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[0]
             self.__gtvt_selected_slices_2d[
                 Orient.VERTICAL
             ] = self.__get_gtvt_selected_slices_on_2d(Plane.CORONAL)
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs["ct"].shape[1]
+            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
+                Modal.CT
+            ].shape[1]
 
         else:
             Debug.error_exit("self._plane value error")
@@ -795,7 +813,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 self._cur_slice_id = self._gtvs_center[2]
 
     def __set_bright_contrast_modality(self):
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if self.__radio_btn[i].isChecked():
                 self.__slider["bright.{}".format(i)].show()
                 self.__slider["contrast.{}".format(i)].show()
@@ -803,13 +821,13 @@ class UiReplay(QMainWindow, Ui_Core):
                 self.__slider["bright.{}".format(i)].hide()
                 self.__slider["contrast.{}".format(i)].hide()
 
-        if self.__radio_btn["ct"].isChecked():
+        if self.__radio_btn[Modal.CT].isChecked():
             key_word = "CT"
-        elif self.__radio_btn["pt"].isChecked():
+        elif self.__radio_btn[Modal.PT].isChecked():
             key_word = "PT"
-        elif self.__radio_btn["mr1"].isChecked():
+        elif self.__radio_btn[Modal.MR1].isChecked():
             key_word = "MR-T1"
-        elif self.__radio_btn["mr2"].isChecked():
+        elif self.__radio_btn[Modal.MR2].isChecked():
             key_word = "MR-T2"
         else:
             Debug.error_exit("no radio button is checked")
@@ -818,7 +836,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["contrast"].setText("Contrast ({})".format(key_word))
 
     def _clear_img_qlabels(self):
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             width = self.img_qlabel[i].width()
             height = self.img_qlabel[i].height()
             black_img = np.zeros([width, height, 3])
@@ -891,7 +909,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._combox["patient"].setEnabled(True)
         return combox_patients
 
-    def _choose_baseline(self):
+    def _load_baseline_3d_imgs(self):
         # self._reset_zoomin()
         self._clear_img_data()
         self._clear_img_qlabels()
@@ -917,7 +935,7 @@ class UiReplay(QMainWindow, Ui_Core):
             reset_patient = True
         else:
             reset_patient = False
-        self._choose_patient(idx=None, reset_patient=reset_patient)
+        self._load_patient_3d_imgs(idx=None, reset_patient=reset_patient)
 
     def _load_3d_img(self, path: str, binary: bool = False):
         img = Nii.load(path, binary=False)
@@ -945,17 +963,17 @@ class UiReplay(QMainWindow, Ui_Core):
     # ui_idl will inherit this function, do not make it a private function
     def _load_multi_modal_imgs(self):
         paths = Dict()
-        paths["ct"] = "CT"
-        paths["pt"] = "PT"
-        paths["mr1"] = "T1dr"
-        paths["mr2"] = "T2dr"
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        paths[Modal.CT] = "CT"
+        paths[Modal.PT] = "PT"
+        paths[Modal.MR1] = "T1dr"
+        paths[Modal.MR2] = "T2dr"
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             paths[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, paths[i])
             paths[i] = os.path.join(self._dataset_dir, paths[i])
             self._3d_imgs[i] = self._load_3d_img(paths[i])
 
     def _get_middle_slice_id(self):
-        if self._3d_imgs["ct"] is None:
+        if self._3d_imgs[Modal.CT] is None:
             Debug.error_exit("get middle slice id after multi-modal imgs are loaded")
         slices_count = self.__get_slices_count()
         if slices_count > 0:
@@ -966,7 +984,7 @@ class UiReplay(QMainWindow, Ui_Core):
         else:
             return None
 
-    def _choose_patient(self, idx: int = None, reset_patient: bool = True):
+    def _load_patient_3d_imgs(self, idx: int = None, reset_patient: bool = True):
         # triggered by:
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
@@ -1047,7 +1065,7 @@ class UiReplay(QMainWindow, Ui_Core):
             else:
                 reset_id = False
             # refresh imgs after idl.gtvn is chosen
-            self.__choose_idl(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
+            self._load_idl_gtv_3d_imgs(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
         self._refresh_rgb_imgs()
         self._refresh_title()
@@ -1068,18 +1086,24 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in range(len(self._gtvs_center)):
             self._gtvs_center[i] = round(self._gtvs_center[i])
 
-    def _choose_idl_gtvt(
+    def _load_idl_gtvt_3d_imgs(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self.__choose_idl(gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs)
+        self._load_idl_gtv_3d_imgs(
+            gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs
+        )
 
-    def _choose_idl_gtvn(
+    def _load_idl_gtvn_3d_imgs(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self.__choose_idl(gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs)
+        self._load_idl_gtv_3d_imgs(
+            gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
+        )
 
-    # _choose_idl_gtvt and _choose_idl_gtvn will share this function
-    def __choose_idl(self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True):
+    # _load_idl_gtvt_3d_imgs and _load_idl_gtvn_3d_imgs will share this function
+    def _load_idl_gtv_3d_imgs(
+        self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True
+    ):
         # triggered by:
         # (1) idl combox update
         # (2) patient combox update, but can not find cur patient in idl dir
@@ -1183,73 +1207,73 @@ class UiReplay(QMainWindow, Ui_Core):
             self._refresh_rgb_imgs()
             self._refresh_title()
 
-    def __choose_prev_baseline(self):
+    def _load_prev_baseline_3d_imgs(self):
         idx = self._combox["baseline"].currentIndex() - 1
         if idx < 0:
             return
         prev_baseline = self._combox["baseline"].itemText(idx)
         self._combox["baseline"].setCurrentText(prev_baseline)
-        self._choose_baseline()
+        self._load_baseline_3d_imgs()
 
-    def __choose_next_baseline(self):
+    def _load_next_baseline_3d_imgs(self):
         idx = self._combox["baseline"].currentIndex() + 1
         if idx > self._combox["baseline"].count() - 1:
             return
         next_baseline = self._combox["baseline"].itemText(idx)
         self._combox["baseline"].setCurrentText(next_baseline)
-        self._choose_baseline()
+        self._load_baseline_3d_imgs()
 
-    def __choose_prev_idl_gtvn(self):
+    def _load_prev_idl_gtvn_3d_imgs(self):
         idx = self._combox["idl.gtvn"].currentIndex() - 1
         if idx < 0:
             return
         prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
-        self._choose_idl_gtvn()
+        self._load_idl_gtvn_3d_imgs()
 
-    def __choose_next_idl_gtvn(self):
+    def _load_next_idl_gtvn_3d_imgs(self):
         idx = self._combox["idl.gtvn"].currentIndex() + 1
         if idx > self._combox["idl.gtvn"].count() - 1:
             return
         next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
-        self._choose_idl_gtvn()
+        self._load_idl_gtvn_3d_imgs()
 
-    def __choose_prev_idl_gtvt(self):
+    def _load_prev_idl_gtvt_3d_imgs(self):
         idx = self._combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
             return
         prev_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
         self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
-        self._choose_idl_gtvt()
+        self._load_idl_gtvt_3d_imgs()
 
-    def __choose_next_idl_gtvt(self):
+    def _load_next_idl_gtvt_3d_imgs(self):
         idx = self._combox["idl.gtvt"].currentIndex() + 1
         if idx > self._combox["idl.gtvt"].count() - 1:
             return
         next_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
         self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
-        self._choose_idl_gtvt()
+        self._load_idl_gtvt_3d_imgs()
 
-    def __choose_prev_patient(self):
+    def _load_prev_patient_3d_imgs(self):
         idx = self._combox["patient"].currentIndex() - 1
         if idx < 0:
             return
         prev_patient = self._combox["patient"].itemText(idx)
         self._combox["patient"].setCurrentText(prev_patient)
-        self._choose_patient()
+        self._load_patient_3d_imgs()
 
-    def __choose_next_patient(self):
+    def _load_next_patient_3d_imgs(self):
         idx = self._combox["patient"].currentIndex() + 1
         if idx > self._combox["patient"].count() - 1:
             return
         next_patient = self._combox["patient"].itemText(idx)
         self._combox["patient"].setCurrentText(next_patient)
-        self._choose_patient()
+        self._load_patient_3d_imgs()
 
     def _refresh_rgb_imgs(self):
         # no img data loaded
-        if self._3d_imgs["ct"] is None:
+        if self._3d_imgs[Modal.CT] is None:
             return
 
         # check if cur slice is annotated
@@ -1270,7 +1294,7 @@ class UiReplay(QMainWindow, Ui_Core):
         color["gtvn.clicks"] = self._color["gtvn.clicks"]
 
         # load rgb imgs
-        for i in ["ct", "pt", "mr1", "mr2"]:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if self._plane == Plane.SAGITTAL:
                 rgb_img = self._3d_imgs[i][:, :, self._cur_slice_id]
             elif self._plane == Plane.CORONAL:
@@ -1360,7 +1384,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # resize and fit img qlabel
             rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[i])
-            if i == "ct":
+            if i == Modal.CT:
                 self._rgb_img_relative_pos = _
 
             # blur after _fit_img_qlabel will gain better effect
@@ -1442,6 +1466,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 QImage.Format_RGB888,
             )
             self.img_qlabel[i].set_background(qt_image)
+            self.img_qlabel[i].update()
 
     def _add_label_text_on_rgb_img(self, rgb_img):
         rgb_img_height = rgb_img.shape[0]
@@ -1578,7 +1603,7 @@ class UiReplay(QMainWindow, Ui_Core):
         return selected_slices_list
 
     def __is_cur_slice_annotated(self) -> bool:
-        if self._3d_imgs["ct"] is None:
+        if self._3d_imgs[Modal.CT] is None:
             return False
 
         if int(self._cur_slice_id) in self.__get_gtvt_selected_slices_on_2d(
@@ -1626,14 +1651,14 @@ class UiReplay(QMainWindow, Ui_Core):
             self._refresh_title()
 
     def __get_slices_count(self) -> int:
-        if (self._3d_imgs["ct"] is None) or (self._plane is None):
+        if (self._3d_imgs[Modal.CT] is None) or (self._plane is None):
             return 0
         elif self._plane == Plane.SAGITTAL:
-            return self._3d_imgs["ct"].shape[2]
+            return self._3d_imgs[Modal.CT].shape[2]
         elif self._plane == Plane.CORONAL:
-            return self._3d_imgs["ct"].shape[1]
+            return self._3d_imgs[Modal.CT].shape[1]
         elif self._plane == Plane.TRANSVERSE:
-            return self._3d_imgs["ct"].shape[0]
+            return self._3d_imgs[Modal.CT].shape[0]
         else:
             Debug.error_exit("self._plane value error")
 
@@ -1674,16 +1699,16 @@ class UiReplay(QMainWindow, Ui_Core):
             pos[i][0] = gap
             pos[i][1] = size[i][0] + gap * 2
 
-        self.img_qlabel["ct"].setGeometry(
+        self.img_qlabel[Modal.CT].setGeometry(
             QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
         )
-        self.img_qlabel["pt"].setGeometry(
+        self.img_qlabel[Modal.PT].setGeometry(
             QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
         )
-        self.img_qlabel["mr1"].setGeometry(
+        self.img_qlabel[Modal.MR1].setGeometry(
             QRect(pos["x"][0], pos["y"][1], size["x"][0], size["y"][1])
         )
-        self.img_qlabel["mr2"].setGeometry(
+        self.img_qlabel[Modal.MR2].setGeometry(
             QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
         )
 

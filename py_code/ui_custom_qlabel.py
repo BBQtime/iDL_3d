@@ -19,6 +19,11 @@ class CustomQLabel(QLabel):
         self.drawing_layer = QPixmap(self.size())
         self.drawing_layer.fill(Qt.transparent)
 
+    def clear_drawing_layer(self):
+        self.drawing_layer = QPixmap(self.size())
+        self.drawing_layer.fill(Qt.transparent)
+        self.update()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # Resize the drawing layer pixmap to match the new size of the QLabel
@@ -31,7 +36,7 @@ class CustomQLabel(QLabel):
             if self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
                 # remove old crosses
                 self.window().delete_all_crosses_on_4_qlabels()
-                self.window().clear_clicks_pos_3d()
+                self.window().clear_gtvt_click_pos_3d()
                 # add new crosses
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 
