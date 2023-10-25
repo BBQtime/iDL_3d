@@ -74,10 +74,10 @@ class UiIDL(UiReplay):
             annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
             # crop np array based on roi
-            x = self._rgb_img_relative_pos["x"]
-            y = self._rgb_img_relative_pos["y"]
-            width = self._rgb_img_relative_pos["width"]
-            height = self._rgb_img_relative_pos["height"]
+            x = self._rgb_img_roi["x"]
+            y = self._rgb_img_roi["y"]
+            width = self._rgb_img_roi["width"]
+            height = self._rgb_img_roi["height"]
             annotation_2d = annotation_2d[y : y + height, x : x + width]
 
             # resize to actual size
@@ -110,11 +110,6 @@ class UiIDL(UiReplay):
                 self.__annotation_3d[:, center_slice_id, :] = annotation_2d
             elif self._plane == Plane.TRANSVERSE:
                 self.__annotation_3d[center_slice_id, :, :] = annotation_2d
-
-            Nii.save(
-                self.__annotation_3d,
-                os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation_3d.nii"),
-            )
 
             self.__refresh_annotation_on_4_qlabels()
 
@@ -159,7 +154,7 @@ class UiIDL(UiReplay):
             # pos 0-transverse 1-coronal 2-saggital
             self._3d_imgs["gtvt.click"][pos[0]][pos[1]][pos[2]] = 1
 
-            # save gtvt_click.nii
+            # save gtvt_click
             round_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
@@ -177,7 +172,7 @@ class UiIDL(UiReplay):
             idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
             Nii.save(
                 img=idl_gtvt_click,
-                save_path=os.path.join(round_dir, "gtvt_click.nii"),
+                save_path=os.path.join(round_dir, "gtvt_click.nii.gz"),
                 spacing=self._nii_spacing,
             )
             # clean current step elements
@@ -238,7 +233,7 @@ class UiIDL(UiReplay):
             self.set_cur_patient_idl_step(IDLStep.CORRECTION)
             self.__save_idl_step()
             self.__update_msg()
-            self._load_idl_gtvn_3d_imgs()
+            self._load_idl_gtvn_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
 
@@ -344,12 +339,12 @@ class UiIDL(UiReplay):
 
                 # find click on current slice
                 if x is not None and y is not None:
-                    x *= self._rgb_img_relative_pos["width"]
-                    y *= self._rgb_img_relative_pos["height"]
+                    x *= self._rgb_img_roi["width"]
+                    y *= self._rgb_img_roi["height"]
                     x = round(x)
                     y = round(y)
-                    x += self._rgb_img_relative_pos["x"]
-                    y += self._rgb_img_relative_pos["y"]
+                    x += self._rgb_img_roi["x"]
+                    y += self._rgb_img_roi["y"]
 
                     # do not record click pos when refreshing
                     self.add_4_crosses(QPoint(x, y), record_click_pos=False)
@@ -410,8 +405,8 @@ class UiIDL(UiReplay):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self.img_qlabel[i].select_cross(cross_id)
 
-    def get_rgb_img_relative_pos(self):
-        return self._rgb_img_relative_pos
+    def get_rgb_img_roi(self):
+        return self._rgb_img_roi
 
     def get_nii_spacing(self):
         return self._nii_spacing
@@ -642,7 +637,7 @@ class UiIDL(UiReplay):
         self._text_box_annotation_msg.setGeometry(rect)
         top += annotation_msg_box_height
 
-    def _load_baseline_3d_imgs(self):
+    def _load_baseline_data(self):
         # self._reset_zoomin()
         self._clear_img_data()
         self._clear_img_qlabels()
@@ -688,7 +683,7 @@ class UiIDL(UiReplay):
                     color=self._color["gtv{}.pred".format(i)],
                 )
 
-    def _load_patient_3d_imgs(self, idx: int = None):
+    def _load_patient_data(self, idx: int = None):
         self.clear_gtvt_click_pos_3d()
         self.clear_gtvn_clicks_pos_3d()
         self.__clear_annotation_3d()
@@ -704,8 +699,8 @@ class UiIDL(UiReplay):
         self._load_multi_modal_imgs()
         # reset current slice id after ct img loaded
         self._reset_cur_slice_id()
-        self._load_idl_gtvt_3d_imgs()
-        self._load_idl_gtvn_3d_imgs()
+        self._load_idl_gtvt_data()
+        self._load_idl_gtvn_data()
         self._refresh_rgb_imgs()
         self._refresh_title()
         self.__refresh_crosses_on_4_qlabels()
@@ -764,10 +759,10 @@ class UiIDL(UiReplay):
         else:
             Debug.error_exit("idl step value error")
 
-    def _load_idl_gtvt_3d_imgs(self):
+    def _load_idl_gtvt_data(self):
         patient_dir = self._load_idl_gtv_3d_imgs(gtv="gtvt")
         # load gtvt click
-        gtvt_click_nii_path = os.path.join(patient_dir, "round=01", "gtvt_click.nii")
+        gtvt_click_nii_path = os.path.join(patient_dir, "round=01", "gtvt_click.nii.gz")
         if os.path.exists(gtvt_click_nii_path):
             self._3d_imgs["gtvt.click"] = self._load_3d_img(
                 path=gtvt_click_nii_path, binary=True
@@ -777,10 +772,12 @@ class UiIDL(UiReplay):
                 self._3d_imgs[Modal.CT].shape, dtype=np.float32
             )
 
-    def _load_idl_gtvn_3d_imgs(self):
+    def _load_idl_gtvn_data(self):
         patient_dir = self._load_idl_gtv_3d_imgs(gtv="gtvn")
         # load gtvn click
-        gtvn_clicks_nii_path = os.path.join(patient_dir, "round=01", "gtvn_clicks.nii")
+        gtvn_clicks_nii_path = os.path.join(
+            patient_dir, "round=01", "gtvn_clicks.nii.gz"
+        )
         if os.path.exists(gtvn_clicks_nii_path):
             self._3d_imgs["gtvn.clicks"] = self._load_3d_img(
                 path=gtvn_clicks_nii_path, binary=True
@@ -807,7 +804,7 @@ class UiIDL(UiReplay):
             # choose the last round
             if len(round_dirs) > 0:
                 round_dir = round_dirs[-1]
-                pred_path = os.path.join(round_dir, "{}_pred.nii".format(gtv))
+                pred_path = os.path.join(round_dir, "{}_pred.nii.gz".format(gtv))
 
                 # find idl pred, load it
                 if os.path.exists(pred_path):

@@ -51,7 +51,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self.showMaximized()
 
         # load first baseline result
-        self._load_baseline_3d_imgs()
+        self._load_baseline_data()
 
     def _init_member_var(
         self,
@@ -85,12 +85,14 @@ class UiReplay(QMainWindow, Ui_Core):
         self._dataset_dir = None  # au.1mm / au.1mm / mda
         self.__scores = Dict()
         self._3d_imgs = Dict()
-        self._rgb_img_relative_pos = None
+        self._rgb_img_roi = None
         self.__side_bar_width = 300
 
+        self.__clear_gtvt_selected_slices_3d()
+
         self.__gtvt_selected_slices_2d = Dict()
-        self.__gtvt_selected_slices_2d[Orient.HORIZONTAL] = []
-        self.__gtvt_selected_slices_2d[Orient.VERTICAL] = []
+        self.__gtvt_selected_slices_2d[Orient.HORIZONTAL] = List()
+        self.__gtvt_selected_slices_2d[Orient.VERTICAL] = List()
 
         self.__total_slices_count_2d = Dict()
         self.__total_slices_count_2d[Orient.HORIZONTAL] = 0
@@ -241,7 +243,7 @@ class UiReplay(QMainWindow, Ui_Core):
     #     end_y -= img_qlabel_top
 
     #     # get actual_img_area related position
-    #     relative_pos = self._rgb_img_relative_pos
+    #     relative_pos = self._rgb_img_roi
     #     start_x -= relative_pos["x"]
     #     start_y -= relative_pos["y"]
     #     end_x -= relative_pos["x"]
@@ -613,33 +615,21 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # connect ui to functions
         # (put the connections at last, because these functions will need the initialization above)
-        self._combox["baseline"].activated.connect(self._load_baseline_3d_imgs)
-        self._arrow_btn["prev.baseline"].clicked.connect(
-            self._load_prev_baseline_3d_imgs
-        )
-        self._arrow_btn["next.baseline"].clicked.connect(
-            self._load_next_baseline_3d_imgs
-        )
+        self._combox["baseline"].activated.connect(self._load_baseline_data)
+        self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
+        self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
 
-        self._combox["patient"].activated.connect(self._load_patient_3d_imgs)
-        self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_3d_imgs)
-        self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_3d_imgs)
+        self._combox["patient"].activated.connect(self._load_patient_data)
+        self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
+        self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
 
-        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_3d_imgs)
-        self._arrow_btn["prev.idl.gtvt"].clicked.connect(
-            self._load_prev_idl_gtvt_3d_imgs
-        )
-        self._arrow_btn["next.idl.gtvt"].clicked.connect(
-            self._load_next_idl_gtvt_3d_imgs
-        )
+        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_data)
+        self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
+        self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
 
-        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_3d_imgs)
-        self._arrow_btn["prev.idl.gtvn"].clicked.connect(
-            self._load_prev_idl_gtvn_3d_imgs
-        )
-        self._arrow_btn["next.idl.gtvn"].clicked.connect(
-            self._load_next_idl_gtvn_3d_imgs
-        )
+        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
+        self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
+        self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
 
         for i in ["bright", "contrast"]:
             for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
@@ -762,16 +752,23 @@ class UiReplay(QMainWindow, Ui_Core):
                 self._plane = i
                 break
 
+        self.__refresh_gtvt_selected_slices_2d()
+        self._reset_cur_slice_id()
+        # self._reset_zoomin()
+        self._refresh_rgb_imgs()
+        self._refresh_title()
+
+    def __refresh_gtvt_selected_slices_2d(self):
         if self._plane == Plane.TRANSVERSE:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.CORONAL)
+            ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
+            self.__gtvt_selected_slices_2d[
+                Orient.VERTICAL
+            ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
             self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
                 Modal.CT
             ].shape[1]
-            self.__gtvt_selected_slices_2d[
-                Orient.VERTICAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.SAGITTAL)
             self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
                 Modal.CT
             ].shape[2]
@@ -779,13 +776,13 @@ class UiReplay(QMainWindow, Ui_Core):
         elif self._plane == Plane.CORONAL:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.TRANSVERSE)
+            ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
             self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
                 Modal.CT
             ].shape[0]
             self.__gtvt_selected_slices_2d[
                 Orient.VERTICAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.SAGITTAL)
+            ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
             self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
                 Modal.CT
             ].shape[2]
@@ -793,24 +790,16 @@ class UiReplay(QMainWindow, Ui_Core):
         elif self._plane == Plane.SAGITTAL:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.TRANSVERSE)
+            ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
             self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
                 Modal.CT
             ].shape[0]
             self.__gtvt_selected_slices_2d[
                 Orient.VERTICAL
-            ] = self.__get_gtvt_selected_slices_on_2d(Plane.CORONAL)
+            ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
             self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
                 Modal.CT
             ].shape[1]
-
-        else:
-            Debug.error_exit("self._plane value error")
-
-        self._reset_cur_slice_id()
-        # self._reset_zoomin()
-        self._refresh_rgb_imgs()
-        self._refresh_title()
 
     def _reset_cur_slice_id(self):
         if self._gtvs_center is not None:
@@ -918,7 +907,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._combox["patient"].setEnabled(True)
         return combox_patients
 
-    def _load_baseline_3d_imgs(self):
+    def _load_baseline_data(self):
         # self._reset_zoomin()
         self._clear_img_data()
         self._clear_img_qlabels()
@@ -944,7 +933,7 @@ class UiReplay(QMainWindow, Ui_Core):
             reset_patient = True
         else:
             reset_patient = False
-        self._load_patient_3d_imgs(idx=None, reset_patient=reset_patient)
+        self._load_patient_data(idx=None, reset_patient=reset_patient)
 
     def _load_3d_img(self, path: str, binary: bool = False):
         img = Nii.load(path, binary=False)
@@ -993,7 +982,7 @@ class UiReplay(QMainWindow, Ui_Core):
         else:
             return None
 
-    def _load_patient_3d_imgs(self, idx: int = None, reset_patient: bool = True):
+    def _load_patient_data(self, idx: int = None, reset_patient: bool = True):
         # triggered by:
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
@@ -1095,21 +1084,26 @@ class UiReplay(QMainWindow, Ui_Core):
         for i in range(len(self._gtvs_center)):
             self._gtvs_center[i] = round(self._gtvs_center[i])
 
-    def _load_idl_gtvt_3d_imgs(
+    def _load_idl_gtvt_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
         self._load_idl_gtv_3d_imgs(
             gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
-    def _load_idl_gtvn_3d_imgs(
+    def _load_idl_gtvn_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
         self._load_idl_gtv_3d_imgs(
             gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
-    # _load_idl_gtvt_3d_imgs and _load_idl_gtvn_3d_imgs will share this function
+    def __clear_gtvt_selected_slices_3d(self):
+        self.__gtvt_selected_slices_3d = Dict()
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.__gtvt_selected_slices_3d[plane] = List()
+
+    # _load_idl_gtvt_data and _load_idl_gtvn_data will share this function
     def _load_idl_gtv_3d_imgs(
         self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True
     ):
@@ -1138,7 +1132,8 @@ class UiReplay(QMainWindow, Ui_Core):
         # run this after idl gtvn combox is filled
         self._enable_arrow_btns("idl.{}".format(gtv))
 
-        # load pred (and gtvn clicks)
+        # load data (pred/clicks/selected_slices)
+        # baseline
         if self._idl_id[gtv] == "baseline":
             pred_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
@@ -1146,34 +1141,73 @@ class UiReplay(QMainWindow, Ui_Core):
                 "baseline",
                 "patients",
                 "patient={}".format(self._cur_patient),
-                "{}_pred.nii".format(gtv),
+                "{}_pred.nii.gz".format(gtv),
             )
-            # clear gtvt/gtvn clicks
+            # clear idl.gtvt/gtvn data
             if gtv == "gtvt":
                 self._3d_imgs["gtvt.click"] = None
+                self.__clear_gtvt_selected_slices_3d()
+                self.__refresh_gtvt_selected_slices_2d()
             elif gtv == "gtvn":
                 self._3d_imgs["gtvn.clicks"] = None
+
+        # idl.gtvt/gtvn
         else:
-            round_dir = os.path.join(
+            cur_patient_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id[gtv],
                 "patients",
                 "patient={}".format(self._cur_patient),
+            )
+            cur_round_dir = os.path.join(
+                cur_patient_dir,
                 self._idl_round[gtv],
             )
-            pred_path = os.path.join(round_dir, "{}_pred.nii".format(gtv))
+            pred_path = os.path.join(cur_round_dir, "{}_pred.nii.gz".format(gtv))
 
-            # load gtvt/gtvn clicks
+            # load gtvt data
             if gtv == "gtvt":
-                gtvt_click_path = os.path.join(round_dir, "gtvt_click.nii")
+                # load gtvt click
+                gtvt_click_path = os.path.join(cur_round_dir, "gtvt_click.nii.gz")
                 if os.path.exists(gtvt_click_path):
                     self._3d_imgs["gtvt.click"] = self._load_3d_img(
                         gtvt_click_path, binary=True
                     )
-            # load gtvt/gtvn clicks
+                # load gtvt selected slices (3d)
+                selected_slices_json_path = os.path.join(
+                    cur_patient_dir,
+                    "selected_slices.json",
+                )
+                if (
+                    not os.path.exists(selected_slices_json_path)
+                    or self._idl_round["gtvt"] == "round=00"
+                ):
+                    self.__clear_gtvt_selected_slices_3d()
+                else:
+                    self.__gtvt_selected_slices_3d = Json.load(
+                        selected_slices_json_path
+                    )
+                    for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                        selected_slices_list = List()
+                        for round_num in self.__gtvt_selected_slices_3d[plane]:
+                            selected_slices_list += List(
+                                self.__gtvt_selected_slices_3d[plane][round_num]
+                            )
+                            if (round_num) == self._idl_round["gtvt"]:
+                                break
+                        # str to int
+                        for i in range(len(selected_slices_list)):
+                            selected_slices_list[i] = int(selected_slices_list[i])
+                        self.__gtvt_selected_slices_3d[plane] = selected_slices_list
+
+                # refresh gtvt selected slices (2d)
+                # after gtvt selected slices (3d) is loaded
+                self.__refresh_gtvt_selected_slices_2d()
+
+            # load gtvn data
             elif gtv == "gtvn":
-                gtvn_clicks_path = os.path.join(round_dir, "gtvn_clicks.nii")
+                gtvn_clicks_path = os.path.join(cur_round_dir, "gtvn_clicks.nii.gz")
                 if os.path.exists(gtvn_clicks_path):
                     self._3d_imgs["gtvn.clicks"] = self._load_3d_img(
                         gtvn_clicks_path, binary=True
@@ -1216,69 +1250,69 @@ class UiReplay(QMainWindow, Ui_Core):
             self._refresh_rgb_imgs()
             self._refresh_title()
 
-    def _load_prev_baseline_3d_imgs(self):
+    def _load_prev_baseline_data(self):
         idx = self._combox["baseline"].currentIndex() - 1
         if idx < 0:
             return
         prev_baseline = self._combox["baseline"].itemText(idx)
         self._combox["baseline"].setCurrentText(prev_baseline)
-        self._load_baseline_3d_imgs()
+        self._load_baseline_data()
 
-    def _load_next_baseline_3d_imgs(self):
+    def _load_next_baseline_data(self):
         idx = self._combox["baseline"].currentIndex() + 1
         if idx > self._combox["baseline"].count() - 1:
             return
         next_baseline = self._combox["baseline"].itemText(idx)
         self._combox["baseline"].setCurrentText(next_baseline)
-        self._load_baseline_3d_imgs()
+        self._load_baseline_data()
 
-    def _load_prev_idl_gtvn_3d_imgs(self):
+    def _load_prev_idl_gtvn_data(self):
         idx = self._combox["idl.gtvn"].currentIndex() - 1
         if idx < 0:
             return
         prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
-        self._load_idl_gtvn_3d_imgs()
+        self._load_idl_gtvn_data()
 
-    def _load_next_idl_gtvn_3d_imgs(self):
+    def _load_next_idl_gtvn_data(self):
         idx = self._combox["idl.gtvn"].currentIndex() + 1
         if idx > self._combox["idl.gtvn"].count() - 1:
             return
         next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
         self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
-        self._load_idl_gtvn_3d_imgs()
+        self._load_idl_gtvn_data()
 
-    def _load_prev_idl_gtvt_3d_imgs(self):
+    def _load_prev_idl_gtvt_data(self):
         idx = self._combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
             return
         prev_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
         self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
-        self._load_idl_gtvt_3d_imgs()
+        self._load_idl_gtvt_data()
 
-    def _load_next_idl_gtvt_3d_imgs(self):
+    def _load_next_idl_gtvt_data(self):
         idx = self._combox["idl.gtvt"].currentIndex() + 1
         if idx > self._combox["idl.gtvt"].count() - 1:
             return
         next_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
         self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
-        self._load_idl_gtvt_3d_imgs()
+        self._load_idl_gtvt_data()
 
-    def _load_prev_patient_3d_imgs(self):
+    def _load_prev_patient_data(self):
         idx = self._combox["patient"].currentIndex() - 1
         if idx < 0:
             return
         prev_patient = self._combox["patient"].itemText(idx)
         self._combox["patient"].setCurrentText(prev_patient)
-        self._load_patient_3d_imgs()
+        self._load_patient_data()
 
-    def _load_next_patient_3d_imgs(self):
+    def _load_next_patient_data(self):
         idx = self._combox["patient"].currentIndex() + 1
         if idx > self._combox["patient"].count() - 1:
             return
         next_patient = self._combox["patient"].itemText(idx)
         self._combox["patient"].setCurrentText(next_patient)
-        self._load_patient_3d_imgs()
+        self._load_patient_data()
 
     def _refresh_rgb_imgs(self):
         # no img data loaded
@@ -1310,14 +1344,6 @@ class UiReplay(QMainWindow, Ui_Core):
                 rgb_img = self._3d_imgs[i][:, self._cur_slice_id, :]
             elif self._plane == Plane.TRANSVERSE:
                 rgb_img = self._3d_imgs[i][self._cur_slice_id, :, :]
-
-                # # for transverse plane, img is upside down,
-                # # true slice id is: slices_count - 1 - slice_id
-                # rgb_img = self._3d_imgs[i][
-                #     (self.__get_slices_count() - 1 - self._cur_slice_id), :, :
-                # ]
-            else:
-                Debug.error_exit("self._plane value error")
 
             rgb_img = np.uint8((rgb_img - rgb_img.min()) / rgb_img.ptp() * 255.0)
             # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
@@ -1394,7 +1420,7 @@ class UiReplay(QMainWindow, Ui_Core):
             # resize and fit img qlabel
             rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[i])
             if i == Modal.CT:
-                self._rgb_img_relative_pos = _
+                self._rgb_img_roi = _
 
             # blur after _fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
@@ -1577,47 +1603,11 @@ class UiReplay(QMainWindow, Ui_Core):
             color=self._color["score.text"],
         )
 
-    def __get_gtvt_selected_slices_on_2d(self, img_plane) -> List:
-        # get current round
-
-        if self._idl_round["gtvt"] == "round=00":
-            return []
-
-        # load annotated slices
-        idl_gtvt_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvt"]
-        )
-        json_path = os.path.join(
-            idl_gtvt_dir,
-            "patients",
-            "patient={}".format(self._cur_patient),
-            "selected_slices.json",
-        )
-        if not os.path.exists(json_path):
-            return []
-
-        selected_slices_dict = Json.load(json_path)[img_plane]
-        selected_slices_list = List()
-
-        for round_num in selected_slices_dict:
-            selected_slices_list += List(selected_slices_dict[round_num])
-
-            if (round_num) == self._idl_round["gtvt"]:
-                break
-
-        # change annotated slice from str to int
-        for i in range(len(selected_slices_list)):
-            selected_slices_list[i] = int(selected_slices_list[i])
-
-        return selected_slices_list
-
     def __is_cur_slice_annotated(self) -> bool:
         if self._3d_imgs[Modal.CT] is None:
             return False
 
-        if int(self._cur_slice_id) in self.__get_gtvt_selected_slices_on_2d(
-            self._plane
-        ):
+        if self._cur_slice_id in self.__gtvt_selected_slices_3d[self._plane]:
             return True
         else:
             return False
@@ -1675,7 +1665,7 @@ class UiReplay(QMainWindow, Ui_Core):
         win_tital = "iDL.Tool "
         # if self._idl_round["gtvt"] is not None:
         #     win_tital += "   Num.of.Annotated.Slices="
-        #     win_tital += str(len(self.__get_gtvt_selected_slices_on_2d(self._plane)))
+        #     win_tital += str(len(self.__gtvt_selected_slices_3d[self._plane]))
         if self._cur_slice_id is not None:
             slices_count = self.__get_slices_count()
             if slices_count > 0:

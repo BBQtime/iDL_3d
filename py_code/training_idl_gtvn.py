@@ -206,7 +206,9 @@ class TrainingIDLGTVn(TrainingBaseline):
                 output_epoch_dir, "patients", "patient={}".format(patient)
             )
             for gtv in ["gtvt", "gtvn"]:
-                pred_path = os.path.join(output_patient_dir, "{}_pred.nii".format(gtv))
+                pred_path = os.path.join(
+                    output_patient_dir, "{}_pred.nii.gz".format(gtv)
+                )
                 if os.path.exists(pred_path):
                     img = Nii.load(path=pred_path, binary=False)
                     if preds[gtv] is None:
@@ -237,7 +239,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             if gtv != "gtvs":
                 Nii.save(
                     img=preds[gtv],
-                    save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
+                    save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
                     spacing=g.NII_SPACING[dataset_ver],
                 )
 
@@ -347,14 +349,14 @@ class TrainingIDLGTVn(TrainingBaseline):
         # save pred
         Nii.save(
             img=patient_outputs["gtvn"]["pred"],
-            save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii"),
+            save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii.gz"),
             spacing=g.NII_SPACING[dataset_ver],
         )
         # save distance map and clicks
         for i in ["distance.map", "clicks"]:
             save_path = os.path.join(
                 cross_valid_patient_dir,
-                "gtvn_{}.nii".format(i.replace(".", "_")),
+                "gtvn_{}.nii.gz".format(i.replace(".", "_")),
             )
             if not os.path.exists(save_path):
                 Nii.save(

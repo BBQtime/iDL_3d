@@ -319,7 +319,6 @@ class Img:
             cur_cc = all_cc * (all_cc == segid)
             # batch normalize
             cur_cc = cur_cc / segid
-            # save_nii(cur_cc, "F:/cc_{}.nii".format(segid), NII_SPACING)
             output_cc_list.append(cur_cc)
         return output_cc_list
 
@@ -376,8 +375,16 @@ class Img:
 
 
 class Nii:
-    def load(path: str, binary: bool = False, dim: int = 3) -> ndarray:
+    def load(
+        path: str,
+        binary: bool = False,
+        dim: int = 3,
+        return_info: bool = False,
+    ) -> ndarray:
         img = sitk.ReadImage(path)
+        if return_info:
+            spacing = img.GetSpacing()
+            origin = img.GetOrigin()
         img = sitk.GetArrayFromImage(img)
         img = img.astype(np.float32)
         if binary:
@@ -385,7 +392,10 @@ class Nii:
         if dim > 0 and len(img.shape) > dim:
             for i in range(len(img.shape) - dim):
                 img = np.squeeze(img, axis=0)
-        return img
+        if return_info:
+            return img, spacing, origin
+        else:
+            return img
 
     def save(
         img: Union[ndarray, Tensor],

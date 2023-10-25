@@ -617,7 +617,7 @@ class TrainingBaseline(TrainingCore):
         for gtv in ["gtvt", "gtvn"]:
             Nii.save(
                 img=patient_outputs[gtv]["pred"],
-                save_path=os.path.join(patient_dir, "{}_pred.nii".format(gtv)),
+                save_path=os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv)),
                 spacing=g.NII_SPACING[dataset_ver],
             )
 
@@ -743,7 +743,7 @@ class TrainingBaseline(TrainingCore):
                     epoch_dir, "patients", "patient={}".format(patient)
                 )
                 for gtv in ["gtvt", "gtvn"]:
-                    pred_path = os.path.join(patient_dir, "{}_pred.nii".format(gtv))
+                    pred_path = os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv))
                     if os.path.exists(pred_path):
                         img = Nii.load(path=pred_path, binary=False)
                         if preds[gtv] is None:
@@ -775,7 +775,7 @@ class TrainingBaseline(TrainingCore):
                 if gtv != "gtvs":
                     Nii.save(
                         img=preds[gtv],
-                        save_path=os.path.join(pred_dir, "{}_pred.nii".format(gtv)),
+                        save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
                         spacing=g.NII_SPACING[dataset_ver],
                     )
 

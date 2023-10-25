@@ -32,20 +32,20 @@ class DraggableCross(QWidget):
         self.png_label.setGeometry(0, 0, self.CROSS_SIZE, self.CROSS_SIZE)
 
     def get_pos_in_3d(self):
-        rgb_img_relative_pos = self.parent().window().get_rgb_img_relative_pos()
+        rgb_img_roi = self.parent().window().get_rgb_img_roi()
         img_plane = self.parent().window().get_img_plane()
         cur_slice = self.parent().window().get_cur_slice()
         img_shape = self.parent().window().get_3d_img_shape()
         nii_spacing = self.parent().window().get_nii_spacing()
 
-        if rgb_img_relative_pos is None:
+        if rgb_img_roi is None:
             return None
 
-        x = self.pos().x() + round(self.CROSS_SIZE / 2) - rgb_img_relative_pos["x"]
-        y = self.pos().y() + round(self.CROSS_SIZE / 2) - rgb_img_relative_pos["y"]
+        x = self.pos().x() + round(self.CROSS_SIZE / 2) - rgb_img_roi["x"]
+        y = self.pos().y() + round(self.CROSS_SIZE / 2) - rgb_img_roi["y"]
 
-        x = x / rgb_img_relative_pos["width"]
-        y = y / rgb_img_relative_pos["height"]
+        x = x / rgb_img_roi["width"]
+        y = y / rgb_img_roi["height"]
 
         d, h, w = img_shape
 

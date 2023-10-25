@@ -33,14 +33,14 @@ class DataSetIDLGTVt(DatasetCore):
         label_path = os.path.join(label_dir, "HNCDL_{}_GTVt.nii".format(patient))
         if not os.path.exists(label_path):
             # real iDL label path
-            label_path = os.path.join(label_dir, "gtvt_label.nii")
+            label_path = os.path.join(label_dir, "gtvt_label.nii.gz")
 
         # load label
         self.__origin["label"] = Nii.load(label_path, binary=True)
 
         # load pred
         self.__origin["pred"] = Nii.load(
-            os.path.join(pred_dir, "gtvt_pred.nii"), binary=True
+            os.path.join(pred_dir, "gtvt_pred.nii.gz"), binary=True
         )
 
         # load ct/pt/mr1/mr2
@@ -65,24 +65,9 @@ class DataSetIDLGTVt(DatasetCore):
             selected_slices, weight
         )
 
-        # save origin label and pred
-        # Nii.save(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "origin_label.nii"),
-        # )
-        # Nii.save(
-        #     self.__origin["pred"], os.path.join(g.PROJ_DIR, "debug", "pred.nii")
-        # )
-
         # overwrite pred to label on non-annotated slices
         self.__origin["label"] *= slice_mask
         self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
-
-        # save overwrited label
-        # Nii.save(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "overwrite_label.nii"),
-        # )
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # annotated slice mask
@@ -129,27 +114,24 @@ class DataSetIDLGTVt(DatasetCore):
             np.maximum(slice_mask[Plane.TRANSVERSE], slice_mask[Plane.CORONAL]),
             slice_mask[Plane.SAGITTAL],
         )
-        # Nii.save(slice_mask, os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii"))
 
         # get fp&fn (keep weight=1 before creating distance map)
         fp = self.__origin["pred"] * (1 - self.__origin["label"])
         fn = (1 - self.__origin["pred"]) * self.__origin["label"]
-        fp_fn = fp + fn
-        fp_fn = fp_fn * np.where(slice_mask > 0, 1, 0)
-        fp_fn = fp_fn.astype(np.float32)
+        fp_plus_fn = fp + fn
+        fp_plus_fn = fp_plus_fn * np.where(slice_mask > 0, 1, 0)
+        fp_plus_fn = fp_plus_fn.astype(np.float32)
 
-        # annotation (pred + label)
-        if 1:
-            annotation = np.maximum(self.__origin["pred"], self.__origin["label"])
-            annotation = annotation * np.where(slice_mask > 0, 1, 0)
-            annotation = annotation.astype(np.float32)
-            # Nii.save(annotation, os.path.join(g.PROJ_DIR, "debug", "annotation.nii"))
+        # pred union label
+        pred_union_label = np.maximum(self.__origin["pred"], self.__origin["label"])
+        pred_union_label = pred_union_label * np.where(slice_mask > 0, 1, 0)
+        pred_union_label = pred_union_label.astype(np.float32)
 
         # distance map
         if 1:
-            distance_map = distance_transform_edt(np.logical_not(annotation))
+            distance_map = distance_transform_edt(np.logical_not(pred_union_label))
         else:
-            distance_map = distance_transform_edt(np.logical_not(fp_fn))
+            distance_map = distance_transform_edt(np.logical_not(fp_plus_fn))
         distance_map = distance_map.astype(np.float32)
         distance_map = np.where(
             distance_map >= 2 * weight["distance.step"],
@@ -163,15 +145,12 @@ class DataSetIDLGTVt(DatasetCore):
         )
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
-        # Nii.save(distance_map, os.path.join(g.PROJ_DIR, "debug", "distance_map.nii"))
 
         # weighted fp&fn (after weight map)
-        fp_fn = fp_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
-        # Nii.save(fp_fn, os.path.join(g.PROJ_DIR, "debug", "fp_fn.nii"))
+        fp_plus_fn = fp_plus_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
 
         # final_weight_map
-        weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_fn)
-        # Nii.save(weight_map, os.path.join(g.PROJ_DIR, "debug", "weight_map.nii"))
+        weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_plus_fn)
 
         # return slice_mask to overwrite pred to label on non-annotated slices
         slice_mask = np.where(slice_mask > 0, 1, 0)

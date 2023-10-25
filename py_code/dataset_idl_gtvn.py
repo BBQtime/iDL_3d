@@ -47,7 +47,7 @@ class DataSetIDLGTVn(DatasetCore):
                 "baseline",
                 "patients",
                 "patient={}".format(patient),
-                "gtvn_pred.nii",
+                "gtvn_pred.nii.gz",
             ),
             binary=False,
         )
@@ -131,34 +131,6 @@ class DataSetIDLGTVn(DatasetCore):
                     for i in range(len(pos)):
                         pos[i] = round(pos[i])
                 self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
-            # dilation
-            if 0:
-                # Nii.save(
-                #     self.__origin["clicks"],
-                #     os.path.join(g.PROJ_DIR, "debug", "before_dilation.nii"),
-                # )
-                structure = np.ones((5, 5, 5), dtype=np.float32)
-                self.__origin["clicks"] = binary_dilation(
-                    self.__origin["clicks"], structure
-                ).astype(np.float32)
-                # Nii.save(
-                #     self.__origin["clicks"],
-                #     os.path.join(g.PROJ_DIR, "debug", "after_dilation.nii"),
-                # )
-
-        # # debug save img
-        # cur_click_nii = np.zeros_like(self.__origin["clicks"])
-        # cur_click_nii[pos[0]][pos[1]][pos[2]] = 1
-        # Nii.save(
-        #     cur_gtvn_cc,
-        #     os.path.join(g.PROJ_DIR, "debug", "cur_cc_{}.nii".format(cc_count)),
-        # )
-        # Nii.save(
-        #     cur_click_nii,
-        #     os.path.join(g.PROJ_DIR, "debug", "cur_click_{}.nii".format(cc_count)),
-        # )
-        # print(cc_count)
-        # cc_count += 1
 
         # generate distance map based on clicks
         if np.sum(self.__origin["label"]) > 0:
