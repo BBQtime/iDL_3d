@@ -1063,7 +1063,7 @@ class UiReplay(QMainWindow, Ui_Core):
             else:
                 reset_id = False
             # refresh imgs after idl.gtvn is chosen
-            self._load_idl_gtv_3d_imgs(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
+            self._load_idl_gtv_data(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
         self._refresh_rgb_imgs()
         self._refresh_title()
@@ -1087,14 +1087,14 @@ class UiReplay(QMainWindow, Ui_Core):
     def _load_idl_gtvt_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self._load_idl_gtv_3d_imgs(
+        self._load_idl_gtv_data(
             gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
     def _load_idl_gtvn_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self._load_idl_gtv_3d_imgs(
+        self._load_idl_gtv_data(
             gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
@@ -1104,7 +1104,7 @@ class UiReplay(QMainWindow, Ui_Core):
             self.__gtvt_selected_slices_3d[plane] = List()
 
     # _load_idl_gtvt_data and _load_idl_gtvn_data will share this function
-    def _load_idl_gtv_3d_imgs(
+    def _load_idl_gtv_data(
         self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True
     ):
         # triggered by:

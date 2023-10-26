@@ -2,11 +2,14 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Metric, Nii, Plane, Value
+from custom import Img, Json, List, Metric, Nii, Plane, SelectScenario, Value
 from dataset_idl_gtvt import DataSetIDLGTVt
 from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
 from numpy import ndarray
@@ -97,11 +100,12 @@ class TrainingIDLGTVt(TrainingCore):
 
         # select scenario
         if (
-            hyper["select.scenario"] != "largest"
-            and hyper["select.scenario"] != "gravity.center"
-            and hyper["select.scenario"] != "equal.divide"
+            hyper["select.scenario"] != SelectScenario.USER_CLICK
+            and hyper["select.scenario"] != SelectScenario.LARGEST
+            and hyper["select.scenario"] != SelectScenario.GRAVITY_CENTER
+            and hyper["select.scenario"] != SelectScenario.EQUAL_DIVIDE
         ):
-            hyper["select.scenario"] = "random"
+            hyper["select.scenario"] = SelectScenario.RANDOM
 
         # weight map parameters
         hyper["weight.background"] = Value.limit_range(
@@ -171,84 +175,6 @@ class TrainingIDLGTVt(TrainingCore):
         simple_hyper = self._simplify_hyper(hyper)
         Json.save(data=simple_hyper, path=json_path)
 
-    # def real_training(
-    #     self,
-    #     baseline_id: str,
-    #     idl_results_dir: str,
-    #     idl_gtvt_id: str,
-    #     cur_patient: str,
-    #     round_num: int,
-    #     debug_mode: bool = False,
-    # ):
-    #     self._idl_gtvt_id = idl_gtvt_id
-
-    #     # get baseline cnn and hyper path
-    #     baseline_cnn_path, baseline_hyper_path = self.__get_baseline_paths(baseline_id)
-    #     print("")
-    #     print(baseline_cnn_path)
-    #     # load hypers
-    #     idl_hyper_dict = Json.load(g.HYPER_JSON_PATH_IDL_GTVT)
-    #     baseline_hyper_dict = Json.load(baseline_hyper_path)
-
-    #     # make sure all hypers are unique, no arrangement
-    #     hyper = Dict()
-    #     for i in idl_hyper_dict:
-    #         if isinstance(idl_hyper_dict[i], list):
-    #             hyper[i] = idl_hyper_dict[i][0]
-    #         else:
-    #             hyper[i] = idl_hyper_dict[i]
-
-    #     # load and print hyper
-    #     self._load_hyper(
-    #         hyper=hyper,
-    #         baseline_cnn_path=baseline_cnn_path,
-    #         debug_mode=debug_mode,
-    #     )
-    #     self._print_hyper(hyper)
-
-    #     # check if result folder exist
-    #     cur_result_dir = os.path.join(idl_results_dir, self._idl_id)
-    #     if not os.path.exists(cur_result_dir):
-    #         print("TrainingIDLGTVt.real_training(): iDL result folder doesn't exist")
-
-    #     # create json file to save train loss
-    #     train_loss_dict = Dict()
-    #     train_loss_dict["iter"] = Dict()
-    #     Json.save(
-    #         train_loss_dict,
-    #         os.path.join(
-    #             cur_result_dir, "patient={}".format(cur_patient), "train_loss.json"
-    #         ),
-    #     )
-
-    #     # get annotated slices
-    #     round_dir = os.path.join(
-    #         cur_result_dir,
-    #         "patient={}".format(cur_patient),
-    #         "round={:02d}".format(round_num),
-    #     )
-    #     selected_slices = Dict()
-    #     selected_slices["round=01"] = List()  # doesn't matter what the dict key is
-    #     for file_name in Dir.get_sub_files(round_dir, key_word="_label.npy"):
-    #         slice_id = file_name[len("slice_") : -len("_label.npy")]
-    #         slice_id = slice_id.zfill(3)
-    #         selected_slices["round=01"].append(slice_id)
-
-    #     # training start time
-    #     hyper["time.spent"] = datetime.now()
-
-    #     self.__training_single_round(
-    #         cur_result_dir=cur_result_dir,
-    #         cur_patient=cur_patient,
-    #         selected_slices=selected_slices,
-    #         label_dir=round_dir,
-    #     )
-
-    #     # get training time spent before save hyper
-    #     hyper["time.spent"] = datetime.now() - hyper["time.spent"]
-    #     # save hyper
-    #     self._save_hyper(os.path.join(cur_result_dir, "hyper.json"))
-
     # in this function, cur round slices have not been added into selected_slices
     def __select_new_round_slices(
         self,
@@ -312,13 +238,16 @@ class TrainingIDLGTVt(TrainingCore):
                         candidates[slice_num] = cur_slice_tumor_size
 
             # "largest"
-            if hyper["select.scenario"] == "largest":
+            if hyper["select.scenario"] == SelectScenario.LARGEST:
                 # descrease sort the dict (return a list of tuple)
                 candidates = candidates.sort_by_value(reverse=True)
                 new_round_slices[plane] = candidates.keys()
 
             # "gravity.center", round = 1
-            elif hyper["select.scenario"] == "gravity.center" and round_num == 1:
+            elif (
+                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
+                and round_num == 1
+            ):
                 if plane == Plane.TRANSVERSE:
                     new_round_slices[plane].append(round(label_center[0]))
                 elif plane == Plane.CORONAL:
@@ -327,7 +256,10 @@ class TrainingIDLGTVt(TrainingCore):
                     new_round_slices[plane].append(round(label_center[2]))
 
             # "equal.divide", round = 1
-            elif hyper["select.scenario"] == "equal.divide" and round_num == 1:
+            elif (
+                hyper["select.scenario"] == SelectScenario.EQUAL_DIVIDE
+                and round_num == 1
+            ):
                 divided_parts = hyper["select.step.{}".format(plane)][0] + 1
                 candidates = candidates.keys()
                 for part in range(1, divided_parts):
@@ -344,7 +276,10 @@ class TrainingIDLGTVt(TrainingCore):
                 new_round_slices[plane].shuffle()
 
             # narrow new_round_slices based on select.step
-            if hyper["select.scenario"] == "gravity.center" and round_num == 1:
+            if (
+                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
+                and round_num == 1
+            ):
                 new_slices_num = 1
             else:
                 new_slices_num = hyper["select.step.{}".format(plane)][round_num - 1]
@@ -461,7 +396,6 @@ class TrainingIDLGTVt(TrainingCore):
     def __training_single_round(
         self,
         round_dir: str,
-        label_dir: str,
         hyper: Dict,
         selected_slices: Dict,
         segment_metrics: Dict,
@@ -479,6 +413,7 @@ class TrainingIDLGTVt(TrainingCore):
         loss_json_path = os.path.join(patient_dir, "loss.json")
         loss_dict = Json.load(loss_json_path)
 
+        # pred dir
         if round_num == 1:
             pred_dir = os.path.join(
                 idl_gtvt_dir.parent,
@@ -488,6 +423,12 @@ class TrainingIDLGTVt(TrainingCore):
             )
         else:
             pred_dir = os.path.join(patient_dir, "round={:02d}".format(round_num - 1))
+
+        # annotation dir
+        if hyper["select.scenario"] == SelectScenario.USER_CLICK:
+            annotation_dir = os.path.join(patient_dir, "round=01")
+        else:
+            annotation_dir = None
 
         # record current round time spent
         time_spent = datetime.now()
@@ -510,8 +451,8 @@ class TrainingIDLGTVt(TrainingCore):
         dataset_idl_gtvt = DataSetIDLGTVt(
             patient=patient,
             selected_slices=selected_slices,
-            label_dir=label_dir,
             pred_dir=pred_dir,
+            annotation_dir=annotation_dir,  # make it =None for simulation
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
             augment=augment,
@@ -579,16 +520,18 @@ class TrainingIDLGTVt(TrainingCore):
 
         # save selected_slices dict before inference, because masked_label needs it
         # copy a new dict to avoid changing origin selected_slices dict
-        selected_slices_to_save = selected_slices.copy()
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            for round_num in selected_slices_to_save[plane]:
-                selected_slices_to_save[plane][round_num] = selected_slices_to_save[
-                    plane
-                ][round_num].to_str()
-        Json.save(
-            data=selected_slices_to_save,
-            path=os.path.join(patient_dir, "selected_slices.json"),
-        )
+        # dont need to save it for real idl
+        if hyper["select.scenario"] != SelectScenario.USER_CLICK:
+            selected_slices_to_save = selected_slices.copy()
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                for round_num in selected_slices_to_save[plane]:
+                    selected_slices_to_save[plane][round_num] = selected_slices_to_save[
+                        plane
+                    ][round_num].to_str()
+            Json.save(
+                data=selected_slices_to_save,
+                path=os.path.join(patient_dir, "selected_slices.json"),
+            )
 
         # inference
         self.__inference_round(
@@ -658,36 +601,45 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         selected_slices = Dict()
-
-        # loop through each round
         max_round = max(
             len(hyper["select.step.transverse"]),
             len(hyper["select.step.coronal"]),
             len(hyper["select.step.sagittal"]),
         )
+        # loop through each round
         for round_num in range(1, max_round + 1):
-            # new_round_slices are add into selected_slices in this function
-            new_round_slices = self.__select_new_round_slices(
-                selected_slices=selected_slices,
-                hyper=hyper,
-                patient_dir=patient_dir,
-            )
-
-            # no slice needs to be annotated in cur round
-            if (
-                len(new_round_slices[Plane.TRANSVERSE]) == 0
-                and len(new_round_slices[Plane.CORONAL]) == 0
-                and len(new_round_slices[Plane.SAGITTAL]) == 0
-            ):
-                break
+            # (1)real idl
+            if hyper["select.scenario"] == SelectScenario.USER_CLICK:
+                selected_slices = Json.load(
+                    os.path.join(patient_dir, "selected_slices.json"),
+                )
+                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                    selected_slices[plane]["round=01"] = List(
+                        int(selected_slices[plane]["round=01"])
+                    )
+            # (2)simulation
+            else:
+                # new_round_slices are add into selected_slices in this function
+                new_round_slices = self.__select_new_round_slices(
+                    selected_slices=selected_slices,
+                    hyper=hyper,
+                    patient_dir=patient_dir,
+                )
+                # no slice needs to be annotated in cur round
+                if (
+                    len(new_round_slices[Plane.TRANSVERSE]) == 0
+                    and len(new_round_slices[Plane.CORONAL]) == 0
+                    and len(new_round_slices[Plane.SAGITTAL]) == 0
+                ):
+                    break
 
             # start current round
             print("round:", round_num)
 
             round_dir = os.path.join(patient_dir, "round={:02d}".format(round_num))
+
             self.__training_single_round(
                 round_dir=round_dir,
-                label_dir=g.DATASET_DIR[hyper["dataset.ver"]],
                 hyper=hyper,
                 selected_slices=selected_slices,
                 segment_metrics=segment_metrics,
@@ -803,10 +755,12 @@ class TrainingIDLGTVt(TrainingCore):
         )[0]
         return best_cnn_path
 
-    def simulation(
+    def new_training(
         self,
         baseline_id: str,
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        real_idl_gtvt_id: str = None,  # this is only for real.idl
+        real_idl_patient: str = None,  # this is only for real.idl
+        dataset_ver: str = None,
         train_remark: str = None,
         debug_mode: bool = False,
     ):
@@ -833,23 +787,36 @@ class TrainingIDLGTVt(TrainingCore):
         elif dataset_ver == DatasetVer.MDA:
             dataset_part_list = [DatasetPart.TEST]
 
-        # print("dataset version: {}".format(dataset_ver))
-        # print("dataset section: {}".format(dataset_part))
-
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics(dataset_ver)
 
-        for hyper in self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"]):
+        # load hyper
+        hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
+        if real_idl_gtvt_id is not None and len(hyper_series) > 1:
+            Debug.error_exit(
+                "please make sure idl.gtvt hyper is unique without combinations"
+            )
+
+        for hyper in hyper_series:
             hyper["dataset.ver"] = dataset_ver
             # idl.gtvt doesnt have "no.pt" hyperparam, copy it from baseline
             hyper["no.pt"] = no_pt
 
-            idl_gtvt_id = "idl.gtvt_" + self._init_train_id(
-                hyper=hyper,
-                hyper_json_path=g.HYPER_JSON_PATH["idl.gtvt"],
-                train_remark=train_remark,
-                debug_mode=debug_mode,
-            )
+            # (1)simulation
+            if real_idl_gtvt_id is None:
+                idl_gtvt_id = "idl.gtvt_" + self._init_train_id(
+                    hyper=hyper,
+                    hyper_json_path=g.HYPER_JSON_PATH["idl.gtvt"],
+                    train_remark=train_remark,
+                    debug_mode=debug_mode,
+                )
+            # (2)real idl.gtvt
+            else:
+                idl_gtvt_id = real_idl_gtvt_id
+                hyper["select.scenario"] = SelectScenario.USER_CLICK
+                hyper["select.step.transverse"] = "1"
+                hyper["select.step.coronal"] = "1"
+                hyper["select.step.sagittal"] = "1"
             print("")
             print(idl_gtvt_id)
 
@@ -896,8 +863,13 @@ class TrainingIDLGTVt(TrainingCore):
                     dataset_part=dataset_part,
                 )
 
+                # (1)simulation
+                if real_idl_patient is None:
+                    patient_list = hyper["patients"][dataset_part]
+                # (2)real.idl
+                else:
+                    patient_list = [real_idl_patient]
                 # loop through each patient
-                patient_list = hyper["patients"][dataset_part]
                 for patient in patient_list:
                     self.__reset_cnn(
                         hyper=hyper,

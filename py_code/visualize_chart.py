@@ -270,11 +270,11 @@
 #             elif key_hyper == "select.scenario":
 #                 plt_label = "Scenario = "
 
-#                 if avg_score_dict[cur_idl_id][key_hyper] == "equal.divide":
+#                 if avg_score_dict[cur_idl_id][key_hyper] == SelectScenario.EQUAL_DIVIDE:
 #                     plt_label += "Equal-divide"
-#                 elif avg_score_dict[cur_idl_id][key_hyper] == "largest":
+#                 elif avg_score_dict[cur_idl_id][key_hyper] == SelectScenario.LARGEST:
 #                     plt_label += "Largest"
-#                 elif avg_score_dict[cur_idl_id][key_hyper] == "random":
+#                 elif avg_score_dict[cur_idl_id][key_hyper] == SelectScenario.RANDOM:
 #                     plt_label += "Random"
 
 #             elif key_hyper == "loss.hybrid.weight":

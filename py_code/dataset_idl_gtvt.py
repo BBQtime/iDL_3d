@@ -4,7 +4,9 @@ from typing import Tuple
 
 import numpy as np
 import torch
-from custom import Dict, Img, Modal, Nii, Plane
+from custom import Dict
+from custom import Global as g
+from custom import Img, Modal, Nii, Plane
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
@@ -16,8 +18,8 @@ class DataSetIDLGTVt(DatasetCore):
         self,
         patient: str,
         selected_slices: Dict,
-        label_dir: str,  # dont use g.DATASET_DIR because of realtime training
         pred_dir: str,
+        annotation_dir: str,  # this is only for realtime idl
         dataset_ver: str,
         no_pt: bool,
         augment: Dict,
@@ -29,14 +31,19 @@ class DataSetIDLGTVt(DatasetCore):
         # origin images
         self.__origin = Dict()
 
-        # simulated iDL label path
-        label_path = os.path.join(label_dir, "HNCDL_{}_GTVt.nii".format(patient))
-        if not os.path.exists(label_path):
-            # real iDL label path
-            label_path = os.path.join(label_dir, "gtvt_label.nii.gz")
-
-        # load label
-        self.__origin["label"] = Nii.load(label_path, binary=True)
+        # real idl
+        if annotation_dir is not None:
+            self.__origin["label"] = Nii.load(
+                os.path.join(annotation_dir, "gtvt_annotation.nii.gz"), binary=True
+            )
+        # simulation
+        else:
+            self.__origin["label"] = Nii.load(
+                os.path.join(
+                    g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
+                ),
+                binary=True,
+            )
 
         # load pred
         self.__origin["pred"] = Nii.load(
@@ -64,10 +71,31 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
             selected_slices, weight
         )
+        Nii.save(
+            self.__origin["label"],
+            os.path.join(g.PROJ_DIR, "debug", "annotation.nii.gz"),
+        )
+        Nii.save(
+            slice_mask,
+            os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii.gz"),
+        )
+        Nii.save(
+            self.__origin["weight.map"],
+            os.path.join(g.PROJ_DIR, "debug", "weight_map.nii.gz"),
+        )
 
         # overwrite pred to label on non-annotated slices
         self.__origin["label"] *= slice_mask
+        Nii.save(
+            self.__origin["label"],
+            os.path.join(g.PROJ_DIR, "debug", "annotation+slice_mask.nii.gz"),
+        )
         self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
+        Nii.save(
+            self.__origin["label"],
+            os.path.join(g.PROJ_DIR, "debug", "annotation+pred.nii.gz"),
+        )
+        print("1")
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # annotated slice mask
@@ -303,7 +331,6 @@ class DataSetIDLGTVt(DatasetCore):
 # tmp_dataset = DataSetIDLGTVt(
 #     patient="336",
 #     selected_slices=selected_slices,
-#     label_dir=self._dataset_dir,
 #     pred_dir=pred_dir,
 #     augment=augment,
 #     weight=weight,

@@ -74,12 +74,21 @@ class List(list):
             return result
 
     def __init__(self, *args):
-        # str to list, split with comma: "1,2,3,4" -> ["1","2","3","4"]
-        if len(args) == 1 and isinstance(args[0], str):
-            if args[0] == "":
-                super().__init__()
+        # normal init
+        if len(args) == 0:
+            super().__init__(*args)
+        elif len(args) == 1:
+            # str to list, split with comma: "1,2,3,4" -> ["1","2","3","4"]
+            if isinstance(args[0], str):
+                if args[0] == "":
+                    super().__init__()
+                else:
+                    super().__init__(args[0].split(","))
+            # init int and float like List(1) or List(2.0)
+            elif isinstance(args[0], int) or isinstance(args[0], float):
+                super().__init__([args[0]])
             else:
-                super().__init__(args[0].split(","))
+                super().__init__(*args)
         # normal init
         else:
             super().__init__(*args)
@@ -645,6 +654,14 @@ class Time:
         cur_time = cur_time.replace("-", ".")
         cur_time = cur_time.replace(" ", ".")
         return cur_time
+
+
+class SelectScenario:
+    LARGEST = "largest"
+    GRAVITY_CENTER = "gravity.center"
+    EQUAL_DIVIDE = "equal.divide"
+    RANDOM = "random"
+    USER_CLICK = "user.click"
 
 
 class Plane:

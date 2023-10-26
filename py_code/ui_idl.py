@@ -11,6 +11,7 @@ from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QIcon, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
+from training_idl_gtvt import TrainingIDLGTVt
 from ui_draggable_cross import DraggableCross
 from ui_replay import UiReplay
 
@@ -155,15 +156,18 @@ class UiIDL(UiReplay):
             self._3d_imgs["gtvt.click"][pos[0]][pos[1]][pos[2]] = 1
 
             # save gtvt_click
-            round_dir = os.path.join(
+            cur_patient_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id["gtvt"],
                 "patients",
                 "patient={}".format(self._cur_patient),
+            )
+            cur_round_dir = os.path.join(
+                cur_patient_dir,
                 "round=01",
             )
-            Dir.create(round_dir)
+            Dir.create(cur_round_dir)
             idl_gtvt_click = self._3d_imgs["gtvt.click"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
@@ -172,13 +176,24 @@ class UiIDL(UiReplay):
             idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
             Nii.save(
                 img=idl_gtvt_click,
-                save_path=os.path.join(round_dir, "gtvt_click.nii.gz"),
+                save_path=os.path.join(cur_round_dir, "gtvt_click.nii.gz"),
                 spacing=self._nii_spacing,
             )
+
+            # save gtvt selected_slices.json
+            pos = np.where(idl_gtvt_click == 1)
+            selected_slices = Dict()
+            selected_slices[Plane.TRANSVERSE]["round=01"] = List(pos[0]).to_str()
+            selected_slices[Plane.CORONAL]["round=01"] = List(pos[1]).to_str()
+            selected_slices[Plane.SAGITTAL]["round=01"] = List(pos[2]).to_str()
+            Json.save(
+                data=selected_slices,
+                path=os.path.join(cur_patient_dir, "selected_slices.json"),
+            )
+
             # clean current step elements
             # DO NOT clear self.__gtvt_click_pos_3d, IDLStep.DRAW_GTVT will use it
             self.delete_all_crosses_on_4_qlabels()
-
             # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
             self.__save_idl_step()
@@ -188,6 +203,37 @@ class UiIDL(UiReplay):
             self.__clear_annotation_3d()
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            # save gtvt annotation
+            cur_round_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_id["gtvt"],
+                "patients",
+                "patient={}".format(self._cur_patient),
+                "round=01",
+            )
+            Dir.create(cur_round_dir)
+            # flip left/right for 1mm data
+            if self._nii_spacing[2] == 1.0:
+                self.__annotation_3d = np.flip(self.__annotation_3d, axis=2)
+            # turn upside down
+            self.__annotation_3d = np.flip(self.__annotation_3d, axis=0)
+            Nii.save(
+                img=self.__annotation_3d,
+                save_path=os.path.join(cur_round_dir, "gtvt_annotation.nii.gz"),
+                spacing=self._nii_spacing,
+            )
+
+            # start real idl gtvt
+            training_idl_gtvt = TrainingIDLGTVt()
+            training_idl_gtvt.new_training(
+                baseline_id="baseline_real.idl",
+                real_idl_gtvt_id=self._idl_id["gtvt"],
+                real_idl_patient=self._cur_patient,
+                dataset_ver=self._dataset_ver,
+                debug_mode=False,  # self.__debug_mode,
+            )
+
             # clean current step elements
             self.__clear_annotation_3d()
             self.__clear_all_drawing_layers_on_4_qlabels()
@@ -195,6 +241,7 @@ class UiIDL(UiReplay):
             self.set_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
             self.__save_idl_step()
             self.__update_msg()
+            self._load_idl_gtvt_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
 
@@ -454,6 +501,7 @@ class UiIDL(UiReplay):
 
     def _init_member_var(self, idl_remark: str = None, debug_mode: bool = False):
         super()._init_member_var()
+        self.__debug_mode = debug_mode
 
         self.__clear_annotation_3d()
 
@@ -760,7 +808,7 @@ class UiIDL(UiReplay):
             Debug.error_exit("idl step value error")
 
     def _load_idl_gtvt_data(self):
-        patient_dir = self._load_idl_gtv_3d_imgs(gtv="gtvt")
+        patient_dir = self._load_idl_gtv_data(gtv="gtvt")
         # load gtvt click
         gtvt_click_nii_path = os.path.join(patient_dir, "round=01", "gtvt_click.nii.gz")
         if os.path.exists(gtvt_click_nii_path):
@@ -773,7 +821,7 @@ class UiIDL(UiReplay):
             )
 
     def _load_idl_gtvn_data(self):
-        patient_dir = self._load_idl_gtv_3d_imgs(gtv="gtvn")
+        patient_dir = self._load_idl_gtv_data(gtv="gtvn")
         # load gtvn click
         gtvn_clicks_nii_path = os.path.join(
             patient_dir, "round=01", "gtvn_clicks.nii.gz"
@@ -787,7 +835,7 @@ class UiIDL(UiReplay):
                 self._3d_imgs[Modal.CT].shape, dtype=np.float32
             )
 
-    def _load_idl_gtv_3d_imgs(self, gtv: str) -> str:
+    def _load_idl_gtv_data(self, gtv: str) -> str:
         patient_dir = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
