@@ -71,31 +71,30 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
             selected_slices, weight
         )
-        Nii.save(
-            self.__origin["label"],
-            os.path.join(g.PROJ_DIR, "debug", "annotation.nii.gz"),
-        )
-        Nii.save(
-            slice_mask,
-            os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii.gz"),
-        )
-        Nii.save(
-            self.__origin["weight.map"],
-            os.path.join(g.PROJ_DIR, "debug", "weight_map.nii.gz"),
-        )
+        # Nii.save(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_DIR, "debug", "annotation.nii.gz"),
+        # )
+        # Nii.save(
+        #     slice_mask,
+        #     os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii.gz"),
+        # )
+        # Nii.save(
+        #     self.__origin["weight.map"],
+        #     os.path.join(g.PROJ_DIR, "debug", "weight_map.nii.gz"),
+        # )
 
         # overwrite pred to label on non-annotated slices
         self.__origin["label"] *= slice_mask
-        Nii.save(
-            self.__origin["label"],
-            os.path.join(g.PROJ_DIR, "debug", "annotation+slice_mask.nii.gz"),
-        )
-        self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
-        Nii.save(
-            self.__origin["label"],
-            os.path.join(g.PROJ_DIR, "debug", "annotation+pred.nii.gz"),
-        )
-        print("1")
+        # Nii.save(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_DIR, "debug", "annotation+slice_mask.nii.gz"),
+        # )
+        # self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
+        # Nii.save(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_DIR, "debug", "annotation+pred.nii.gz"),
+        # )
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # annotated slice mask

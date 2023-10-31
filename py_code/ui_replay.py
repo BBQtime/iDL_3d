@@ -12,7 +12,8 @@ from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QImage, QPalette
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow
+from PyQt5.QtWidgets import (QApplication, QButtonGroup, QMainWindow,
+                             QRadioButton)
 from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 from ui_custom_qlabel import CustomQLabel
@@ -114,6 +115,7 @@ class UiReplay(QMainWindow, Ui_Core):
             "gtvt.pred",
             "gtvn.pred",
             "gtvt.click",
+            "gtvt.annotation",
             "gtvn.clicks",
         ]:
             self._3d_imgs[i] = None
@@ -746,11 +748,22 @@ class UiReplay(QMainWindow, Ui_Core):
         # return the followings for UiIDL
         return left, top, width, gap, text_height, bar_height, slider_height
 
-    def _set_img_plane(self):
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if self.__radio_btn[i].isChecked():
-                self._plane = i
-                break
+    # new_plane = None will read from radio buttons
+    def _set_img_plane(
+        self, connected_radio_btn: QRadioButton = None, new_plane: str = None
+    ):
+        if new_plane is None:
+            for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if self.__radio_btn[i].isChecked():
+                    self._plane = i
+                    break
+        else:
+            self._plane = new_plane
+            for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if i == new_plane:
+                    self.__radio_btn[i].setChecked(True)
+                else:
+                    self.__radio_btn[i].setChecked(False)
 
         self.__refresh_gtvt_selected_slices_2d()
         self._reset_cur_slice_id()
@@ -759,6 +772,9 @@ class UiReplay(QMainWindow, Ui_Core):
         self._refresh_title()
 
     def __refresh_gtvt_selected_slices_2d(self):
+        if self._3d_imgs[Modal.CT] is None:
+            return
+
         if self._plane == Plane.TRANSVERSE:
             self.__gtvt_selected_slices_2d[
                 Orient.HORIZONTAL
@@ -1014,6 +1030,8 @@ class UiReplay(QMainWindow, Ui_Core):
                 key_word=i,
                 full_path=True,
             ):
+                if Path(idl_result_dir).name == "idl.gtvn_real.idl":
+                    continue
                 patient_dir = os.path.join(
                     idl_result_dir,
                     "patients",
@@ -1146,6 +1164,7 @@ class UiReplay(QMainWindow, Ui_Core):
             # clear idl.gtvt/gtvn data
             if gtv == "gtvt":
                 self._3d_imgs["gtvt.click"] = None
+                self._3d_imgs["gtvt.annotation"] = None
                 self.__clear_gtvt_selected_slices_3d()
                 self.__refresh_gtvt_selected_slices_2d()
             elif gtv == "gtvn":
@@ -1173,6 +1192,14 @@ class UiReplay(QMainWindow, Ui_Core):
                 if os.path.exists(gtvt_click_path):
                     self._3d_imgs["gtvt.click"] = self._load_3d_img(
                         gtvt_click_path, binary=True
+                    )
+                # load gtvt annotation
+                gtvt_annotation_path = os.path.join(
+                    cur_round_dir, "gtvt_annotation.nii.gz"
+                )
+                if os.path.exists(gtvt_annotation_path):
+                    self._3d_imgs["gtvt.annotation"] = self._load_3d_img(
+                        gtvt_annotation_path, binary=True
                     )
                 # load gtvt selected slices (3d)
                 selected_slices_json_path = os.path.join(
@@ -1319,21 +1346,23 @@ class UiReplay(QMainWindow, Ui_Core):
         if self._3d_imgs[Modal.CT] is None:
             return
 
-        # check if cur slice is annotated
-        is_annotated = self.__is_cur_slice_annotated()
+        # # check if cur slice is annotated
+        # is_annotated = self.__is_cur_slice_annotated()
 
         # set contour color
         color = Dict()
         color["gtvt.label"] = self._color["gtvt.label"]
         color["gtvn.label"] = self._color["gtvn.label"]
 
-        if is_annotated:
-            color["gtvt.pred"] = self._color["gtvt.annotation"]
-        else:
-            color["gtvt.pred"] = self._color["gtvt.pred"]
+        # if is_annotated:
+        #     color["gtvt.pred"] = self._color["gtvt.annotation"]
+        # else:
+        #     color["gtvt.pred"] = self._color["gtvt.pred"]
 
-        color["gtvn.pred"] = self._color["gtvn.pred"]
+        color["gtvt.pred"] = self._color["gtvt.pred"]
         color["gtvt.click"] = self._color["gtvt.click"]
+        color["gtvt.annotation"] = self._color["gtvt.annotation"]
+        color["gtvn.pred"] = self._color["gtvn.pred"]
         color["gtvn.clicks"] = self._color["gtvn.clicks"]
 
         # load rgb imgs
@@ -1432,6 +1461,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 "gtvn.pred",
                 "gtvt.pred",
                 "gtvt.click",
+                "gtvt.annotation",
                 "gtvn.clicks",
             ]:
                 if self._3d_imgs[k] is None:
@@ -1549,15 +1579,15 @@ class UiReplay(QMainWindow, Ui_Core):
 
         cv_text = "GTVt"
         pos_x += 65
-        if self.__is_cur_slice_annotated():
-            color = self._color["gtvt.annotation"]
-        else:
-            color = self._color["gtvt.pred"]
+        # if self.__is_cur_slice_annotated():
+        #     color = self._color["gtvt.annotation"]
+        # else:
+        #     color = self._color["gtvt.pred"]
         self._cv_put_text(
             img=rgb_img,
             text=cv_text,
             pos=(pos_x, pos_y),
-            color=color,
+            color=self._color["gtvt.pred"],
         )
 
         # add text pred gtvn
@@ -1662,6 +1692,9 @@ class UiReplay(QMainWindow, Ui_Core):
             Debug.error_exit("self._plane value error")
 
     def _refresh_title(self):
+        if self._3d_imgs[Modal.CT] is None:
+            return
+
         win_tital = "iDL.Tool "
         # if self._idl_round["gtvt"] is not None:
         #     win_tital += "   Num.of.Annotated.Slices="

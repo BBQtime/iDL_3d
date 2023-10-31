@@ -7,8 +7,10 @@ import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time
+from numpy import ndarray
 from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtGui import QIcon, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt5.QtWidgets import QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
@@ -203,6 +205,9 @@ class UiIDL(UiReplay):
             self.__clear_annotation_3d()
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            if not self.__is_valid_annotation():
+                return
+
             # save gtvt annotation
             cur_round_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR,
@@ -231,7 +236,7 @@ class UiIDL(UiReplay):
                 real_idl_gtvt_id=self._idl_id["gtvt"],
                 real_idl_patient=self._cur_patient,
                 dataset_ver=self._dataset_ver,
-                debug_mode=False,  # self.__debug_mode,
+                debug_mode=self.__debug_mode,
             )
 
             # clean current step elements
@@ -284,6 +289,55 @@ class UiIDL(UiReplay):
             self._refresh_rgb_imgs()
             self._refresh_title()
 
+    # check annotation in 3 different planes
+    def __is_valid_annotation(self):
+        t, c, s = self.__gtvt_click_pos_3d
+
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            if plane == Plane.TRANSVERSE:
+                cur_plane_annotation = self.__annotation_3d[t, :, :].copy()
+                cur_plane_annotation[c, :] = 0
+                cur_plane_annotation[:, s] = 0
+                if cur_plane_annotation.max() == 0:
+                    QMessageBox.information(
+                        self,
+                        "Information",
+                        "Please draw GTVt in {} plane.".format(plane),
+                        QMessageBox.Ok,
+                    )
+                    self._set_img_plane(new_plane=plane)
+                    return False
+
+            elif plane == Plane.CORONAL:
+                cur_plane_annotation = self.__annotation_3d[:, c, :].copy()
+                cur_plane_annotation[t, :] = 0
+                cur_plane_annotation[:, s] = 0
+                if cur_plane_annotation.max() == 0:
+                    QMessageBox.information(
+                        self,
+                        "Information",
+                        "Please draw GTVt in {} plane.".format(plane),
+                        QMessageBox.Ok,
+                    )
+                    self._set_img_plane(new_plane=plane)
+                    return False
+
+            elif plane == Plane.SAGITTAL:
+                cur_plane_annotation = self.__annotation_3d[:, :, s]
+                cur_plane_annotation[t, :] = 0
+                cur_plane_annotation[:, c] = 0
+                if cur_plane_annotation.max() == 0:
+                    QMessageBox.information(
+                        self,
+                        "Information",
+                        "Please draw GTVt in {} plane.".format(plane),
+                        QMessageBox.Ok,
+                    )
+                    self._set_img_plane(new_plane=plane)
+                    return False
+
+        return True
+
     def __click_btn_clear(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
             self.clear_gtvt_click_pos_3d()
@@ -330,8 +384,12 @@ class UiIDL(UiReplay):
         self.__refresh_crosses_on_4_qlabels()
         self.__refresh_annotation_on_4_qlabels()
 
-    def _set_img_plane(self):
-        super()._set_img_plane()
+    def _set_img_plane(
+        self, connected_radio_btn: QRadioButton = None, new_plane: str = None
+    ):
+        super()._set_img_plane(
+            connected_radio_btn=connected_radio_btn, new_plane=new_plane
+        )
         self.__refresh_crosses_on_4_qlabels()
         self.__refresh_annotation_on_4_qlabels()
 
@@ -809,6 +867,7 @@ class UiIDL(UiReplay):
 
     def _load_idl_gtvt_data(self):
         patient_dir = self._load_idl_gtv_data(gtv="gtvt")
+
         # load gtvt click
         gtvt_click_nii_path = os.path.join(patient_dir, "round=01", "gtvt_click.nii.gz")
         if os.path.exists(gtvt_click_nii_path):
@@ -819,6 +878,34 @@ class UiIDL(UiReplay):
             self._3d_imgs["gtvt.click"] = np.zeros(
                 self._3d_imgs[Modal.CT].shape, dtype=np.float32
             )
+
+        # load gtvt annotation
+        gtvt_annotation_nii_path = os.path.join(
+            patient_dir, "round=01", "gtvt_annotation.nii.gz"
+        )
+        if os.path.exists(gtvt_annotation_nii_path):
+            gtvt_annotation = self._load_3d_img(
+                path=gtvt_annotation_nii_path, binary=True
+            )
+            # Nii.save(
+            #     gtvt_annotation,
+            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation.nii.gz"),
+            # )
+            pos = np.where(self._3d_imgs["gtvt.click"] == 1)
+            self._3d_imgs["gtvt.pred"][pos[0], :, :] = 0
+            self._3d_imgs["gtvt.pred"][:, pos[1], :] = 0
+            self._3d_imgs["gtvt.pred"][:, :, pos[2]] = 0
+            # Nii.save(
+            #     self._3d_imgs["gtvt.pred"],
+            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_pred_remove_slices.nii.gz"),
+            # )
+            self._3d_imgs["gtvt.pred"] = np.maximum(
+                self._3d_imgs["gtvt.pred"], gtvt_annotation
+            )
+            # Nii.save(
+            #     self._3d_imgs["gtvt.pred"],
+            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_pred_add_annotation.nii.gz"),
+            # )
 
     def _load_idl_gtvn_data(self):
         patient_dir = self._load_idl_gtv_data(gtv="gtvn")

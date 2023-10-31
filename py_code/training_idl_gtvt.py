@@ -52,7 +52,7 @@ class TrainingIDLGTVt(TrainingCore):
         # iter
         if debug_mode:
             # at least 2 iters to compare loss difference
-            hyper["iter"] = 2
+            hyper["iter"] = 1
         else:
             hyper["iter"] = Value.limit_range(hyper["iter"], (1, None))
 
