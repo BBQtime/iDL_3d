@@ -6,10 +6,9 @@ import numpy as np
 import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time
-from numpy import ndarray
+from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
 from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QIcon, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt5.QtGui import QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
@@ -105,34 +104,30 @@ class UiIDL(UiReplay):
                     np.float32
                 )
 
-            # save annotation into 3d ndarray
-            center_slice_id = self.__get_gtvt_center_slice_id()
-            if self._plane == Plane.SAGITTAL:
-                self.__annotation_3d[:, :, center_slice_id] = annotation_2d
-            elif self._plane == Plane.CORONAL:
-                self.__annotation_3d[:, center_slice_id, :] = annotation_2d
-            elif self._plane == Plane.TRANSVERSE:
-                self.__annotation_3d[center_slice_id, :, :] = annotation_2d
+            self.__gtvt_annotation[self._plane] = annotation_2d
 
+            self._refresh_rgb_imgs()
             self.__refresh_annotation_on_4_qlabels()
 
     def __refresh_annotation_on_4_qlabels(self):
+        # check idl step
         if self.get_cur_patient_idl_step() != IDLStep.DRAW_GTVT:
             return
 
+        # check slice id
         center_slice_id = self.__get_gtvt_center_slice_id()
-
         if self._cur_slice_id != center_slice_id:
             for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self.img_qlabel[i].clear_drawing_layer()
             return
 
-        if self._plane == Plane.SAGITTAL:
-            annotation_2d = self.__annotation_3d[:, :, center_slice_id]
-        elif self._plane == Plane.CORONAL:
-            annotation_2d = self.__annotation_3d[:, center_slice_id, :]
-        elif self._plane == Plane.TRANSVERSE:
-            annotation_2d = self.__annotation_3d[center_slice_id, :, :]
+        # check if there is annotation
+        if self.__gtvt_annotation[self._plane] is None:
+            self.__clear_all_drawing_layers_on_4_qlabels()
+            return
+
+        # copy annotation on current plane
+        annotation_2d = self.__gtvt_annotation[self._plane].copy()
 
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             annotation_2d, _ = self._fit_img_qlabel(annotation_2d, self.img_qlabel[i])
@@ -152,6 +147,15 @@ class UiIDL(UiReplay):
 
     def __click_btn_confirm(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
+            if self.__gtvt_click_pos_3d is None:
+                QMessageBox.information(
+                    self,
+                    "Information",
+                    "GTVt center not detected.",
+                    QMessageBox.Ok,
+                )
+                return
+
             # add clicks into 3d img
             pos = self.__gtvt_click_pos_3d
             # pos 0-transverse 1-coronal 2-saggital
@@ -199,14 +203,35 @@ class UiIDL(UiReplay):
             # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
             self.__save_idl_step()
-            self.__update_msg()
+            # self.__update_msg()
             self._refresh_rgb_imgs()
             self._refresh_title()
-            self.__clear_annotation_3d()
+            self.__clear_gtvt_annotation_ndarray()
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
-            if not self.__is_valid_annotation():
-                return
+            annotated_status = self.__get_annotated_status()
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if annotated_status[plane] is False:
+                    QMessageBox.information(
+                        self,
+                        "Information",
+                        "Please draw GTVt in {} plane.".format(plane),
+                        QMessageBox.Ok,
+                    )
+                    self._set_img_plane(new_plane=plane)
+                    return
+
+            # save annotation into 3d ndarray
+            gtvt_annotation_3d = np.zeros_like(self._3d_imgs[Modal.CT])
+            gtvt_annotation_3d[
+                :, :, self.__gtvt_click_pos_3d[2]
+            ] = self.__gtvt_annotation[Plane.SAGITTAL]
+            gtvt_annotation_3d[
+                :, self.__gtvt_click_pos_3d[1], :
+            ] = self.__gtvt_annotation[Plane.CORONAL]
+            gtvt_annotation_3d[
+                self.__gtvt_click_pos_3d[0], :, :
+            ] = self.__gtvt_annotation[Plane.TRANSVERSE]
 
             # save gtvt annotation
             cur_round_dir = os.path.join(
@@ -220,11 +245,11 @@ class UiIDL(UiReplay):
             Dir.create(cur_round_dir)
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
-                self.__annotation_3d = np.flip(self.__annotation_3d, axis=2)
+                gtvt_annotation_3d = np.flip(gtvt_annotation_3d, axis=2)
             # turn upside down
-            self.__annotation_3d = np.flip(self.__annotation_3d, axis=0)
+            gtvt_annotation_3d = np.flip(gtvt_annotation_3d, axis=0)
             Nii.save(
-                img=self.__annotation_3d,
+                img=gtvt_annotation_3d,
                 save_path=os.path.join(cur_round_dir, "gtvt_annotation.nii.gz"),
                 spacing=self._nii_spacing,
             )
@@ -240,12 +265,12 @@ class UiIDL(UiReplay):
             )
 
             # clean current step elements
-            self.__clear_annotation_3d()
+            self.__clear_gtvt_annotation_ndarray()
             self.__clear_all_drawing_layers_on_4_qlabels()
             # new step
             self.set_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
             self.__save_idl_step()
-            self.__update_msg()
+            # self.__update_msg()
             self._load_idl_gtvt_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
@@ -284,59 +309,22 @@ class UiIDL(UiReplay):
             # new step
             self.set_cur_patient_idl_step(IDLStep.CORRECTION)
             self.__save_idl_step()
-            self.__update_msg()
+            # self.__update_msg()
             self._load_idl_gtvn_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
 
     # check annotation in 3 different planes
-    def __is_valid_annotation(self):
-        t, c, s = self.__gtvt_click_pos_3d
-
+    def __get_annotated_status(self) -> Dict:
+        annotated_status = Dict()
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if plane == Plane.TRANSVERSE:
-                cur_plane_annotation = self.__annotation_3d[t, :, :].copy()
-                cur_plane_annotation[c, :] = 0
-                cur_plane_annotation[:, s] = 0
-                if cur_plane_annotation.max() == 0:
-                    QMessageBox.information(
-                        self,
-                        "Information",
-                        "Please draw GTVt in {} plane.".format(plane),
-                        QMessageBox.Ok,
-                    )
-                    self._set_img_plane(new_plane=plane)
-                    return False
-
-            elif plane == Plane.CORONAL:
-                cur_plane_annotation = self.__annotation_3d[:, c, :].copy()
-                cur_plane_annotation[t, :] = 0
-                cur_plane_annotation[:, s] = 0
-                if cur_plane_annotation.max() == 0:
-                    QMessageBox.information(
-                        self,
-                        "Information",
-                        "Please draw GTVt in {} plane.".format(plane),
-                        QMessageBox.Ok,
-                    )
-                    self._set_img_plane(new_plane=plane)
-                    return False
-
-            elif plane == Plane.SAGITTAL:
-                cur_plane_annotation = self.__annotation_3d[:, :, s]
-                cur_plane_annotation[t, :] = 0
-                cur_plane_annotation[:, c] = 0
-                if cur_plane_annotation.max() == 0:
-                    QMessageBox.information(
-                        self,
-                        "Information",
-                        "Please draw GTVt in {} plane.".format(plane),
-                        QMessageBox.Ok,
-                    )
-                    self._set_img_plane(new_plane=plane)
-                    return False
-
-        return True
+            if self.__gtvt_annotation[plane] is None:
+                annotated_status[plane] = False
+            elif self.__gtvt_annotation[plane].max() == 0:
+                annotated_status[plane] = False
+            else:
+                annotated_status[plane] = True
+        return annotated_status
 
     def __click_btn_clear(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
@@ -349,7 +337,8 @@ class UiIDL(UiReplay):
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
             self.__clear_all_drawing_layers_on_4_qlabels()
-            self.__clear_annotation_3d()
+            self.__gtvt_annotation[self._plane] = None
+            self._refresh_rgb_imgs()
             self.__refresh_annotation_on_4_qlabels()
 
     def __get_gtvt_center_slice_id(self):
@@ -548,8 +537,10 @@ class UiIDL(UiReplay):
         self.__btn["clear"] = self._btn_clear
         self.__btn["confirm"] = self._btn_confirm
 
-    def __clear_annotation_3d(self):
-        self.__annotation_3d = np.zeros_like(self._3d_imgs[Modal.CT])
+    def __clear_gtvt_annotation_ndarray(self):
+        self.__gtvt_annotation = Dict()
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.__gtvt_annotation[plane] = None
 
     def clear_gtvt_click_pos_3d(self):
         self.__gtvt_click_pos_3d = None
@@ -561,7 +552,7 @@ class UiIDL(UiReplay):
         super()._init_member_var()
         self.__debug_mode = debug_mode
 
-        self.__clear_annotation_3d()
+        self.__clear_gtvt_annotation_ndarray()
 
         # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.cur_time_str()
@@ -609,14 +600,14 @@ class UiIDL(UiReplay):
 
         super().keyPressEvent(event)
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+    # def mousePressEvent(self, event):
+    #     super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
+    # def mouseMoveEvent(self, event):
+    #     super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
+    # def mouseReleaseEvent(self, event):
+    #     super().mouseReleaseEvent(event)
 
     def __clear_all_drawing_layers_on_4_qlabels(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
@@ -646,7 +637,7 @@ class UiIDL(UiReplay):
             self._arrow_btn["next.{}".format(i)].hide()
 
         # show annotation controls
-        self._text_box_annotation_msg.show()
+        # self._text_box_annotation_msg.show()
         self._progress_bar_idl.show()
         self._slider_pen_size.show()
         for i in ["annotation.tools", "idl.progress", "pen.size"]:
@@ -655,7 +646,7 @@ class UiIDL(UiReplay):
             self.__btn[i].show()
 
         # set text
-        self._text_box_annotation_msg.setText("Please Select a Patient")
+        # self._text_box_annotation_msg.setText("Please Select a Patient")
         self._text_label["annotation.tools"].setText("Annotation Tools")
         self._text_label["idl.progress"].setText("Retraining Progress")
 
@@ -764,27 +755,91 @@ class UiIDL(UiReplay):
                 os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i])
             )
 
-    # rewrite this function (do nothing)
-    def _add_score_on_rgb_img(self, rgb_img):
-        pass
-
-    # rewrite this function (do nothing)
-    def _add_label_text_on_rgb_img(self, rgb_img):
-        pass
-
-    def _add_pred_text_on_rgb_img(self, rgb_img):
-        rgb_img_height = rgb_img.shape[0]
+    def _add_msg_on_qimg(self, qimg: QImage):
         pos_x = 10
-        pos_y = rgb_img_height - 68
+        pos_y = 25
+
+        if self._cur_patient is None:
+            text = "Please select a patient"
+            self._qimg_draw_text(
+                qimg=qimg,
+                text=text,
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
+            return
+
+        cur_patient_idl_step = self.get_cur_patient_idl_step()
+
+        if cur_patient_idl_step == IDLStep.CLICK_GTVT_CENTER:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="Please click the center of the primary Gross Tumor Volumes (GTVt)",
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
+
+        elif cur_patient_idl_step == IDLStep.DRAW_GTVT:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="Please delineate the countour of GTVt in 3 different anatomical planes",
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
+            pos_y += 5
+            annotated_status = self.__get_annotated_status()
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                pos_y += 20
+                text = Value.capitalized(plane)
+                if annotated_status[plane] is True:
+                    text += " ✓"
+                    color = self._color["green"]
+                else:
+                    text += " ✕"
+                    color = self._color["red"]
+                self._qimg_draw_text(
+                    qimg=qimg,
+                    text=text,
+                    pos=(pos_x, pos_y),
+                    color=color,
+                )
+
+        elif cur_patient_idl_step == IDLStep.CLICK_GTVN_CENTER:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="Please click the center of the malignant lymph nodes (GTVn)",
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
+
+        elif cur_patient_idl_step == IDLStep.CORRECTION:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="Please correct the auto-segmentation",
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
+
+    # rewrite this function (do nothing)
+    def _add_score_on_qimg(self, qimg: QImage):
+        pass
+
+    # rewrite this function (do nothing)
+    def _add_label_text_on_qimg(self, qimg: QImage):
+        pass
+
+    def _add_pred_text_on_qimg(self, qimg: QImage):
+        pos_x = 10
+        pos_y = qimg.height() - 68
         gap_y = 20
 
         for i in ["t", "n"]:
             if self._3d_imgs["gtv{}.pred".format(i)] is not None:
-                cv_text = "GTV{}".format(i)
+                text = "GTV{}".format(i)
                 pos_y += gap_y
-                self._cv_put_text(
-                    img=rgb_img,
-                    text=cv_text,
+                self._qimg_draw_text(
+                    qimg=qimg,
+                    text=text,
                     pos=(pos_x, pos_y),
                     color=self._color["gtv{}.pred".format(i)],
                 )
@@ -792,7 +847,7 @@ class UiIDL(UiReplay):
     def _load_patient_data(self, idx: int = None):
         self.clear_gtvt_click_pos_3d()
         self.clear_gtvn_clicks_pos_3d()
-        self.__clear_annotation_3d()
+        self.__clear_gtvt_annotation_ndarray()
 
         self._cur_patient = self._combox["patient"].currentText()
         # run these after patient combox current text is set up
@@ -812,7 +867,7 @@ class UiIDL(UiReplay):
         self.__refresh_crosses_on_4_qlabels()
         self.__refresh_annotation_on_4_qlabels()
         self.__save_idl_step()
-        self.__update_msg()
+        # self.__update_msg()
 
     def _reset_cur_slice_id(self):
         if (
@@ -839,31 +894,28 @@ class UiIDL(UiReplay):
     def set_cur_patient_idl_step(self, step: str):
         self.__idl_step["patient={}".format(self._cur_patient)] = step
 
-    def __update_msg(self):
-        cur_patient_idl_step = self.get_cur_patient_idl_step()
+    # def __update_msg(self):
+    #     cur_patient_idl_step = self.get_cur_patient_idl_step()
 
-        if cur_patient_idl_step == IDLStep.CLICK_GTVT_CENTER:
-            self._text_box_annotation_msg.setText(
-                "Please click the center of GTVt, then press OK"
-            )
+    #     if cur_patient_idl_step == IDLStep.CLICK_GTVT_CENTER:
+    #         self._text_box_annotation_msg.setText(
+    #             "Please click the center of GTVt, then press OK"
+    #         )
 
-        elif cur_patient_idl_step == IDLStep.DRAW_GTVT:
-            self._text_box_annotation_msg.setText(
-                "Please delineate the countour of GTVt on transvers/coronal/sagittal plane, then press OK"
-            )
+    #     elif cur_patient_idl_step == IDLStep.DRAW_GTVT:
+    #         self._text_box_annotation_msg.setText(
+    #             "Please delineate the countour of GTVt on transvers/coronal/sagittal plane, then press OK"
+    #         )
 
-        elif cur_patient_idl_step == IDLStep.CLICK_GTVN_CENTER:
-            self._text_box_annotation_msg.setText(
-                "Please click the center of each involved lymph nodes, then press OK."
-            )
+    #     elif cur_patient_idl_step == IDLStep.CLICK_GTVN_CENTER:
+    #         self._text_box_annotation_msg.setText(
+    #             "Please click the center of each involved lymph nodes, then press OK."
+    #         )
 
-        elif cur_patient_idl_step == IDLStep.CORRECTION:
-            self._text_box_annotation_msg.setText(
-                "Please correct the predictions, then press OK"
-            )
-
-        else:
-            Debug.error_exit("idl step value error")
+    #     elif cur_patient_idl_step == IDLStep.CORRECTION:
+    #         self._text_box_annotation_msg.setText(
+    #             "Please correct the predictions, then press OK"
+    #         )
 
     def _load_idl_gtvt_data(self):
         patient_dir = self._load_idl_gtv_data(gtv="gtvt")

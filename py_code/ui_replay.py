@@ -2,7 +2,6 @@ import os
 import platform
 from pathlib import Path
 from tkinter import Tk, filedialog
-from typing import Tuple
 
 import cv2
 import numpy as np
@@ -11,7 +10,7 @@ from custom import Global as g
 from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
-from PyQt5.QtGui import QImage, QPalette
+from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
 from PyQt5.QtWidgets import (QApplication, QButtonGroup, QMainWindow,
                              QRadioButton)
 from scipy.ndimage import measurements
@@ -245,19 +244,19 @@ class UiReplay(QMainWindow, Ui_Core):
     #     end_y -= img_qlabel_top
 
     #     # get actual_img_area related position
-    #     relative_pos = self._rgb_img_roi
-    #     start_x -= relative_pos["x"]
-    #     start_y -= relative_pos["y"]
-    #     end_x -= relative_pos["x"]
-    #     end_y -= relative_pos["y"]
+    #     rgb_img_roi = self._rgb_img_roi
+    #     start_x -= rgb_img_roi["x"]
+    #     start_y -= rgb_img_roi["y"]
+    #     end_x -= rgb_img_roi["x"]
+    #     end_y -= rgb_img_roi["y"]
     #     # out of range
     #     if (start_x < 0 and end_x < 0) or (
-    #         start_x > relative_pos["width"] and end_x > relative_pos["width"]
+    #         start_x > rgb_img_roi["width"] and end_x > rgb_img_roi["width"]
     #     ):
     #         self._reset_zoomin()
     #         return
     #     if (start_y < 0 and end_y < 0) or (
-    #         start_y > relative_pos["height"] and end_y > relative_pos["height"]
+    #         start_y > rgb_img_roi["height"] and end_y > rgb_img_roi["height"]
     #     ):
     #         self._reset_zoomin()
     #         return
@@ -266,10 +265,10 @@ class UiReplay(QMainWindow, Ui_Core):
     #         start_x = 0
     #     if start_y < 0:
     #         start_y = 0
-    #     if end_x > relative_pos["width"]:
-    #         end_x = relative_pos["width"]
-    #     if end_y > relative_pos["height"]:
-    #         end_y = relative_pos["height"]
+    #     if end_x > rgb_img_roi["width"]:
+    #         end_x = rgb_img_roi["width"]
+    #     if end_y > rgb_img_roi["height"]:
+    #         end_y = rgb_img_roi["height"]
 
     #     # get actual zoom position
     #     if self._plane == Plane.SAGITTAL:
@@ -288,10 +287,10 @@ class UiReplay(QMainWindow, Ui_Core):
     #         origin_width = self._3d_imgs[Modal.CT].shape[2]
     #         origin_height = self._3d_imgs[Modal.CT].shape[1]
 
-    #     start_x = round(start_x * origin_width / relative_pos["width"])
-    #     end_x = round(end_x * origin_width / relative_pos["width"])
-    #     start_y = round(start_y * origin_height / relative_pos["height"])
-    #     end_y = round(end_y * origin_height / relative_pos["height"])
+    #     start_x = round(start_x * origin_width / rgb_img_roi["width"])
+    #     end_x = round(end_x * origin_width / rgb_img_roi["width"])
+    #     start_y = round(start_y * origin_height / rgb_img_roi["height"])
+    #     end_y = round(end_y * origin_height / rgb_img_roi["height"])
 
     #     self.__zoomin["start"] = QPoint(start_x, start_y)
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
@@ -345,59 +344,60 @@ class UiReplay(QMainWindow, Ui_Core):
         # resize to fit image frame
         origin_height = img.shape[0]
         origin_width = img.shape[1]
-        relative_pos = Dict()
-        relative_pos["x"], relative_pos["y"] = None, None
-        relative_pos["width"], relative_pos["height"] = None, None
+        rgb_img_roi = Dict()
+        rgb_img_roi["x"], rgb_img_roi["y"] = None, None
+        rgb_img_roi["width"], rgb_img_roi["height"] = None, None
         final_width = img_qlabel.width()
         final_height = img_qlabel.height()
 
         # border on left and right
         if origin_height * final_width > final_height * origin_width:
-            relative_pos["width"] = int(final_height * origin_width / origin_height)
-            relative_pos["height"] = final_height
-            relative_pos["x"] = int((final_width - relative_pos["width"]) / 2)
-            if relative_pos["x"] < 0:
-                relative_pos["x"] = 0
-            relative_pos["y"] = 0
+            rgb_img_roi["width"] = int(final_height * origin_width / origin_height)
+            rgb_img_roi["height"] = final_height
+            rgb_img_roi["x"] = int((final_width - rgb_img_roi["width"]) / 2)
+            if rgb_img_roi["x"] < 0:
+                rgb_img_roi["x"] = 0
+            rgb_img_roi["y"] = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((final_height, relative_pos["x"], 3), np.uint8)
+                black_border = np.zeros((final_height, rgb_img_roi["x"], 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((final_height, relative_pos["x"]), np.uint8)
+                black_border = np.zeros((final_height, rgb_img_roi["x"]), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (relative_pos["width"], relative_pos["height"]),
+                (rgb_img_roi["width"], rgb_img_roi["height"]),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=1)
 
         # border on up and down
         else:
-            relative_pos["width"] = final_width
-            relative_pos["height"] = int(final_width * origin_height / origin_width)
-            relative_pos["y"] = int((final_height - relative_pos["height"]) / 2)
-            if relative_pos["y"] < 0:
-                relative_pos["y"] = 0
-            relative_pos["x"] = 0
+            rgb_img_roi["width"] = final_width
+            rgb_img_roi["height"] = int(final_width * origin_height / origin_width)
+            rgb_img_roi["y"] = int((final_height - rgb_img_roi["height"]) / 2)
+            if rgb_img_roi["y"] < 0:
+                rgb_img_roi["y"] = 0
+            rgb_img_roi["x"] = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((relative_pos["y"], final_width, 3), np.uint8)
+                black_border = np.zeros((rgb_img_roi["y"], final_width, 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((relative_pos["y"], final_width), np.uint8)
+                black_border = np.zeros((rgb_img_roi["y"], final_width), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (relative_pos["width"], relative_pos["height"]),
+                (rgb_img_roi["width"], rgb_img_roi["height"]),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=0)
 
         # smooth img
-        return img, relative_pos
+        return img, rgb_img_roi
 
     def __init_color(self):
         self._color = Dict()
+        red = (255, 50, 0)
         green = (0, 255, 64)
         pink = (255, 70, 200)
         light_blue = (0, 255, 255)
@@ -412,6 +412,8 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["gtvt.click"] = pink
         self._color["gtvn.clicks"] = pink
         self._color["score.text"] = green
+        self._color["green"] = green
+        self._color["red"] = red
 
     def _init_ui_names(self):
         self._img_qlabel_ct = CustomQLabel(self._central_widget)
@@ -1515,154 +1517,187 @@ class UiReplay(QMainWindow, Ui_Core):
             rgb_img_width = rgb_img.shape[1]
             rgb_img_chan = rgb_img.shape[2]
 
-            # add score text
-            self._add_score_on_rgb_img(rgb_img)
-
-            # add text label gtvt
-            self._add_label_text_on_rgb_img(rgb_img)
-            self._add_pred_text_on_rgb_img(rgb_img)
-
-            # show imgs
-            qt_image = QImage(
+            # ndarray to qimage
+            qimg = QImage(
                 rgb_img,
                 rgb_img_width,
                 rgb_img_height,
                 rgb_img_width * rgb_img_chan,
                 QImage.Format_RGB888,
             )
-            self.img_qlabel[i].set_background(qt_image)
+
+            self._add_score_on_qimg(qimg)
+            if i == Modal.CT:
+                self._add_msg_on_qimg(qimg)
+            self._add_label_text_on_qimg(qimg)
+            self._add_pred_text_on_qimg(qimg)
+
+            self.img_qlabel[i].set_background(qimg)
             self.img_qlabel[i].update()
 
-    def _add_label_text_on_rgb_img(self, rgb_img):
-        rgb_img_height = rgb_img.shape[0]
+    def _add_label_text_on_qimg(self, qimg: QImage):
         pos_x = 10
-        pos_y = rgb_img_height - 48
+        pos_y = qimg.height() - 13
 
-        cv_text = "LABEL:"
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        text = "Label:"
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["score.text"],
         )
 
-        cv_text = "GTVt"
-        pos_x += 65
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        text = "GTVt"
+        pos_x += 55
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["gtvt.label"],
         )
 
-        cv_text = "GTVn"
-        pos_x += 50
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        text = "GTVn"
+        pos_x += 45
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["gtvn.label"],
         )
 
-    def _add_pred_text_on_rgb_img(self, rgb_img):
-        rgb_img_height = rgb_img.shape[0]
+    def _add_pred_text_on_qimg(self, qimg: QImage):
         pos_x = 10
-        pos_y = rgb_img_height - 28
+        pos_y = qimg.height() - 35
 
-        cv_text = "PRED:"
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        text = "Pred:"
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["score.text"],
         )
 
-        cv_text = "GTVt"
-        pos_x += 65
+        text = "GTVt"
+        pos_x += 55
         # if self.__is_cur_slice_annotated():
         #     color = self._color["gtvt.annotation"]
         # else:
         #     color = self._color["gtvt.pred"]
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["gtvt.pred"],
         )
 
         # add text pred gtvn
-        cv_text = "GTVn"
-        pos_x += 50
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
+        text = "GTVn"
+        pos_x += 45
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
             pos=(pos_x, pos_y),
             color=self._color["gtvn.pred"],
         )
 
-    def _add_score_on_rgb_img(self, rgb_img):
-        text_pos_x = 10
-        text_pos_y = 10
-        cv_text = ""
+    def _add_msg_on_qimg(self, qimg: QImage):
+        pass
+
+    def _add_score_on_qimg(self, qimg: QImage):
+        pos_y = 25
 
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+            pos_x = 10
+
             # "DSC/MSD/HD95: "
-            cv_text += metric.upper() + ": "
+            text = metric.upper() + ": "
+            self._qimg_draw_text(
+                qimg=qimg,
+                text=text,
+                pos=(pos_x, pos_y),
+                color=self._color["score.text"],
+            )
             # load scores
             for i in ["gtvt", "gtvn"]:
+                # text
                 if Value.is_number(self.__scores[i][metric]):
                     if metric == Metric.DSC:
-                        cv_text += "{:.2f}".format(self.__scores[i][metric])
-                    elif metric == Metric.MSD:
-                        cv_text += "{:.1f}".format(self.__scores[i][metric])
-                    elif metric == Metric.HD95:
-                        cv_text += "{:.1f}".format(self.__scores[i][metric])
+                        text = "{:.2f}".format(self.__scores[i][metric])
                     else:
-                        Debug.error_exit("metric value error")
+                        text = "{:.1f}".format(self.__scores[i][metric])
                 else:
-                    cv_text += "NaN"
+                    text = "NaN"
+                # mod x pos
                 if i == "gtvt":
-                    cv_text += " / "
+                    pos_x += 55
                 else:
-                    cv_text += "\n"
+                    pos_x += 40
+                # draw text
+                self._qimg_draw_text(
+                    qimg=qimg,
+                    text=text,
+                    pos=(pos_x, pos_y),
+                    color=self._color["{}.pred".format(i)],
+                )
+            # mod y pos
+            pos_y += 20
 
-        self._cv_put_text(
-            img=rgb_img,
-            text=cv_text,
-            pos=(text_pos_x, text_pos_y),
-            color=self._color["score.text"],
-        )
+    def get_cur_patient_idl_step(self):
+        return None
 
-    def __is_cur_slice_annotated(self) -> bool:
-        if self._3d_imgs[Modal.CT] is None:
-            return False
+    # def __is_cur_slice_annotated(self) -> bool:
+    #     if self._3d_imgs[Modal.CT] is None:
+    #         return False
 
-        if self._cur_slice_id in self.__gtvt_selected_slices_3d[self._plane]:
-            return True
-        else:
-            return False
+    #     if self._cur_slice_id in self.__gtvt_selected_slices_3d[self._plane]:
+    #         return True
+    #     else:
+    #         return False
 
-    def _cv_put_text(
+    # def _qimg_draw_text(
+    #     self,
+    #     img,
+    #     text: str,
+    #     pos: Tuple[int, int],
+    #     color: Tuple[int, int, int],
+    #     line_gap: int = 20,
+    # ):
+    #     for i, line in enumerate(text.split("\n")):
+    #         y = pos[1] + i * line_gap
+    #         y += 15
+    #         cv2.putText(
+    #             img=img,
+    #             text=line,
+    #             org=(pos[0], y),
+    #             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+    #             # fontFace=cv2.FONT_HERSHEY_PLAIN,
+    #             fontScale=1.0,
+    #             color=color,
+    #             thickness=1,
+    #             lineType=cv2.LINE_AA,
+    #         )
+
+    def _qimg_draw_text(
         self,
-        img,
+        qimg,
         text: str,
-        pos: Tuple[int, int],
-        color: Tuple[int, int, int],
+        pos: tuple,
+        color: tuple,
         line_gap: int = 20,
     ):
+        font = QFont("Arial", 12)
+        font.setBold(True)
+        painter = QPainter(qimg)
+        painter.setFont(font)
+
+        r, g, b = color
+        alpha = 255
+        painter.setPen(QColor(r, g, b, alpha))
+
+        x = pos[0]
         for i, line in enumerate(text.split("\n")):
             y = pos[1] + i * line_gap
-            y += 15
-            cv2.putText(
-                img=img,
-                text=line,
-                org=(pos[0], y),
-                fontFace=cv2.FONT_HERSHEY_PLAIN,
-                fontScale=1.0,
-                color=color,
-                thickness=1,
-                lineType=cv2.LINE_AA,
-            )
+            painter.drawText(x, y, line)
 
     def wheelEvent(self, event):
         super().wheelEvent(event)

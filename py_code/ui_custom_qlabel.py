@@ -33,17 +33,22 @@ class CustomQLabel(QLabel):
         super().mousePressEvent(event)
 
         if event.button() == Qt.LeftButton:
-            if self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
+            idl_step = self.window().get_cur_patient_idl_step()
+
+            if idl_step is None:
+                return
+
+            elif idl_step == IDLStep.CLICK_GTVT_CENTER:
                 # remove old crosses
                 self.window().delete_all_crosses_on_4_qlabels()
                 self.window().clear_gtvt_click_pos_3d()
                 # add new crosses
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 
-            elif self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            elif idl_step == IDLStep.DRAW_GTVT:
                 self.window().draw_on_4_qlabels_press(event)
 
-            elif self.window().get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+            elif idl_step == IDLStep.CLICK_GTVN_CENTER:
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 
     def mouseMoveEvent(self, event: QMouseEvent):
