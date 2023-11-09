@@ -11,8 +11,7 @@ from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PyQt5.QtWidgets import (QApplication, QButtonGroup, QMainWindow,
-                             QRadioButton)
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRadioButton
 from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 from ui_custom_qlabel import CustomQLabel
@@ -310,7 +309,8 @@ class UiReplay(QMainWindow, Ui_Core):
                     img.shape[1],
                     spacing_height,
                 ),
-                interpolation=cv2.INTER_AREA,
+                # interpolation=cv2.INTER_LANCZOS4,
+                interpolation=cv2.INTER_LINEAR,  # upscalling
             )
         elif self._plane == Plane.CORONAL:
             spacing_height = round(
@@ -493,7 +493,8 @@ class UiReplay(QMainWindow, Ui_Core):
         # hide annotation controls
         self._text_box_annotation_msg.hide()
         self._text_label_annotation_tools.hide()
-        self._btn_drawing_mode.hide()
+        self._btn_pen.hide()
+        self._btn_eraser.hide()
         self._btn_clear.hide()
         self._btn_confirm.hide()
         self._text_label_idl_progress.hide()
@@ -502,10 +503,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._slider_pen_size.hide()
 
         # set text
-        self._text_label["baseline"].setText("Choose Baseline")
-        self._text_label["patient"].setText("Choose Patient")
-        self._text_label["idl.gtvt"].setText("Choose iDL GTVt")
-        self._text_label["idl.gtvn"].setText("Choose iDL GTVn")
+        self._text_label["baseline"].setText("Select Baseline")
+        self._text_label["patient"].setText("Select Patient")
+        self._text_label["idl.gtvt"].setText("Select iDL GTVt")
+        self._text_label["idl.gtvn"].setText("Select iDL GTVn")
 
         self._text_label["bright"].setText("Brightness (CT)")
         self._text_label["contrast"].setText("Contrast (CT)")
@@ -1346,6 +1347,15 @@ class UiReplay(QMainWindow, Ui_Core):
     def _refresh_rgb_imgs(self):
         # no img data loaded
         if self._3d_imgs[Modal.CT] is None:
+            # ask user to select a patient
+            w = self.img_qlabel[Modal.CT].width()
+            h = self.img_qlabel[Modal.CT].height()
+            qimg = QImage(w, h, QImage.Format_RGB888)
+            black = QColor(0, 0, 0)
+            qimg.fill(black)
+            self._add_msg_on_qimg(qimg)
+            self.img_qlabel[Modal.CT].set_background(qimg)
+            self.img_qlabel[Modal.CT].update()
             return
 
         # # check if cur slice is annotated

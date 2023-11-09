@@ -692,6 +692,13 @@ class Metric:
     HD95 = "hd95"
 
 
+class DrawingMode:
+    GTVT_PEN = "gtvt.pen"
+    GTVN_PEN = "gtvn.pen"
+    GTVT_ERASER = "gtvt.eraser"
+    GTVN_ERASER = "gtvn.eraser"
+
+
 class IDLStep:
     CLICK_GTVT_CENTER = "click.gtvt.center"
     DRAW_GTVT = "draw.gtvt"

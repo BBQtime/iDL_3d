@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file '/home/alan/alan/iDL_3d/py_code/core.ui'
+# Form implementation generated from reading ui file '/mnt/faststorage/alan/iDL_3d/py_code/core.ui'
 #
 # Created by: PyQt5 UI code generator 5.9.2
 #
@@ -86,23 +86,17 @@ class Ui_Core(object):
         self._text_label_annotation_tools = QtWidgets.QLabel(self._central_widget)
         self._text_label_annotation_tools.setGeometry(QtCore.QRect(300, 120, 241, 16))
         self._text_label_annotation_tools.setObjectName("_text_label_annotation_tools")
-        self._btn_drawing_mode = QtWidgets.QPushButton(self._central_widget)
-        self._btn_drawing_mode.setGeometry(QtCore.QRect(300, 140, 61, 31))
-        self._btn_drawing_mode.setText("")
-        self._btn_drawing_mode.setObjectName("_btn_drawing_mode")
+        self._btn_pen = QtWidgets.QPushButton(self._central_widget)
+        self._btn_pen.setGeometry(QtCore.QRect(300, 140, 51, 31))
+        self._btn_pen.setText("")
+        self._btn_pen.setObjectName("_btn_pen")
         self._btn_clear = QtWidgets.QPushButton(self._central_widget)
-        self._btn_clear.setGeometry(QtCore.QRect(390, 140, 61, 31))
+        self._btn_clear.setGeometry(QtCore.QRect(430, 140, 51, 31))
         self._btn_clear.setText("")
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self._btn_clear.setIcon(icon)
         self._btn_clear.setObjectName("_btn_clear")
         self._btn_confirm = QtWidgets.QPushButton(self._central_widget)
-        self._btn_confirm.setGeometry(QtCore.QRect(480, 140, 61, 31))
+        self._btn_confirm.setGeometry(QtCore.QRect(490, 140, 51, 31))
         self._btn_confirm.setText("")
-        icon1 = QtGui.QIcon()
-        icon1.addPixmap(QtGui.QPixmap("../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self._btn_confirm.setIcon(icon1)
         self._btn_confirm.setObjectName("_btn_confirm")
         self._text_box_annotation_msg = QtWidgets.QTextEdit(self._central_widget)
         self._text_box_annotation_msg.setGeometry(QtCore.QRect(300, 280, 241, 61))
@@ -178,6 +172,10 @@ class Ui_Core(object):
         self._text_label_pen_size = QtWidgets.QLabel(self._central_widget)
         self._text_label_pen_size.setGeometry(QtCore.QRect(300, 180, 52, 15))
         self._text_label_pen_size.setObjectName("_text_label_pen_size")
+        self._btn_eraser = QtWidgets.QPushButton(self._central_widget)
+        self._btn_eraser.setGeometry(QtCore.QRect(360, 140, 51, 31))
+        self._btn_eraser.setText("")
+        self._btn_eraser.setObjectName("_btn_eraser")
         Core.setCentralWidget(self._central_widget)
 
         self.retranslateUi(Core)
@@ -186,12 +184,12 @@ class Ui_Core(object):
     def retranslateUi(self, Core):
         _translate = QtCore.QCoreApplication.translate
         Core.setWindowTitle(_translate("Core", "Interactive Learning Tool"))
-        self._text_label_idl_gtvt.setText(_translate("Core", "Choose iDL GTVt"))
-        self._text_label_patient.setText(_translate("Core", "Choose Patient"))
+        self._text_label_idl_gtvt.setText(_translate("Core", "Select iDL GTVt"))
+        self._text_label_patient.setText(_translate("Core", "Select Patient"))
         self._text_label_bright.setText(_translate("Core", "Brightness"))
         self._text_label_contrast.setText(_translate("Core", "Contrast"))
         self._btn_next_idl_gtvn.setText(_translate("Core", "..."))
-        self._text_label_idl_gtvn.setText(_translate("Core", "Choose iDL GTVn"))
+        self._text_label_idl_gtvn.setText(_translate("Core", "Select iDL GTVn"))
         self._btn_prev_idl_gtvn.setText(_translate("Core", "..."))
         self._btn_prev_idl_gtvt.setText(_translate("Core", "..."))
         self._btn_next_idl_gtvt.setText(_translate("Core", "..."))
@@ -199,7 +197,7 @@ class Ui_Core(object):
         self._btn_next_patient.setText(_translate("Core", "..."))
         self._btn_prev_baseline.setText(_translate("Core", "..."))
         self._btn_next_baseline.setText(_translate("Core", "..."))
-        self._text_label_baseline.setText(_translate("Core", "Choose Baseline"))
+        self._text_label_baseline.setText(_translate("Core", "Select Baseline"))
         self._text_label_idl_progress.setText(_translate("Core", "Retraining Progress"))
         self._text_label_annotation_tools.setText(_translate("Core", "Annotation Tools"))
         self._radio_btn_transverse.setText(_translate("Core", "Transverse"))
@@ -212,6 +210,6 @@ class Ui_Core(object):
         self._text_label_zoom.setText(_translate("Core", "Zoom In"))
         self._btn_next_idl_gtvs.setText(_translate("Core", "..."))
         self._btn_prev_idl_gtvs.setText(_translate("Core", "..."))
-        self._text_label_idl_gtvs.setText(_translate("Core", "Choose iDL GTVs"))
+        self._text_label_idl_gtvs.setText(_translate("Core", "Select iDL GTVs"))
         self._text_label_pen_size.setText(_translate("Core", "Pen Size"))
 

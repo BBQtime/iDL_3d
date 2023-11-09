@@ -14,7 +14,6 @@ Debug.clear_debug_data()
 Debug.clear_linux_trash()
 
 
-# confirm annotation in 3 different planes
 # correction, show a transparent layer if use is not satisfied with the contour
 # new icon form mouse pointer pen/eraser
 # progress bar

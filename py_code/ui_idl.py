@@ -4,11 +4,20 @@ import random
 import cv2
 import numpy as np
 import qimage2ndarray
-from custom import Debug, Dict, Dir
+from custom import Debug, Dict, Dir, DrawingMode
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
-from PyQt5.QtCore import QPoint, QRect, Qt
-from PyQt5.QtGui import QIcon, QImage, QKeyEvent, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt5.QtCore import QPoint, QRect, QSize, Qt
+from PyQt5.QtGui import (
+    QCursor,
+    QIcon,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PyQt5.QtWidgets import QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
@@ -36,12 +45,12 @@ class UiIDL(UiReplay):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             painter = QPainter(self.img_qlabel[i].drawing_layer)
 
-            if self.eraser_mode:
+            if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
                 painter.setPen(
                     QPen(Qt.transparent, pen_size + 2, Qt.SolidLine, Qt.RoundCap)
                 )
-            else:
+            elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
                 # smooth
                 painter.setRenderHint(QPainter.Antialiasing)
                 # Set the composition mode to control alpha blending
@@ -63,7 +72,7 @@ class UiIDL(UiReplay):
             # binarize threshold
             # (this is for saving qimage as ndarray,
             # need binarization before and after resize the ndarray)
-            binary_threshold = 0.15
+            binary_threshold = Value.EPS  # 0.005
 
             # save drawing layer in to 2d ndarray
             # qpixmap to a qimage
@@ -92,14 +101,15 @@ class UiIDL(UiReplay):
             annotation_2d = cv2.resize(
                 annotation_2d,
                 (actual_shape[1], actual_shape[0]),
-                interpolation=cv2.INTER_AREA,
+                # interpolation=cv2.INTER_LANCZOS4,
+                interpolation=cv2.INTER_AREA,  # best for scaling down
             )
 
             # binarization (after resize)
             annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
             # fill holes if pen mode
-            if not self.eraser_mode:
+            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
                 annotation_2d = ndimage.binary_fill_holes(annotation_2d).astype(
                     np.float32
                 )
@@ -207,6 +217,7 @@ class UiIDL(UiReplay):
             self._refresh_rgb_imgs()
             self._refresh_title()
             self.__clear_gtvt_annotation_ndarray()
+            self.__set_mouse_cursor("pen")
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
             annotated_status = self.__get_annotated_status()
@@ -533,7 +544,8 @@ class UiIDL(UiReplay):
         self._text_label["pen.size"] = self._text_label_pen_size
 
         self.__btn = Dict()
-        self.__btn["drawing.mode"] = self._btn_drawing_mode
+        self.__btn["pen"] = self._btn_pen
+        self.__btn["eraser"] = self._btn_eraser
         self.__btn["clear"] = self._btn_clear
         self.__btn["confirm"] = self._btn_confirm
 
@@ -577,7 +589,7 @@ class UiIDL(UiReplay):
         self.clear_gtvn_clicks_pos_3d()
 
         # drawing
-        self.eraser_mode = False
+        self.drawing_mode = DrawingMode.GTVT_PEN
         self.paint_pos = None  # Store the last painted point
 
         # r/g/b/transparency, all range from 0 to 255
@@ -600,31 +612,36 @@ class UiIDL(UiReplay):
 
         super().keyPressEvent(event)
 
-    # def mousePressEvent(self, event):
-    #     super().mousePressEvent(event)
-
-    # def mouseMoveEvent(self, event):
-    #     super().mouseMoveEvent(event)
-
-    # def mouseReleaseEvent(self, event):
-    #     super().mouseReleaseEvent(event)
-
     def __clear_all_drawing_layers_on_4_qlabels(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self.img_qlabel[i].drawing_layer = QPixmap(self.img_qlabel[i].size())
             self.img_qlabel[i].drawing_layer.fill(Qt.transparent)
             self.img_qlabel[i].update()
 
-    def __switch_drawing_mode(self):
+    def __switch_to_pen_mode(self):
         if self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
-            if self.eraser_mode:
-                self.eraser_mode = False
-                icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "eraser.png"))
-                self.__btn["drawing.mode"].setIcon(icon)
-            else:
-                self.eraser_mode = True
-                icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "pen.png"))
-                self.__btn["drawing.mode"].setIcon(icon)
+            self.drawing_mode = DrawingMode.GTVT_PEN
+            self.__set_mouse_cursor("pen")
+            self._text_label["pen.size"].setText("Pen Size")
+
+    def __switch_to_eraser_mode(self):
+        if self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            self.drawing_mode = DrawingMode.GTVT_ERASER
+            self.__set_mouse_cursor("eraser")
+            self._text_label["pen.size"].setText("Eraser Size")
+
+    def __set_mouse_cursor(self, cursor_type: str):
+        cursor_size = 32  # no larger than 32
+        cursor_pixmap = QPixmap(
+            (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(cursor_type)))
+        )
+        cursor_pixmap = cursor_pixmap.scaled(
+            cursor_size, cursor_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        if cursor_type == "pen":
+            self.setCursor(QCursor(cursor_pixmap, 0, cursor_size * 0.95))
+        else:
+            self.setCursor(QCursor(cursor_pixmap, cursor_size * 0.2, cursor_size * 0.8))
 
     def _init_side_bar(self):
         super()._init_side_bar()
@@ -642,7 +659,7 @@ class UiIDL(UiReplay):
         self._slider_pen_size.show()
         for i in ["annotation.tools", "idl.progress", "pen.size"]:
             self._text_label[i].show()
-        for i in ["drawing.mode", "clear", "confirm"]:
+        for i in ["pen", "eraser", "clear", "confirm"]:
             self.__btn[i].show()
 
         # set text
@@ -663,17 +680,21 @@ class UiIDL(UiReplay):
         self._slider_pen_size.setMaximum(11)
         self._slider_pen_size.setValue(6)
 
-        # set icons
-        icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "eraser.png"))
-        self.__btn["drawing.mode"].setIcon(icon)
-        icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "clear.png"))
-        self.__btn["clear"].setIcon(icon)
-        icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "confirm.png"))
-        self.__btn["confirm"].setIcon(icon)
+        # set btn icons
+        for i in ["pen", "eraser", "clear", "confirm"]:
+            icon = QIcon(os.path.join(g.PROJ_DIR, "icons", "{}.png".format(i)))
+            if i == "pen":
+                self.__btn[i].setIconSize(QSize(24, 24))
+            elif i == "eraser":
+                self.__btn[i].setIconSize(QSize(31, 31))
+            else:
+                self.__btn[i].setIconSize(QSize(25, 25))
+            self.__btn[i].setIcon(icon)
 
         # connect ui to functions
         # (put this at the end, because these functions will need the initialization above)
-        self.__btn["drawing.mode"].clicked.connect(self.__switch_drawing_mode)
+        self.__btn["pen"].clicked.connect(self.__switch_to_pen_mode)
+        self.__btn["eraser"].clicked.connect(self.__switch_to_eraser_mode)
         self.__btn["clear"].clicked.connect(self.__click_btn_clear)
         self.__btn["confirm"].clicked.connect(self.__click_btn_confirm)
 
@@ -692,7 +713,8 @@ class UiIDL(UiReplay):
         ) = super()._refresh_side_bar(widgets_to_display=["patient"])
 
         annotation_msg_box_height = 80
-        annotation_btn_width = 60
+        annotation_btn_width = 50
+        annotation_btn_height = 40
 
         # annotation tools
         top += gap
@@ -701,13 +723,13 @@ class UiIDL(UiReplay):
         self._text_label["annotation.tools"].show()
         top += text_height
         tmp_left = left
-        annotation_btn_gap = round((width - 3 * annotation_btn_width) / 2)
-        for i in ["drawing.mode", "clear", "confirm"]:
-            rect = QRect(tmp_left, top, annotation_btn_width, bar_height)
+        annotation_btn_gap = round((width - 4 * annotation_btn_width) / 3)
+        for i in ["pen", "eraser", "clear", "confirm"]:
+            rect = QRect(tmp_left, top, annotation_btn_width, annotation_btn_height)
             self.__btn[i].setGeometry(rect)
             self.__btn[i].show()
             tmp_left += annotation_btn_gap + annotation_btn_width
-        top += bar_height
+        top += annotation_btn_height
 
         # pen size
         rect = QRect(left, top, width, text_height)

@@ -24,7 +24,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Choose iDL GTVt</string>
+     <string>Select iDL GTVt</string>
     </property>
    </widget>
    <widget class="QLabel" name="_text_label_patient">
@@ -37,7 +37,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Choose Patient</string>
+     <string>Select Patient</string>
     </property>
    </widget>
    <widget class="QComboBox" name="_combox_idl_gtvt">
@@ -145,7 +145,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Choose iDL GTVn</string>
+     <string>Select iDL GTVn</string>
     </property>
    </widget>
    <widget class="QToolButton" name="_btn_prev_idl_gtvn">
@@ -259,7 +259,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Choose Baseline</string>
+     <string>Select Baseline</string>
     </property>
    </widget>
    <widget class="QProgressBar" name="_progress_bar_idl">
@@ -301,12 +301,12 @@
      <string>Annotation Tools</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="_btn_drawing_mode">
+   <widget class="QPushButton" name="_btn_pen">
     <property name="geometry">
      <rect>
       <x>300</x>
       <y>140</y>
-      <width>61</width>
+      <width>51</width>
       <height>31</height>
      </rect>
     </property>
@@ -317,35 +317,27 @@
    <widget class="QPushButton" name="_btn_clear">
     <property name="geometry">
      <rect>
-      <x>390</x>
+      <x>430</x>
       <y>140</y>
-      <width>61</width>
+      <width>51</width>
       <height>31</height>
      </rect>
     </property>
     <property name="text">
      <string/>
-    </property>
-    <property name="icon">
-     <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_clear.png</iconset>
     </property>
    </widget>
    <widget class="QPushButton" name="_btn_confirm">
     <property name="geometry">
      <rect>
-      <x>480</x>
+      <x>490</x>
       <y>140</y>
-      <width>61</width>
+      <width>51</width>
       <height>31</height>
      </rect>
     </property>
     <property name="text">
      <string/>
-    </property>
-    <property name="icon">
-     <iconset>
-      <normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png</normaloff>../../../../../../mnt/faststorage/alan/iDL_3d/icons/icon_confirm.png</iconset>
     </property>
    </widget>
    <widget class="QTextEdit" name="_text_box_annotation_msg">
@@ -521,7 +513,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Choose iDL GTVs</string>
+     <string>Select iDL GTVs</string>
     </property>
    </widget>
    <widget class="QSlider" name="_slider_bright_pt">
@@ -626,6 +618,19 @@
     </property>
     <property name="text">
      <string>Pen Size</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="_btn_eraser">
+    <property name="geometry">
+     <rect>
+      <x>360</x>
+      <y>140</y>
+      <width>51</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
     </property>
    </widget>
   </widget>
