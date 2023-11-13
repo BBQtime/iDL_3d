@@ -14,9 +14,17 @@ Debug.clear_debug_data()
 Debug.clear_linux_trash()
 
 
-# correction, show a transparent layer if use is not satisfied with the contour
-# new icon form mouse pointer pen/eraser
-# progress bar
+# correction in contour
+# remove pred if there is correction on current slice:
+# (1)when loading pred
+# (2)after update gtvt.correction
+# then refresh_rgb_imgs
+
+# radio button for gtvt annotation and correction
+
+# list of idl step
+
+# progress bar: multi thread
 
 
 ############# UI #############

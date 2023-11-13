@@ -37,7 +37,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # self.__init_zoomin()
 
-        self.__init_color()
+        self._init_color()
 
         self._init_side_bar()  # after _init_member_var(), function connection needed
 
@@ -395,25 +395,24 @@ class UiReplay(QMainWindow, Ui_Core):
         # smooth img
         return img, rgb_img_roi
 
-    def __init_color(self):
+    def _init_color(self):
         self._color = Dict()
-        red = (255, 50, 0)
-        green = (0, 255, 64)
-        pink = (255, 70, 200)
-        light_blue = (0, 255, 255)
-        dark_blue = (0, 150, 255)
-        yellow = (255, 255, 0)
-        orange = (255, 128, 0)
-        self._color["gtvt.label"] = light_blue
-        self._color["gtvn.label"] = dark_blue
-        self._color["gtvt.pred"] = yellow
-        self._color["gtvn.pred"] = orange
-        self._color["gtvt.annotation"] = green
-        self._color["gtvt.click"] = pink
-        self._color["gtvn.clicks"] = pink
-        self._color["score.text"] = green
-        self._color["green"] = green
-        self._color["red"] = red
+        self._color["red"] = (255, 50, 0)
+        self._color["green"] = (0, 255, 64)
+        self._color["magenta"] = (255, 70, 200)
+        self._color["cyan"] = (0, 255, 255)
+        self._color["blue"] = (0, 160, 255)
+        self._color["yellow"] = (255, 255, 0)
+        self._color["orange"] = (255, 120, 0)
+        self._color["gtvt.pred"] = self._color["yellow"]
+        self._color["gtvt.label"] = self._color["orange"]
+        self._color["gtvn.pred"] = self._color["cyan"]
+        self._color["gtvn.label"] = self._color["blue"]
+        self._color["gtvt.annotation"] = self._color["magenta"]
+        self._color["gtvt.click"] = self._color["magenta"]
+        self._color["gtvn.clicks"] = self._color["magenta"]
+        self._color["score"] = self._color["green"]
+        self._color["msg"] = self._color["green"]
 
     def _init_ui_names(self):
         self._img_qlabel_ct = CustomQLabel(self._central_widget)
@@ -1358,25 +1357,6 @@ class UiReplay(QMainWindow, Ui_Core):
             self.img_qlabel[Modal.CT].update()
             return
 
-        # # check if cur slice is annotated
-        # is_annotated = self.__is_cur_slice_annotated()
-
-        # set contour color
-        color = Dict()
-        color["gtvt.label"] = self._color["gtvt.label"]
-        color["gtvn.label"] = self._color["gtvn.label"]
-
-        # if is_annotated:
-        #     color["gtvt.pred"] = self._color["gtvt.annotation"]
-        # else:
-        #     color["gtvt.pred"] = self._color["gtvt.pred"]
-
-        color["gtvt.pred"] = self._color["gtvt.pred"]
-        color["gtvt.click"] = self._color["gtvt.click"]
-        color["gtvt.annotation"] = self._color["gtvt.annotation"]
-        color["gtvn.pred"] = self._color["gtvn.pred"]
-        color["gtvn.clicks"] = self._color["gtvn.clicks"]
-
         # load rgb imgs
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if self._plane == Plane.SAGITTAL:
@@ -1399,64 +1379,64 @@ class UiReplay(QMainWindow, Ui_Core):
                 gamma=self.__slider["bright.{}".format(i)].value(),
             )
 
-            # add mask to gtvt selected slices
-            rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
-            selected_slices_mask = None
-            for orient in [Orient.HORIZONTAL, Orient.VERTICAL]:
-                for gtvt_selected_slice_2d in self.__gtvt_selected_slices_2d[orient]:
-                    # all images are reversed in transverse plane
-                    if self._plane != Plane.TRANSVERSE and orient == Orient.HORIZONTAL:
-                        slice_pos = (
-                            self.__total_slices_count_2d[orient]
-                            - gtvt_selected_slice_2d
-                        )
-                    # 1mm images are reversed in sagittal plane
-                    elif (
-                        self._plane != Plane.SAGITTAL
-                        and orient == Orient.VERTICAL
-                        and (
-                            self._dataset_ver == DatasetVer.AU_1MM
-                            or self._dataset_ver == DatasetVer.MDA
-                        )
-                    ):
-                        slice_pos = (
-                            self.__total_slices_count_2d[orient]
-                            - gtvt_selected_slice_2d
-                        )
-                    else:
-                        slice_pos = gtvt_selected_slice_2d
+            # # add mask to gtvt selected slices
+            # rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
+            # selected_slices_mask = None
+            # for orient in [Orient.HORIZONTAL, Orient.VERTICAL]:
+            #     for gtvt_selected_slice_2d in self.__gtvt_selected_slices_2d[orient]:
+            #         # all images are reversed in transverse plane
+            #         if self._plane != Plane.TRANSVERSE and orient == Orient.HORIZONTAL:
+            #             slice_pos = (
+            #                 self.__total_slices_count_2d[orient]
+            #                 - gtvt_selected_slice_2d
+            #             )
+            #         # 1mm images are reversed in sagittal plane
+            #         elif (
+            #             self._plane != Plane.SAGITTAL
+            #             and orient == Orient.VERTICAL
+            #             and (
+            #                 self._dataset_ver == DatasetVer.AU_1MM
+            #                 or self._dataset_ver == DatasetVer.MDA
+            #             )
+            #         ):
+            #             slice_pos = (
+            #                 self.__total_slices_count_2d[orient]
+            #                 - gtvt_selected_slice_2d
+            #             )
+            #         else:
+            #             slice_pos = gtvt_selected_slice_2d
 
-                    if orient == Orient.HORIZONTAL:
-                        x1 = 0
-                        y1 = slice_pos
-                        x2 = rgb_img.shape[1] - 1
-                        y2 = slice_pos
-                    elif orient == Orient.VERTICAL:
-                        x1 = slice_pos
-                        y1 = 0
-                        x2 = slice_pos
-                        y2 = rgb_img.shape[0] - 1
+            #         if orient == Orient.HORIZONTAL:
+            #             x1 = 0
+            #             y1 = slice_pos
+            #             x2 = rgb_img.shape[1] - 1
+            #             y2 = slice_pos
+            #         elif orient == Orient.VERTICAL:
+            #             x1 = slice_pos
+            #             y1 = 0
+            #             x2 = slice_pos
+            #             y2 = rgb_img.shape[0] - 1
 
-                    cur_slice_mask = cv2.rectangle(
-                        img=rgb_img_zeros,
-                        pt1=(x1, y1),
-                        pt2=(x2, y2),
-                        color=self._color["gtvt.annotation"],
-                        thickness=-1,
-                    )
-                    if selected_slices_mask is None:
-                        selected_slices_mask = cur_slice_mask
-                    else:
-                        selected_slices_mask += cur_slice_mask
+            #         cur_slice_mask = cv2.rectangle(
+            #             img=rgb_img_zeros,
+            #             pt1=(x1, y1),
+            #             pt2=(x2, y2),
+            #             color=self._color["gtvt.annotation"],
+            #             thickness=-1,
+            #         )
+            #         if selected_slices_mask is None:
+            #             selected_slices_mask = cur_slice_mask
+            #         else:
+            #             selected_slices_mask += cur_slice_mask
 
-            if selected_slices_mask is not None:
-                rgb_img = cv2.addWeighted(
-                    src1=rgb_img,
-                    alpha=1,
-                    src2=selected_slices_mask,
-                    beta=1,  # 0.5,
-                    gamma=0,
-                )
+            # if selected_slices_mask is not None:
+            #     rgb_img = cv2.addWeighted(
+            #         src1=rgb_img,
+            #         alpha=1,
+            #         src2=selected_slices_mask,
+            #         beta=1,  # 0.5,
+            #         gamma=0,
+            #     )
 
             # resize and fit img qlabel
             rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[i])
@@ -1467,14 +1447,15 @@ class UiReplay(QMainWindow, Ui_Core):
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # draw label and pred contour
+            show_user_input_text = False
             for k in [
                 "gtvn.label",
                 "gtvt.label",
                 "gtvn.pred",
                 "gtvt.pred",
-                "gtvt.click",
                 "gtvt.annotation",
                 "gtvn.clicks",
+                "gtvt.click",
             ]:
                 if self._3d_imgs[k] is None:
                     continue
@@ -1493,14 +1474,6 @@ class UiReplay(QMainWindow, Ui_Core):
                         np.uint8
                     )
 
-                    # # for transverse plane, img is upside down,
-                    # # true slice id is: slices_count - 1 - slice_id
-                    # contours = self._3d_imgs[k][
-                    #     (self.__get_slices_count() - 1 - self._cur_slice_id), :, :
-                    # ].astype(np.uint8)
-                else:
-                    Debug.error_exit("self._plane value error")
-
                 contours, _ = self._fit_img_qlabel(contours, self.img_qlabel[i])
 
                 if k == "gtvt.click" or k == "gtvn.clicks":
@@ -1511,15 +1484,21 @@ class UiReplay(QMainWindow, Ui_Core):
                     # blur after _fit_img_qlabel()
                     contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
 
+                if contours.max() > 0 and k in [
+                    "gtvt.click",
+                    "gtvt.annotation",
+                    "gtvn.clicks",
+                ]:
+                    show_user_input_text = True
+
                 contours, _ = cv2.findContours(
                     contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
                 )
-
                 rgb_img = cv2.drawContours(
                     image=rgb_img,
                     contours=contours,
                     contourIdx=-1,
-                    color=color[k],
+                    color=self._color[k],
                     thickness=thickness,
                 )
 
@@ -1536,79 +1515,77 @@ class UiReplay(QMainWindow, Ui_Core):
                 QImage.Format_RGB888,
             )
 
-            self._add_score_on_qimg(qimg)
+            # top left
             if i == Modal.CT:
+                self._add_score_on_qimg(qimg)
                 self._add_msg_on_qimg(qimg)
-            self._add_label_text_on_qimg(qimg)
-            self._add_pred_text_on_qimg(qimg)
+
+            # bottom left
+            if i == Modal.MR1:
+                self._add_contour_description_on_qimg(
+                    qimg=qimg,
+                    show_user_input_text=show_user_input_text,
+                )
 
             self.img_qlabel[i].set_background(qimg)
             self.img_qlabel[i].update()
 
-    def _add_label_text_on_qimg(self, qimg: QImage):
-        pos_x = 10
-        pos_y = qimg.height() - 13
+    def _add_contour_description_on_qimg(
+        self,
+        qimg: QImage,
+        show_user_input_text: bool,
+    ):
+        pos_x = [10, 65, 110]
+        pos_y = [qimg.height() - 13, qimg.height() - 35, qimg.height() - 57]
 
-        text = "Label:"
+        # label
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
-            color=self._color["score.text"],
+            text="Label:",
+            pos=(pos_x[0], pos_y[0]),
+            color=self._color["score"],
         )
-
-        text = "GTVt"
-        pos_x += 55
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
+            text="GTVt",
+            pos=(pos_x[1], pos_y[0]),
             color=self._color["gtvt.label"],
         )
-
-        text = "GTVn"
-        pos_x += 45
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
+            text="GTVn",
+            pos=(pos_x[2], pos_y[0]),
             color=self._color["gtvn.label"],
         )
 
-    def _add_pred_text_on_qimg(self, qimg: QImage):
-        pos_x = 10
-        pos_y = qimg.height() - 35
-
-        text = "Pred:"
+        # pred
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
-            color=self._color["score.text"],
+            text="Pred:",
+            pos=(pos_x[0], pos_y[1]),
+            color=self._color["score"],
         )
-
-        text = "GTVt"
-        pos_x += 55
-        # if self.__is_cur_slice_annotated():
-        #     color = self._color["gtvt.annotation"]
-        # else:
-        #     color = self._color["gtvt.pred"]
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
+            text="GTVt",
+            pos=(pos_x[1], pos_y[1]),
             color=self._color["gtvt.pred"],
         )
-
-        # add text pred gtvn
-        text = "GTVn"
-        pos_x += 45
         self._qimg_draw_text(
             qimg=qimg,
-            text=text,
-            pos=(pos_x, pos_y),
+            text="GTVn",
+            pos=(pos_x[2], pos_y[1]),
             color=self._color["gtvn.pred"],
         )
+
+        # user input
+        if show_user_input_text:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="User input",
+                pos=(pos_x[0], pos_y[2]),
+                color=self._color["gtvt.annotation"],
+            )
 
     def _add_msg_on_qimg(self, qimg: QImage):
         pass
@@ -1625,7 +1602,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 qimg=qimg,
                 text=text,
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["score"],
             )
             # load scores
             for i in ["gtvt", "gtvn"]:
@@ -1699,14 +1676,23 @@ class UiReplay(QMainWindow, Ui_Core):
         font.setBold(True)
         painter = QPainter(qimg)
         painter.setFont(font)
-
         r, g, b = color
         alpha = 255
-        painter.setPen(QColor(r, g, b, alpha))
 
         x = pos[0]
         for i, line in enumerate(text.split("\n")):
             y = pos[1] + i * line_gap
+
+            # draw outline
+            # outline_color = QColor("black")
+            painter.setPen(Qt.black)
+            # Adjust for desired thickness
+            offsets = [(1, 1), (-1, -1), (-1, 1), (1, -1)]
+            for x_off, y_off in offsets:
+                painter.drawText(x + x_off, y + y_off, line)
+
+            # draw text
+            painter.setPen(QColor(r, g, b, alpha))
             painter.drawText(x, y, line)
 
     def wheelEvent(self, event):

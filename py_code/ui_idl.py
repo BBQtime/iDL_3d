@@ -8,16 +8,8 @@ from custom import Debug, Dict, Dir, DrawingMode
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt
-from PyQt5.QtGui import (
-    QCursor,
-    QIcon,
-    QImage,
-    QKeyEvent,
-    QMouseEvent,
-    QPainter,
-    QPen,
-    QPixmap,
-)
+from PyQt5.QtGui import (QColor, QCursor, QIcon, QImage, QKeyEvent,
+                         QMouseEvent, QPainter, QPen, QPixmap)
 from PyQt5.QtWidgets import QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
@@ -28,36 +20,49 @@ from ui_replay import UiReplay
 
 class UiIDL(UiReplay):
     def draw_on_4_qlabels_press(self, event: QMouseEvent):
-        center_slice_id = self.__get_gtvt_center_slice_id()
+        idl_step = self.get_cur_patient_idl_step()
+        if idl_step not in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            return
 
-        if self._cur_slice_id == center_slice_id:
+        if idl_step == IDLStep.DRAW_GTVT:
+            center_slice_id = self.__get_gtvt_center_slice_id()
+
+            # if on center slice, start painting
+            if self._cur_slice_id == center_slice_id:
+                self.paint_pos = event.pos()
+
+            # if on other slices, switch to center slice
+            else:
+                self._cur_slice_id = center_slice_id
+                self._refresh_rgb_imgs()
+                self._refresh_title()
+
+        elif idl_step == IDLStep.CORRECTION:
             self.paint_pos = event.pos()
-        else:
-            self._cur_slice_id = center_slice_id
-            self._refresh_rgb_imgs()
-            self.__refresh_annotation_on_4_qlabels()
-            self._refresh_title()
 
     def draw_on_4_qlabels_move(self, event: QMouseEvent):
         if self.paint_pos is None:
             return
+
         pen_size = self.get_pen_size()
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             painter = QPainter(self.img_qlabel[i].drawing_layer)
 
-            if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
-                painter.setCompositionMode(QPainter.CompositionMode_Clear)
-                painter.setPen(
-                    QPen(Qt.transparent, pen_size + 2, Qt.SolidLine, Qt.RoundCap)
-                )
-            elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
-                # smooth
-                painter.setRenderHint(QPainter.Antialiasing)
-                # Set the composition mode to control alpha blending
-                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
-                painter.setPen(
-                    QPen(self.pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
-                )
+            # if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            #     painter.setCompositionMode(QPainter.CompositionMode_Clear)
+            #     painter.setPen(
+            #         QPen(Qt.transparent, pen_size + 2, Qt.SolidLine, Qt.RoundCap)
+            #     )
+
+            # smooth
+            painter.setRenderHint(QPainter.Antialiasing)
+            # Set the composition mode to control alpha blending
+            painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
+                pen_color = QColor(*self._color["gtvt.pred"])
+            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
+                pen_color = QColor(*self._color["gtvn.pred"])
+            painter.setPen(QPen(pen_color, pen_size, Qt.SolidLine, Qt.RoundCap))
 
             painter.drawLine(self.paint_pos, event.pos())
 
@@ -66,94 +71,120 @@ class UiIDL(UiReplay):
         self.paint_pos = event.pos()  # update paint pos
 
     def draw_on_4_qlabels_release(self):
-        if self.paint_pos is not None:
-            self.paint_pos = None
+        if self.paint_pos is None:
+            return
 
-            # binarize threshold
-            # (this is for saving qimage as ndarray,
-            # need binarization before and after resize the ndarray)
-            binary_threshold = Value.EPS  # 0.005
+        # binarize threshold
+        # this is for saving qimage as ndarray
+        # binarization is needed before and after resize the ndarray
+        binary_threshold = 0.5
 
-            # save drawing layer in to 2d ndarray
-            # qpixmap to a qimage
-            qimg = self.img_qlabel[Modal.CT].drawing_layer.toImage()
-            # qimage to ndarray
-            annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
-            annotation_2d /= 255
+        # save drawing layer into 2d ndarray
+        # qpixmap to a qimage
+        qimg = self.img_qlabel[Modal.CT].drawing_layer.toImage()
+        # qimage to ndarray
+        annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
+        annotation_2d /= 255
 
-            # binarization (before resize)
-            annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+        # binarization (before resize)
+        annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
-            # crop np array based on roi
-            x = self._rgb_img_roi["x"]
-            y = self._rgb_img_roi["y"]
-            width = self._rgb_img_roi["width"]
-            height = self._rgb_img_roi["height"]
-            annotation_2d = annotation_2d[y : y + height, x : x + width]
+        # crop annotation_2d based on roi
+        x = self._rgb_img_roi["x"]
+        y = self._rgb_img_roi["y"]
+        width = self._rgb_img_roi["width"]
+        height = self._rgb_img_roi["height"]
+        annotation_2d = annotation_2d[y : y + height, x : x + width]
 
-            # resize to actual size
-            if self._plane == Plane.SAGITTAL:
-                actual_shape = self._3d_imgs[Modal.CT][:, :, 0].shape
-            elif self._plane == Plane.CORONAL:
-                actual_shape = self._3d_imgs[Modal.CT][:, 0, :].shape
-            elif self._plane == Plane.TRANSVERSE:
-                actual_shape = self._3d_imgs[Modal.CT][0, :, :].shape
-            annotation_2d = cv2.resize(
-                annotation_2d,
-                (actual_shape[1], actual_shape[0]),
-                # interpolation=cv2.INTER_LANCZOS4,
-                interpolation=cv2.INTER_AREA,  # best for scaling down
+        # resize to actual size
+        if self._plane == Plane.SAGITTAL:
+            actual_shape = self._3d_imgs[Modal.CT][:, :, 0].shape
+        elif self._plane == Plane.CORONAL:
+            actual_shape = self._3d_imgs[Modal.CT][:, 0, :].shape
+        elif self._plane == Plane.TRANSVERSE:
+            actual_shape = self._3d_imgs[Modal.CT][0, :, :].shape
+        annotation_2d = cv2.resize(
+            annotation_2d,
+            (actual_shape[1], actual_shape[0]),
+            interpolation=cv2.INTER_AREA,  # best for scaling down
+        )
+
+        # binarization (after resize)
+        annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+
+        # add annotation_2d on 3d annotation
+        pos = self.__gtvt_click_pos_3d
+        if self._plane == Plane.TRANSVERSE:
+            cur_slice_ndarray = self._3d_imgs["gtvt.annotation"][pos[0], :, :]
+        elif self._plane == Plane.CORONAL:
+            cur_slice_ndarray = self._3d_imgs["gtvt.annotation"][:, pos[1], :]
+        elif self._plane == Plane.SAGITTAL:
+            cur_slice_ndarray = self._3d_imgs["gtvt.annotation"][:, :, pos[2]]
+
+        # invert color if in eraser mode
+        if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            cur_slice_ndarray = 1 - cur_slice_ndarray
+
+        # combine annotation_2d and cur_slice_ndarray
+        cur_slice_ndarray = np.maximum(cur_slice_ndarray, annotation_2d)
+
+        # fill holes if in pen mode
+        if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+            cur_slice_ndarray = ndimage.binary_fill_holes(cur_slice_ndarray).astype(
+                np.float32
             )
 
-            # binarization (after resize)
-            annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+        # invert color back, if in eraser mode
+        if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            cur_slice_ndarray = 1 - cur_slice_ndarray
 
-            # fill holes if pen mode
-            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
-                annotation_2d = ndimage.binary_fill_holes(annotation_2d).astype(
-                    np.float32
-                )
+        # replace slice in 3d gtvt.annotation
+        if self._plane == Plane.TRANSVERSE:
+            self._3d_imgs["gtvt.annotation"][pos[0], :, :] = cur_slice_ndarray
+        elif self._plane == Plane.CORONAL:
+            self._3d_imgs["gtvt.annotation"][:, pos[1], :] = cur_slice_ndarray
+        elif self._plane == Plane.SAGITTAL:
+            self._3d_imgs["gtvt.annotation"][:, :, pos[2]] = cur_slice_ndarray
 
-            self.__gtvt_annotation[self._plane] = annotation_2d
+        # update values
+        self.paint_pos = None
+        self.__update_gtvt_annotated_status()
 
-            self._refresh_rgb_imgs()
-            self.__refresh_annotation_on_4_qlabels()
+        # update UI
+        self.__clear_all_drawing_layers_on_4_qlabels()
+        self._refresh_rgb_imgs()
 
-    def __refresh_annotation_on_4_qlabels(self):
-        # check idl step
-        if self.get_cur_patient_idl_step() != IDLStep.DRAW_GTVT:
-            return
+    def __click_btn_pen(self):
+        idl_step = self.get_cur_patient_idl_step()
 
-        # check slice id
-        center_slice_id = self.__get_gtvt_center_slice_id()
-        if self._cur_slice_id != center_slice_id:
-            for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.img_qlabel[i].clear_drawing_layer()
-            return
+        if idl_step == IDLStep.DRAW_GTVT:
+            self.drawing_mode = DrawingMode.GTVT_PEN
 
-        # check if there is annotation
-        if self.__gtvt_annotation[self._plane] is None:
-            self.__clear_all_drawing_layers_on_4_qlabels()
-            return
+        elif idl_step == IDLStep.CORRECTION:
+            if self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVT_ERASER]:
+                self.drawing_mode = DrawingMode.GTVT_PEN
+            elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_ERASER]:
+                self.drawing_mode = DrawingMode.GTVN_PEN
 
-        # copy annotation on current plane
-        annotation_2d = self.__gtvt_annotation[self._plane].copy()
+        if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            self.__set_mouse_cursor("pen")
+            self._text_label["pen.size"].setText("Pen Size")
 
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            annotation_2d, _ = self._fit_img_qlabel(annotation_2d, self.img_qlabel[i])
+    def __click_btn_eraser(self):
+        idl_step = self.get_cur_patient_idl_step()
 
-            # binary array to rgb array
-            color_array = np.zeros(
-                # 4channels r/g/b/alpha
-                shape=(annotation_2d.shape[0], annotation_2d.shape[1], 4),
-                dtype=np.uint8,
-            )
-            rgb_alpha = self._color["gtvt.annotation"] + (255,)
-            color_array[annotation_2d == 1] = rgb_alpha
+        if idl_step == IDLStep.DRAW_GTVT:
+            self.drawing_mode = DrawingMode.GTVT_ERASER
 
-            qimg = qimage2ndarray.array2qimage(color_array)
-            self.img_qlabel[i].drawing_layer = QPixmap.fromImage(qimg)
-            self.img_qlabel[i].update()
+        elif idl_step == IDLStep.CORRECTION:
+            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_ERASER]:
+                self.drawing_mode = DrawingMode.GTVT_ERASER
+            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVT_ERASER]:
+                self.drawing_mode = DrawingMode.GTVN_ERASER
+
+        if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            self.__set_mouse_cursor("eraser")
+            self._text_label["pen.size"].setText("Eraser Size")
 
     def __click_btn_confirm(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
@@ -213,16 +244,14 @@ class UiIDL(UiReplay):
             # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
             self.__save_idl_step()
-            # self.__update_msg()
             self._refresh_rgb_imgs()
             self._refresh_title()
-            self.__clear_gtvt_annotation_ndarray()
+            self._3d_imgs["gtvt.annotation"] = np.zeros_like(self._3d_imgs[Modal.CT])
             self.__set_mouse_cursor("pen")
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
-            annotated_status = self.__get_annotated_status()
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                if annotated_status[plane] is False:
+                if self.__gtvt_annotated_status[plane] is False:
                     QMessageBox.information(
                         self,
                         "Information",
@@ -231,18 +260,6 @@ class UiIDL(UiReplay):
                     )
                     self._set_img_plane(new_plane=plane)
                     return
-
-            # save annotation into 3d ndarray
-            gtvt_annotation_3d = np.zeros_like(self._3d_imgs[Modal.CT])
-            gtvt_annotation_3d[
-                :, :, self.__gtvt_click_pos_3d[2]
-            ] = self.__gtvt_annotation[Plane.SAGITTAL]
-            gtvt_annotation_3d[
-                :, self.__gtvt_click_pos_3d[1], :
-            ] = self.__gtvt_annotation[Plane.CORONAL]
-            gtvt_annotation_3d[
-                self.__gtvt_click_pos_3d[0], :, :
-            ] = self.__gtvt_annotation[Plane.TRANSVERSE]
 
             # save gtvt annotation
             cur_round_dir = os.path.join(
@@ -254,13 +271,14 @@ class UiIDL(UiReplay):
                 "round=01",
             )
             Dir.create(cur_round_dir)
+            gtvt_annotation_to_save = self._3d_imgs["gtvt.annotation"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
-                gtvt_annotation_3d = np.flip(gtvt_annotation_3d, axis=2)
+                gtvt_annotation_to_save = np.flip(gtvt_annotation_to_save, axis=2)
             # turn upside down
-            gtvt_annotation_3d = np.flip(gtvt_annotation_3d, axis=0)
+            gtvt_annotation_to_save = np.flip(gtvt_annotation_to_save, axis=0)
             Nii.save(
-                img=gtvt_annotation_3d,
+                img=gtvt_annotation_to_save,
                 save_path=os.path.join(cur_round_dir, "gtvt_annotation.nii.gz"),
                 spacing=self._nii_spacing,
             )
@@ -276,12 +294,10 @@ class UiIDL(UiReplay):
             )
 
             # clean current step elements
-            self.__clear_gtvt_annotation_ndarray()
             self.__clear_all_drawing_layers_on_4_qlabels()
             # new step
             self.set_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
             self.__save_idl_step()
-            # self.__update_msg()
             self._load_idl_gtvt_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
@@ -326,16 +342,33 @@ class UiIDL(UiReplay):
             self._refresh_title()
 
     # check annotation in 3 different planes
-    def __get_annotated_status(self) -> Dict:
-        annotated_status = Dict()
+    def __update_gtvt_annotated_status(self) -> Dict:
+        t, c, s = np.where(self._3d_imgs["gtvt.click"] == 1)
+        t, c, s = int(t), int(c), int(s)
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if self.__gtvt_annotation[plane] is None:
-                annotated_status[plane] = False
-            elif self.__gtvt_annotation[plane].max() == 0:
-                annotated_status[plane] = False
+            if plane == Plane.TRANSVERSE:
+                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][t, :, :].copy()
+                cur_plane_annotation[c, :] = 0
+                cur_plane_annotation[:, s] = 0
+
+            elif plane == Plane.CORONAL:
+                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][:, c, :].copy()
+                cur_plane_annotation[t, :] = 0
+                cur_plane_annotation[:, s] = 0
+
+            elif plane == Plane.SAGITTAL:
+                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][:, :, s].copy()
+                cur_plane_annotation[t, :] = 0
+                cur_plane_annotation[:, c] = 0
+
+            if cur_plane_annotation.max() == 0:
+                self.__gtvt_annotated_status[plane] = False
             else:
-                annotated_status[plane] = True
-        return annotated_status
+                self.__gtvt_annotated_status[plane] = True
+
+    def _init_color(self):
+        super()._init_color()
+        self._color["gtvt.annotation"] = self._color["yellow"]
 
     def __click_btn_clear(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
@@ -348,9 +381,30 @@ class UiIDL(UiReplay):
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
             self.__clear_all_drawing_layers_on_4_qlabels()
-            self.__gtvt_annotation[self._plane] = None
+
+            # clear annotation on cur plane
+            t, c, s = np.where(self._3d_imgs["gtvt.click"] == 1)
+            t, c, s = int(t), int(c), int(s)
+            # use mask to filter out the annotation on current anatomical plane
+            if self._plane == Plane.TRANSVERSE:
+                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][t, :, :])
+                mask[c, :] = 1
+                mask[:, s] = 1
+                self._3d_imgs["gtvt.annotation"][t, :, :] *= mask
+            elif self._plane == Plane.CORONAL:
+                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][:, c, :])
+                mask[t, :] = 1
+                mask[:, s] = 1
+                self._3d_imgs["gtvt.annotation"][:, c, :] *= mask
+            elif self._plane == Plane.SAGITTAL:
+                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][:, :, s])
+                mask[t, :] = 1
+                mask[:, c] = 1
+                self._3d_imgs["gtvt.annotation"][:, :, s] *= mask
+
+            # update gtvt annotated status
+            self.__gtvt_annotated_status[self._plane] = False
             self._refresh_rgb_imgs()
-            self.__refresh_annotation_on_4_qlabels()
 
     def __get_gtvt_center_slice_id(self):
         if self.__gtvt_click_pos_3d is None:
@@ -377,12 +431,10 @@ class UiIDL(UiReplay):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.__refresh_crosses_on_4_qlabels()
-        self.__refresh_annotation_on_4_qlabels()
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
         self.__refresh_crosses_on_4_qlabels()
-        self.__refresh_annotation_on_4_qlabels()
 
     def _set_img_plane(
         self, connected_radio_btn: QRadioButton = None, new_plane: str = None
@@ -391,7 +443,6 @@ class UiIDL(UiReplay):
             connected_radio_btn=connected_radio_btn, new_plane=new_plane
         )
         self.__refresh_crosses_on_4_qlabels()
-        self.__refresh_annotation_on_4_qlabels()
 
     def delete_all_crosses_on_4_qlabels(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
@@ -549,11 +600,6 @@ class UiIDL(UiReplay):
         self.__btn["clear"] = self._btn_clear
         self.__btn["confirm"] = self._btn_confirm
 
-    def __clear_gtvt_annotation_ndarray(self):
-        self.__gtvt_annotation = Dict()
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self.__gtvt_annotation[plane] = None
-
     def clear_gtvt_click_pos_3d(self):
         self.__gtvt_click_pos_3d = None
 
@@ -563,8 +609,6 @@ class UiIDL(UiReplay):
     def _init_member_var(self, idl_remark: str = None, debug_mode: bool = False):
         super()._init_member_var()
         self.__debug_mode = debug_mode
-
-        self.__clear_gtvt_annotation_ndarray()
 
         # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.cur_time_str()
@@ -591,9 +635,9 @@ class UiIDL(UiReplay):
         # drawing
         self.drawing_mode = DrawingMode.GTVT_PEN
         self.paint_pos = None  # Store the last painted point
-
-        # r/g/b/transparency, all range from 0 to 255
-        self.pen_color = Qt.green  # QColor(0, 255, 0, 150)
+        self.__gtvt_annotated_status = Dict()
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.__gtvt_annotated_status[plane] = False
 
     def __save_idl_step(self):
         for i in ["gtvt", "gtvn"]:
@@ -617,18 +661,6 @@ class UiIDL(UiReplay):
             self.img_qlabel[i].drawing_layer = QPixmap(self.img_qlabel[i].size())
             self.img_qlabel[i].drawing_layer.fill(Qt.transparent)
             self.img_qlabel[i].update()
-
-    def __switch_to_pen_mode(self):
-        if self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
-            self.drawing_mode = DrawingMode.GTVT_PEN
-            self.__set_mouse_cursor("pen")
-            self._text_label["pen.size"].setText("Pen Size")
-
-    def __switch_to_eraser_mode(self):
-        if self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
-            self.drawing_mode = DrawingMode.GTVT_ERASER
-            self.__set_mouse_cursor("eraser")
-            self._text_label["pen.size"].setText("Eraser Size")
 
     def __set_mouse_cursor(self, cursor_type: str):
         cursor_size = 32  # no larger than 32
@@ -693,8 +725,8 @@ class UiIDL(UiReplay):
 
         # connect ui to functions
         # (put this at the end, because these functions will need the initialization above)
-        self.__btn["pen"].clicked.connect(self.__switch_to_pen_mode)
-        self.__btn["eraser"].clicked.connect(self.__switch_to_eraser_mode)
+        self.__btn["pen"].clicked.connect(self.__click_btn_pen)
+        self.__btn["eraser"].clicked.connect(self.__click_btn_eraser)
         self.__btn["clear"].clicked.connect(self.__click_btn_clear)
         self.__btn["confirm"].clicked.connect(self.__click_btn_confirm)
 
@@ -762,14 +794,10 @@ class UiIDL(UiReplay):
         self._clear_img_qlabels()
 
         self._baseline_id = "baseline_real.idl"
-        # self._baseline_id = "baseline_2023.02.27.07.08.09_3mm"
 
         # fill combobox patient after self._baseline_id is confirmed
         self._fill_combox_patient()
         self._combox["patient"].setCurrentIndex(-1)  # show nothing
-
-        # # run this after patient combox current text is set up
-        # self._enable_arrow_btns("patient")
 
         # create idl folders (after baseline_id is confirmed)
         for i in ["gtvt", "gtvn"]:
@@ -787,7 +815,7 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text=text,
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["msg"],
             )
             return
 
@@ -798,7 +826,7 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text="Please click the center of the primary Gross Tumor Volumes (GTVt)",
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["msg"],
             )
 
         elif cur_patient_idl_step == IDLStep.DRAW_GTVT:
@@ -806,14 +834,13 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text="Please delineate the countour of GTVt in 3 different anatomical planes",
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["msg"],
             )
             pos_y += 5
-            annotated_status = self.__get_annotated_status()
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 pos_y += 20
                 text = Value.capitalized(plane)
-                if annotated_status[plane] is True:
+                if self.__gtvt_annotated_status[plane] is True:
                     text += " ✓"
                     color = self._color["green"]
                 else:
@@ -831,7 +858,7 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text="Please click the center of the malignant lymph nodes (GTVn)",
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["msg"],
             )
 
         elif cur_patient_idl_step == IDLStep.CORRECTION:
@@ -839,37 +866,35 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text="Please correct the auto-segmentation",
                 pos=(pos_x, pos_y),
-                color=self._color["score.text"],
+                color=self._color["msg"],
             )
 
     # rewrite this function (do nothing)
     def _add_score_on_qimg(self, qimg: QImage):
         pass
 
-    # rewrite this function (do nothing)
-    def _add_label_text_on_qimg(self, qimg: QImage):
-        pass
-
-    def _add_pred_text_on_qimg(self, qimg: QImage):
+    def _add_contour_description_on_qimg(
+        self,
+        qimg: QImage,
+        show_user_input_text: bool = False,
+    ):
         pos_x = 10
-        pos_y = qimg.height() - 68
-        gap_y = 20
+        pos_y = qimg.height() - 13
 
         for i in ["t", "n"]:
             if self._3d_imgs["gtv{}.pred".format(i)] is not None:
                 text = "GTV{}".format(i)
-                pos_y += gap_y
                 self._qimg_draw_text(
                     qimg=qimg,
                     text=text,
                     pos=(pos_x, pos_y),
                     color=self._color["gtv{}.pred".format(i)],
                 )
+                pos_x += 45
 
     def _load_patient_data(self, idx: int = None):
         self.clear_gtvt_click_pos_3d()
         self.clear_gtvn_clicks_pos_3d()
-        self.__clear_gtvt_annotation_ndarray()
 
         self._cur_patient = self._combox["patient"].currentText()
         # run these after patient combox current text is set up
@@ -887,9 +912,7 @@ class UiIDL(UiReplay):
         self._refresh_rgb_imgs()
         self._refresh_title()
         self.__refresh_crosses_on_4_qlabels()
-        self.__refresh_annotation_on_4_qlabels()
         self.__save_idl_step()
-        # self.__update_msg()
 
     def _reset_cur_slice_id(self):
         if (
@@ -958,27 +981,17 @@ class UiIDL(UiReplay):
             patient_dir, "round=01", "gtvt_annotation.nii.gz"
         )
         if os.path.exists(gtvt_annotation_nii_path):
-            gtvt_annotation = self._load_3d_img(
-                path=gtvt_annotation_nii_path, binary=True
-            )
-            # Nii.save(
-            #     gtvt_annotation,
-            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_annotation.nii.gz"),
+            # gtvt_annotation = self._load_3d_img(
+            #     path=gtvt_annotation_nii_path, binary=True
             # )
+            # clear central slices in gtvt pred
             pos = np.where(self._3d_imgs["gtvt.click"] == 1)
             self._3d_imgs["gtvt.pred"][pos[0], :, :] = 0
             self._3d_imgs["gtvt.pred"][:, pos[1], :] = 0
             self._3d_imgs["gtvt.pred"][:, :, pos[2]] = 0
-            # Nii.save(
-            #     self._3d_imgs["gtvt.pred"],
-            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_pred_remove_slices.nii.gz"),
-            # )
-            self._3d_imgs["gtvt.pred"] = np.maximum(
-                self._3d_imgs["gtvt.pred"], gtvt_annotation
-            )
-            # Nii.save(
-            #     self._3d_imgs["gtvt.pred"],
-            #     os.path.join(g.PROJ_DIR, "debug", "gtvt_pred_add_annotation.nii.gz"),
+            # # add gtvt annotation into gtvt pred
+            # self._3d_imgs["gtvt.pred"] = np.maximum(
+            #     self._3d_imgs["gtvt.pred"], gtvt_annotation
             # )
 
     def _load_idl_gtvn_data(self):

@@ -45,7 +45,7 @@ class CustomQLabel(QLabel):
                 # add new crosses
                 self.window().add_4_crosses(event.pos(), record_click_pos=True)
 
-            elif idl_step == IDLStep.DRAW_GTVT:
+            elif idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
                 self.window().draw_on_4_qlabels_press(event)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
@@ -57,14 +57,18 @@ class CustomQLabel(QLabel):
         # use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
         if event.buttons() == Qt.LeftButton:
-            if self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            idl_step = self.window().get_cur_patient_idl_step()
+
+            if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
                 self.window().draw_on_4_qlabels_move(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
         if event.button() == Qt.LeftButton:
-            if self.window().get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
+            idl_step = self.window().get_cur_patient_idl_step()
+
+            if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
                 self.window().draw_on_4_qlabels_release()
 
     def paintEvent(self, event):
