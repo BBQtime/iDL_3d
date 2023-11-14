@@ -14,17 +14,12 @@ Debug.clear_debug_data()
 Debug.clear_linux_trash()
 
 
-# correction in contour
-# remove pred if there is correction on current slice:
-# (1)when loading pred
-# (2)after update gtvt.correction
-# then refresh_rgb_imgs
-
-# radio button for gtvt annotation and correction
-
-# list of idl step
+# contour inside segmentation
+# larger eraser size
 
 # progress bar: multi thread
+
+# list of idl step
 
 
 ############# UI #############

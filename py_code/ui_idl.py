@@ -8,18 +8,9 @@ from custom import Debug, Dict, Dir, DrawingMode
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt
-from PyQt5.QtGui import (
-    QColor,
-    QCursor,
-    QIcon,
-    QImage,
-    QKeyEvent,
-    QMouseEvent,
-    QPainter,
-    QPen,
-    QPixmap,
-)
-from PyQt5.QtWidgets import QMessageBox, QRadioButton
+from PyQt5.QtGui import (QColor, QCursor, QIcon, QImage, QKeyEvent,
+                         QMouseEvent, QPainter, QPen, QPixmap)
+from PyQt5.QtWidgets import QButtonGroup, QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
@@ -195,7 +186,8 @@ class UiIDL(UiReplay):
 
         # save gtvt and gtvn corrections
         if idl_step == IDLStep.CORRECTION:
-            self.__save_corrections()
+            for gtv in ["gtvt", "gtvn"]:
+                self.__save_corrections(gtv)
 
         # update values
         self.paint_pos = None
@@ -205,35 +197,36 @@ class UiIDL(UiReplay):
         self.__clear_all_drawing_layers_on_4_qlabels()
         self._refresh_rgb_imgs()
 
-    def __save_corrections(self):
-        for gtv in ["gtvt", "gtvn"]:
-            if self._3d_imgs["{}.correction".format(gtv)] is None:
-                continue
-            cur_patient_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self._baseline_id,
-                self._idl_id[gtv],
-                "patients",
-                "patient={}".format(self._cur_patient),
-            )
-            cur_round_dir = os.path.join(
-                cur_patient_dir,
-                "round=01",
-            )
-            correction = self._3d_imgs["{}.correction".format(gtv)].copy()
-            # flip left/right for 1mm data
-            if self._nii_spacing[2] == 1.0:
-                correction = np.flip(correction, axis=2)
-            # turn upside down
-            correction = np.flip(correction, axis=0)
-            # save
-            Nii.save(
-                img=correction,
-                save_path=os.path.join(
-                    cur_round_dir, "{}_correction.nii.gz".format(gtv)
-                ),
-                spacing=self._nii_spacing,
-            )
+    def __save_corrections(self, gtv: str):
+        if gtv not in ["gtvt", "gtvn"]:
+            Debug.error_exit("gtv value error")
+
+        if self._3d_imgs["{}.correction".format(gtv)] is None:
+            return
+
+        cur_patient_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id[gtv],
+            "patients",
+            "patient={}".format(self._cur_patient),
+        )
+        cur_round_dir = os.path.join(
+            cur_patient_dir,
+            "round=01",
+        )
+        correction = self._3d_imgs["{}.correction".format(gtv)].copy()
+        # flip left/right for 1mm data
+        if self._nii_spacing[2] == 1.0:
+            correction = np.flip(correction, axis=2)
+        # turn upside down
+        correction = np.flip(correction, axis=0)
+        # save
+        Nii.save(
+            img=correction,
+            save_path=os.path.join(cur_round_dir, "{}_correction.nii.gz".format(gtv)),
+            spacing=self._nii_spacing,
+        )
 
     def __click_btn_pen(self):
         idl_step = self.get_cur_patient_idl_step()
@@ -242,9 +235,9 @@ class UiIDL(UiReplay):
             self.drawing_mode = DrawingMode.GTVT_PEN
 
         elif idl_step == IDLStep.CORRECTION:
-            if self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVT_ERASER]:
+            if self.drawing_mode == DrawingMode.GTVT_ERASER:
                 self.drawing_mode = DrawingMode.GTVT_PEN
-            elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_ERASER]:
+            elif self.drawing_mode == DrawingMode.GTVN_ERASER:
                 self.drawing_mode = DrawingMode.GTVN_PEN
 
         if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
@@ -258,9 +251,9 @@ class UiIDL(UiReplay):
             self.drawing_mode = DrawingMode.GTVT_ERASER
 
         elif idl_step == IDLStep.CORRECTION:
-            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_ERASER]:
+            if self.drawing_mode == DrawingMode.GTVT_PEN:
                 self.drawing_mode = DrawingMode.GTVT_ERASER
-            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVT_ERASER]:
+            elif self.drawing_mode == DrawingMode.GTVN_PEN:
                 self.drawing_mode = DrawingMode.GTVN_ERASER
 
         if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
@@ -469,7 +462,7 @@ class UiIDL(UiReplay):
 
     def _init_color(self):
         super()._init_color()
-        # self._color["gtvt.annotation"] = self._color["yellow"]
+        self._color["gtvt.annotation"] = self._color["yellow"]
         self._color["gtvt.correction"] = self._color["yellow"]
         self._color["gtvn.correction"] = self._color["cyan"]
 
@@ -513,16 +506,18 @@ class UiIDL(UiReplay):
 
         elif idl_step == IDLStep.CORRECTION:
             t = c = s = self._cur_slice_id
-            for gtv in ["gtvt", "gtvn"]:
-                _3d_img = self._3d_imgs["{}.correction".format(gtv)]
-                if self._plane == Plane.TRANSVERSE:
-                    _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
-                elif self._plane == Plane.CORONAL:
-                    _3d_img[:, c, :] = np.zeros_like(_3d_img[:, c, :])
-                elif self._plane == Plane.SAGITTAL:
-                    _3d_img[:, :, s] = np.zeros_like(_3d_img[:, :, s])
-
-            self.__save_corrections()
+            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
+                gtv = "gtvt"
+            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
+                gtv = "gtvn"
+            _3d_img = self._3d_imgs["{}.correction".format(gtv)]
+            if self._plane == Plane.TRANSVERSE:
+                _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
+            elif self._plane == Plane.CORONAL:
+                _3d_img[:, c, :] = np.zeros_like(_3d_img[:, c, :])
+            elif self._plane == Plane.SAGITTAL:
+                _3d_img[:, :, s] = np.zeros_like(_3d_img[:, :, s])
+            self.__save_corrections(gtv)
             self._refresh_rgb_imgs()
 
     def __get_gtvt_center_slice_id(self):
@@ -713,6 +708,10 @@ class UiIDL(UiReplay):
         self._text_label["idl.progress"] = self._text_label_idl_progress
         self._text_label["pen.size"] = self._text_label_pen_size
 
+        self.__radio_btn = Dict()
+        self.__radio_btn["draw.gtvt"] = self._radio_btn_draw_gtvt
+        self.__radio_btn["draw.gtvn"] = self._radio_btn_draw_gtvn
+
         self.__btn = Dict()
         self.__btn["pen"] = self._btn_pen
         self.__btn["eraser"] = self._btn_eraser
@@ -812,6 +811,11 @@ class UiIDL(UiReplay):
             self._text_label[i].show()
         for i in ["pen", "eraser", "clear", "confirm"]:
             self.__btn[i].show()
+        for i in ["gtvt", "gtvn"]:
+            self.__radio_btn["draw.{}".format(i)].show()
+            self.__radio_btn["draw.{}".format(i)].setFont(self._font_bold)
+
+        self.__radio_btn["draw.gtvt"].setChecked(True)
 
         # set text
         # self._text_box_annotation_msg.setText("Please Select a Patient")
@@ -849,6 +853,27 @@ class UiIDL(UiReplay):
         self.__btn["clear"].clicked.connect(self.__click_btn_clear)
         self.__btn["confirm"].clicked.connect(self.__click_btn_confirm)
 
+        self.__btn_group_drawing_mode_gtv = QButtonGroup()
+        for i in ["gtvt", "gtvn"]:
+            self.__btn_group_drawing_mode_gtv.addButton(
+                self.__radio_btn["draw.{}".format(i)]
+            )
+        self.__btn_group_drawing_mode_gtv.buttonClicked.connect(
+            self.__switch_drawing_mode_gtv
+        )
+
+    def __switch_drawing_mode_gtv(self):
+        if self.__radio_btn["draw.gtvt"].isChecked():
+            if self.drawing_mode == DrawingMode.GTVN_PEN:
+                self.drawing_mode = DrawingMode.GTVT_PEN
+            elif self.drawing_mode == DrawingMode.GTVN_ERASER:
+                self.drawing_mode = DrawingMode.GTVT_ERASER
+        elif self.__radio_btn["draw.gtvn"].isChecked():
+            if self.drawing_mode == DrawingMode.GTVT_PEN:
+                self.drawing_mode = DrawingMode.GTVN_PEN
+            elif self.drawing_mode == DrawingMode.GTVT_ERASER:
+                self.drawing_mode = DrawingMode.GTVN_ERASER
+
     def get_pen_size(self):
         return self._slider_pen_size.value()
 
@@ -861,11 +886,14 @@ class UiIDL(UiReplay):
             text_height,
             bar_height,
             slider_height,
+            radio_btn_height,
         ) = super()._refresh_side_bar(widgets_to_display=["patient"])
 
         annotation_msg_box_height = 80
         annotation_btn_width = 50
         annotation_btn_height = 40
+        radio_btn_width = 90
+        radio_btn_gap = 10
 
         # annotation tools
         top += gap
@@ -873,6 +901,14 @@ class UiIDL(UiReplay):
         self._text_label["annotation.tools"].setGeometry(rect)
         self._text_label["annotation.tools"].show()
         top += text_height
+        # drawing mode radio btns
+        tmp_left = left
+        for i in ["gtvt", "gtvn"]:
+            rect = QRect(tmp_left, top, radio_btn_width, radio_btn_height)
+            self.__radio_btn["draw.{}".format(i)].setGeometry(rect)
+            tmp_left += radio_btn_gap + radio_btn_width
+        top += radio_btn_height
+        # annotation buttons
         tmp_left = left
         annotation_btn_gap = round((width - 4 * annotation_btn_width) / 3)
         for i in ["pen", "eraser", "clear", "confirm"]:

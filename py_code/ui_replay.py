@@ -436,8 +436,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["patient"] = self._text_label_patient
         self._text_label["idl.gtvt"] = self._text_label_idl_gtvt
         self._text_label["idl.gtvn"] = self._text_label_idl_gtvn
+        self._text_label["bright.contrast"] = self._text_label_bright_contrast
         self._text_label["bright"] = self._text_label_bright
         self._text_label["contrast"] = self._text_label_contrast
+        self._text_label["plane"] = self._text_label_plane
         self._text_label["zoom"] = self._text_label_zoom
         self._text_label["annotation.tools"] = self._text_label_annotation_tools
         self._text_label["idl.progress"] = self._text_label_idl_progress
@@ -497,6 +499,8 @@ class UiReplay(QMainWindow, Ui_Core):
         # hide annotation controls
         self._text_box_annotation_msg.hide()
         self._text_label_annotation_tools.hide()
+        self._radio_btn_draw_gtvt.hide()
+        self._radio_btn_draw_gtvn.hide()
         self._btn_pen.hide()
         self._btn_eraser.hide()
         self._btn_clear.hide()
@@ -511,7 +515,8 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["patient"].setText("Select Patient")
         self._text_label["idl.gtvt"].setText("Select iDL GTVt")
         self._text_label["idl.gtvn"].setText("Select iDL GTVn")
-
+        self._text_label["plane"].setText("Anatomical Plane")
+        self._text_label["bright.contrast"].setText("Brightness & Contrast")
         self._text_label["bright"].setText("Brightness (CT)")
         self._text_label["contrast"].setText("Contrast (CT)")
         self._text_label["zoom"].setText("Zoom In")
@@ -538,8 +543,10 @@ class UiReplay(QMainWindow, Ui_Core):
             "patient",
             "idl.gtvt",
             "idl.gtvn",
+            "bright.contrast",
             "bright",
             "contrast",
+            "plane",
             "zoom",
         ]:
             self._text_label[i].setFont(self._font_bold)
@@ -669,7 +676,7 @@ class UiReplay(QMainWindow, Ui_Core):
         arrow_btn_width = 30
 
         if platform.system().lower() == "linux":
-            gap = 20
+            gap = 30
         else:  # windows
             gap = 40
 
@@ -715,15 +722,18 @@ class UiReplay(QMainWindow, Ui_Core):
             # next element
             top += bar_height
 
-        # brightness and contrast radio btns
+        # brightness and contrast text label
         top += gap
+        rect = QRect(left, top, width, text_height)
+        self._text_label["bright.contrast"].setGeometry(rect)
+        top += text_height
+        # brightness and contrast radio btns
         tmp_left = left
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
             self.__radio_btn[i].setGeometry(rect)
             tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
         top += radio_btn_height
-
         # brightness and contrast sliders
         for i in ["bright", "contrast"]:
             rect = QRect(left, top, width, text_height)
@@ -734,8 +744,12 @@ class UiReplay(QMainWindow, Ui_Core):
                 self.__slider["{}.{}".format(i, j)].setGeometry(rect)
             top += slider_height
 
-        # img plane
+        # anatomical plane radio buttons
         top += gap
+        rect = QRect(left, top, width, text_height)
+        self._text_label["plane"].setGeometry(rect)
+        top += text_height
+        # anatomical plane radio buttons
         tmp_left = left
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
@@ -743,7 +757,7 @@ class UiReplay(QMainWindow, Ui_Core):
             tmp_left += radio_btn_gap["planes"] + radio_btn_width[i]
         top += radio_btn_height
 
-        # zoom
+        # zoom in
         top += gap
         rect = QRect(left, top, width, text_height)
         self._text_label["zoom"].setGeometry(rect)
@@ -753,7 +767,16 @@ class UiReplay(QMainWindow, Ui_Core):
         top += slider_height
 
         # return the followings for UiIDL
-        return left, top, width, gap, text_height, bar_height, slider_height
+        return (
+            left,
+            top,
+            width,
+            gap,
+            text_height,
+            bar_height,
+            slider_height,
+            radio_btn_height,
+        )
 
     # new_plane = None will read from radio buttons
     def _set_img_plane(
