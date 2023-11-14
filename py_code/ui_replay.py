@@ -400,6 +400,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def _init_color(self):
         self._color = Dict()
+        self._color["black"] = (0, 0, 0)
         self._color["red"] = (255, 50, 0)
         self._color["green"] = (0, 255, 64)
         self._color["magenta"] = (255, 70, 200)

@@ -18,6 +18,7 @@ class CustomQLabel(QLabel):
         self.background_img = None
         self.drawing_layer = QPixmap(self.size())
         self.drawing_layer.fill(Qt.transparent)
+        self.pen_mode = True
 
     def clear_drawing_layer(self):
         self.drawing_layer = QPixmap(self.size())
@@ -81,7 +82,10 @@ class CustomQLabel(QLabel):
 
         if self.drawing_layer:
             # 0 for fully transparent, 255 for fully opaque
-            painter.setOpacity(100 / 255)
+            if self.pen_mode:
+                painter.setOpacity(130 / 255)
+            else:
+                painter.setOpacity(200 / 255)
             painter.drawPixmap(self.rect(), self.drawing_layer)
 
     def set_background(self, img: QImage):

@@ -8,8 +8,17 @@ from custom import Debug, Dict, Dir, DrawingMode
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt
-from PyQt5.QtGui import (QColor, QCursor, QIcon, QImage, QKeyEvent,
-                         QMouseEvent, QPainter, QPen, QPixmap)
+from PyQt5.QtGui import (
+    QColor,
+    QCursor,
+    QIcon,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PyQt5.QtWidgets import QButtonGroup, QMessageBox, QRadioButton
 from scipy import ndimage
 from training_idl_gtvn import TrainingIDLGTVn
@@ -45,6 +54,8 @@ class UiIDL(UiReplay):
             return
 
         pen_size = self.get_pen_size()
+        eraser_size = pen_size + 2
+        eraser_color = QColor(*self._color["eraser"])
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             painter = QPainter(self.img_qlabel[i].drawing_layer)
 
@@ -58,11 +69,20 @@ class UiIDL(UiReplay):
             painter.setRenderHint(QPainter.Antialiasing)
             # Set the composition mode to control alpha blending
             painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 pen_color = QColor(*self._color["gtvt.pred"])
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 pen_color = QColor(*self._color["gtvn.pred"])
-            painter.setPen(QPen(pen_color, pen_size, Qt.SolidLine, Qt.RoundCap))
+
+            if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+                painter.setPen(
+                    QPen(eraser_color, eraser_size, Qt.SolidLine, Qt.RoundCap)
+                )
+                self.img_qlabel[i].pen_mode = False
+            elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+                painter.setPen(QPen(pen_color, pen_size, Qt.SolidLine, Qt.RoundCap))
+                self.img_qlabel[i].pen_mode = True
 
             painter.drawLine(self.paint_pos, event.pos())
 
@@ -465,6 +485,7 @@ class UiIDL(UiReplay):
         self._color["gtvt.annotation"] = self._color["yellow"]
         self._color["gtvt.correction"] = self._color["yellow"]
         self._color["gtvn.correction"] = self._color["cyan"]
+        self._color["eraser"] = self._color["black"]
 
     def __click_btn_clear(self):
         idl_step = self.get_cur_patient_idl_step()

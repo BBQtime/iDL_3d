@@ -14,9 +14,6 @@ Debug.clear_debug_data()
 Debug.clear_linux_trash()
 
 
-# contour inside segmentation
-# larger eraser size
-
 # progress bar: multi thread
 
 # list of idl step
