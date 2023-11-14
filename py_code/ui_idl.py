@@ -343,6 +343,8 @@ class UiIDL(UiReplay):
             self._3d_imgs["gtvt.annotation"] = np.zeros_like(self._3d_imgs[Modal.CT])
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__set_mouse_cursor("pen")
+            for i in ["pen", "eraser"]:
+                self.__btn[i].setEnabled(True)
 
         elif self.get_cur_patient_idl_step() == IDLStep.DRAW_GTVT:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -354,6 +356,10 @@ class UiIDL(UiReplay):
                         QMessageBox.Ok,
                     )
                     self._set_img_plane(new_plane=plane)
+                    if self.drawing_mode == DrawingMode.GTVT_ERASER:
+                        self.drawing_mode = DrawingMode.GTVT_PEN
+                        self.__set_mouse_cursor("pen")
+                        self._text_label["pen.size"].setText("Pen Size")
                     return
 
             # save gtvt annotation
@@ -396,6 +402,9 @@ class UiIDL(UiReplay):
             self._load_idl_gtvt_data()
             self._refresh_rgb_imgs()
             self._refresh_title()
+            self.setCursor(Qt.ArrowCursor)
+            for i in ["pen", "eraser"]:
+                self.__btn[i].setEnabled(False)
 
         elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
             # add clicks into 3d img
@@ -438,6 +447,11 @@ class UiIDL(UiReplay):
             self._3d_imgs["gtvn.correction"] = np.zeros_like(self._3d_imgs[Modal.CT])
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__set_mouse_cursor("pen")
+            for i in ["gtvt", "gtvn"]:
+                self._radio_btn["draw.{}".format(i)].setEnabled(True)
+            for i in ["pen", "eraser"]:
+                self.__btn[i].setEnabled(True)
+            self.__btn["confirm"].setEnabled(False)
 
     # check annotation in 3 different planes
     def __update_gtvt_annotated_status(self) -> Dict:
@@ -479,6 +493,22 @@ class UiIDL(UiReplay):
             return
 
         super()._refresh_rgb_imgs(replay_mode)
+
+    def __set_mouse_cursor(self, cursor_type: str):
+        if cursor_type not in ["pen", "eraser"]:
+            Debug.error_exit("cursor type error")
+
+        cursor_size = 32  # no larger than 32
+        cursor_pixmap = QPixmap(
+            (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(cursor_type)))
+        )
+        cursor_pixmap = cursor_pixmap.scaled(
+            cursor_size, cursor_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        if cursor_type == "pen":
+            self.setCursor(QCursor(cursor_pixmap, 0, cursor_size * 0.95))
+        elif cursor_type == "eraser":
+            self.setCursor(QCursor(cursor_pixmap, cursor_size * 0.2, cursor_size * 0.8))
 
     def _init_color(self):
         super()._init_color()
@@ -729,9 +759,8 @@ class UiIDL(UiReplay):
         self._text_label["idl.progress"] = self._text_label_idl_progress
         self._text_label["pen.size"] = self._text_label_pen_size
 
-        self.__radio_btn = Dict()
-        self.__radio_btn["draw.gtvt"] = self._radio_btn_draw_gtvt
-        self.__radio_btn["draw.gtvn"] = self._radio_btn_draw_gtvn
+        self._radio_btn["draw.gtvt"] = self._radio_btn_draw_gtvt
+        self._radio_btn["draw.gtvn"] = self._radio_btn_draw_gtvn
 
         self.__btn = Dict()
         self.__btn["pen"] = self._btn_pen
@@ -801,23 +830,10 @@ class UiIDL(UiReplay):
             self.img_qlabel[i].drawing_layer.fill(Qt.transparent)
             self.img_qlabel[i].update()
 
-    def __set_mouse_cursor(self, cursor_type: str):
-        cursor_size = 32  # no larger than 32
-        cursor_pixmap = QPixmap(
-            (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(cursor_type)))
-        )
-        cursor_pixmap = cursor_pixmap.scaled(
-            cursor_size, cursor_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        if cursor_type == "pen":
-            self.setCursor(QCursor(cursor_pixmap, 0, cursor_size * 0.95))
-        else:
-            self.setCursor(QCursor(cursor_pixmap, cursor_size * 0.2, cursor_size * 0.8))
-
     def _init_side_bar(self):
         super()._init_side_bar()
 
-        # hide idl.gtvt/gtvn controls
+        # hide replay controls
         for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
             self._text_label[i].hide()
             self._combox[i].hide()
@@ -827,16 +843,16 @@ class UiIDL(UiReplay):
         # show annotation controls
         # self._text_box_annotation_msg.show()
         self._progress_bar_idl.show()
-        self._slider_pen_size.show()
+        self._slider["pen.size"].show()
         for i in ["annotation.tools", "idl.progress", "pen.size"]:
             self._text_label[i].show()
         for i in ["pen", "eraser", "clear", "confirm"]:
             self.__btn[i].show()
         for i in ["gtvt", "gtvn"]:
-            self.__radio_btn["draw.{}".format(i)].show()
-            self.__radio_btn["draw.{}".format(i)].setFont(self._font_bold)
+            self._radio_btn["draw.{}".format(i)].show()
+            self._radio_btn["draw.{}".format(i)].setFont(self._font_bold)
 
-        self.__radio_btn["draw.gtvt"].setChecked(True)
+        self._radio_btn["draw.gtvt"].setChecked(True)
 
         # set text
         # self._text_box_annotation_msg.setText("Please Select a Patient")
@@ -852,9 +868,9 @@ class UiIDL(UiReplay):
         self._text_box_annotation_msg.setReadOnly(True)
 
         # pen size slider
-        self._slider_pen_size.setMinimum(1)
-        self._slider_pen_size.setMaximum(11)
-        self._slider_pen_size.setValue(6)
+        self._slider["pen.size"].setMinimum(1)
+        self._slider["pen.size"].setMaximum(11)
+        self._slider["pen.size"].setValue(6)
 
         # set btn icons
         for i in ["pen", "eraser", "clear", "confirm"]:
@@ -867,6 +883,27 @@ class UiIDL(UiReplay):
                 self.__btn[i].setIconSize(QSize(25, 25))
             self.__btn[i].setIcon(icon)
 
+        # disable all controls
+        for i in [
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
+        ]:
+            self._radio_btn[i].setEnabled(False)
+        for i in ["gtvt", "gtvn"]:
+            self._radio_btn["draw.{}".format(i)].setEnabled(False)
+        for i in ["pen", "eraser", "clear", "confirm"]:
+            self.__btn[i].setEnabled(False)
+        for i in ["bright", "contrast"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self._slider["{}.{}".format(i, j)].setEnabled(False)
+        for i in ["zoom", "pen.size"]:
+            self._slider[i].setEnabled(False)
+
         # connect ui to functions
         # (put this at the end, because these functions will need the initialization above)
         self.__btn["pen"].clicked.connect(self.__click_btn_pen)
@@ -877,26 +914,26 @@ class UiIDL(UiReplay):
         self.__btn_group_drawing_mode_gtv = QButtonGroup()
         for i in ["gtvt", "gtvn"]:
             self.__btn_group_drawing_mode_gtv.addButton(
-                self.__radio_btn["draw.{}".format(i)]
+                self._radio_btn["draw.{}".format(i)]
             )
         self.__btn_group_drawing_mode_gtv.buttonClicked.connect(
             self.__switch_drawing_mode_gtv
         )
 
     def __switch_drawing_mode_gtv(self):
-        if self.__radio_btn["draw.gtvt"].isChecked():
+        if self._radio_btn["draw.gtvt"].isChecked():
             if self.drawing_mode == DrawingMode.GTVN_PEN:
                 self.drawing_mode = DrawingMode.GTVT_PEN
             elif self.drawing_mode == DrawingMode.GTVN_ERASER:
                 self.drawing_mode = DrawingMode.GTVT_ERASER
-        elif self.__radio_btn["draw.gtvn"].isChecked():
+        elif self._radio_btn["draw.gtvn"].isChecked():
             if self.drawing_mode == DrawingMode.GTVT_PEN:
                 self.drawing_mode = DrawingMode.GTVN_PEN
             elif self.drawing_mode == DrawingMode.GTVT_ERASER:
                 self.drawing_mode = DrawingMode.GTVN_ERASER
 
     def get_pen_size(self):
-        return self._slider_pen_size.value()
+        return self._slider["pen.size"].value()
 
     def _refresh_side_bar(self):
         (
@@ -926,7 +963,7 @@ class UiIDL(UiReplay):
         tmp_left = left
         for i in ["gtvt", "gtvn"]:
             rect = QRect(tmp_left, top, radio_btn_width, radio_btn_height)
-            self.__radio_btn["draw.{}".format(i)].setGeometry(rect)
+            self._radio_btn["draw.{}".format(i)].setGeometry(rect)
             tmp_left += radio_btn_gap + radio_btn_width
         top += radio_btn_height
         # annotation buttons
@@ -944,7 +981,7 @@ class UiIDL(UiReplay):
         self._text_label["pen.size"].setGeometry(rect)
         top += text_height
         rect = QRect(left, top, width, slider_height)
-        self._slider_pen_size.setGeometry(rect)
+        self._slider["pen.size"].setGeometry(rect)
         top += slider_height
 
         # idl retraining progress bar
@@ -1069,6 +1106,25 @@ class UiIDL(UiReplay):
                 pos_x += 45
 
     def _load_patient_data(self, idx: int = None):
+        # enable all controls
+        for i in [
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
+        ]:
+            self._radio_btn[i].setEnabled(True)
+        for i in ["clear", "confirm"]:
+            self.__btn[i].setEnabled(True)
+        for i in ["bright", "contrast"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self._slider["{}.{}".format(i, j)].setEnabled(True)
+        for i in ["zoom", "pen.size"]:
+            self._slider[i].setEnabled(True)
+
         self.clear_gtvt_click_pos_3d()
         self.clear_gtvn_clicks_pos_3d()
 

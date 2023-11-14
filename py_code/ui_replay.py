@@ -11,8 +11,7 @@ from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PyQt5.QtWidgets import (QApplication, QButtonGroup, QMainWindow,
-                             QRadioButton)
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRadioButton
 from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 from ui_custom_qlabel import CustomQLabel
@@ -26,32 +25,19 @@ class UiReplay(QMainWindow, Ui_Core):
     ):
         super().__init__()
         self.setupUi(self)
-
         self._init_ui_names()
-
         self._init_member_var(idl_remark=idl_remark, debug_mode=debug_mode)
-
-        # after _init_member_var()
+        # setMinimumSize after _init_member_var()
         self.setMinimumSize(self.__side_bar_width + 600, 600)
-
         self.__set_img_qlabels_background()
-
         # self.__init_zoomin()
-
         self._init_color()
-
         self._init_side_bar()  # after _init_member_var(), function connection needed
-
         self._clear_img_data()
-
         self._refresh_title()  # after _init_member_var()
-
-        # resize
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
-
-        # load first baseline result
-        self._load_baseline_data()
+        self._load_baseline_data()  # load first baseline result
 
     def _init_member_var(
         self,
@@ -123,7 +109,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # set image plane
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if self.__radio_btn[i].isChecked():
+            if self._radio_btn[i].isChecked():
                 self._plane = i
 
     # def __init_zoomin(self):
@@ -461,25 +447,26 @@ class UiReplay(QMainWindow, Ui_Core):
         self._arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
         self._arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
 
-        self.__radio_btn = Dict()
-        self.__radio_btn[Modal.CT] = self._radio_btn_ct
-        self.__radio_btn[Modal.PT] = self._radio_btn_pt
-        self.__radio_btn[Modal.MR1] = self._radio_btn_mr1
-        self.__radio_btn[Modal.MR2] = self._radio_btn_mr2
-        self.__radio_btn[Plane.TRANSVERSE] = self._radio_btn_transverse
-        self.__radio_btn[Plane.CORONAL] = self._radio_btn_coronal
-        self.__radio_btn[Plane.SAGITTAL] = self._radio_btn_sagittal
+        self._radio_btn = Dict()
+        self._radio_btn[Modal.CT] = self._radio_btn_ct
+        self._radio_btn[Modal.PT] = self._radio_btn_pt
+        self._radio_btn[Modal.MR1] = self._radio_btn_mr1
+        self._radio_btn[Modal.MR2] = self._radio_btn_mr2
+        self._radio_btn[Plane.TRANSVERSE] = self._radio_btn_transverse
+        self._radio_btn[Plane.CORONAL] = self._radio_btn_coronal
+        self._radio_btn[Plane.SAGITTAL] = self._radio_btn_sagittal
 
-        self.__slider = Dict()
-        self.__slider["bright.ct"] = self._slider_bright_ct
-        self.__slider["bright.pt"] = self._slider_bright_pt
-        self.__slider["bright.mr1"] = self._slider_bright_mr1
-        self.__slider["bright.mr2"] = self._slider_bright_mr2
-        self.__slider["contrast.ct"] = self._slider_contrast_ct
-        self.__slider["contrast.pt"] = self._slider_contrast_pt
-        self.__slider["contrast.mr1"] = self._slider_contrast_mr1
-        self.__slider["contrast.mr2"] = self._slider_contrast_mr2
-        self.__slider["zoom"] = self._slider_zoom
+        self._slider = Dict()
+        self._slider["bright.ct"] = self._slider_bright_ct
+        self._slider["bright.pt"] = self._slider_bright_pt
+        self._slider["bright.mr1"] = self._slider_bright_mr1
+        self._slider["bright.mr2"] = self._slider_bright_mr2
+        self._slider["contrast.ct"] = self._slider_contrast_ct
+        self._slider["contrast.pt"] = self._slider_contrast_pt
+        self._slider["contrast.mr1"] = self._slider_contrast_mr1
+        self._slider["contrast.mr2"] = self._slider_contrast_mr2
+        self._slider["zoom"] = self._slider_zoom
+        self._slider["pen.size"] = self._slider_pen_size
 
     # set display frames background black
     def __set_img_qlabels_background(self):
@@ -522,13 +509,13 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["contrast"].setText("Contrast (CT)")
         self._text_label["zoom"].setText("Zoom In")
 
-        self.__radio_btn[Modal.CT].setText("CT")
-        self.__radio_btn[Modal.PT].setText("PT")
-        self.__radio_btn[Modal.MR1].setText("MR-T1")
-        self.__radio_btn[Modal.MR2].setText("MR-T2")
-        self.__radio_btn[Plane.TRANSVERSE].setText("Transverse")
-        self.__radio_btn[Plane.CORONAL].setText("Coronal")
-        self.__radio_btn[Plane.SAGITTAL].setText("Sagittal")
+        self._radio_btn[Modal.CT].setText("CT")
+        self._radio_btn[Modal.PT].setText("PT")
+        self._radio_btn[Modal.MR1].setText("MR-T1")
+        self._radio_btn[Modal.MR2].setText("MR-T2")
+        self._radio_btn[Plane.TRANSVERSE].setText("Transverse")
+        self._radio_btn[Plane.CORONAL].setText("Coronal")
+        self._radio_btn[Plane.SAGITTAL].setText("Sagittal")
 
         # set font
         self._font_bold = self._text_label["baseline"].font()
@@ -562,7 +549,7 @@ class UiReplay(QMainWindow, Ui_Core):
             Modal.MR1,
             Modal.MR2,
         ]:
-            self.__radio_btn[i].setFont(self._font_bold)
+            self._radio_btn[i].setFont(self._font_bold)
 
         # set font of comboboxes
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
@@ -594,41 +581,41 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # Add radio buttons to the button group
         self.__btn_group_bright_contrast = QButtonGroup()
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.CT])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.PT])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.MR1])
-        self.__btn_group_bright_contrast.addButton(self.__radio_btn[Modal.MR2])
+        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.CT])
+        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.PT])
+        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.MR1])
+        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.MR2])
         self.__btn_group_plane = QButtonGroup()
-        self.__btn_group_plane.addButton(self.__radio_btn[Plane.TRANSVERSE])
-        self.__btn_group_plane.addButton(self.__radio_btn[Plane.CORONAL])
-        self.__btn_group_plane.addButton(self.__radio_btn[Plane.SAGITTAL])
+        self.__btn_group_plane.addButton(self._radio_btn[Plane.TRANSVERSE])
+        self.__btn_group_plane.addButton(self._radio_btn[Plane.CORONAL])
+        self.__btn_group_plane.addButton(self._radio_btn[Plane.SAGITTAL])
 
         # radio btns checked or not
-        self.__radio_btn[Modal.CT].setChecked(True)
-        self.__radio_btn[Modal.PT].setChecked(False)
-        self.__radio_btn[Modal.MR1].setChecked(False)
-        self.__radio_btn[Modal.MR2].setChecked(False)
-        self.__radio_btn[Plane.TRANSVERSE].setChecked(True)
-        self.__radio_btn[Plane.CORONAL].setChecked(False)
-        self.__radio_btn[Plane.SAGITTAL].setChecked(False)
+        self._radio_btn[Modal.CT].setChecked(True)
+        self._radio_btn[Modal.PT].setChecked(False)
+        self._radio_btn[Modal.MR1].setChecked(False)
+        self._radio_btn[Modal.MR2].setChecked(False)
+        self._radio_btn[Plane.TRANSVERSE].setChecked(True)
+        self._radio_btn[Plane.CORONAL].setChecked(False)
+        self._radio_btn[Plane.SAGITTAL].setChecked(False)
 
         # set slider range and default value
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self.__slider["bright.{}".format(i)].setMinimum(-128)
-            self.__slider["bright.{}".format(i)].setMaximum(128)
-            self.__slider["bright.{}".format(i)].setValue(0)
-            self.__slider["contrast.{}".format(i)].setMinimum(0)
-            self.__slider["contrast.{}".format(i)].setMaximum(200)
-            self.__slider["contrast.{}".format(i)].setValue(100)
+            self._slider["bright.{}".format(i)].setMinimum(-128)
+            self._slider["bright.{}".format(i)].setMaximum(128)
+            self._slider["bright.{}".format(i)].setValue(0)
+            self._slider["contrast.{}".format(i)].setMinimum(0)
+            self._slider["contrast.{}".format(i)].setMaximum(200)
+            self._slider["contrast.{}".format(i)].setValue(100)
 
         # only show ct bright/contrast slider bars
         for i in [Modal.PT, Modal.MR1, Modal.MR2]:
-            self.__slider["bright.{}".format(i)].hide()
-            self.__slider["contrast.{}".format(i)].hide()
+            self._slider["bright.{}".format(i)].hide()
+            self._slider["contrast.{}".format(i)].hide()
 
-        self.__slider["zoom"].setMinimum(100)
-        self.__slider["zoom"].setMaximum(200)
-        self.__slider["zoom"].setValue(100)
+        self._slider["zoom"].setMinimum(100)
+        self._slider["zoom"].setMaximum(200)
+        self._slider["zoom"].setValue(100)
 
         # connect ui to functions
         # (put the connections at last, because these functions will need the initialization above)
@@ -650,7 +637,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
         for i in ["bright", "contrast"]:
             for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.__slider["{}.{}".format(i, j)].valueChanged.connect(
+                self._slider["{}.{}".format(i, j)].valueChanged.connect(
                     self._refresh_rgb_imgs
                 )
 
@@ -732,7 +719,7 @@ class UiReplay(QMainWindow, Ui_Core):
         tmp_left = left
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
-            self.__radio_btn[i].setGeometry(rect)
+            self._radio_btn[i].setGeometry(rect)
             tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
         top += radio_btn_height
         # brightness and contrast sliders
@@ -742,7 +729,7 @@ class UiReplay(QMainWindow, Ui_Core):
             top += text_height
             rect = QRect(left, top, width, slider_height)
             for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.__slider["{}.{}".format(i, j)].setGeometry(rect)
+                self._slider["{}.{}".format(i, j)].setGeometry(rect)
             top += slider_height
 
         # anatomical plane radio buttons
@@ -754,7 +741,7 @@ class UiReplay(QMainWindow, Ui_Core):
         tmp_left = left
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
-            self.__radio_btn[i].setGeometry(rect)
+            self._radio_btn[i].setGeometry(rect)
             tmp_left += radio_btn_gap["planes"] + radio_btn_width[i]
         top += radio_btn_height
 
@@ -764,7 +751,7 @@ class UiReplay(QMainWindow, Ui_Core):
         self._text_label["zoom"].setGeometry(rect)
         top += text_height
         rect = QRect(left, top, width, slider_height)
-        self.__slider["zoom"].setGeometry(rect)
+        self._slider["zoom"].setGeometry(rect)
         top += slider_height
 
         # return the followings for UiIDL
@@ -785,16 +772,16 @@ class UiReplay(QMainWindow, Ui_Core):
     ):
         if new_plane is None:
             for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                if self.__radio_btn[i].isChecked():
+                if self._radio_btn[i].isChecked():
                     self._plane = i
                     break
         else:
             self._plane = new_plane
             for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if i == new_plane:
-                    self.__radio_btn[i].setChecked(True)
+                    self._radio_btn[i].setChecked(True)
                 else:
-                    self.__radio_btn[i].setChecked(False)
+                    self._radio_btn[i].setChecked(False)
 
         self.__refresh_gtvt_selected_slices_2d()
         self._reset_cur_slice_id()
@@ -859,20 +846,20 @@ class UiReplay(QMainWindow, Ui_Core):
 
     def __set_bright_contrast_modality(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            if self.__radio_btn[i].isChecked():
-                self.__slider["bright.{}".format(i)].show()
-                self.__slider["contrast.{}".format(i)].show()
+            if self._radio_btn[i].isChecked():
+                self._slider["bright.{}".format(i)].show()
+                self._slider["contrast.{}".format(i)].show()
             else:
-                self.__slider["bright.{}".format(i)].hide()
-                self.__slider["contrast.{}".format(i)].hide()
+                self._slider["bright.{}".format(i)].hide()
+                self._slider["contrast.{}".format(i)].hide()
 
-        if self.__radio_btn[Modal.CT].isChecked():
+        if self._radio_btn[Modal.CT].isChecked():
             key_word = "CT"
-        elif self.__radio_btn[Modal.PT].isChecked():
+        elif self._radio_btn[Modal.PT].isChecked():
             key_word = "PT"
-        elif self.__radio_btn[Modal.MR1].isChecked():
+        elif self._radio_btn[Modal.MR1].isChecked():
             key_word = "MR-T1"
-        elif self.__radio_btn[Modal.MR2].isChecked():
+        elif self._radio_btn[Modal.MR2].isChecked():
             key_word = "MR-T2"
         else:
             Debug.error_exit("no radio button is checked")
@@ -1402,10 +1389,10 @@ class UiReplay(QMainWindow, Ui_Core):
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
             rgb_img = cv2.addWeighted(
                 src1=rgb_img,
-                alpha=self.__slider["contrast.{}".format(i)].value() / 100,
+                alpha=self._slider["contrast.{}".format(i)].value() / 100,
                 src2=np.zeros_like(rgb_img),
                 beta=0,
-                gamma=self.__slider["bright.{}".format(i)].value(),
+                gamma=self._slider["bright.{}".format(i)].value(),
             )
 
             # # add mask to gtvt selected slices

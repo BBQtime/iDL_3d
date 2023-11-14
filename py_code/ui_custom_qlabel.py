@@ -85,7 +85,7 @@ class CustomQLabel(QLabel):
             if self.pen_mode:
                 painter.setOpacity(130 / 255)
             else:
-                painter.setOpacity(200 / 255)
+                painter.setOpacity(180 / 255)
             painter.drawPixmap(self.rect(), self.drawing_layer)
 
     def set_background(self, img: QImage):
