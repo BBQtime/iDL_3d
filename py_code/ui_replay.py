@@ -11,7 +11,8 @@ from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRadioButton
+from PyQt5.QtWidgets import (QApplication, QButtonGroup, QMainWindow,
+                             QRadioButton)
 from scipy.ndimage import measurements
 from Ui_core import Ui_Core
 from ui_custom_qlabel import CustomQLabel
@@ -113,8 +114,10 @@ class UiReplay(QMainWindow, Ui_Core):
             "gtvt.pred",
             "gtvn.pred",
             "gtvt.click",
-            "gtvt.annotation",
             "gtvn.clicks",
+            "gtvt.annotation",
+            "gtvt.correction",
+            "gtvn.correction",
         ]:
             self._3d_imgs[i] = None
 
@@ -409,6 +412,8 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["gtvn.pred"] = self._color["cyan"]
         self._color["gtvn.label"] = self._color["blue"]
         self._color["gtvt.annotation"] = self._color["magenta"]
+        self._color["gtvt.correction"] = self._color["magenta"]
+        self._color["gtvn.correction"] = self._color["magenta"]
         self._color["gtvt.click"] = self._color["magenta"]
         self._color["gtvn.clicks"] = self._color["magenta"]
         self._color["score"] = self._color["green"]
@@ -1343,19 +1348,19 @@ class UiReplay(QMainWindow, Ui_Core):
         self._combox["patient"].setCurrentText(next_patient)
         self._load_patient_data()
 
-    def _refresh_rgb_imgs(self):
-        # no img data loaded
+    # replay_mode=True will show all contours
+    # otherwise correction and annotation will cover pred
+    def _refresh_rgb_imgs(self, replay_mode: bool = True):
         if self._3d_imgs[Modal.CT] is None:
-            # ask user to select a patient
-            w = self.img_qlabel[Modal.CT].width()
-            h = self.img_qlabel[Modal.CT].height()
-            qimg = QImage(w, h, QImage.Format_RGB888)
-            black = QColor(0, 0, 0)
-            qimg.fill(black)
-            self._add_msg_on_qimg(qimg)
-            self.img_qlabel[Modal.CT].set_background(qimg)
-            self.img_qlabel[Modal.CT].update()
             return
+
+        # show "user input" text at the bottom left of img
+        show_user_input_text = None  # bool
+
+        # show annotation/pred contour or not
+        show_gtvt_annotation_contour = True
+        show_gtvt_pred_contour = True
+        show_gtvn_pred_contour = True
 
         # load rgb imgs
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
@@ -1446,59 +1451,122 @@ class UiReplay(QMainWindow, Ui_Core):
             # blur after _fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
+            # replay mode, put important segment at the end
+            if replay_mode:
+                segment_type_list = [
+                    "gtvn.label",
+                    "gtvt.label",
+                    "gtvn.pred",
+                    "gtvt.pred",
+                    "gtvt.annotation",
+                    "gtvn.correction",
+                    "gtvt.correction",
+                    "gtvn.clicks",
+                    "gtvt.click",
+                ]
+            # idl mode, correction > annotation > pred
+            else:
+                segment_type_list = [
+                    "gtvn.correction",
+                    "gtvt.correction",
+                    "gtvt.annotation",
+                    "gtvn.pred",
+                    "gtvt.pred",
+                    "gtvn.clicks",
+                    "gtvt.click",
+                ]
+
             # draw label and pred contour
-            show_user_input_text = False
-            for k in [
-                "gtvn.label",
-                "gtvt.label",
-                "gtvn.pred",
-                "gtvt.pred",
-                "gtvt.annotation",
-                "gtvn.clicks",
-                "gtvt.click",
-            ]:
-                if self._3d_imgs[k] is None:
+            for s in segment_type_list:
+                if self._3d_imgs[s] is None:
+                    continue
+
+                if s == "gtvt.annotation" and not show_gtvt_annotation_contour:
+                    continue
+                elif s == "gtvt.pred" and not show_gtvt_pred_contour:
+                    continue
+                elif s == "gtvn.pred" and not show_gtvn_pred_contour:
                     continue
 
                 # load data of current slice
                 if self._plane == Plane.SAGITTAL:
-                    contours = self._3d_imgs[k][:, :, self._cur_slice_id].astype(
+                    segment = self._3d_imgs[s][:, :, self._cur_slice_id].astype(
                         np.uint8
                     )
                 elif self._plane == Plane.CORONAL:
-                    contours = self._3d_imgs[k][:, self._cur_slice_id, :].astype(
+                    segment = self._3d_imgs[s][:, self._cur_slice_id, :].astype(
                         np.uint8
                     )
                 elif self._plane == Plane.TRANSVERSE:
-                    contours = self._3d_imgs[k][self._cur_slice_id, :, :].astype(
+                    segment = self._3d_imgs[s][self._cur_slice_id, :, :].astype(
                         np.uint8
                     )
 
-                contours, _ = self._fit_img_qlabel(contours, self.img_qlabel[i])
+                # skip if current contour img is empty
+                if s in ["gtvn.correction", "gtvt.correction", "gtvt.annotation"]:
+                    # perfomr erosion to remove overlap of 3 different planes
+                    kernel = np.ones((3, 3), np.uint8)
+                    eroded_segment = cv2.erode(segment, kernel, iterations=1)
+                    if eroded_segment.max() <= 0:
+                        continue
+                else:
+                    if segment.max() <= 0:
+                        continue
 
-                if k == "gtvt.click" or k == "gtvn.clicks":
+                segment, _ = self._fit_img_qlabel(segment, self.img_qlabel[i])
+
+                # points, higher thickness (otherwise cant see the points)
+                if s == "gtvt.click" or s == "gtvn.clicks":
                     thickness = 7
+                # contours, lower thickness
                 else:
                     thickness = 2
                     # blur, make the contours looks better on the UI
                     # blur after _fit_img_qlabel()
-                    contours = cv2.GaussianBlur(contours, (7, 7), cv2.BORDER_DEFAULT)
+                    segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
 
-                if contours.max() > 0 and k in [
-                    "gtvt.click",
-                    "gtvt.annotation",
-                    "gtvn.clicks",
-                ]:
+                # get max value of segment, to check weather the segment is visible
+                # sometimes the origin segment is not empty but after GaussianBlur it is empty
+                # so, name it "visible" not "empty" for user experience
+                if segment.max() <= 0:
+                    visible_segment = False
+                else:
+                    visible_segment = True
+
+                # show "user input" text or not
+                if (
+                    show_user_input_text is None
+                    and visible_segment
+                    and s
+                    in [
+                        "gtvt.click",
+                        "gtvt.annotation",
+                        "gtvt.correction",
+                        "gtvn.clicks",
+                        "gtvn.correction",
+                    ]
+                ):
                     show_user_input_text = True
 
+                # show annotation/pred coutour or not
+                if not replay_mode:
+                    if s == "gtvt.correction" and visible_segment:
+                        show_gtvt_annotation_contour = False
+                        show_gtvt_pred_contour = False
+                    elif s == "gtvt.annotation" and visible_segment:
+                        show_gtvt_pred_contour = False
+                    elif s == "gtvn.correction" and visible_segment:
+                        show_gtvn_pred_contour = False
+
+                # find and draw contours
                 contours, _ = cv2.findContours(
-                    contours, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+                    segment, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
                 )
                 rgb_img = cv2.drawContours(
                     image=rgb_img,
                     contours=contours,
                     contourIdx=-1,
-                    color=self._color[k],
+                    color=self._color[s],
                     thickness=thickness,
                 )
 
