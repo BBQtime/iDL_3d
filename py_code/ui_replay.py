@@ -104,6 +104,8 @@ class UiReplay(QMainWindow, Ui_Core):
             "gtvt.annotation",
             "gtvt.correction",
             "gtvn.correction",
+            "gtvt.pred.final",
+            "gtvn.pred.final",
         ]:
             self._3d_imgs[i] = None
 
@@ -399,12 +401,10 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["gtvn.pred"] = self._color["cyan"]
         self._color["gtvn.label"] = self._color["blue"]
         self._color["gtvt.annotation"] = self._color["magenta"]
-        self._color["gtvt.correction"] = self._color["magenta"]
-        self._color["gtvn.correction"] = self._color["magenta"]
+        self._color["gtvt.correction"] = self._color["red"]
+        self._color["gtvn.correction"] = self._color["red"]
         self._color["gtvt.click"] = self._color["magenta"]
         self._color["gtvn.clicks"] = self._color["magenta"]
-        self._color["score"] = self._color["green"]
-        self._color["msg"] = self._color["green"]
 
     def _init_ui_names(self):
         self._img_qlabel_ct = CustomQLabel(self._central_widget)
@@ -500,14 +500,14 @@ class UiReplay(QMainWindow, Ui_Core):
 
         # set text
         self._text_label["baseline"].setText("Select Baseline")
-        self._text_label["patient"].setText("Select Patient")
+        self._text_label["patient"].setText("SELECT PATIENT")
         self._text_label["idl.gtvt"].setText("Select iDL GTVt")
         self._text_label["idl.gtvn"].setText("Select iDL GTVn")
-        self._text_label["plane"].setText("Anatomical Plane")
-        self._text_label["bright.contrast"].setText("Brightness & Contrast")
+        self._text_label["plane"].setText("ANATOMICAL PLANE")
+        self._text_label["bright.contrast"].setText("BRIGHTNESS & CONTRAST")
         self._text_label["bright"].setText("Brightness (CT)")
         self._text_label["contrast"].setText("Contrast (CT)")
-        self._text_label["zoom"].setText("Zoom In")
+        self._text_label["zoom"].setText("ZOOM IN")
 
         self._radio_btn[Modal.CT].setText("CT")
         self._radio_btn[Modal.PT].setText("PT")
@@ -652,6 +652,12 @@ class UiReplay(QMainWindow, Ui_Core):
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
         self._combox["baseline"].addItems(baseline_id_list)
+
+        # sest real idl baseline id as default
+        for baseline_id in baseline_id_list:
+            if "real.idl" in baseline_id:
+                real_idl_baseline_id = baseline_id
+        self._combox["baseline"].setCurrentText(real_idl_baseline_id)
 
     def _refresh_side_bar(
         self, widgets_to_display: list = ["baseline", "patient", "idl.gtvt", "idl.gtvn"]
@@ -1179,14 +1185,16 @@ class UiReplay(QMainWindow, Ui_Core):
                 "patient={}".format(self._cur_patient),
                 "{}_pred.nii.gz".format(gtv),
             )
-            # clear idl.gtvt/gtvn data
+            # clear idl.gtvt data
             if gtv == "gtvt":
-                self._3d_imgs["gtvt.click"] = None
-                self._3d_imgs["gtvt.annotation"] = None
+                for i in ["click", "annotation", "correction"]:
+                    self._3d_imgs["gtvt.{}".format(i)] = None
                 self.__clear_gtvt_selected_slices_3d()
                 self.__refresh_gtvt_selected_slices_2d()
+            # clear idl.gtvn data
             elif gtv == "gtvn":
-                self._3d_imgs["gtvn.clicks"] = None
+                for i in ["clicks", "correction"]:
+                    self._3d_imgs["gtvn.{}".format(i)] = None
 
         # idl.gtvt/gtvn
         else:
@@ -1205,20 +1213,15 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # load gtvt data
             if gtv == "gtvt":
-                # load gtvt click
-                gtvt_click_path = os.path.join(cur_round_dir, "gtvt_click.nii.gz")
-                if os.path.exists(gtvt_click_path):
-                    self._3d_imgs["gtvt.click"] = self._load_3d_img(
-                        gtvt_click_path, binary=True
-                    )
-                # load gtvt annotation
-                gtvt_annotation_path = os.path.join(
-                    cur_round_dir, "gtvt_annotation.nii.gz"
-                )
-                if os.path.exists(gtvt_annotation_path):
-                    self._3d_imgs["gtvt.annotation"] = self._load_3d_img(
-                        gtvt_annotation_path, binary=True
-                    )
+                # load gtvt nii
+                for i in ["click", "annotation", "correction"]:
+                    nii_path = os.path.join(cur_round_dir, "gtvt_{}.nii.gz".format(i))
+                    if os.path.exists(nii_path):
+                        self._3d_imgs["gtvt.{}".format(i)] = self._load_3d_img(
+                            nii_path, binary=True
+                        )
+                    else:
+                        self._3d_imgs["gtvt.{}".format(i)] = None
                 # load gtvt selected slices (3d)
                 selected_slices_json_path = os.path.join(
                     cur_patient_dir,
@@ -1252,11 +1255,15 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # load gtvn data
             elif gtv == "gtvn":
-                gtvn_clicks_path = os.path.join(cur_round_dir, "gtvn_clicks.nii.gz")
-                if os.path.exists(gtvn_clicks_path):
-                    self._3d_imgs["gtvn.clicks"] = self._load_3d_img(
-                        gtvn_clicks_path, binary=True
-                    )
+                # load gtvn nii
+                for i in ["clicks", "correction"]:
+                    nii_path = os.path.join(cur_round_dir, "gtvn_{}.nii.gz".format(i))
+                    if os.path.exists(nii_path):
+                        self._3d_imgs["gtvn.{}".format(i)] = self._load_3d_img(
+                            nii_path, binary=True
+                        )
+                    else:
+                        self._3d_imgs["gtvn.{}".format(i)] = None
 
         # load preds
         self._3d_imgs["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
@@ -1365,14 +1372,6 @@ class UiReplay(QMainWindow, Ui_Core):
         if self._3d_imgs[Modal.CT] is None:
             return
 
-        # show "user input" text at the bottom left of img
-        show_user_input_text = None  # bool
-
-        # show annotation/pred contour or not
-        show_gtvt_annotation_contour = True
-        show_gtvt_pred_contour = True
-        show_gtvn_pred_contour = True
-
         # load rgb imgs
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if self._plane == Plane.SAGITTAL:
@@ -1464,7 +1463,7 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # replay mode, put important segment at the end
             if replay_mode:
-                segment_type_list = [
+                contour_list = [
                     "gtvn.label",
                     "gtvt.label",
                     "gtvn.pred",
@@ -1477,44 +1476,35 @@ class UiReplay(QMainWindow, Ui_Core):
                 ]
             # idl mode, correction > annotation > pred
             else:
-                segment_type_list = [
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvt.annotation",
-                    "gtvn.pred",
-                    "gtvt.pred",
+                contour_list = [
+                    "gtvn.pred.final",
+                    "gtvt.pred.final",
                     "gtvn.clicks",
                     "gtvt.click",
                 ]
 
             # draw label and pred contour
-            for s in segment_type_list:
-                if self._3d_imgs[s] is None:
-                    continue
-
-                if s == "gtvt.annotation" and not show_gtvt_annotation_contour:
-                    continue
-                elif s == "gtvt.pred" and not show_gtvt_pred_contour:
-                    continue
-                elif s == "gtvn.pred" and not show_gtvn_pred_contour:
+            # dont use "i" in for loop here
+            for c in contour_list:
+                if self._3d_imgs[c] is None:
                     continue
 
                 # load data of current slice
                 if self._plane == Plane.SAGITTAL:
-                    segment = self._3d_imgs[s][:, :, self._cur_slice_id].astype(
+                    segment = self._3d_imgs[c][:, :, self._cur_slice_id].astype(
                         np.uint8
                     )
                 elif self._plane == Plane.CORONAL:
-                    segment = self._3d_imgs[s][:, self._cur_slice_id, :].astype(
+                    segment = self._3d_imgs[c][:, self._cur_slice_id, :].astype(
                         np.uint8
                     )
                 elif self._plane == Plane.TRANSVERSE:
-                    segment = self._3d_imgs[s][self._cur_slice_id, :, :].astype(
+                    segment = self._3d_imgs[c][self._cur_slice_id, :, :].astype(
                         np.uint8
                     )
 
                 # skip if current contour img is empty
-                if s in ["gtvn.correction", "gtvt.correction", "gtvt.annotation"]:
+                if c in ["gtvn.correction", "gtvt.correction", "gtvt.annotation"]:
                     # perfomr erosion to remove overlap of 3 different planes
                     kernel = np.ones((3, 3), np.uint8)
                     eroded_segment = cv2.erode(segment, kernel, iterations=1)
@@ -1527,7 +1517,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 segment, _ = self._fit_img_qlabel(segment, self.img_qlabel[i])
 
                 # points, higher thickness (otherwise cant see the points)
-                if s == "gtvt.click" or s == "gtvn.clicks":
+                if c == "gtvt.click" or c == "gtvn.clicks":
                     thickness = 7
                 # contours, lower thickness
                 else:
@@ -1535,39 +1525,6 @@ class UiReplay(QMainWindow, Ui_Core):
                     # blur, make the contours looks better on the UI
                     # blur after _fit_img_qlabel()
                     segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
-
-                # get max value of segment, to check weather the segment is visible
-                # sometimes the origin segment is not empty but after GaussianBlur it is empty
-                # so, name it "visible" not "empty" for user experience
-                if segment.max() <= 0:
-                    visible_segment = False
-                else:
-                    visible_segment = True
-
-                # show "user input" text or not
-                if (
-                    show_user_input_text is None
-                    and visible_segment
-                    and s
-                    in [
-                        "gtvt.click",
-                        "gtvt.annotation",
-                        "gtvt.correction",
-                        "gtvn.clicks",
-                        "gtvn.correction",
-                    ]
-                ):
-                    show_user_input_text = True
-
-                # show annotation/pred coutour or not
-                if not replay_mode:
-                    if s == "gtvt.correction" and visible_segment:
-                        show_gtvt_annotation_contour = False
-                        show_gtvt_pred_contour = False
-                    elif s == "gtvt.annotation" and visible_segment:
-                        show_gtvt_pred_contour = False
-                    elif s == "gtvn.correction" and visible_segment:
-                        show_gtvn_pred_contour = False
 
                 # find and draw contours
                 contours, _ = cv2.findContours(
@@ -1577,7 +1534,7 @@ class UiReplay(QMainWindow, Ui_Core):
                     image=rgb_img,
                     contours=contours,
                     contourIdx=-1,
-                    color=self._color[s],
+                    color=self._color[c],
                     thickness=thickness,
                 )
 
@@ -1601,28 +1558,21 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # bottom left
             if i == Modal.MR1:
-                self._add_contour_description_on_qimg(
-                    qimg=qimg,
-                    show_user_input_text=show_user_input_text,
-                )
+                self._add_contour_description_on_qimg(qimg)
 
             self.img_qlabel[i].set_background(qimg)
             self.img_qlabel[i].update()
 
-    def _add_contour_description_on_qimg(
-        self,
-        qimg: QImage,
-        show_user_input_text: bool,
-    ):
+    def _add_contour_description_on_qimg(self, qimg: QImage):
         pos_x = [10, 65, 110]
-        pos_y = [qimg.height() - 13, qimg.height() - 35, qimg.height() - 57]
+        pos_y = [qimg.height() - 57, qimg.height() - 35, qimg.height() - 13]
 
         # label
         self._qimg_draw_text(
             qimg=qimg,
             text="Label:",
             pos=(pos_x[0], pos_y[0]),
-            color=self._color["score"],
+            color=self._color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
@@ -1642,7 +1592,7 @@ class UiReplay(QMainWindow, Ui_Core):
             qimg=qimg,
             text="Pred:",
             pos=(pos_x[0], pos_y[1]),
-            color=self._color["score"],
+            color=self._color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
@@ -1658,13 +1608,24 @@ class UiReplay(QMainWindow, Ui_Core):
         )
 
         # user input
-        if show_user_input_text:
-            self._qimg_draw_text(
-                qimg=qimg,
-                text="User input",
-                pos=(pos_x[0], pos_y[2]),
-                color=self._color["gtvt.annotation"],
-            )
+        self._qimg_draw_text(
+            qimg=qimg,
+            text="User:",
+            pos=(pos_x[0], pos_y[2]),
+            color=self._color["green"],
+        )
+        self._qimg_draw_text(
+            qimg=qimg,
+            text="Init",
+            pos=(pos_x[1], pos_y[2]),
+            color=self._color["gtvt.annotation"],
+        )
+        self._qimg_draw_text(
+            qimg=qimg,
+            text="Correction",
+            pos=(pos_x[2], pos_y[2]),
+            color=self._color["gtvt.correction"],
+        )
 
     def _add_msg_on_qimg(self, qimg: QImage):
         pass
@@ -1681,7 +1642,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 qimg=qimg,
                 text=text,
                 pos=(pos_x, pos_y),
-                color=self._color["score"],
+                color=self._color["green"],
             )
             # load scores
             for i in ["gtvt", "gtvn"]:
@@ -1697,7 +1658,7 @@ class UiReplay(QMainWindow, Ui_Core):
                 if i == "gtvt":
                     pos_x += 55
                 else:
-                    pos_x += 40
+                    pos_x += 50
                 # draw text
                 self._qimg_draw_text(
                     qimg=qimg,
