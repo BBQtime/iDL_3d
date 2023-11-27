@@ -7,6 +7,7 @@ import qimage2ndarray
 from custom import Debug, Dict, Dir, DrawingMode
 from custom import Global as g
 from custom import IDLStep, Img, Json, List, Modal, Nii, Plane, Time, Value
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt
 from PyQt5.QtGui import (
     QColor,
@@ -806,21 +807,18 @@ class UiIDL(UiReplay):
         # pass debug_mode parameter to the parent class
         super().__init__(idl_remark=idl_remark, debug_mode=debug_mode)
 
-    def _init_ui_names(self):
-        super()._init_ui_names()
+    def _init_widgets(self):
+        super()._init_widgets()
 
-        self._text_label["annotation.tools"] = self._text_label_annotation_tools
-        self._text_label["idl.progress"] = self._text_label_idl_progress
-        self._text_label["pen.size"] = self._text_label_pen_size
+        for i in ["annotation.tools", "idl.progress", "pen.size"]:
+            self._text_label[i] = QtWidgets.QLabel(self._central_widget)
 
-        self._radio_btn["draw.gtvt"] = self._radio_btn_draw_gtvt
-        self._radio_btn["draw.gtvn"] = self._radio_btn_draw_gtvn
+        for i in ["gtvt", "gtvn"]:
+            self._radio_btn["draw.{}".format(i)] = QRadioButton()
 
         self.__btn = Dict()
-        self.__btn["pen"] = self._btn_pen
-        self.__btn["eraser"] = self._btn_eraser
-        self.__btn["clear"] = self._btn_clear
-        self.__btn["confirm"] = self._btn_confirm
+        for i in ["pen", "eraser", "clear", "confirm"]:
+            self.__btn[i] = QtWidgets.QPushButton(self._central_widget)
 
     def clear_gtvt_click_pos_3d(self):
         self.__gtvt_click_pos_3d = None

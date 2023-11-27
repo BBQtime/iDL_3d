@@ -1,7 +1,7 @@
 import sys
 
 from custom import GPU, DatasetPart, DatasetVer, Debug
-from custom import Global as g
+from darktheme.widget_template import DarkPalette
 from PyQt5.QtWidgets import QApplication
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
@@ -21,15 +21,19 @@ Debug.clear_linux_trash()
 
 ############# UI #############
 if 1:
+    # app = DarkApplication(sys.argv)
     app = QApplication(sys.argv)
-    if 1:
-        ui = UiIDL(
+    app.setPalette(DarkPalette())
+
+    if 0:
+        main_win = UiIDL(
             idl_remark="",
             debug_mode=1,
         )
     else:
-        ui = UiReplay()
-    ui.show()
+        main_win = UiReplay()
+
+    main_win.show()
     sys.exit(app.exec_())
 
 

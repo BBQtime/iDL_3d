@@ -8,16 +8,24 @@ import numpy as np
 from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
-from PyQt5 import QtWidgets
+from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QMainWindow, QRadioButton
+from PyQt5.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QHBoxLayout,
+    QMainWindow,
+    QRadioButton,
+    QVBoxLayout,
+    QWidget,
+)
 from scipy.ndimage import measurements
-from Ui_core import Ui_Core
+from superqt import QCollapsible
 from ui_custom_qlabel import CustomQLabel
 
 
-class UiReplay(QMainWindow, Ui_Core):
+class UiReplay(QMainWindow):
     def __init__(
         self,
         idl_remark: str = None,  # param: idl_remark is for subclass: UiIDL
@@ -25,14 +33,13 @@ class UiReplay(QMainWindow, Ui_Core):
     ):
         super().__init__()
         self.setupUi(self)
-        self._init_ui_names()
+        self._init_widgets()
         self._init_member_var(idl_remark=idl_remark, debug_mode=debug_mode)
         # setMinimumSize after _init_member_var()
         self.setMinimumSize(self.__side_bar_width + 600, 600)
         self.__set_img_qlabels_background()
         # self.__init_zoomin()
         self._init_color()
-        self._init_side_bar()  # after _init_member_var(), function connection needed
         self._clear_img_data()
         self._refresh_title()  # after _init_member_var()
         self.resize(1200, 800)  # set origin size
@@ -406,67 +413,226 @@ class UiReplay(QMainWindow, Ui_Core):
         self._color["gtvt.click"] = self._color["magenta"]
         self._color["gtvn.clicks"] = self._color["magenta"]
 
-    def _init_ui_names(self):
-        self._img_qlabel_ct = CustomQLabel(self._central_widget)
-        self._img_qlabel_pt = CustomQLabel(self._central_widget)
-        self._img_qlabel_mr1 = CustomQLabel(self._central_widget)
-        self._img_qlabel_mr2 = CustomQLabel(self._central_widget)
+    def setupUi(self, Core):
+        Core.setObjectName("Core")
+        self._central_widget = QtWidgets.QWidget(Core)
+        # self._central_widget.setObjectName("_central_widget")
+        Core.setCentralWidget(self._central_widget)
+        self.retranslateUi(Core)
+        QtCore.QMetaObject.connectSlotsByName(Core)
 
+    def retranslateUi(self, Core):
+        _translate = QtCore.QCoreApplication.translate
+        Core.setWindowTitle(_translate("Core", "Interactive Learning Tool"))
+
+    def _init_widgets(self):
+        # set font
+        self._font_bold = QFont("Arial", 8)
+        self._font_light = QFont("Arial", 8)
+        # self._font_bold.setPointSize(8)
+        # self._font_light.setPointSize(8)
+        self._font_bold.setBold(True)
+        self._font_light.setBold(False)
+
+        # image qlabels
         self.img_qlabel = Dict()
-        self.img_qlabel[Modal.CT] = self._img_qlabel_ct
-        self.img_qlabel[Modal.PT] = self._img_qlabel_pt
-        self.img_qlabel[Modal.MR1] = self._img_qlabel_mr1
-        self.img_qlabel[Modal.MR2] = self._img_qlabel_mr2
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            self.img_qlabel[i] = CustomQLabel(self._central_widget)
 
-        self._text_label = Dict()
-        self._text_label["baseline"] = self._text_label_baseline
-        self._text_label["patient"] = self._text_label_patient
-        self._text_label["idl.gtvt"] = self._text_label_idl_gtvt
-        self._text_label["idl.gtvn"] = self._text_label_idl_gtvn
-        self._text_label["bright.contrast"] = self._text_label_bright_contrast
-        self._text_label["bright"] = self._text_label_bright
-        self._text_label["contrast"] = self._text_label_contrast
-        self._text_label["plane"] = self._text_label_plane
-        self._text_label["zoom"] = self._text_label_zoom
-        self._text_label["annotation.tools"] = self._text_label_annotation_tools
-        self._text_label["idl.progress"] = self._text_label_idl_progress
-
-        self._combox = Dict()
-        self._combox["baseline"] = self._combox_baseline
-        self._combox["patient"] = self._combox_patient
-        self._combox["idl.gtvt"] = self._combox_idl_gtvt
-        self._combox["idl.gtvn"] = self._combox_idl_gtvn
-
-        self._arrow_btn = Dict()
-        self._arrow_btn["prev.baseline"] = self._btn_prev_baseline
-        self._arrow_btn["next.baseline"] = self._btn_next_baseline
-        self._arrow_btn["prev.patient"] = self._btn_prev_patient
-        self._arrow_btn["next.patient"] = self._btn_next_patient
-        self._arrow_btn["prev.idl.gtvt"] = self._btn_prev_idl_gtvt
-        self._arrow_btn["next.idl.gtvt"] = self._btn_next_idl_gtvt
-        self._arrow_btn["prev.idl.gtvn"] = self._btn_prev_idl_gtvn
-        self._arrow_btn["next.idl.gtvn"] = self._btn_next_idl_gtvn
-
+        # radio buttons
         self._radio_btn = Dict()
-        self._radio_btn[Modal.CT] = self._radio_btn_ct
-        self._radio_btn[Modal.PT] = self._radio_btn_pt
-        self._radio_btn[Modal.MR1] = self._radio_btn_mr1
-        self._radio_btn[Modal.MR2] = self._radio_btn_mr2
-        self._radio_btn[Plane.TRANSVERSE] = self._radio_btn_transverse
-        self._radio_btn[Plane.CORONAL] = self._radio_btn_coronal
-        self._radio_btn[Plane.SAGITTAL] = self._radio_btn_sagittal
+        for i in [
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
+        ]:
+            self._radio_btn[i] = QRadioButton()
+            self._radio_btn[i].setFont(self._font_bold)
+        # set text
+        self._radio_btn[Modal.CT].setText("CT")
+        self._radio_btn[Modal.PT].setText("PT")
+        self._radio_btn[Modal.MR1].setText("MR-T1")
+        self._radio_btn[Modal.MR2].setText("MR-T2")
+        self._radio_btn[Plane.TRANSVERSE].setText("Transverse")
+        self._radio_btn[Plane.CORONAL].setText("Coronal")
+        self._radio_btn[Plane.SAGITTAL].setText("Sagittal")
+        # add radio buttons to the button group
+        self.__btn_group_luminance = QButtonGroup()
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            self.__btn_group_luminance.addButton(self._radio_btn[i])
+        self.__btn_group_plane = QButtonGroup()
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.__btn_group_plane.addButton(self._radio_btn[i])
+        # set checked
+        self._radio_btn[Modal.CT].setChecked(True)
+        self._radio_btn[Plane.TRANSVERSE].setChecked(True)
 
+        # text labels
+        self._text_label = Dict()
+        for i in [
+            "bright",
+            "contrast",
+        ]:
+            self._text_label[i] = QtWidgets.QLabel()
+            self._text_label[i].setFont(self._font_bold)
+
+        self._text_label["bright"].setText("Brightness (CT)")
+        self._text_label["contrast"].setText("Contrast (CT)")
+
+        # combobox
+        self._combox = Dict()
+        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            self._combox[i] = QtWidgets.QComboBox(self._central_widget)
+            self._combox[i].setFont(self._font_light)
+            self._combox[i].setFixedHeight(25)
+            # set combobox dropdown width: 700px
+            if i != "patient":
+                self._combox[i].setStyleSheet(
+                    """*
+                    QComboBox QAbstractItemView
+                    {
+                        min-width: 500px;
+                    }
+                    """
+                )
+            if i in ["patient", "idl.gtvt", "idl.gtvn"]:
+                self._combox[i].setEnabled(False)
+        # fill combox baseline
+        baseline_id_list = Dir.get_sub_dirs(
+            g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
+        )
+        self._combox["baseline"].addItems(baseline_id_list)
+        # set real idl baseline id as default
+        for baseline_id in baseline_id_list:
+            if "real.idl" in baseline_id:
+                real_idl_baseline_id = baseline_id
+        self._combox["baseline"].setCurrentText(real_idl_baseline_id)
+
+        # arrow buttons
+        self._arrow_btn = Dict()
+        for i in ["prev", "next"]:
+            for j in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+                self._arrow_btn["{}.{}".format(i, j)] = QtWidgets.QToolButton()
+                self._arrow_btn["{}.{}".format(i, j)].setFixedWidth(30)
+                self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(25)
+        # set initial state
+        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            self._arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
+            self._arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
+            if i in ["patient", "idl.gtvt", "idl.gtvn"]:
+                self._arrow_btn["prev.{}".format(i)].setEnabled(False)
+                self._arrow_btn["next.{}".format(i)].setEnabled(False)
+
+        # slider bars
         self._slider = Dict()
-        self._slider["bright.ct"] = self._slider_bright_ct
-        self._slider["bright.pt"] = self._slider_bright_pt
-        self._slider["bright.mr1"] = self._slider_bright_mr1
-        self._slider["bright.mr2"] = self._slider_bright_mr2
-        self._slider["contrast.ct"] = self._slider_contrast_ct
-        self._slider["contrast.pt"] = self._slider_contrast_pt
-        self._slider["contrast.mr1"] = self._slider_contrast_mr1
-        self._slider["contrast.mr2"] = self._slider_contrast_mr2
-        self._slider["zoom"] = self._slider_zoom
-        self._slider["pen.size"] = self._slider_pen_size
+        for i in ["bright", "contrast"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self._slider["{}.{}".format(i, j)] = QtWidgets.QSlider()
+                slider = self._slider["{}.{}".format(i, j)]
+                slider.setOrientation(QtCore.Qt.Horizontal)
+                if i == "bright":
+                    slider.setMinimum(-128)
+                    slider.setMaximum(128)
+                    slider.setValue(0)
+                elif i == "contrast":
+                    slider.setMinimum(0)
+                    slider.setMaximum(200)
+                    slider.setValue(100)
+                # only show ct slider bars
+                if j in [Modal.PT, Modal.MR1, Modal.MR2]:
+                    slider.hide()
+        self._slider["zoom"] = QtWidgets.QSlider(self._central_widget)
+        self._slider["zoom"].setOrientation(QtCore.Qt.Horizontal)
+        self._slider["zoom"].setMinimum(100)
+        self._slider["zoom"].setMaximum(200)
+        self._slider["zoom"].setValue(100)
+
+        # Collapsible space
+        collap = Dict()
+        collap["baseline"] = QCollapsible("SELECT BASELINE")
+        collap["patient"] = QCollapsible("SELECT PATIENT")
+        collap["idl.gtvt"] = QCollapsible("SELECT IDL GTVT")
+        collap["idl.gtvn"] = QCollapsible("SELECT IDL GTVN")
+        # collapse - baseline/patient/idl.gtvt/gtvn
+        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            collap[i].expand(True)
+            h_layout = QHBoxLayout()
+            h_layout.setSpacing(1)
+            h_layout.addWidget(self._arrow_btn["prev.{}".format(i)])
+            h_layout.addWidget(self._combox[i])
+            h_layout.addWidget(self._arrow_btn["next.{}".format(i)])
+            container = QWidget()
+            container.setLayout(h_layout)
+            collap[i].addWidget(container)
+
+        # collapse - display mode
+        collap["display.mode"] = QCollapsible("DISPLAY MODE")
+        collap["display.mode"].expand(True)
+        h_layout = QHBoxLayout()
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            h_layout.addWidget(self._radio_btn[i])
+        container = QWidget()
+        container.setLayout(h_layout)
+        collap["display.mode"].addWidget(container)
+
+        # collapse - luminance
+        collap["luminance"] = QCollapsible("LUMINANCE")
+        # collap["luminance"].expand(True)
+        h_layout = QHBoxLayout()
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn[i])
+        v_layout = QVBoxLayout()
+        v_layout.addLayout(h_layout)
+        for i in ["bright", "contrast"]:
+            v_layout.addWidget(self._text_label[i])
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                v_layout.addWidget(self._slider["{}.{}".format(i, j)])
+        container = QWidget()
+        container.setLayout(v_layout)
+        collap["luminance"].addWidget(container)
+
+        # collapse - zoomin
+        collap["zoom"] = QCollapsible("ZOOM IN")
+        collap["zoom"].addWidget(self._slider["zoom"])
+
+        # set font of collapsible bars
+        for i in collap.keys():
+            collap[i].setFont(self._font_bold)
+
+        # add collapsible bars into sidebar
+        v_layout = QVBoxLayout()
+        for i in collap.keys():
+            v_layout.addWidget(collap[i])
+        self._side_bar = QWidget(self._central_widget)
+        self._side_bar.setLayout(v_layout)
+
+        # connect ui to functions
+        # (put the connections at last, because these functions will need the initialization above)
+        self._combox["baseline"].activated.connect(self._load_baseline_data)
+        self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
+        self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
+        self._combox["patient"].activated.connect(self._load_patient_data)
+        self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
+        self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
+        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_data)
+        self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
+        self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
+        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
+        self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
+        self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
+        for i in ["bright", "contrast"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self._slider["{}.{}".format(i, j)].valueChanged.connect(
+                    self._refresh_rgb_imgs
+                )
+        self.__btn_group_plane.buttonClicked.connect(self._set_img_plane)
+        self.__btn_group_luminance.buttonClicked.connect(
+            self.__set_bright_contrast_modality
+        )
 
     # set display frames background black
     def __set_img_qlabels_background(self):
@@ -477,193 +643,18 @@ class UiReplay(QMainWindow, Ui_Core):
             self.img_qlabel[i].setAutoFillBackground(True)
             self.img_qlabel[i].setPalette(pal)
 
-    def _init_side_bar(self):
-        # hide idl.gtvs controls
-        self._text_label_idl_gtvs.hide()
-        self._combox_idl_gtvs.hide()
-        self._btn_prev_idl_gtvs.hide()
-        self._btn_next_idl_gtvs.hide()
-
-        # hide annotation controls
-        self._text_box_annotation_msg.hide()
-        self._text_label_annotation_tools.hide()
-        self._radio_btn_draw_gtvt.hide()
-        self._radio_btn_draw_gtvn.hide()
-        self._btn_pen.hide()
-        self._btn_eraser.hide()
-        self._btn_clear.hide()
-        self._btn_confirm.hide()
-        self._text_label_idl_progress.hide()
-        self._progress_bar_idl.hide()
-        self._text_label_pen_size.hide()
-        self._slider_pen_size.hide()
-
-        # set text
-        self._text_label["baseline"].setText("Select Baseline")
-        self._text_label["patient"].setText("SELECT PATIENT")
-        self._text_label["idl.gtvt"].setText("Select iDL GTVt")
-        self._text_label["idl.gtvn"].setText("Select iDL GTVn")
-        self._text_label["plane"].setText("ANATOMICAL PLANE")
-        self._text_label["bright.contrast"].setText("BRIGHTNESS & CONTRAST")
-        self._text_label["bright"].setText("Brightness (CT)")
-        self._text_label["contrast"].setText("Contrast (CT)")
-        self._text_label["zoom"].setText("ZOOM IN")
-
-        self._radio_btn[Modal.CT].setText("CT")
-        self._radio_btn[Modal.PT].setText("PT")
-        self._radio_btn[Modal.MR1].setText("MR-T1")
-        self._radio_btn[Modal.MR2].setText("MR-T2")
-        self._radio_btn[Plane.TRANSVERSE].setText("Transverse")
-        self._radio_btn[Plane.CORONAL].setText("Coronal")
-        self._radio_btn[Plane.SAGITTAL].setText("Sagittal")
-
-        # set font
-        self._font_bold = self._text_label["baseline"].font()
-        self._font_light = self._text_label["baseline"].font()
-        self._font_bold.setPointSize(8)
-        self._font_light.setPointSize(8)
-        self._font_bold.setBold(True)
-        self._font_light.setBold(False)
-
-        # set font of text labels
-        for i in [
-            "baseline",
-            "patient",
-            "idl.gtvt",
-            "idl.gtvn",
-            "bright.contrast",
-            "bright",
-            "contrast",
-            "plane",
-            "zoom",
-        ]:
-            self._text_label[i].setFont(self._font_bold)
-
-        # set font of radio buttons
-        for i in [
-            Plane.TRANSVERSE,
-            Plane.CORONAL,
-            Plane.SAGITTAL,
-            Modal.CT,
-            Modal.PT,
-            Modal.MR1,
-            Modal.MR2,
-        ]:
-            self._radio_btn[i].setFont(self._font_bold)
-
-        # set font of comboboxes
-        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            self._combox[i].setFont(self._font_light)
-
-        # set combobox dropdown width: 700px
-        for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
-            self._combox[i].setStyleSheet(
-                """*
-                QComboBox QAbstractItemView
-                {
-                    min-width: 500px;
-                }
-                """
-            )
-
-        # fill the baseline combobox with baseline_ids
-        self._fill_combox_baseline()
-
-        # set initial state
-        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            self._arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
-            self._arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
-
-        for i in ["patient", "idl.gtvt", "idl.gtvn"]:
-            self._combox[i].setEnabled(False)
-            self._arrow_btn["prev.{}".format(i)].setEnabled(False)
-            self._arrow_btn["next.{}".format(i)].setEnabled(False)
-
-        # Add radio buttons to the button group
-        self.__btn_group_bright_contrast = QButtonGroup()
-        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.CT])
-        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.PT])
-        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.MR1])
-        self.__btn_group_bright_contrast.addButton(self._radio_btn[Modal.MR2])
-        self.__btn_group_plane = QButtonGroup()
-        self.__btn_group_plane.addButton(self._radio_btn[Plane.TRANSVERSE])
-        self.__btn_group_plane.addButton(self._radio_btn[Plane.CORONAL])
-        self.__btn_group_plane.addButton(self._radio_btn[Plane.SAGITTAL])
-
-        # radio btns checked or not
-        self._radio_btn[Modal.CT].setChecked(True)
-        self._radio_btn[Modal.PT].setChecked(False)
-        self._radio_btn[Modal.MR1].setChecked(False)
-        self._radio_btn[Modal.MR2].setChecked(False)
-        self._radio_btn[Plane.TRANSVERSE].setChecked(True)
-        self._radio_btn[Plane.CORONAL].setChecked(False)
-        self._radio_btn[Plane.SAGITTAL].setChecked(False)
-
-        # set slider range and default value
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self._slider["bright.{}".format(i)].setMinimum(-128)
-            self._slider["bright.{}".format(i)].setMaximum(128)
-            self._slider["bright.{}".format(i)].setValue(0)
-            self._slider["contrast.{}".format(i)].setMinimum(0)
-            self._slider["contrast.{}".format(i)].setMaximum(200)
-            self._slider["contrast.{}".format(i)].setValue(100)
-
-        # only show ct bright/contrast slider bars
-        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
-            self._slider["bright.{}".format(i)].hide()
-            self._slider["contrast.{}".format(i)].hide()
-
-        self._slider["zoom"].setMinimum(100)
-        self._slider["zoom"].setMaximum(200)
-        self._slider["zoom"].setValue(100)
-
-        # connect ui to functions
-        # (put the connections at last, because these functions will need the initialization above)
-        self._combox["baseline"].activated.connect(self._load_baseline_data)
-        self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
-        self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
-
-        self._combox["patient"].activated.connect(self._load_patient_data)
-        self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
-        self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
-
-        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_data)
-        self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
-        self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
-
-        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
-        self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
-        self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
-
-        for i in ["bright", "contrast"]:
-            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self._slider["{}.{}".format(i, j)].valueChanged.connect(
-                    self._refresh_rgb_imgs
-                )
-
-        self.__btn_group_plane.buttonClicked.connect(self._set_img_plane)
-
-        self.__btn_group_bright_contrast.buttonClicked.connect(
-            self.__set_bright_contrast_modality
-        )
-
-    def _fill_combox_baseline(self):
-        baseline_id_list = Dir.get_sub_dirs(
-            g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
-        )
-        self._combox["baseline"].addItems(baseline_id_list)
-
-        # sest real idl baseline id as default
-        for baseline_id in baseline_id_list:
-            if "real.idl" in baseline_id:
-                real_idl_baseline_id = baseline_id
-        self._combox["baseline"].setCurrentText(real_idl_baseline_id)
-
     def _refresh_side_bar(
         self, widgets_to_display: list = ["baseline", "patient", "idl.gtvt", "idl.gtvn"]
     ):
-        left = 30
+        left = 0
         top = 0
+        width = self.__side_bar_width - left * 2
+        height = self._central_widget.height()
+        left += self.geometry().width() - self.__side_bar_width
+        rect = QRect(left, top, width, height)
+        self._side_bar.setGeometry(rect)
+        return
+
         text_height = 25
         bar_height = 25
         slider_height = 20
@@ -682,7 +673,7 @@ class UiReplay(QMainWindow, Ui_Core):
         radio_btn_width[Plane.CORONAL] = 70
         radio_btn_width[Plane.SAGITTAL] = 70
         radio_btn_gap = Dict()
-        radio_btn_gap["bright.contrast"] = 10
+        radio_btn_gap["luminance"] = 10
         radio_btn_gap["planes"] = 6
 
         # side bar location
@@ -715,50 +706,6 @@ class UiReplay(QMainWindow, Ui_Core):
 
             # next element
             top += bar_height
-
-        # brightness and contrast text label
-        top += gap
-        rect = QRect(left, top, width, text_height)
-        self._text_label["bright.contrast"].setGeometry(rect)
-        top += text_height
-        # brightness and contrast radio btns
-        tmp_left = left
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
-            self._radio_btn[i].setGeometry(rect)
-            tmp_left += radio_btn_gap["bright.contrast"] + radio_btn_width[i]
-        top += radio_btn_height
-        # brightness and contrast sliders
-        for i in ["bright", "contrast"]:
-            rect = QRect(left, top, width, text_height)
-            self._text_label[i].setGeometry(rect)
-            top += text_height
-            rect = QRect(left, top, width, slider_height)
-            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self._slider["{}.{}".format(i, j)].setGeometry(rect)
-            top += slider_height
-
-        # anatomical plane radio buttons
-        top += gap
-        rect = QRect(left, top, width, text_height)
-        self._text_label["plane"].setGeometry(rect)
-        top += text_height
-        # anatomical plane radio buttons
-        tmp_left = left
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            rect = QRect(tmp_left, top, radio_btn_width[i], radio_btn_height)
-            self._radio_btn[i].setGeometry(rect)
-            tmp_left += radio_btn_gap["planes"] + radio_btn_width[i]
-        top += radio_btn_height
-
-        # zoom in
-        top += gap
-        rect = QRect(left, top, width, text_height)
-        self._text_label["zoom"].setGeometry(rect)
-        top += text_height
-        rect = QRect(left, top, width, slider_height)
-        self._slider["zoom"].setGeometry(rect)
-        top += slider_height
 
         # return the followings for UiIDL
         return (
