@@ -393,7 +393,7 @@ class UiIDL(UiReplay):
                         "Please draw GTVt in {} plane.".format(plane),
                         QMessageBox.Ok,
                     )
-                    self._set_img_plane(new_plane=plane)
+                    self._switch_multi_modal_plane(new_plane=plane)
                     if self.drawing_mode == DrawingMode.GTVT_ERASER:
                         self.drawing_mode = DrawingMode.GTVT_PEN
                         self.__set_mouse_cursor("pen")
@@ -656,10 +656,10 @@ class UiIDL(UiReplay):
         super().wheelEvent(event)
         self.__refresh_crosses_on_4_qlabels()
 
-    def _set_img_plane(
+    def _switch_multi_modal_plane(
         self, connected_radio_btn: QRadioButton = None, new_plane: str = None
     ):
-        super()._set_img_plane(
+        super()._switch_multi_modal_plane(
             connected_radio_btn=connected_radio_btn, new_plane=new_plane
         )
         self.__refresh_crosses_on_4_qlabels()
@@ -826,8 +826,8 @@ class UiIDL(UiReplay):
     def clear_gtvn_clicks_pos_3d(self):
         self.__gtvn_clicks_pos_3d = List()
 
-    def _init_member_var(self, idl_remark: str = None, debug_mode: bool = False):
-        super()._init_member_var()
+    def _init_data(self, idl_remark: str = None, debug_mode: bool = False):
+        super()._init_data()
         self.__debug_mode = debug_mode
 
         # keep idl.gtvt and idl.gtvn id unchanged
@@ -1104,7 +1104,7 @@ class UiIDL(UiReplay):
             pos_y += 5
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 pos_y += 20
-                text = Value.capitalized(plane)
+                text = plane.capitalize()
                 if self.__gtvt_annotated_status[plane] is True:
                     text += " ✓"
                     color = self._color["green"]

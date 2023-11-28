@@ -8,6 +8,7 @@ import numpy as np
 from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
+from matplotlib.pyplot import vlines
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
@@ -15,13 +16,16 @@ from PyQt5.QtWidgets import (
     QApplication,
     QButtonGroup,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QRadioButton,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 from scipy.ndimage import measurements
 from superqt import QCollapsible
+from toggle_btn import ToggleButton
 from ui_custom_qlabel import CustomQLabel
 
 
@@ -34,19 +38,18 @@ class UiReplay(QMainWindow):
         super().__init__()
         self.setupUi(self)
         self._init_widgets()
-        self._init_member_var(idl_remark=idl_remark, debug_mode=debug_mode)
-        # setMinimumSize after _init_member_var()
+        self._init_data(idl_remark=idl_remark, debug_mode=debug_mode)
+        # setMinimumSize after _init_data()
         self.setMinimumSize(self.__side_bar_width + 600, 600)
-        self.__set_img_qlabels_background()
         # self.__init_zoomin()
         self._init_color()
         self._clear_img_data()
-        self._refresh_title()  # after _init_member_var()
+        self._refresh_title()  # after _init_data()
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
         self._load_baseline_data()  # load first baseline result
 
-    def _init_member_var(
+    def _init_data(
         self,
         idl_remark: str = None,  # param: idl_remark is for subclass: UiIDL
         debug_mode: bool = False,  # param: debug_mode is for subclass: UiIDL
@@ -79,7 +82,7 @@ class UiReplay(QMainWindow):
         self.__scores = Dict()
         self._3d_imgs = Dict()
         self._rgb_img_roi = None
-        self.__side_bar_width = 300
+        self.__side_bar_width = 310
 
         self.__clear_gtvt_selected_slices_3d()
 
@@ -293,7 +296,7 @@ class UiReplay(QMainWindow):
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
     #     self._refresh_rgb_imgs()
 
-    def _fit_img_qlabel(self, img, img_qlabel: QtWidgets.QLabel):
+    def _fit_img_qlabel(self, img, img_qlabel: QLabel):
         err_msg = "MainWindow._fit_img_qlabel(), img.shape should == 2 or 3"
 
         # image spacing resize
@@ -425,70 +428,30 @@ class UiReplay(QMainWindow):
         _translate = QtCore.QCoreApplication.translate
         Core.setWindowTitle(_translate("Core", "Interactive Learning Tool"))
 
-    def _init_widgets(self):
-        # set font
-        self._font_bold = QFont("Arial", 8)
-        self._font_light = QFont("Arial", 8)
-        # self._font_bold.setPointSize(8)
-        # self._font_light.setPointSize(8)
-        self._font_bold.setBold(True)
-        self._font_light.setBold(False)
-
-        # image qlabels
+    def _init_widgets_img_qlabels(self):
         self.img_qlabel = Dict()
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self.img_qlabel[i] = CustomQLabel(self._central_widget)
-
-        # radio buttons
-        self._radio_btn = Dict()
+        pal = QPalette()
+        pal.setColor(QPalette.Window, Qt.black)
         for i in [
-            Plane.TRANSVERSE,
-            Plane.CORONAL,
-            Plane.SAGITTAL,
             Modal.CT,
             Modal.PT,
             Modal.MR1,
             Modal.MR2,
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
         ]:
-            self._radio_btn[i] = QRadioButton()
-            self._radio_btn[i].setFont(self._font_bold)
-        # set text
-        self._radio_btn[Modal.CT].setText("CT")
-        self._radio_btn[Modal.PT].setText("PT")
-        self._radio_btn[Modal.MR1].setText("MR-T1")
-        self._radio_btn[Modal.MR2].setText("MR-T2")
-        self._radio_btn[Plane.TRANSVERSE].setText("Transverse")
-        self._radio_btn[Plane.CORONAL].setText("Coronal")
-        self._radio_btn[Plane.SAGITTAL].setText("Sagittal")
-        # add radio buttons to the button group
-        self.__btn_group_luminance = QButtonGroup()
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self.__btn_group_luminance.addButton(self._radio_btn[i])
-        self.__btn_group_plane = QButtonGroup()
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self.__btn_group_plane.addButton(self._radio_btn[i])
-        # set checked
-        self._radio_btn[Modal.CT].setChecked(True)
-        self._radio_btn[Plane.TRANSVERSE].setChecked(True)
+            self.img_qlabel[i] = CustomQLabel(self._central_widget)
+            self.img_qlabel[i].setObjectName("")
+            # black background
+            self.img_qlabel[i].setAutoFillBackground(True)
+            self.img_qlabel[i].setPalette(pal)
 
-        # text labels
-        self._text_label = Dict()
-        for i in [
-            "bright",
-            "contrast",
-        ]:
-            self._text_label[i] = QtWidgets.QLabel()
-            self._text_label[i].setFont(self._font_bold)
-
-        self._text_label["bright"].setText("Brightness (CT)")
-        self._text_label["contrast"].setText("Contrast (CT)")
-
-        # combobox
+    def _init_widgets_combox(self):
         self._combox = Dict()
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
             self._combox[i] = QtWidgets.QComboBox(self._central_widget)
-            self._combox[i].setFont(self._font_light)
-            self._combox[i].setFixedHeight(25)
+            self._combox[i].setFixedHeight(30)
             # set combobox dropdown width: 700px
             if i != "patient":
                 self._combox[i].setStyleSheet(
@@ -501,11 +464,13 @@ class UiReplay(QMainWindow):
                 )
             if i in ["patient", "idl.gtvt", "idl.gtvn"]:
                 self._combox[i].setEnabled(False)
+
         # fill combox baseline
         baseline_id_list = Dir.get_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
         self._combox["baseline"].addItems(baseline_id_list)
+
         # set real idl baseline id as default
         for baseline_id in baseline_id_list:
             if "real.idl" in baseline_id:
@@ -518,8 +483,9 @@ class UiReplay(QMainWindow):
             for j in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
                 self._arrow_btn["{}.{}".format(i, j)] = QtWidgets.QToolButton()
                 self._arrow_btn["{}.{}".format(i, j)].setFixedWidth(30)
-                self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(25)
-        # set initial state
+                self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(30)
+
+        # set arrow buttons initial state
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
             self._arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
             self._arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
@@ -527,91 +493,23 @@ class UiReplay(QMainWindow):
                 self._arrow_btn["prev.{}".format(i)].setEnabled(False)
                 self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
-        # slider bars
-        self._slider = Dict()
-        for i in ["bright", "contrast"]:
-            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self._slider["{}.{}".format(i, j)] = QtWidgets.QSlider()
-                slider = self._slider["{}.{}".format(i, j)]
-                slider.setOrientation(QtCore.Qt.Horizontal)
-                if i == "bright":
-                    slider.setMinimum(-128)
-                    slider.setMaximum(128)
-                    slider.setValue(0)
-                elif i == "contrast":
-                    slider.setMinimum(0)
-                    slider.setMaximum(200)
-                    slider.setValue(100)
-                # only show ct slider bars
-                if j in [Modal.PT, Modal.MR1, Modal.MR2]:
-                    slider.hide()
-        self._slider["zoom"] = QtWidgets.QSlider(self._central_widget)
-        self._slider["zoom"].setOrientation(QtCore.Qt.Horizontal)
-        self._slider["zoom"].setMinimum(100)
-        self._slider["zoom"].setMaximum(200)
-        self._slider["zoom"].setValue(100)
-
-        # Collapsible space
-        collap = Dict()
-        collap["baseline"] = QCollapsible("SELECT BASELINE")
-        collap["patient"] = QCollapsible("SELECT PATIENT")
-        collap["idl.gtvt"] = QCollapsible("SELECT IDL GTVT")
-        collap["idl.gtvn"] = QCollapsible("SELECT IDL GTVN")
         # collapse - baseline/patient/idl.gtvt/gtvn
+        self._collap["baseline"] = QCollapsible("SELECT BASELINE")
+        self._collap["patient"] = QCollapsible("SELECT PATIENT")
+        self._collap["idl.gtvt"] = QCollapsible("SELECT IDL GTVT")
+        self._collap["idl.gtvn"] = QCollapsible("SELECT IDL GTVN")
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            collap[i].expand(True)
+            self._collap[i].expand(True)
             h_layout = QHBoxLayout()
-            h_layout.setSpacing(1)
+            # h_layout.setSpacing(1)
             h_layout.addWidget(self._arrow_btn["prev.{}".format(i)])
             h_layout.addWidget(self._combox[i])
             h_layout.addWidget(self._arrow_btn["next.{}".format(i)])
             container = QWidget()
             container.setLayout(h_layout)
-            collap[i].addWidget(container)
+            self._collap[i].addWidget(container)
 
-        # collapse - display mode
-        collap["display.mode"] = QCollapsible("DISPLAY MODE")
-        collap["display.mode"].expand(True)
-        h_layout = QHBoxLayout()
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            h_layout.addWidget(self._radio_btn[i])
-        container = QWidget()
-        container.setLayout(h_layout)
-        collap["display.mode"].addWidget(container)
-
-        # collapse - luminance
-        collap["luminance"] = QCollapsible("LUMINANCE")
-        # collap["luminance"].expand(True)
-        h_layout = QHBoxLayout()
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            h_layout.addWidget(self._radio_btn[i])
-        v_layout = QVBoxLayout()
-        v_layout.addLayout(h_layout)
-        for i in ["bright", "contrast"]:
-            v_layout.addWidget(self._text_label[i])
-            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                v_layout.addWidget(self._slider["{}.{}".format(i, j)])
-        container = QWidget()
-        container.setLayout(v_layout)
-        collap["luminance"].addWidget(container)
-
-        # collapse - zoomin
-        collap["zoom"] = QCollapsible("ZOOM IN")
-        collap["zoom"].addWidget(self._slider["zoom"])
-
-        # set font of collapsible bars
-        for i in collap.keys():
-            collap[i].setFont(self._font_bold)
-
-        # add collapsible bars into sidebar
-        v_layout = QVBoxLayout()
-        for i in collap.keys():
-            v_layout.addWidget(collap[i])
-        self._side_bar = QWidget(self._central_widget)
-        self._side_bar.setLayout(v_layout)
-
-        # connect ui to functions
-        # (put the connections at last, because these functions will need the initialization above)
+        # connect ctrls to functions
         self._combox["baseline"].activated.connect(self._load_baseline_data)
         self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
         self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
@@ -624,28 +522,323 @@ class UiReplay(QMainWindow):
         self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
         self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
+
+    def _init_widgets_luminance(self):
+        # init radio btns
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            self._radio_btn["luminance.{}".format(i)] = QRadioButton()
+
+        # set text
+        self._radio_btn["luminance.{}".format(Modal.CT)].setText("CT")
+        self._radio_btn["luminance.{}".format(Modal.PT)].setText("PT")
+        self._radio_btn["luminance.{}".format(Modal.MR1)].setText("MR-T1")
+        self._radio_btn["luminance.{}".format(Modal.MR2)].setText("MR-T2")
+
+        # add radio buttons to the button group
+        self.__btn_group_luminance = QButtonGroup()
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            self.__btn_group_luminance.addButton(
+                self._radio_btn["luminance.{}".format(i)]
+            )
+
+        # set checked
+        self._radio_btn["luminance.{}".format(Modal.CT)].setChecked(True)
+
+        # text labels
+        for i in ["bright", "contrast"]:
+            self._text_label[i] = QLabel()
+        self._text_label["bright"].setText("Brightness (CT)")
+        self._text_label["contrast"].setText("Contrast (CT)")
+
+        # slider bars
+        for i in ["bright", "contrast"]:
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self._slider["{}.{}".format(i, j)] = QSlider()
+                slider = self._slider["{}.{}".format(i, j)]
+                slider.setOrientation(Qt.Horizontal)
+                if i == "bright":
+                    slider.setMinimum(-128)
+                    slider.setMaximum(128)
+                    slider.setValue(0)
+                elif i == "contrast":
+                    slider.setMinimum(0)
+                    slider.setMaximum(200)
+                    slider.setValue(100)
+                # only show ct slider bars
+                if j in [Modal.PT, Modal.MR1, Modal.MR2]:
+                    slider.hide()
+
+        # collapse
+        self._collap["luminance"] = QCollapsible("LUMINANCE")
+        self._collap["luminance"].expand(False)
+        v_layout = QVBoxLayout()
+
+        # radio buttons: ct/pt/mr1/mr2
+        h_layout = QHBoxLayout()
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn["luminance.{}".format(i)])
+        v_layout.addLayout(h_layout)
+
+        # text labels and slider bars
+        for i in ["bright", "contrast"]:
+            v_layout.addWidget(self._text_label[i])
+            for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                v_layout.addWidget(self._slider["{}.{}".format(i, j)])
+
+        # add final layout into collapsible space
+        container = QWidget()
+        container.setLayout(v_layout)
+        self._collap["luminance"].addWidget(container)
+
+        # connect widgets to functions
         for i in ["bright", "contrast"]:
             for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self._slider["{}.{}".format(i, j)].valueChanged.connect(
                     self._refresh_rgb_imgs
                 )
-        self.__btn_group_plane.buttonClicked.connect(self._set_img_plane)
         self.__btn_group_luminance.buttonClicked.connect(
             self.__set_bright_contrast_modality
         )
 
-    # set display frames background black
-    def __set_img_qlabels_background(self):
-        pal = QPalette()
-        pal.setColor(QPalette.Window, Qt.black)
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self.img_qlabel[i].setObjectName("")
-            self.img_qlabel[i].setAutoFillBackground(True)
-            self.img_qlabel[i].setPalette(pal)
+    def __switch_coronal_modal(self):
+        print("__switch_coronal_modal")
 
-    def _refresh_side_bar(
-        self, widgets_to_display: list = ["baseline", "patient", "idl.gtvt", "idl.gtvn"]
-    ):
+    def __switch_sagittal_modal(self):
+        print("__switch_sagittal_modal")
+
+    def switch_display_mode(self):
+        plane_fixed_mode = self._toggle_btn.isChecked()
+        # img qlabels: modalities
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            if plane_fixed_mode:
+                self.img_qlabel[i].hide()
+            else:
+                self.img_qlabel[i].show()
+        # img qlabels: planes
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            if plane_fixed_mode:
+                self.img_qlabel[i].show()
+            else:
+                self.img_qlabel[i].hide()
+        # radio buttons: modal fixed mode
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            if plane_fixed_mode:
+                self._radio_btn[i].hide()
+            else:
+                self._radio_btn[i].show()
+        # text labels
+        for i in [
+            Modal.CT,
+            Modal.PT,
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
+        ]:
+            if plane_fixed_mode:
+                self._text_label[i].show()
+            else:
+                self._text_label[i].hide()
+        # ratio buttons: plane fixed mode
+        for i in [Plane.CORONAL, Plane.SAGITTAL]:
+            for j in [Modal.PT, Modal.MR1, Modal.MR2]:
+                if plane_fixed_mode:
+                    self._radio_btn["{}.{}".format(i, j)].show()
+                else:
+                    self._radio_btn["{}.{}".format(i, j)].hide()
+        # ct/pt mix slider
+        if plane_fixed_mode:
+            self._slider["mix"].show()
+        else:
+            self._slider["mix"].hide()
+
+    def _init_widgets_display_mode(self):
+        # toggle display mode
+        for i in ["modal.fixed", "plane.fixed"]:
+            self._text_label[i] = QLabel()
+            # self._text_label[i].setStyleSheet("border: 1px solid black;")
+        self._text_label["modal.fixed"].setText("Modality Fixed")
+        self._text_label["modal.fixed"].setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self._text_label["modal.fixed"].setFixedWidth(112)
+        self._text_label["plane.fixed"].setText("Plane Fixed")
+        self._text_label["plane.fixed"].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # self._text_label["modal.fixed"].setFixedWidth(50)
+
+        #  display mode: modality fixed
+        self._radio_group["plane"] = QButtonGroup()
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self._radio_btn[i] = QRadioButton()
+            self._radio_btn[i].setText(i.capitalize())
+            self._radio_group["plane"].addButton(self._radio_btn[i])
+        self._radio_btn[Plane.TRANSVERSE].setFixedWidth(120)
+        # set checked
+        self._radio_btn[Plane.TRANSVERSE].setChecked(True)
+        # connect ui to functions
+        self._radio_group["plane"].buttonClicked.connect(self._switch_multi_modal_plane)
+
+        #  display mode: plane fixed
+        # radio buttons
+        for i in [Plane.CORONAL, Plane.SAGITTAL]:
+            self._radio_group["{}.modal".format(i)] = QButtonGroup()
+            for j in [Modal.PT, Modal.MR1, Modal.MR2]:
+                self._radio_btn["{}.{}".format(i, j)] = QRadioButton()
+                self._radio_group["{}.modal".format(i)].addButton(
+                    self._radio_btn["{}.{}".format(i, j)]
+                )
+        # connect functions
+        self._radio_group["{}.modal".format(Plane.CORONAL)].buttonClicked.connect(
+            self.__switch_coronal_modal
+        )
+        self._radio_group["{}.modal".format(Plane.SAGITTAL)].buttonClicked.connect(
+            self.__switch_sagittal_modal
+        )
+        # set checked
+        for i in [Plane.CORONAL, Plane.SAGITTAL]:
+            self._radio_btn["{}.{}".format(i, Modal.MR1)].setChecked(True)
+
+        # set text - pt
+        for i in [
+            "{}.{}".format(Plane.CORONAL, Modal.PT),
+            "{}.{}".format(Plane.SAGITTAL, Modal.PT),
+        ]:
+            self._radio_btn[i].setText("PT")
+        # set text - mr1
+        for i in [
+            "{}.{}".format(Plane.CORONAL, Modal.MR1),
+            "{}.{}".format(Plane.SAGITTAL, Modal.MR1),
+        ]:
+            self._radio_btn[i].setText("MR-T1")
+        # set text - mr2
+        for i in [
+            "{}.{}".format(Plane.CORONAL, Modal.MR2),
+            "{}.{}".format(Plane.SAGITTAL, Modal.MR2),
+        ]:
+            self._radio_btn[i].setText("MR-T2")
+
+        # text label for plane fixed mode
+        for i in [Modal.CT, Modal.PT]:
+            self._text_label[i] = QLabel()
+            self._text_label[i].setText(i.upper())
+            # self._text_label[i].setStyleSheet("border: 1px solid black;")
+        self._text_label[Modal.CT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._text_label[Modal.PT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._text_label[Modal.CT].setFixedWidth(30)
+
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self._text_label[i] = QLabel()
+            self._text_label[i].setText(i.capitalize())
+            if i != Plane.TRANSVERSE:
+                self._text_label[i].setFixedWidth(63)
+        # self._text_label[Plane.TRANSVERSE].setStyleSheet("border: 1px solid black;")
+
+        # ct/pt weight slider bar
+        self._slider["mix"] = QSlider()
+        self._slider["mix"].setOrientation(Qt.Horizontal)
+        self._slider["mix"].setMinimum(0)
+        self._slider["mix"].setMaximum(100)
+        self._slider["mix"].setValue(50)
+        self._slider["mix"].setFixedWidth(112)
+
+        # toggle button
+        self._toggle_btn = ToggleButton(is_checked=0)
+        self.switch_display_mode()
+        # self._toggle_btn.clicked.connect(self.__switch_display_mode)
+
+        # collapse
+        self._collap["display.mode"] = QCollapsible("DISPLAY MODE")
+        self._collap["display.mode"].expand(True)
+        v_layout = QVBoxLayout()
+
+        # toggle btn and display mode text
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(self._text_label["modal.fixed"])
+        h_layout.addWidget(self._toggle_btn)
+        h_layout.addWidget(self._text_label["plane.fixed"])
+        v_layout.addLayout(h_layout)
+
+        # modality fixed widgets
+        h_layout = QHBoxLayout()
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            h_layout.addWidget(self._radio_btn[i])
+        v_layout.addLayout(h_layout)
+
+        # plane fixed widgets - transverse
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(self._text_label[Plane.TRANSVERSE])
+        h_layout.addWidget(self._text_label[Modal.CT])
+        h_layout.addWidget(self._slider["mix"])
+        h_layout.addWidget(self._text_label[Modal.PT])
+        v_layout.addLayout(h_layout)
+
+        # plane fixed widgets - coronal
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(self._text_label[Plane.CORONAL])
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn["{}.{}".format(Plane.CORONAL, i)])
+        v_layout.addLayout(h_layout)
+
+        # plane fixed widgets - sagittal
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(self._text_label[Plane.SAGITTAL])
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn["{}.{}".format(Plane.SAGITTAL, i)])
+        v_layout.addLayout(h_layout)
+
+        # put v_layout into collapsible space
+        container = QWidget()
+        container.setLayout(v_layout)
+        self._collap["display.mode"].addWidget(container)
+
+    def _init_widgets_set_fonts(self):
+        self._font_bold = QFont("Arial", 10)
+        self._font_light = QFont("Arial", 10)
+        self._font_bold.setBold(True)
+        self._font_light.setBold(False)
+
+        for i in self._radio_btn.keys():
+            self._radio_btn[i].setFont(self._font_bold)
+
+        for i in self._text_label.keys():
+            self._text_label[i].setFont(self._font_bold)
+
+        for i in self._collap.keys():
+            self._collap[i].setFont(self._font_bold)
+
+        for i in self._combox.keys():
+            self._combox[i].setFont(self._font_light)
+
+    def _init_widgets_zoom(self):
+        self._slider["zoom"] = QSlider()
+        self._slider["zoom"].setOrientation(Qt.Horizontal)
+        self._slider["zoom"].setMinimum(100)
+        self._slider["zoom"].setMaximum(200)
+        self._slider["zoom"].setValue(100)
+        # add slider into collapsible space
+        self._collap["zoom"] = QCollapsible("ZOOM IN")
+        self._collap["zoom"].addWidget(self._slider["zoom"])
+
+    def _init_widgets(self):
+        self._collap = Dict()
+        self._radio_btn = Dict()
+        self._radio_group = Dict()
+        self._text_label = Dict()
+        self._slider = Dict()
+
+        self._init_widgets_img_qlabels()
+        self._init_widgets_combox()
+        self._init_widgets_display_mode()
+        self._init_widgets_luminance()
+        self._init_widgets_zoom()
+        self._init_widgets_set_fonts()
+
+        # add collapsible bars into sidebar
+        v_layout = QVBoxLayout()
+        v_layout.setSpacing(1)
+        for i in self._collap.keys():
+            v_layout.addWidget(self._collap[i])
+        self._side_bar = QWidget(self._central_widget)
+        self._side_bar.setLayout(v_layout)
+
+    def _refresh_side_bar(self):
         left = 0
         top = 0
         width = self.__side_bar_width - left * 2
@@ -655,72 +848,72 @@ class UiReplay(QMainWindow):
         self._side_bar.setGeometry(rect)
         return
 
-        text_height = 25
-        bar_height = 25
-        slider_height = 20
-        arrow_btn_width = 30
+        # text_height = 25
+        # bar_height = 25
+        # slider_height = 20
+        # arrow_btn_width = 30
 
-        if platform.system().lower() == "linux":
-            gap = 30
-        else:  # windows
-            gap = 40
+        # if platform.system().lower() == "linux":
+        #     gap = 30
+        # else:  # windows
+        #     gap = 40
 
-        radio_btn_height = 25
-        radio_btn_width = Dict()
-        radio_btn_width[Modal.CT] = radio_btn_width[Modal.PT] = 45
-        radio_btn_width[Modal.MR1] = radio_btn_width[Modal.MR2] = 60
-        radio_btn_width[Plane.TRANSVERSE] = 90
-        radio_btn_width[Plane.CORONAL] = 70
-        radio_btn_width[Plane.SAGITTAL] = 70
-        radio_btn_gap = Dict()
-        radio_btn_gap["luminance"] = 10
-        radio_btn_gap["planes"] = 6
+        # radio_btn_height = 25
+        # radio_btn_width = Dict()
+        # radio_btn_width[Modal.CT] = radio_btn_width[Modal.PT] = 45
+        # radio_btn_width[Modal.MR1] = radio_btn_width[Modal.MR2] = 60
+        # radio_btn_width[Plane.TRANSVERSE] = 90
+        # radio_btn_width[Plane.CORONAL] = 70
+        # radio_btn_width[Plane.SAGITTAL] = 70
+        # radio_btn_gap = Dict()
+        # radio_btn_gap["luminance"] = 10
+        # radio_btn_gap["planes"] = 6
 
-        # side bar location
-        side_bar_x = self.geometry().width() - self.__side_bar_width
-        width = self.__side_bar_width - left * 2
-        left += side_bar_x
+        # # side bar location
+        # side_bar_x = self.geometry().width() - self.__side_bar_width
+        # width = self.__side_bar_width - left * 2
+        # left += side_bar_x
 
-        # set position of text label / comboxes / btns
-        for i in widgets_to_display:
-            # text label
-            top += gap
-            rect = QRect(left, top, width, text_height)
-            self._text_label[i].setGeometry(rect)
-            top += text_height
+        # # set position of text label / comboxes / btns
+        # for i in widgets_to_display:
+        #     # text label
+        #     top += gap
+        #     rect = QRect(left, top, width, text_height)
+        #     self._text_label[i].setGeometry(rect)
+        #     top += text_height
 
-            # btn prev
-            tmp_left = left
-            rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
-            self._arrow_btn["prev.{}".format(i)].setGeometry(rect)
+        #     # btn prev
+        #     tmp_left = left
+        #     rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
+        #     self._arrow_btn["prev.{}".format(i)].setGeometry(rect)
 
-            # combobox
-            tmp_left += arrow_btn_width
-            rect = QRect(tmp_left + 1, top, width - arrow_btn_width * 2 - 2, bar_height)
-            self._combox[i].setGeometry(rect)
+        #     # combobox
+        #     tmp_left += arrow_btn_width
+        #     rect = QRect(tmp_left + 1, top, width - arrow_btn_width * 2 - 2, bar_height)
+        #     self._combox[i].setGeometry(rect)
 
-            # btn next
-            tmp_left += width - arrow_btn_width * 2
-            rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
-            self._arrow_btn["next.{}".format(i)].setGeometry(rect)
+        #     # btn next
+        #     tmp_left += width - arrow_btn_width * 2
+        #     rect = QRect(tmp_left, top, arrow_btn_width, bar_height)
+        #     self._arrow_btn["next.{}".format(i)].setGeometry(rect)
 
-            # next element
-            top += bar_height
+        #     # next element
+        #     top += bar_height
 
-        # return the followings for UiIDL
-        return (
-            left,
-            top,
-            width,
-            gap,
-            text_height,
-            bar_height,
-            slider_height,
-            radio_btn_height,
-        )
+        # # return the followings for UiIDL
+        # return (
+        #     left,
+        #     top,
+        #     width,
+        #     gap,
+        #     text_height,
+        #     bar_height,
+        #     slider_height,
+        #     radio_btn_height,
+        # )
 
     # new_plane = None will read from radio buttons
-    def _set_img_plane(
+    def _switch_multi_modal_plane(
         self, connected_radio_btn: QRadioButton = None, new_plane: str = None
     ):
         if new_plane is None:
@@ -799,20 +992,20 @@ class UiReplay(QMainWindow):
 
     def __set_bright_contrast_modality(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            if self._radio_btn[i].isChecked():
+            if self._radio_btn["luminance.{}".format(i)].isChecked():
                 self._slider["bright.{}".format(i)].show()
                 self._slider["contrast.{}".format(i)].show()
             else:
                 self._slider["bright.{}".format(i)].hide()
                 self._slider["contrast.{}".format(i)].hide()
 
-        if self._radio_btn[Modal.CT].isChecked():
+        if self._radio_btn["luminance.{}".format(Modal.CT)].isChecked():
             key_word = "CT"
-        elif self._radio_btn[Modal.PT].isChecked():
+        elif self._radio_btn["luminance.{}".format(Modal.PT)].isChecked():
             key_word = "PT"
-        elif self._radio_btn[Modal.MR1].isChecked():
+        elif self._radio_btn["luminance.{}".format(Modal.MR1)].isChecked():
             key_word = "MR-T1"
-        elif self._radio_btn[Modal.MR2].isChecked():
+        elif self._radio_btn["luminance.{}".format(Modal.MR2)].isChecked():
             key_word = "MR-T2"
         else:
             Debug.error_exit("no radio button is checked")
@@ -1733,34 +1926,49 @@ class UiReplay(QMainWindow):
 
     def __resize_img_qlabels(self):
         gap = 1
-        size = Dict()
-        size["x"] = self.geometry().width() - self.__side_bar_width
-        size["y"] = self.geometry().height()
-        for i in ["x", "y"]:
-            double_size = size[i] - gap * 3
-            size.pop(i)
-            size[i][0] = double_size // 2
-            size[i][1] = double_size // 2
-            if double_size % 2 != 0:
-                size[i][0] += 1
-
+        # pos: w0 w1 h0 h1
         pos = Dict()
+        pos["w"] = self.geometry().width() - self.__side_bar_width
+        pos["h"] = self.geometry().height()
+        for i in ["w", "h"]:
+            double_size = pos[i] - gap * 3
+            pos.pop(i)
+            pos[i][0] = double_size // 2
+            pos[i][1] = double_size // 2
+            if double_size % 2 != 0:
+                pos[i][0] += 1
+
+        # pos: x0 x1 y0 y1
         for i in ["x", "y"]:
             pos[i][0] = gap
-            pos[i][1] = size[i][0] + gap * 2
+            if i == "x":
+                j = "w"
+            else:
+                j = "h"
+            pos[i][1] = pos[j][0] + gap * 2
 
+        # ct
         self.img_qlabel[Modal.CT].setGeometry(
-            QRect(pos["x"][0], pos["y"][0], size["x"][0], size["y"][0])
+            QRect(pos["x"][0], pos["y"][0], pos["w"][0], pos["h"][0])
         )
-        self.img_qlabel[Modal.PT].setGeometry(
-            QRect(pos["x"][1], pos["y"][0], size["x"][1], size["y"][0])
+        # transverse
+        self.img_qlabel[Plane.TRANSVERSE].setGeometry(
+            QRect(pos["x"][0], pos["y"][0], pos["w"][0], pos["h"][0] + 1 + pos["h"][1])
         )
+        # pt / coronal
+        for i in [Modal.PT, Plane.CORONAL]:
+            self.img_qlabel[i].setGeometry(
+                QRect(pos["x"][1], pos["y"][0], pos["w"][1], pos["h"][0])
+            )
+        # mr1
         self.img_qlabel[Modal.MR1].setGeometry(
-            QRect(pos["x"][0], pos["y"][1], size["x"][0], size["y"][1])
+            QRect(pos["x"][0], pos["y"][1], pos["w"][0], pos["h"][1])
         )
-        self.img_qlabel[Modal.MR2].setGeometry(
-            QRect(pos["x"][1], pos["y"][1], size["x"][1], size["y"][1])
-        )
+        # mr2 sagittal
+        for i in [Modal.MR2, Plane.SAGITTAL]:
+            self.img_qlabel[i].setGeometry(
+                QRect(pos["x"][1], pos["y"][1], pos["w"][1], pos["h"][1])
+            )
 
     def _open_file_dlg(self):
         Tk().withdraw()

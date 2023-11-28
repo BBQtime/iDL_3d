@@ -126,10 +126,6 @@ class List(list):
 class Value:
     EPS = sys.float_info.epsilon
 
-    def capitalized(input_str: str) -> str:
-        output_str = input_str[0].upper() + input_str[1:]
-        return output_str
-
     def replace_char(input_str: str, idx: int, new_char: str) -> str:
         return input_str[:idx] + new_char + input_str[idx + 1 :]
 
