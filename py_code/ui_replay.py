@@ -1,5 +1,4 @@
 import os
-import platform
 from pathlib import Path
 from tkinter import Tk, filedialog
 
@@ -8,21 +7,12 @@ import numpy as np
 from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Metric, Modal, Nii, Orient, Plane, Value
-from matplotlib.pyplot import vlines
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QRect, Qt
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PyQt5.QtWidgets import (
-    QApplication,
-    QButtonGroup,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QRadioButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import (QApplication, QButtonGroup, QHBoxLayout, QLabel,
+                             QMainWindow, QRadioButton, QSlider, QVBoxLayout,
+                             QWidget)
 from scipy.ndimage import measurements
 from superqt import QCollapsible
 from toggle_btn import ToggleButton
@@ -37,14 +27,11 @@ class UiReplay(QMainWindow):
     ):
         super().__init__()
         self.setupUi(self)
-        self._init_widgets()
         self._init_data(idl_remark=idl_remark, debug_mode=debug_mode)
-        # setMinimumSize after _init_data()
-        self.setMinimumSize(self.__side_bar_width + 600, 600)
+        self._init_widgets()  # after _init_data()
+        self.setMinimumSize(self.__side_bar_width + 600, 600)  # after _init_data()
         # self.__init_zoomin()
         self._init_color()
-        self._clear_img_data()
-        self._refresh_title()  # after _init_data()
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
         self._load_baseline_data()  # load first baseline result
@@ -65,8 +52,9 @@ class UiReplay(QMainWindow):
 
         self._baseline_id = None
         self._cur_patient = None
-        self._cur_slice_id = 0  # starts from 0
-        self._plane = None
+        self.cur_slice_id = Dict()
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.cur_slice_id[i] = 0  # starts from 0
         self._gtvs_center = None
 
         self._idl_id = Dict()
@@ -79,27 +67,26 @@ class UiReplay(QMainWindow):
         self._dataset_part = None
         self._nii_spacing = None  # (1,1,1) or (1,1,3)
         self._dataset_dir = None  # au.1mm / au.1mm / mda
+
         self.__scores = Dict()
-        self._3d_imgs = Dict()
+        self.__clear_scores()
+        self.img_3d = Dict()
+        self._clear_img_3d()
+
         self._rgb_img_roi = None
         self.__side_bar_width = 310
 
         self.__clear_gtvt_selected_slices_3d()
 
-        self.__gtvt_selected_slices_2d = Dict()
-        self.__gtvt_selected_slices_2d[Orient.HORIZONTAL] = List()
-        self.__gtvt_selected_slices_2d[Orient.VERTICAL] = List()
+        # self.__gtvt_selected_slices_2d = Dict()
+        # self.__gtvt_selected_slices_2d[Orient.HORIZONTAL] = List()
+        # self.__gtvt_selected_slices_2d[Orient.VERTICAL] = List()
 
-        self.__total_slices_count_2d = Dict()
-        self.__total_slices_count_2d[Orient.HORIZONTAL] = 0
-        self.__total_slices_count_2d[Orient.VERTICAL] = 0
+        # self.__total_slices_count_2d = Dict()
+        # self.__total_slices_count_2d[Orient.HORIZONTAL] = 0
+        # self.__total_slices_count_2d[Orient.VERTICAL] = 0
 
-    def _clear_img_data(self):
-        for i in ["gtvt", "gtvn"]:
-            self.__scores[i][Metric.DSC] = None
-            self.__scores[i][Metric.MSD] = None
-            self.__scores[i][Metric.HD95] = None
-
+    def _clear_img_3d(self):
         for i in [
             Modal.CT,
             Modal.PT,
@@ -117,12 +104,13 @@ class UiReplay(QMainWindow):
             "gtvt.pred.final",
             "gtvn.pred.final",
         ]:
-            self._3d_imgs[i] = None
+            self.img_3d[i] = None
 
-        # set image plane
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if self._radio_btn[i].isChecked():
-                self._plane = i
+    def __clear_scores(self):
+        for i in ["gtvt", "gtvn"]:
+            self.__scores[i][Metric.DSC] = None
+            self.__scores[i][Metric.MSD] = None
+            self.__scores[i][Metric.HD95] = None
 
     # def __init_zoomin(self):
     #     self.__zoomin = Dict()
@@ -154,7 +142,7 @@ class UiReplay(QMainWindow):
     #             # already zoomed in, clear zoomin (only click in img frame area)
     #             if self.__zoomin["start"] is not None:
     #                 self._reset_zoomin()
-    #                 self._refresh_rgb_imgs()
+    #                 self.refresh_img_qlabels()
     #                 return
     #             # zoom in
     #             else:
@@ -207,7 +195,7 @@ class UiReplay(QMainWindow):
     #     # self.__zoomin["rubber.band"] = None
 
     #     # no data loaded
-    #     if self._3d_imgs[Modal.CT] is None:
+    #     if self.img_3d[Modal.CT] is None:
     #         self._reset_zoomin()
     #         return
 
@@ -272,20 +260,20 @@ class UiReplay(QMainWindow):
 
     #     # get actual zoom position
     #     if self._plane == Plane.SAGITTAL:
-    #         origin_width = self._3d_imgs[Modal.CT].shape[1]
-    #         origin_height = self._3d_imgs[Modal.CT].shape[0]
+    #         origin_width = self.img_3d[Modal.CT].shape[1]
+    #         origin_height = self.img_3d[Modal.CT].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
     #         )
     #     elif self._plane == Plane.CORONAL:
-    #         origin_width = self._3d_imgs[Modal.CT].shape[2]
-    #         origin_height = self._3d_imgs[Modal.CT].shape[0]
+    #         origin_width = self.img_3d[Modal.CT].shape[2]
+    #         origin_height = self.img_3d[Modal.CT].shape[0]
     #         origin_height = round(
     #             origin_height * self._nii_spacing[2] / self._nii_spacing[0]
     #         )
     #     else:
-    #         origin_width = self._3d_imgs[Modal.CT].shape[2]
-    #         origin_height = self._3d_imgs[Modal.CT].shape[1]
+    #         origin_width = self.img_3d[Modal.CT].shape[2]
+    #         origin_height = self.img_3d[Modal.CT].shape[1]
 
     #     start_x = round(start_x * origin_width / rgb_img_roi["width"])
     #     end_x = round(end_x * origin_width / rgb_img_roi["width"])
@@ -294,13 +282,13 @@ class UiReplay(QMainWindow):
 
     #     self.__zoomin["start"] = QPoint(start_x, start_y)
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
-    #     self._refresh_rgb_imgs()
+    #     self.refresh_img_qlabels()
 
     def _fit_img_qlabel(self, img, img_qlabel: QLabel):
         err_msg = "MainWindow._fit_img_qlabel(), img.shape should == 2 or 3"
 
-        # image spacing resize
-        if self._plane == Plane.SAGITTAL:
+        # spacing upscalling
+        if self._nii_spacing[2] != 1.0 and img_qlabel.plane == Plane.SAGITTAL:
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
             )
@@ -310,10 +298,9 @@ class UiReplay(QMainWindow):
                     img.shape[1],
                     spacing_height,
                 ),
-                # interpolation=cv2.INTER_LANCZOS4,
-                interpolation=cv2.INTER_LINEAR,  # upscalling
+                interpolation=cv2.INTER_CUBIC,
             )
-        elif self._plane == Plane.CORONAL:
+        elif self._nii_spacing[2] != 1.0 and img_qlabel.plane == Plane.CORONAL:
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
             )
@@ -323,7 +310,7 @@ class UiReplay(QMainWindow):
                     img.shape[1],
                     spacing_height,
                 ),
-                interpolation=cv2.INTER_AREA,
+                interpolation=cv2.INTER_CUBIC,
             )
 
         # # zoom in
@@ -432,6 +419,7 @@ class UiReplay(QMainWindow):
         self.img_qlabel = Dict()
         pal = QPalette()
         pal.setColor(QPalette.Window, Qt.black)
+
         for i in [
             Modal.CT,
             Modal.PT,
@@ -446,6 +434,16 @@ class UiReplay(QMainWindow):
             # black background
             self.img_qlabel[i].setAutoFillBackground(True)
             self.img_qlabel[i].setPalette(pal)
+
+        # fixed plane
+        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.img_qlabel[i].plane = i
+
+        # fixed modal
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            self.img_qlabel[i].modal = i
+
+        self.img_qlabel[Plane.TRANSVERSE].modal = "mix"
 
     def _init_widgets_combox(self):
         self._combox = Dict()
@@ -594,17 +592,25 @@ class UiReplay(QMainWindow):
         for i in ["bright", "contrast"]:
             for j in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self._slider["{}.{}".format(i, j)].valueChanged.connect(
-                    self._refresh_rgb_imgs
+                    self.refresh_img_qlabels
                 )
         self.__btn_group_luminance.buttonClicked.connect(
             self.__set_bright_contrast_modality
         )
 
     def __switch_coronal_modal(self):
-        print("__switch_coronal_modal")
+        for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
+            if self._radio_btn["{}.{}".format(Plane.CORONAL, modal)].isChecked():
+                self.img_qlabel[Plane.CORONAL].modal = modal
+                break
+        self.refresh_img_qlabels(img_name=Plane.CORONAL)
 
     def __switch_sagittal_modal(self):
-        print("__switch_sagittal_modal")
+        for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
+            if self._radio_btn["{}.{}".format(Plane.SAGITTAL, modal)].isChecked():
+                self.img_qlabel[Plane.SAGITTAL].modal = modal
+                break
+        self.refresh_img_qlabels(img_name=Plane.SAGITTAL)
 
     def switch_display_mode(self):
         plane_fixed_mode = self._toggle_btn.isChecked()
@@ -650,6 +656,8 @@ class UiReplay(QMainWindow):
             self._slider["mix"].show()
         else:
             self._slider["mix"].hide()
+
+        self.refresh_img_qlabels()
 
     def _init_widgets_display_mode(self):
         # toggle display mode
@@ -713,6 +721,20 @@ class UiReplay(QMainWindow):
             "{}.{}".format(Plane.SAGITTAL, Modal.MR2),
         ]:
             self._radio_btn[i].setText("MR-T2")
+
+        # reset image plane
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            if self._radio_btn[plane].isChecked():
+                for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                    self.img_qlabel[modal].plane = plane
+                break
+
+        # reset img modality
+        for plane in [Plane.CORONAL, Plane.SAGITTAL]:
+            for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
+                if self._radio_btn["{}.{}".format(plane, modal)].isChecked():
+                    self.img_qlabel[plane].modal = modal
+                    continue
 
         # text label for plane fixed mode
         for i in [Modal.CT, Modal.PT]:
@@ -917,78 +939,76 @@ class UiReplay(QMainWindow):
         self, connected_radio_btn: QRadioButton = None, new_plane: str = None
     ):
         if new_plane is None:
-            for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                if self._radio_btn[i].isChecked():
-                    self._plane = i
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if self._radio_btn[plane].isChecked():
+                    for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                        self.img_qlabel[modal].plane = plane
                     break
+
         else:
-            self._plane = new_plane
-            for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                if i == new_plane:
-                    self._radio_btn[i].setChecked(True)
+            for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                self.img_qlabel[modal].plane = new_plane
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if plane == new_plane:
+                    self._radio_btn[plane].setChecked(True)
                 else:
-                    self._radio_btn[i].setChecked(False)
+                    self._radio_btn[plane].setChecked(False)
 
-        self.__refresh_gtvt_selected_slices_2d()
-        self._reset_cur_slice_id()
+        # self.__refresh_gtvt_selected_slices_2d()
         # self._reset_zoomin()
-        self._refresh_rgb_imgs()
-        self._refresh_title()
+        self.refresh_img_qlabels()
 
-    def __refresh_gtvt_selected_slices_2d(self):
-        if self._3d_imgs[Modal.CT] is None:
-            return
+    # def __refresh_gtvt_selected_slices_2d(self):
+    #     if self.img_3d[Modal.CT] is None:
+    #         return
 
-        if self._plane == Plane.TRANSVERSE:
-            self.__gtvt_selected_slices_2d[
-                Orient.HORIZONTAL
-            ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
-            self.__gtvt_selected_slices_2d[
-                Orient.VERTICAL
-            ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[1]
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[2]
+    #     if self._plane == Plane.TRANSVERSE:
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.HORIZONTAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.VERTICAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
+    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
+    #             Modal.CT
+    #         ].shape[1]
+    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
+    #             2
+    #         ]
 
-        elif self._plane == Plane.CORONAL:
-            self.__gtvt_selected_slices_2d[
-                Orient.HORIZONTAL
-            ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[0]
-            self.__gtvt_selected_slices_2d[
-                Orient.VERTICAL
-            ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[2]
+    #     elif self._plane == Plane.CORONAL:
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.HORIZONTAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
+    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
+    #             Modal.CT
+    #         ].shape[0]
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.VERTICAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
+    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
+    #             2
+    #         ]
 
-        elif self._plane == Plane.SAGITTAL:
-            self.__gtvt_selected_slices_2d[
-                Orient.HORIZONTAL
-            ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
-            self.__total_slices_count_2d[Orient.HORIZONTAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[0]
-            self.__gtvt_selected_slices_2d[
-                Orient.VERTICAL
-            ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
-            self.__total_slices_count_2d[Orient.VERTICAL] = self._3d_imgs[
-                Modal.CT
-            ].shape[1]
+    #     elif self._plane == Plane.SAGITTAL:
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.HORIZONTAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
+    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
+    #             Modal.CT
+    #         ].shape[0]
+    #         self.__gtvt_selected_slices_2d[
+    #             Orient.VERTICAL
+    #         ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
+    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
+    #             1
+    #         ]
 
     def _reset_cur_slice_id(self):
         if self._gtvs_center is not None:
-            if self._plane == Plane.TRANSVERSE:
-                self._cur_slice_id = self._gtvs_center[0]
-            if self._plane == Plane.CORONAL:
-                self._cur_slice_id = self._gtvs_center[1]
-            if self._plane == Plane.SAGITTAL:
-                self._cur_slice_id = self._gtvs_center[2]
+            self.cur_slice_id[Plane.TRANSVERSE] = self._gtvs_center[0]
+            self.cur_slice_id[Plane.CORONAL] = self._gtvs_center[1]
+            self.cur_slice_id[Plane.SAGITTAL] = self._gtvs_center[2]
 
     def __set_bright_contrast_modality(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
@@ -1089,7 +1109,8 @@ class UiReplay(QMainWindow):
 
     def _load_baseline_data(self):
         # self._reset_zoomin()
-        self._clear_img_data()
+        self.__clear_scores()
+        self._clear_img_3d()
         self._clear_img_qlabels()
 
         # run this after current text of baseline combox is confirmed
@@ -1148,19 +1169,7 @@ class UiReplay(QMainWindow):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             paths[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, paths[i])
             paths[i] = os.path.join(self._dataset_dir, paths[i])
-            self._3d_imgs[i] = self._load_3d_img(paths[i])
-
-    def _get_middle_slice_id(self):
-        if self._3d_imgs[Modal.CT] is None:
-            Debug.error_exit("get middle slice id after multi-modal imgs are loaded")
-        slices_count = self.__get_slices_count()
-        if slices_count > 0:
-            # show the middle slice of whole 3D img,
-            slice_id = round(slices_count / 2) - 1
-            slice_id = Value.limit_range(slice_id, (0, slices_count - 1))
-            return slice_id
-        else:
-            return None
+            self.img_3d[i] = self._load_3d_img(paths[i])
 
     def _load_patient_data(self, idx: int = None, reset_patient: bool = True):
         # triggered by:
@@ -1229,7 +1238,6 @@ class UiReplay(QMainWindow):
         self.__load_labels()
 
         # reset slice id (after multi-modal imgs are loaded)
-        # self._cur_slice_id = self._get_middle_slice_id()
         self._reset_cur_slice_id()
 
         # choose idl automatically
@@ -1247,8 +1255,7 @@ class UiReplay(QMainWindow):
             # refresh imgs after idl.gtvn is chosen
             self._load_idl_gtv_data(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
-        self._refresh_rgb_imgs()
-        self._refresh_title()
+        self.refresh_img_qlabels()
 
     # load labels and gtvs gravity center
     def __load_labels(self):
@@ -1259,7 +1266,7 @@ class UiReplay(QMainWindow):
         )
         # load gtvt and gtvn
         for gtv in ["gtvt", "gtvn"]:
-            self._3d_imgs["{}.label".format(gtv)] = labels[gtv]
+            self.img_3d["{}.label".format(gtv)] = labels[gtv]
         # load gtvs gravity center: (d,h,w)
         self._gtvs_center = list(measurements.center_of_mass(labels["gtvs"]))
         # float to int
@@ -1328,13 +1335,13 @@ class UiReplay(QMainWindow):
             # clear idl.gtvt data
             if gtv == "gtvt":
                 for i in ["click", "annotation", "correction"]:
-                    self._3d_imgs["gtvt.{}".format(i)] = None
+                    self.img_3d["gtvt.{}".format(i)] = None
                 self.__clear_gtvt_selected_slices_3d()
-                self.__refresh_gtvt_selected_slices_2d()
+                # self.__refresh_gtvt_selected_slices_2d()
             # clear idl.gtvn data
             elif gtv == "gtvn":
                 for i in ["clicks", "correction"]:
-                    self._3d_imgs["gtvn.{}".format(i)] = None
+                    self.img_3d["gtvn.{}".format(i)] = None
 
         # idl.gtvt/gtvn
         else:
@@ -1357,11 +1364,11 @@ class UiReplay(QMainWindow):
                 for i in ["click", "annotation", "correction"]:
                     nii_path = os.path.join(cur_round_dir, "gtvt_{}.nii.gz".format(i))
                     if os.path.exists(nii_path):
-                        self._3d_imgs["gtvt.{}".format(i)] = self._load_3d_img(
+                        self.img_3d["gtvt.{}".format(i)] = self._load_3d_img(
                             nii_path, binary=True
                         )
                     else:
-                        self._3d_imgs["gtvt.{}".format(i)] = None
+                        self.img_3d["gtvt.{}".format(i)] = None
                 # load gtvt selected slices (3d)
                 selected_slices_json_path = os.path.join(
                     cur_patient_dir,
@@ -1391,7 +1398,7 @@ class UiReplay(QMainWindow):
 
                 # refresh gtvt selected slices (2d)
                 # after gtvt selected slices (3d) is loaded
-                self.__refresh_gtvt_selected_slices_2d()
+                # self.__refresh_gtvt_selected_slices_2d()
 
             # load gtvn data
             elif gtv == "gtvn":
@@ -1399,14 +1406,14 @@ class UiReplay(QMainWindow):
                 for i in ["clicks", "correction"]:
                     nii_path = os.path.join(cur_round_dir, "gtvn_{}.nii.gz".format(i))
                     if os.path.exists(nii_path):
-                        self._3d_imgs["gtvn.{}".format(i)] = self._load_3d_img(
+                        self.img_3d["gtvn.{}".format(i)] = self._load_3d_img(
                             nii_path, binary=True
                         )
                     else:
-                        self._3d_imgs["gtvn.{}".format(i)] = None
+                        self.img_3d["gtvn.{}".format(i)] = None
 
         # load preds
-        self._3d_imgs["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
+        self.img_3d["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
 
         # load baseline scores
         if self._idl_id[gtv] == "baseline":
@@ -1439,8 +1446,7 @@ class UiReplay(QMainWindow):
                     ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
-            self._refresh_rgb_imgs()
-            self._refresh_title()
+            self.refresh_img_qlabels()
 
     def _load_prev_baseline_data(self):
         idx = self._combox["baseline"].currentIndex() - 1
@@ -1508,31 +1514,54 @@ class UiReplay(QMainWindow):
 
     # replay_mode=True will show all contours
     # otherwise correction and annotation will cover pred
-    def _refresh_rgb_imgs(self, replay_mode: bool = True):
-        if self._3d_imgs[Modal.CT] is None:
+    def refresh_img_qlabels(self, replay_mode: bool = True, img_name=None):
+        if self.img_3d[Modal.CT] is None:
             return
 
+        if img_name is not None:
+            img_name_list = [img_name]
+        else:
+            if self._toggle_btn.isChecked():
+                img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            else:
+                img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+
         # load rgb imgs
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            if self._plane == Plane.SAGITTAL:
-                rgb_img = self._3d_imgs[i][:, :, self._cur_slice_id]
-            elif self._plane == Plane.CORONAL:
-                rgb_img = self._3d_imgs[i][:, self._cur_slice_id, :]
-            elif self._plane == Plane.TRANSVERSE:
-                rgb_img = self._3d_imgs[i][self._cur_slice_id, :, :]
+        for img_name in img_name_list:
+            # plane fixed mode
+            if self._toggle_btn.isChecked():
+                cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
+                modal = self.img_qlabel[img_name].modal
+                if img_name == Plane.TRANSVERSE:
+                    rgb_img = self.img_3d[Modal.CT][cur_slice_id, :, :]
+                elif img_name == Plane.CORONAL:
+                    rgb_img = self.img_3d[modal][:, cur_slice_id, :]
+                elif img_name == Plane.SAGITTAL:
+                    rgb_img = self.img_3d[modal][:, :, cur_slice_id]
+
+            # modality fixed mode
+            else:
+                cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
+                if self.img_qlabel[img_name].plane == Plane.TRANSVERSE:
+                    rgb_img = self.img_3d[img_name][cur_slice_id, :, :]
+                elif self.img_qlabel[img_name].plane == Plane.CORONAL:
+                    rgb_img = self.img_3d[img_name][:, cur_slice_id, :]
+                elif self.img_qlabel[img_name].plane == Plane.SAGITTAL:
+                    rgb_img = self.img_3d[img_name][:, :, cur_slice_id]
 
             rgb_img = np.uint8((rgb_img - rgb_img.min()) / rgb_img.ptp() * 255.0)
             # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
             rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_GRAY2RGB)
 
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
-            rgb_img = cv2.addWeighted(
-                src1=rgb_img,
-                alpha=self._slider["contrast.{}".format(i)].value() / 100,
-                src2=np.zeros_like(rgb_img),
-                beta=0,
-                gamma=self._slider["bright.{}".format(i)].value(),
-            )
+            if not self._toggle_btn.isChecked():
+                rgb_img = cv2.addWeighted(
+                    src1=rgb_img,
+                    alpha=self._slider["contrast.{}".format(img_name)].value() / 100,
+                    src2=np.zeros_like(rgb_img),
+                    beta=0,
+                    gamma=self._slider["bright.{}".format(img_name)].value(),
+                )
 
             # # add mask to gtvt selected slices
             # rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
@@ -1594,16 +1623,16 @@ class UiReplay(QMainWindow):
             #     )
 
             # resize and fit img qlabel
-            rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[i])
-            if i == Modal.CT:
+            rgb_img, _ = self._fit_img_qlabel(rgb_img, self.img_qlabel[img_name])
+            if img_name == Modal.CT:
                 self._rgb_img_roi = _
 
             # blur after _fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
-            # replay mode, put important segment at the end
+            # replay mode, place the name of img on the top layer at the end of the list
             if replay_mode:
-                contour_list = [
+                seg_name_list = [
                     "gtvn.label",
                     "gtvt.label",
                     "gtvn.pred",
@@ -1616,7 +1645,7 @@ class UiReplay(QMainWindow):
                 ]
             # idl mode, correction > annotation > pred
             else:
-                contour_list = [
+                seg_name_list = [
                     "gtvn.pred.final",
                     "gtvt.pred.final",
                     "gtvn.clicks",
@@ -1624,27 +1653,32 @@ class UiReplay(QMainWindow):
                 ]
 
             # draw label and pred contour
-            # dont use "i" in for loop here
-            for c in contour_list:
-                if self._3d_imgs[c] is None:
+            for seg_name in seg_name_list:
+                if self.img_3d[seg_name] is None:
                     continue
 
                 # load data of current slice
-                if self._plane == Plane.SAGITTAL:
-                    segment = self._3d_imgs[c][:, :, self._cur_slice_id].astype(
-                        np.uint8
-                    )
-                elif self._plane == Plane.CORONAL:
-                    segment = self._3d_imgs[c][:, self._cur_slice_id, :].astype(
-                        np.uint8
-                    )
-                elif self._plane == Plane.TRANSVERSE:
-                    segment = self._3d_imgs[c][self._cur_slice_id, :, :].astype(
-                        np.uint8
-                    )
+                if self.img_qlabel[img_name].plane == Plane.SAGITTAL:
+                    segment = self.img_3d[seg_name][
+                        :, :, self.cur_slice_id[Plane.SAGITTAL]
+                    ]
+                elif self.img_qlabel[img_name].plane == Plane.CORONAL:
+                    segment = self.img_3d[seg_name][
+                        :, self.cur_slice_id[Plane.CORONAL], :
+                    ]
+                elif self.img_qlabel[img_name].plane == Plane.TRANSVERSE:
+                    segment = self.img_3d[seg_name][
+                        self.cur_slice_id[Plane.TRANSVERSE], :, :
+                    ]
+
+                segment = segment.astype(np.uint8)
 
                 # skip if current contour img is empty
-                if c in ["gtvn.correction", "gtvt.correction", "gtvt.annotation"]:
+                if seg_name in [
+                    "gtvn.correction",
+                    "gtvt.correction",
+                    "gtvt.annotation",
+                ]:
                     # perfomr erosion to remove overlap of 3 different planes
                     kernel = np.ones((3, 3), np.uint8)
                     eroded_segment = cv2.erode(segment, kernel, iterations=1)
@@ -1654,10 +1688,10 @@ class UiReplay(QMainWindow):
                     if segment.max() <= 0:
                         continue
 
-                segment, _ = self._fit_img_qlabel(segment, self.img_qlabel[i])
+                segment, _ = self._fit_img_qlabel(segment, self.img_qlabel[img_name])
 
                 # points, higher thickness (otherwise cant see the points)
-                if c == "gtvt.click" or c == "gtvn.clicks":
+                if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
                     thickness = 7
                 # contours, lower thickness
                 else:
@@ -1674,7 +1708,7 @@ class UiReplay(QMainWindow):
                     image=rgb_img,
                     contours=contours,
                     contourIdx=-1,
-                    color=self._color[c],
+                    color=self._color[seg_name],
                     thickness=thickness,
                 )
 
@@ -1691,17 +1725,17 @@ class UiReplay(QMainWindow):
                 QImage.Format_RGB888,
             )
 
-            # top left
-            if i == Modal.CT:
+            # top left text
+            if img_name == Plane.TRANSVERSE or img_name == Modal.CT:
                 self._add_score_on_qimg(qimg)
                 self._add_msg_on_qimg(qimg)
 
-            # bottom left
-            if i == Modal.MR1:
+            # bottom left text
+            if img_name == Plane.TRANSVERSE or img_name == Modal.MR1:
                 self._add_contour_description_on_qimg(qimg)
 
-            self.img_qlabel[i].set_background(qimg)
-            self.img_qlabel[i].update()
+            self.img_qlabel[img_name].set_background(qimg)
+            self.img_qlabel[img_name].update()
 
     def _add_contour_description_on_qimg(self, qimg: QImage):
         pos_x = [10, 65, 110]
@@ -1812,38 +1846,6 @@ class UiReplay(QMainWindow):
     def get_cur_patient_idl_step(self):
         return None
 
-    # def __is_cur_slice_annotated(self) -> bool:
-    #     if self._3d_imgs[Modal.CT] is None:
-    #         return False
-
-    #     if self._cur_slice_id in self.__gtvt_selected_slices_3d[self._plane]:
-    #         return True
-    #     else:
-    #         return False
-
-    # def _qimg_draw_text(
-    #     self,
-    #     img,
-    #     text: str,
-    #     pos: Tuple[int, int],
-    #     color: Tuple[int, int, int],
-    #     line_gap: int = 20,
-    # ):
-    #     for i, line in enumerate(text.split("\n")):
-    #         y = pos[1] + i * line_gap
-    #         y += 15
-    #         cv2.putText(
-    #             img=img,
-    #             text=line,
-    #             org=(pos[0], y),
-    #             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-    #             # fontFace=cv2.FONT_HERSHEY_PLAIN,
-    #             fontScale=1.0,
-    #             color=color,
-    #             thickness=1,
-    #             lineType=cv2.LINE_AA,
-    #         )
-
     def _qimg_draw_text(
         self,
         qimg,
@@ -1875,54 +1877,11 @@ class UiReplay(QMainWindow):
             painter.setPen(QColor(r, g, b, alpha))
             painter.drawText(x, y, line)
 
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-        if self._cur_slice_id is not None:
-            slices_count = self.__get_slices_count()
-            if slices_count == 0:
-                return
-            slice_delta = event.angleDelta().y() // 120
-            if self._plane == Plane.CORONAL:
-                slice_delta = -slice_delta
-            self._cur_slice_id -= slice_delta
-            # limite slice_id in range(0,slices_count)
-            self._cur_slice_id %= slices_count
-            self._refresh_rgb_imgs()
-            self._refresh_title()
-
-    def __get_slices_count(self) -> int:
-        if (self._3d_imgs[Modal.CT] is None) or (self._plane is None):
-            return 0
-        elif self._plane == Plane.SAGITTAL:
-            return self._3d_imgs[Modal.CT].shape[2]
-        elif self._plane == Plane.CORONAL:
-            return self._3d_imgs[Modal.CT].shape[1]
-        elif self._plane == Plane.TRANSVERSE:
-            return self._3d_imgs[Modal.CT].shape[0]
-        else:
-            Debug.error_exit("self._plane value error")
-
-    def _refresh_title(self):
-        if self._3d_imgs[Modal.CT] is None:
-            return
-
-        win_tital = "iDL.Tool "
-        # if self._idl_round["gtvt"] is not None:
-        #     win_tital += "   Num.of.Annotated.Slices="
-        #     win_tital += str(len(self.__gtvt_selected_slices_3d[self._plane]))
-        if self._cur_slice_id is not None:
-            slices_count = self.__get_slices_count()
-            if slices_count > 0:
-                win_tital += "   Slice={}/{}".format(
-                    self._cur_slice_id + 1, slices_count
-                )
-        self.setWindowTitle(win_tital)
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.__resize_img_qlabels()
         self._refresh_side_bar()
-        self._refresh_rgb_imgs()
+        self.refresh_img_qlabels()
 
     def __resize_img_qlabels(self):
         gap = 1

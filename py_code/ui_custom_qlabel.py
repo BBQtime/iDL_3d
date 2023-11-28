@@ -1,4 +1,4 @@
-from custom import IDLStep
+from custom import IDLStep, Modal, Plane
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
@@ -8,6 +8,10 @@ from ui_draggable_cross import DraggableCross
 class CustomQLabel(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
+
+        # record plane and modality here instead of main window
+        self.plane = None
+        self.modal = None
 
         # clicks
         self.selected_cross = None
@@ -145,3 +149,26 @@ class CustomQLabel(QLabel):
         new_cross.load_png(new_cross.CROSS_ICON_DIR_UNSELECTED)
         new_cross.show()
         self.crosses_list.append(new_cross)
+
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+
+        ct_img = self.window().img_3d[Modal.CT]
+        if self.plane == Plane.SAGITTAL:
+            slices_count = ct_img.shape[2]
+        elif self.plane == Plane.CORONAL:
+            slices_count = ct_img.shape[1]
+        elif self.plane == Plane.TRANSVERSE:
+            slices_count = ct_img.shape[0]
+
+        if slices_count == 0:
+            return
+
+        slice_delta = event.angleDelta().y() // 120
+        if self.plane == Plane.CORONAL:
+            slice_delta = -slice_delta
+
+        self.window().cur_slice_id[self.plane] -= slice_delta
+        # limite slice_id in range (0, slices_count)
+        self.window().cur_slice_id[self.plane] %= slices_count
+        self.window().refresh_img_qlabels()

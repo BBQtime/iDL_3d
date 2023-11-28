@@ -38,14 +38,13 @@ class UiIDL(UiReplay):
             center_slice_id = self.__get_gtvt_center_slice_id()
 
             # if on center slice, start painting
-            if self._cur_slice_id == center_slice_id:
+            if self.cur_slice_id == center_slice_id:
                 self.paint_pos = event.pos()
 
             # if on other slices, switch to center slice
             else:
-                self._cur_slice_id = center_slice_id
-                self._refresh_rgb_imgs()
-                self._refresh_title()
+                self.cur_slice_id = center_slice_id
+                self.refresh_img_qlabels()
 
         elif idl_step == IDLStep.CORRECTION:
             self.paint_pos = event.pos()
@@ -119,11 +118,11 @@ class UiIDL(UiReplay):
 
         # resize to actual size
         if self._plane == Plane.SAGITTAL:
-            actual_shape = self._3d_imgs[Modal.CT][:, :, 0].shape
+            actual_shape = self.img_3d[Modal.CT][:, :, 0].shape
         elif self._plane == Plane.CORONAL:
-            actual_shape = self._3d_imgs[Modal.CT][:, 0, :].shape
+            actual_shape = self.img_3d[Modal.CT][:, 0, :].shape
         elif self._plane == Plane.TRANSVERSE:
-            actual_shape = self._3d_imgs[Modal.CT][0, :, :].shape
+            actual_shape = self.img_3d[Modal.CT][0, :, :].shape
         annotation_2d = cv2.resize(
             annotation_2d,
             (actual_shape[1], actual_shape[0]),
@@ -138,14 +137,14 @@ class UiIDL(UiReplay):
         if idl_step == IDLStep.DRAW_GTVT:
             t, c, s = self.__gtvt_click_pos_3d
             if self._plane == Plane.TRANSVERSE:
-                segment = self._3d_imgs["gtvt.annotation"][t, :, :]
+                segment = self.img_3d["gtvt.annotation"][t, :, :]
             elif self._plane == Plane.CORONAL:
-                segment = self._3d_imgs["gtvt.annotation"][:, c, :]
+                segment = self.img_3d["gtvt.annotation"][:, c, :]
             elif self._plane == Plane.SAGITTAL:
-                segment = self._3d_imgs["gtvt.annotation"][:, :, s]
+                segment = self.img_3d["gtvt.annotation"][:, :, s]
 
         elif idl_step == IDLStep.CORRECTION:
-            t = c = s = self._cur_slice_id
+            t = c = s = self.cur_slice_id
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
                 # segment_type_list = ["correction", "annotation", "pred"]
@@ -155,7 +154,7 @@ class UiIDL(UiReplay):
 
             # # loop through correction->annotation->pred until finding un-empty slice
             # for i in segment_type_list:
-            #     _3d_img = self._3d_imgs["{}.{}".format(gtv, i)]
+            #     _3d_img = self.img_3d["{}.{}".format(gtv, i)]
             #     if self._plane == Plane.TRANSVERSE:
             #         segment = _3d_img[t, :, :].copy()
             #     elif self._plane == Plane.CORONAL:
@@ -176,7 +175,7 @@ class UiIDL(UiReplay):
             #         else:
             #             break
 
-            _3d_img = self._3d_imgs["{}.pred.final".format(gtv)]
+            _3d_img = self.img_3d["{}.pred.final".format(gtv)]
             if self._plane == Plane.TRANSVERSE:
                 segment = _3d_img[t, :, :].copy()
             elif self._plane == Plane.CORONAL:
@@ -201,14 +200,14 @@ class UiIDL(UiReplay):
 
         # replace slice in 3d gtvt.annotation or gtvt/gtvn correction
         if idl_step == IDLStep.DRAW_GTVT:
-            _3d_img = self._3d_imgs["gtvt.annotation"]
+            _3d_img = self.img_3d["gtvt.annotation"]
         elif idl_step == IDLStep.CORRECTION:
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                _3d_img = self._3d_imgs["gtvt.correction"]
-                _3d_mask = self._3d_imgs["gtvt.correction.mask"]
+                _3d_img = self.img_3d["gtvt.correction"]
+                _3d_mask = self.img_3d["gtvt.correction.mask"]
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                _3d_img = self._3d_imgs["gtvn.correction"]
-                _3d_mask = self._3d_imgs["gtvn.correction.mask"]
+                _3d_img = self.img_3d["gtvn.correction"]
+                _3d_mask = self.img_3d["gtvn.correction.mask"]
 
         # replace slice
         if self._plane == Plane.TRANSVERSE:
@@ -248,13 +247,13 @@ class UiIDL(UiReplay):
 
         # update UI
         self.__clear_all_drawing_layers_on_4_qlabels()
-        self._refresh_rgb_imgs()
+        self.refresh_img_qlabels()
 
     def __save_corrections(self, gtv: str):
         if gtv not in ["gtvt", "gtvn"]:
             Debug.error_exit("gtv value error")
 
-        if self._3d_imgs["{}.correction".format(gtv)] is None:
+        if self.img_3d["{}.correction".format(gtv)] is None:
             return
 
         cur_patient_dir = os.path.join(
@@ -270,7 +269,7 @@ class UiIDL(UiReplay):
         )
 
         for i in ["correction", "correction.mask"]:
-            img = self._3d_imgs["{}.{}".format(gtv, i)].copy()
+            img = self.img_3d["{}.{}".format(gtv, i)].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
                 img = np.flip(img, axis=2)
@@ -330,10 +329,10 @@ class UiIDL(UiReplay):
 
             # add clicks into 3d img
             pos = self.__gtvt_click_pos_3d
-            if self._3d_imgs["gtvt.click"] is None:
-                self._3d_imgs["gtvt.click"] = np.zeros_like(self._3d_imgs[Modal.CT])
+            if self.img_3d["gtvt.click"] is None:
+                self.img_3d["gtvt.click"] = np.zeros_like(self.img_3d[Modal.CT])
             # pos 0-transverse 1-coronal 2-saggital
-            self._3d_imgs["gtvt.click"][pos[0]][pos[1]][pos[2]] = 1
+            self.img_3d["gtvt.click"][pos[0]][pos[1]][pos[2]] = 1
 
             # save gtvt_click
             cur_patient_dir = os.path.join(
@@ -348,7 +347,7 @@ class UiIDL(UiReplay):
                 "round=01",
             )
             Dir.create(cur_round_dir)
-            idl_gtvt_click = self._3d_imgs["gtvt.click"].copy()
+            idl_gtvt_click = self.img_3d["gtvt.click"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
                 idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
@@ -376,9 +375,8 @@ class UiIDL(UiReplay):
             # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
             self.__save_idl_step()
-            self._refresh_rgb_imgs()
-            self._refresh_title()
-            self._3d_imgs["gtvt.annotation"] = np.zeros_like(self._3d_imgs[Modal.CT])
+            self.refresh_img_qlabels()
+            self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__set_mouse_cursor("pen")
             for i in ["pen", "eraser"]:
@@ -410,7 +408,7 @@ class UiIDL(UiReplay):
                 "round=01",
             )
             Dir.create(cur_round_dir)
-            gtvt_annotation_to_save = self._3d_imgs["gtvt.annotation"].copy()
+            gtvt_annotation_to_save = self.img_3d["gtvt.annotation"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
                 gtvt_annotation_to_save = np.flip(gtvt_annotation_to_save, axis=2)
@@ -439,29 +437,27 @@ class UiIDL(UiReplay):
             self.__save_idl_step()
             self._load_idl_gtvt_data()
             self.__combine_pred_annotation_correction()
-            self._refresh_rgb_imgs()
-            self._refresh_title()
+            self.refresh_img_qlabels()
             self.setCursor(Qt.ArrowCursor)
             for i in ["pen", "eraser"]:
                 self.__btn[i].setEnabled(False)
 
         elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
             # add clicks into 3d img
-            if self._3d_imgs["gtvn.clicks"] is None:
-                self._3d_imgs["gtvn.clicks"] = np.zeros_like(self._3d_imgs[Modal.CT])
+            if self.img_3d["gtvn.clicks"] is None:
+                self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
             for pos in self.__gtvn_clicks_pos_3d:
                 # pos 0-transverse 1-coronal 2-saggital
-                self._3d_imgs["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
+                self.img_3d["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
 
             # clean current step elements
             self.delete_all_crosses_on_4_qlabels()
 
             # show gtvn center
-            self._refresh_rgb_imgs()
-            self._refresh_title()
+            self.refresh_img_qlabels()
 
             # copy data (dont change origin ndarray)
-            idl_gtvn_clicks = self._3d_imgs["gtvn.clicks"].copy()
+            idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
             # flip left/right for 1mm data
             if self._nii_spacing[2] == 1.0:
                 idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
@@ -483,8 +479,7 @@ class UiIDL(UiReplay):
             self.__save_idl_step()
             self._load_idl_gtvn_data()
             self.__combine_pred_annotation_correction()
-            self._refresh_rgb_imgs()
-            self._refresh_title()
+            self.refresh_img_qlabels()
             # init correction and mask
             for i in [
                 "gtvt.correction",
@@ -492,7 +487,7 @@ class UiIDL(UiReplay):
                 "gtvt.correction.mask",
                 "gtvn.correction.mask",
             ]:
-                self._3d_imgs[i] = np.zeros_like(self._3d_imgs[Modal.CT])
+                self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__set_mouse_cursor("pen")
@@ -504,21 +499,21 @@ class UiIDL(UiReplay):
 
     # check annotation in 3 different planes
     def __update_gtvt_annotated_status(self) -> Dict:
-        t, c, s = np.where(self._3d_imgs["gtvt.click"] == 1)
+        t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
         t, c, s = int(t), int(c), int(s)
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if plane == Plane.TRANSVERSE:
-                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][t, :, :].copy()
+                cur_plane_annotation = self.img_3d["gtvt.annotation"][t, :, :].copy()
                 cur_plane_annotation[c, :] = 0
                 cur_plane_annotation[:, s] = 0
 
             elif plane == Plane.CORONAL:
-                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][:, c, :].copy()
+                cur_plane_annotation = self.img_3d["gtvt.annotation"][:, c, :].copy()
                 cur_plane_annotation[t, :] = 0
                 cur_plane_annotation[:, s] = 0
 
             elif plane == Plane.SAGITTAL:
-                cur_plane_annotation = self._3d_imgs["gtvt.annotation"][:, :, s].copy()
+                cur_plane_annotation = self.img_3d["gtvt.annotation"][:, :, s].copy()
                 cur_plane_annotation[t, :] = 0
                 cur_plane_annotation[:, c] = 0
 
@@ -527,9 +522,9 @@ class UiIDL(UiReplay):
             else:
                 self.__gtvt_annotated_status[plane] = True
 
-    def _refresh_rgb_imgs(self, replay_mode: bool = False):
+    def refresh_img_qlabels(self):
         # no patient loaded
-        if self._3d_imgs[Modal.CT] is None:
+        if self.img_3d[Modal.CT] is None:
             # ask user to select a patient
             w = self.img_qlabel[Modal.CT].width()
             h = self.img_qlabel[Modal.CT].height()
@@ -541,7 +536,7 @@ class UiIDL(UiReplay):
             self.img_qlabel[Modal.CT].update()
             return
 
-        super()._refresh_rgb_imgs(replay_mode)
+        super().refresh_img_qlabels(replay_mode=False)
 
     def __set_mouse_cursor(self, cursor_type: str):
         if cursor_type not in ["pen", "eraser"]:
@@ -581,38 +576,38 @@ class UiIDL(UiReplay):
 
         elif idl_step == IDLStep.DRAW_GTVT:
             # clear annotation on cur plane
-            t, c, s = np.where(self._3d_imgs["gtvt.click"] == 1)
+            t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
             t, c, s = int(t), int(c), int(s)
             # use mask to filter out the annotation on current anatomical plane
             if self._plane == Plane.TRANSVERSE:
-                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][t, :, :])
+                mask = np.zeros_like(self.img_3d["gtvt.annotation"][t, :, :])
                 mask[c, :] = 1
                 mask[:, s] = 1
-                self._3d_imgs["gtvt.annotation"][t, :, :] *= mask
+                self.img_3d["gtvt.annotation"][t, :, :] *= mask
             elif self._plane == Plane.CORONAL:
-                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][:, c, :])
+                mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, c, :])
                 mask[t, :] = 1
                 mask[:, s] = 1
-                self._3d_imgs["gtvt.annotation"][:, c, :] *= mask
+                self.img_3d["gtvt.annotation"][:, c, :] *= mask
             elif self._plane == Plane.SAGITTAL:
-                mask = np.zeros_like(self._3d_imgs["gtvt.annotation"][:, :, s])
+                mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, :, s])
                 mask[t, :] = 1
                 mask[:, c] = 1
-                self._3d_imgs["gtvt.annotation"][:, :, s] *= mask
+                self.img_3d["gtvt.annotation"][:, :, s] *= mask
 
             # update gtvt annotated status
             self.__gtvt_annotated_status[self._plane] = False
             self.__combine_pred_annotation_correction()
-            self._refresh_rgb_imgs()
+            self.refresh_img_qlabels()
 
         elif idl_step == IDLStep.CORRECTION:
-            t = c = s = self._cur_slice_id
+            t = c = s = self.cur_slice_id
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 gtv = "gtvn"
-            _3d_img = self._3d_imgs["{}.correction".format(gtv)]
-            _3d_mask = self._3d_imgs["{}.correction.mask".format(gtv)]
+            _3d_img = self.img_3d["{}.correction".format(gtv)]
+            _3d_mask = self.img_3d["{}.correction.mask".format(gtv)]
             if self._plane == Plane.TRANSVERSE:
                 _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
                 _3d_mask[t, :, :] = np.zeros_like(_3d_mask[t, :, :])
@@ -624,7 +619,7 @@ class UiIDL(UiReplay):
                 _3d_mask[:, :, s] = np.zeros_like(_3d_mask[:, :, s])
             self.__save_corrections(gtv)
             self.__combine_pred_annotation_correction()
-            self._refresh_rgb_imgs()
+            self.refresh_img_qlabels()
 
     def __get_gtvt_center_slice_id(self):
         if self.__gtvt_click_pos_3d is None:
@@ -699,17 +694,17 @@ class UiIDL(UiReplay):
             for d, h, w in clicks_pos_3d:
                 x = y = None
                 if self._plane == Plane.TRANSVERSE:
-                    if self._cur_slice_id == d:
+                    if self.cur_slice_id == d:
                         x = w / img_shape[2]
                         y = h / img_shape[1]
 
                 elif self._plane == Plane.CORONAL:
-                    if self._cur_slice_id == h:
+                    if self.cur_slice_id == h:
                         x = w / img_shape[2]
                         y = d / img_shape[0]
 
                 elif self._plane == Plane.SAGITTAL:
-                    if self._cur_slice_id == w:
+                    if self.cur_slice_id == w:
                         x = h / img_shape[1]
                         y = d / img_shape[0]
 
@@ -759,7 +754,7 @@ class UiIDL(UiReplay):
 
     # make this function public, CustomQLabel will use it
     def add_4_crosses(self, pos: QPoint, record_click_pos: bool):
-        if self._3d_imgs[Modal.CT] is None:
+        if self.img_3d[Modal.CT] is None:
             return
 
         # make sure new cross id is unique
@@ -791,11 +786,11 @@ class UiIDL(UiReplay):
         return self._plane
 
     def get_cur_slice(self):
-        return self._cur_slice_id
+        return self.cur_slice_id
 
     def get_3d_img_shape(self):
-        if self._3d_imgs[Modal.CT] is not None:
-            return self._3d_imgs[Modal.CT].shape
+        if self.img_3d[Modal.CT] is not None:
+            return self.img_3d[Modal.CT].shape
         else:
             return None
 
@@ -1055,7 +1050,7 @@ class UiIDL(UiReplay):
 
     def _load_baseline_data(self):
         # self._reset_zoomin()
-        self._clear_img_data()
+        self._clear_img_3d()
         self._clear_img_qlabels()
 
         self._baseline_id = "baseline_real.idl"
@@ -1147,7 +1142,7 @@ class UiIDL(UiReplay):
         pos_y = qimg.height() - 13
 
         for i in ["t", "n"]:
-            if self._3d_imgs["gtv{}.pred".format(i)] is not None:
+            if self.img_3d["gtv{}.pred".format(i)] is not None:
                 text = "GTV{}".format(i)
                 self._qimg_draw_text(
                     qimg=qimg,
@@ -1193,34 +1188,52 @@ class UiIDL(UiReplay):
         self._reset_cur_slice_id()
         self._load_idl_gtvt_data()
         self._load_idl_gtvn_data()
-        self._refresh_rgb_imgs()
-        self._refresh_title()
+        self.refresh_img_qlabels()
         self.__refresh_crosses_on_4_qlabels()
         self.__save_idl_step()
+
+    def _get_middle_slice_id(self):
+        if self.img_3d[Modal.CT] is None:
+            Debug.error_exit("get middle slice id after multi-modal imgs are loaded")
+
+        if self._plane == Plane.SAGITTAL:
+            slices_count = self.img_3d[Modal.CT].shape[2]
+        elif self._plane == Plane.CORONAL:
+            slices_count = self.img_3d[Modal.CT].shape[1]
+        elif self._plane == Plane.TRANSVERSE:
+            slices_count = self.img_3d[Modal.CT].shape[0]
+
+        if slices_count > 0:
+            # show the middle slice of whole 3D img,
+            slice_id = round(slices_count / 2) - 1
+            slice_id = Value.limit_range(slice_id, (0, slices_count - 1))
+            return slice_id
+        else:
+            return None
 
     def _reset_cur_slice_id(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER or idl_step == IDLStep.DRAW_GTVT:
             if self.__gtvt_click_pos_3d is None:
-                self._cur_slice_id = self._get_middle_slice_id()
+                self.cur_slice_id = self._get_middle_slice_id()
             else:
-                self._cur_slice_id = self.__get_gtvt_center_slice_id()
+                self.cur_slice_id = self.__get_gtvt_center_slice_id()
 
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             if len(self.__gtvn_clicks_pos_3d) == 0:
-                self._cur_slice_id = self.__get_gtvt_center_slice_id()
+                self.cur_slice_id = self.__get_gtvt_center_slice_id()
             else:
-                self._cur_slice_id = self.__get_gtvn_center_slice_id()
+                self.cur_slice_id = self.__get_gtvn_center_slice_id()
 
         elif idl_step == IDLStep.CORRECTION:
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                self._cur_slice_id = self.__get_gtvt_center_slice_id()
+                self.cur_slice_id = self.__get_gtvt_center_slice_id()
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 if len(self.__gtvn_clicks_pos_3d) == 0:
-                    self._cur_slice_id = self.__get_gtvt_center_slice_id()
+                    self.cur_slice_id = self.__get_gtvt_center_slice_id()
                 else:
-                    self._cur_slice_id = self.__get_gtvn_center_slice_id()
+                    self.cur_slice_id = self.__get_gtvn_center_slice_id()
 
     def get_cur_patient_idl_step(self):
         return self.__idl_step["patient={}".format(self._cur_patient)]
@@ -1276,47 +1289,47 @@ class UiIDL(UiReplay):
         for i in nii_name_list:
             nii_path = os.path.join(round_dir, "{}_{}.nii.gz".format(gtv, i))
             if os.path.exists(nii_path):
-                self._3d_imgs["{}.{}".format(gtv, i)] = self._load_3d_img(
+                self.img_3d["{}.{}".format(gtv, i)] = self._load_3d_img(
                     path=nii_path, binary=True
                 )
             else:
-                self._3d_imgs["{}.{}".format(gtv, i)] = None
+                self.img_3d["{}.{}".format(gtv, i)] = None
 
     def __combine_pred_annotation_correction(self):
-        if self._3d_imgs[Modal.CT] is None:
+        if self.img_3d[Modal.CT] is None:
             return
 
         for i in ["gtvt", "gtvn"]:
             # no pred loaded, generate an empty pred.final
-            if self._3d_imgs["{}.pred".format(i)] is None:
-                self._3d_imgs["{}.pred.final".format(i)] = np.zeros_like(
-                    self._3d_imgs[Modal.CT]
+            if self.img_3d["{}.pred".format(i)] is None:
+                self.img_3d["{}.pred.final".format(i)] = np.zeros_like(
+                    self.img_3d[Modal.CT]
                 )
             # copy from origin pred
             else:
-                self._3d_imgs["{}.pred.final".format(i)] = self._3d_imgs[
+                self.img_3d["{}.pred.final".format(i)] = self.img_3d[
                     "{}.pred".format(i)
                 ].copy()
 
             # combine gtvt.pred and gtvt.annotation
             if i == "gtvt":
-                t, c, s = np.where(self._3d_imgs["gtvt.click"] == 1)
-                self._3d_imgs["gtvt.pred.final"][t, :, :] = 0
-                self._3d_imgs["gtvt.pred.final"][:, c, :] = 0
-                self._3d_imgs["gtvt.pred.final"][:, :, s] = 0
-                self._3d_imgs["gtvt.pred.final"] = np.maximum(
-                    self._3d_imgs["gtvt.pred.final"], self._3d_imgs["gtvt.annotation"]
+                t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
+                self.img_3d["gtvt.pred.final"][t, :, :] = 0
+                self.img_3d["gtvt.pred.final"][:, c, :] = 0
+                self.img_3d["gtvt.pred.final"][:, :, s] = 0
+                self.img_3d["gtvt.pred.final"] = np.maximum(
+                    self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.annotation"]
                 )
 
             # combine pred and correction
-            if self._3d_imgs["{}.correction.mask".format(i)] is None:
+            if self.img_3d["{}.correction.mask".format(i)] is None:
                 continue
             else:
-                self._3d_imgs["{}.pred.final".format(i)] *= (
-                    1 - self._3d_imgs["{}.correction.mask".format(i)]
+                self.img_3d["{}.pred.final".format(i)] *= (
+                    1 - self.img_3d["{}.correction.mask".format(i)]
                 )
-                self._3d_imgs["{}.pred.final".format(i)] = np.maximum(
-                    self._3d_imgs["{}.pred.final".format(i)],
-                    self._3d_imgs["{}.correction.mask".format(i)]
-                    * self._3d_imgs["{}.correction".format(i)],
+                self.img_3d["{}.pred.final".format(i)] = np.maximum(
+                    self.img_3d["{}.pred.final".format(i)],
+                    self.img_3d["{}.correction.mask".format(i)]
+                    * self.img_3d["{}.correction".format(i)],
                 )
