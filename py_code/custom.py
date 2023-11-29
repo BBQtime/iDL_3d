@@ -664,22 +664,9 @@ class SelectScenario:
     USER_CLICK = "user.click"
 
 
-class Plane:
-    TRANSVERSE = "transverse"
-    CORONAL = "coronal"
-    SAGITTAL = "sagittal"
-
-
 class Orient:
     HORIZONTAL = "horizontal"
     VERTICAL = "vertical"
-
-
-class Modal:
-    CT = "ct"
-    PT = "pt"
-    MR1 = "mr1"
-    MR2 = "mr2"
 
 
 class Metric:

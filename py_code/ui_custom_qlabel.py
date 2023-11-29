@@ -1,7 +1,8 @@
-from custom import IDLStep, Modal, Plane
+from custom import IDLStep
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
+from str_lib import CORONAL, CT, SAGITTAL, TRANSVERSE
 from ui_draggable_cross import DraggableCross
 
 
@@ -153,19 +154,19 @@ class CustomQLabel(QLabel):
     def wheelEvent(self, event):
         super().wheelEvent(event)
 
-        ct_img = self.window().img_3d[Modal.CT]
-        if self.plane == Plane.SAGITTAL:
+        ct_img = self.window().img_3d[CT]
+        if self.plane == SAGITTAL:
             slices_count = ct_img.shape[2]
-        elif self.plane == Plane.CORONAL:
+        elif self.plane == CORONAL:
             slices_count = ct_img.shape[1]
-        elif self.plane == Plane.TRANSVERSE:
+        elif self.plane == TRANSVERSE:
             slices_count = ct_img.shape[0]
 
         if slices_count == 0:
             return
 
         slice_delta = event.angleDelta().y() // 120
-        if self.plane == Plane.CORONAL:
+        if self.plane == CORONAL:
             slice_delta = -slice_delta
 
         self.window().cur_slice_id[self.plane] -= slice_delta

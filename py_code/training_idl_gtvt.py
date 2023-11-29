@@ -9,11 +9,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from custom import GPU, DatasetPart, DatasetVer, Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Metric, Nii, Plane, SelectScenario, Value
+from custom import Img, Json, List, Metric, Nii, SelectScenario, Value
 from dataset_idl_gtvt import DataSetIDLGTVt
 from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
 from numpy import ndarray
 from scipy.ndimage import measurements
+from str_lib import CORONAL, SAGITTAL, TRANSVERSE
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -91,7 +92,7 @@ class TrainingIDLGTVt(TrainingCore):
         # select.step is saved in json file as a string, not a list, because:
         # (1) string is easier to read than list in json file (only one line)
         # (2) a "list" will be recognized as multiple trainings
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
             plane = "select.step.{}".format(plane)
             hyper[plane] = List(hyper[plane])
             for i in range(len(hyper[plane])):
@@ -183,13 +184,13 @@ class TrainingIDLGTVt(TrainingCore):
         patient_dir: str,
     ) -> list:  # return a list of int
         new_round_slices = Dict()
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
             new_round_slices[plane] = List()
 
         round_num = max(
-            len(selected_slices[Plane.TRANSVERSE]),
-            len(selected_slices[Plane.CORONAL]),
-            len(selected_slices[Plane.SAGITTAL]),
+            len(selected_slices[TRANSVERSE]),
+            len(selected_slices[CORONAL]),
+            len(selected_slices[SAGITTAL]),
         )
         round_num += 1
 
@@ -206,7 +207,7 @@ class TrainingIDLGTVt(TrainingCore):
         label_center = measurements.center_of_mass(label)
 
         # select slices through each plane
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
             # skip cur plane if no slice needs to be selected
             if len(hyper["select.step.{}".format(plane)]) < round_num:
                 continue
@@ -215,11 +216,11 @@ class TrainingIDLGTVt(TrainingCore):
             ignored_slices = selected_slices[plane].to_list()
 
             # go through pred and record tumor size
-            if plane == Plane.TRANSVERSE:
+            if plane == TRANSVERSE:
                 total_slices = label.shape[0]
-            elif plane == Plane.CORONAL:
+            elif plane == CORONAL:
                 total_slices = label.shape[1]
-            elif plane == Plane.SAGITTAL:
+            elif plane == SAGITTAL:
                 total_slices = label.shape[2]
 
             for slice_num in range(total_slices):
@@ -227,11 +228,11 @@ class TrainingIDLGTVt(TrainingCore):
                 if slice_num in ignored_slices:
                     continue
                 else:
-                    if plane == Plane.TRANSVERSE:
+                    if plane == TRANSVERSE:
                         cur_slice_tumor_size = label[slice_num, :, :].sum()
-                    elif plane == Plane.CORONAL:
+                    elif plane == CORONAL:
                         cur_slice_tumor_size = label[:, slice_num, :].sum()
-                    elif plane == Plane.SAGITTAL:
+                    elif plane == SAGITTAL:
                         cur_slice_tumor_size = label[:, :, slice_num].sum()
                     # add slice with target (pred or label) into candidates
                     if cur_slice_tumor_size > 0:
@@ -248,11 +249,11 @@ class TrainingIDLGTVt(TrainingCore):
                 hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
                 and round_num == 1
             ):
-                if plane == Plane.TRANSVERSE:
+                if plane == TRANSVERSE:
                     new_round_slices[plane].append(round(label_center[0]))
-                elif plane == Plane.CORONAL:
+                elif plane == CORONAL:
                     new_round_slices[plane].append(round(label_center[1]))
-                elif plane == Plane.SAGITTAL:
+                elif plane == SAGITTAL:
                     new_round_slices[plane].append(round(label_center[2]))
 
             # "equal.divide", round = 1
@@ -313,7 +314,7 @@ class TrainingIDLGTVt(TrainingCore):
         slice_mask = Dict()
 
         # loop through each plane
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
             slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
 
             # loop through each round
@@ -326,23 +327,23 @@ class TrainingIDLGTVt(TrainingCore):
                 for slice_num in selected_slices[plane][round_num]:
                     # change slice id from str into int
                     slice_num = int(slice_num)
-                    if plane == Plane.TRANSVERSE:
+                    if plane == TRANSVERSE:
                         slice_mask[plane][slice_num, :, :] = np.ones_like(
                             slice_mask[plane][0, :, :]
                         )
-                    elif plane == Plane.CORONAL:
+                    elif plane == CORONAL:
                         slice_mask[plane][:, slice_num, :] = np.ones_like(
                             slice_mask[plane][:, 0, :]
                         )
-                    elif plane == Plane.SAGITTAL:
+                    elif plane == SAGITTAL:
                         slice_mask[plane][:, :, slice_num] = np.ones_like(
                             slice_mask[plane][:, :, 0]
                         )
 
         # combine slice_mask on 3 planes
         slice_mask = np.maximum(
-            np.maximum(slice_mask[Plane.TRANSVERSE], slice_mask[Plane.CORONAL]),
-            slice_mask[Plane.SAGITTAL],
+            np.maximum(slice_mask[TRANSVERSE], slice_mask[CORONAL]),
+            slice_mask[SAGITTAL],
         )
         label *= slice_mask
         return label
@@ -523,7 +524,7 @@ class TrainingIDLGTVt(TrainingCore):
         # dont need to save it for real idl
         if hyper["select.scenario"] != SelectScenario.USER_CLICK:
             selected_slices_to_save = selected_slices.copy()
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
                 for round_num in selected_slices_to_save[plane]:
                     selected_slices_to_save[plane][round_num] = selected_slices_to_save[
                         plane
@@ -613,7 +614,7 @@ class TrainingIDLGTVt(TrainingCore):
                 selected_slices = Json.load(
                     os.path.join(patient_dir, "selected_slices.json"),
                 )
-                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
                     selected_slices[plane]["round=01"] = List(
                         int(selected_slices[plane]["round=01"])
                     )
@@ -627,9 +628,9 @@ class TrainingIDLGTVt(TrainingCore):
                 )
                 # no slice needs to be annotated in cur round
                 if (
-                    len(new_round_slices[Plane.TRANSVERSE]) == 0
-                    and len(new_round_slices[Plane.CORONAL]) == 0
-                    and len(new_round_slices[Plane.SAGITTAL]) == 0
+                    len(new_round_slices[TRANSVERSE]) == 0
+                    and len(new_round_slices[CORONAL]) == 0
+                    and len(new_round_slices[SAGITTAL]) == 0
                 ):
                     break
 

@@ -1,10 +1,11 @@
 import os
 
 from custom import Global as g
-from custom import Plane, Value
+from custom import Value
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
+from str_lib import CORONAL, SAGITTAL, TRANSVERSE
 
 
 class DraggableCross(QWidget):
@@ -50,15 +51,15 @@ class DraggableCross(QWidget):
         d, h, w = img_shape
 
         # 2d to 3d
-        if img_plane == Plane.TRANSVERSE:
+        if img_plane == TRANSVERSE:
             w *= x
             h *= y
             d = cur_slice
-        elif img_plane == Plane.CORONAL:
+        elif img_plane == CORONAL:
             w *= x
             h = cur_slice
             d *= y
-        elif img_plane == Plane.SAGITTAL:
+        elif img_plane == SAGITTAL:
             w = cur_slice
             h *= x
             d *= y

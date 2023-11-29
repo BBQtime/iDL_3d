@@ -6,10 +6,11 @@ import numpy as np
 import torch
 from custom import Dict
 from custom import Global as g
-from custom import Img, Modal, Nii, Plane
+from custom import Img, Nii
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
+from str_lib import CORONAL, CT, MR1, MR2, PT, SAGITTAL, TRANSVERSE
 from torch import Tensor
 
 
@@ -51,21 +52,21 @@ class DataSetIDLGTVt(DatasetCore):
         )
 
         # load ct/pt/mr1/mr2
-        self.__origin[Modal.CT] = Nii.load(
+        self.__origin[CT] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
         if not self._no_pt:
-            self.__origin[Modal.PT] = Nii.load(
+            self.__origin[PT] = Nii.load(
                 os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(patient))
             )
-        self.__origin[Modal.MR1] = Nii.load(
+        self.__origin[MR1] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
-        self.__origin[Modal.MR2] = Nii.load(
+        self.__origin[MR2] = Nii.load(
             os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
         )
         # ct windowing
-        self.__origin[Modal.CT] = Img.ct_windowing(self.__origin[Modal.CT])
+        self.__origin[CT] = Img.ct_windowing(self.__origin[CT])
 
         # load weight map
         self.__origin["weight.map"], slice_mask = self.__load_weight_map(
@@ -100,16 +101,14 @@ class DataSetIDLGTVt(DatasetCore):
         # annotated slice mask
         slice_mask = Dict()
         max_round = max(
-            len(selected_slices[Plane.TRANSVERSE]),
-            len(selected_slices[Plane.CORONAL]),
-            len(selected_slices[Plane.SAGITTAL]),
+            len(selected_slices[TRANSVERSE]),
+            len(selected_slices[CORONAL]),
+            len(selected_slices[SAGITTAL]),
         )
 
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for plane in [TRANSVERSE, CORONAL, SAGITTAL]:
             # annotated slice mask
-            slice_mask[plane] = np.zeros(
-                self.__origin[Modal.CT].shape, dtype=np.float32
-            )
+            slice_mask[plane] = np.zeros(self.__origin[CT].shape, dtype=np.float32)
 
             for round_num in selected_slices[plane]:
                 # do NOT change weight["annotate.slice"], use another variable
@@ -123,23 +122,23 @@ class DataSetIDLGTVt(DatasetCore):
 
                 # current step
                 for slice_num in selected_slices[plane][round_num]:
-                    if plane == Plane.TRANSVERSE:
+                    if plane == TRANSVERSE:
                         slice_mask[plane][slice_num, :, :] = (
                             np.ones_like(slice_mask[plane][0, :, :]) * slice_weight
                         )
-                    elif plane == Plane.CORONAL:
+                    elif plane == CORONAL:
                         slice_mask[plane][:, slice_num, :] = (
                             np.ones_like(slice_mask[plane][:, 0, :]) * slice_weight
                         )
-                    elif plane == Plane.SAGITTAL:
+                    elif plane == SAGITTAL:
                         slice_mask[plane][:, :, slice_num] = (
                             np.ones_like(slice_mask[plane][:, :, 0]) * slice_weight
                         )
 
         # combine slice_mask on 3 planes
         slice_mask = np.maximum(
-            np.maximum(slice_mask[Plane.TRANSVERSE], slice_mask[Plane.CORONAL]),
-            slice_mask[Plane.SAGITTAL],
+            np.maximum(slice_mask[TRANSVERSE], slice_mask[CORONAL]),
+            slice_mask[SAGITTAL],
         )
 
         # get fp&fn (keep weight=1 before creating distance map)
@@ -275,9 +274,9 @@ class DataSetIDLGTVt(DatasetCore):
 
         # load multi-modal imgs
         input_imgs = None
-        multi_modal_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+        multi_modal_list = [CT, PT, MR1, MR2]
         if self._no_pt:
-            multi_modal_list.remove(Modal.PT)
+            multi_modal_list.remove(PT)
         for i in multi_modal_list:
             img = self._preprocess(self.__origin[i], final["seed"])
 
