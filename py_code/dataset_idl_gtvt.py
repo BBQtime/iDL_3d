@@ -10,7 +10,26 @@ from custom import Img, Nii
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
-from str_lib import CORONAL, CT, MR1, MR2, PT, SAGITTAL, TRANSVERSE
+from str_lib import (
+    AUGMENT_TIMES,
+    BACKGROUND,
+    CORONAL,
+    CT,
+    LABEL,
+    MR1,
+    MR2,
+    PRED,
+    PT,
+    SAGITTAL,
+    SEED,
+    TRANSVERSE,
+    WEIGHT_BACKGROUND,
+    WEIGHT_DISTANCE_STEP,
+    WEIGHT_FP_FN,
+    WEIGHT_MAP,
+    WEIGHT_PREV_ROUND_DECAY,
+    WEIGHT_SLICE,
+)
 from torch import Tensor
 
 
@@ -27,19 +46,19 @@ class DataSetIDLGTVt(DatasetCore):
         weight: Dict,
     ):
         super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
-        self.__augment_times = augment["times"]
+        self.__augment_times = augment[AUGMENT_TIMES]
 
         # origin images
         self.__origin = Dict()
 
         # real idl
         if annotation_dir is not None:
-            self.__origin["label"] = Nii.load(
+            self.__origin[LABEL] = Nii.load(
                 os.path.join(annotation_dir, "gtvt_annotation.nii.gz"), binary=True
             )
         # simulation
         else:
-            self.__origin["label"] = Nii.load(
+            self.__origin[LABEL] = Nii.load(
                 os.path.join(
                     g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
                 ),
@@ -47,7 +66,7 @@ class DataSetIDLGTVt(DatasetCore):
             )
 
         # load pred
-        self.__origin["pred"] = Nii.load(
+        self.__origin[PRED] = Nii.load(
             os.path.join(pred_dir, "gtvt_pred.nii.gz"), binary=True
         )
 
@@ -69,11 +88,11 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin[CT] = Img.ct_windowing(self.__origin[CT])
 
         # load weight map
-        self.__origin["weight.map"], slice_mask = self.__load_weight_map(
+        self.__origin[WEIGHT_MAP], slice_mask = self.__load_weight_map(
             selected_slices, weight
         )
         # Nii.save(
-        #     self.__origin["label"],
+        #     self.__origin[LABEL],
         #     os.path.join(g.PROJ_DIR, "debug", "annotation.nii.gz"),
         # )
         # Nii.save(
@@ -81,19 +100,19 @@ class DataSetIDLGTVt(DatasetCore):
         #     os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii.gz"),
         # )
         # Nii.save(
-        #     self.__origin["weight.map"],
+        #     self.__origin[WEIGHT_MAP],
         #     os.path.join(g.PROJ_DIR, "debug", "weight_map.nii.gz"),
         # )
 
         # overwrite pred to label on non-annotated slices
-        self.__origin["label"] *= slice_mask
+        self.__origin[LABEL] *= slice_mask
         # Nii.save(
-        #     self.__origin["label"],
+        #     self.__origin[LABEL],
         #     os.path.join(g.PROJ_DIR, "debug", "annotation+slice_mask.nii.gz"),
         # )
-        # self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
+        # self.__origin[LABEL] += self.__origin[PRED] * (1 - slice_mask)
         # Nii.save(
-        #     self.__origin["label"],
+        #     self.__origin[LABEL],
         #     os.path.join(g.PROJ_DIR, "debug", "annotation+pred.nii.gz"),
         # )
 
@@ -112,13 +131,13 @@ class DataSetIDLGTVt(DatasetCore):
 
             for round_num in selected_slices[plane]:
                 # do NOT change weight["annotate.slice"], use another variable
-                slice_weight = weight["slice"]
+                slice_weight = weight[WEIGHT_SLICE]
                 slice_weight *= pow(
-                    weight["prev.round.decay"],
+                    weight[WEIGHT_PREV_ROUND_DECAY],
                     (max_round - int(round_num[len("round=") :])),
                 )
-                if slice_weight < weight["background"]:
-                    slice_weight = weight["background"]
+                if slice_weight < weight[WEIGHT_BACKGROUND]:
+                    slice_weight = weight[WEIGHT_BACKGROUND]
 
                 # current step
                 for slice_num in selected_slices[plane][round_num]:
@@ -142,14 +161,14 @@ class DataSetIDLGTVt(DatasetCore):
         )
 
         # get fp&fn (keep weight=1 before creating distance map)
-        fp = self.__origin["pred"] * (1 - self.__origin["label"])
-        fn = (1 - self.__origin["pred"]) * self.__origin["label"]
+        fp = self.__origin[PRED] * (1 - self.__origin[LABEL])
+        fn = (1 - self.__origin[PRED]) * self.__origin[LABEL]
         fp_plus_fn = fp + fn
         fp_plus_fn = fp_plus_fn * np.where(slice_mask > 0, 1, 0)
         fp_plus_fn = fp_plus_fn.astype(np.float32)
 
         # pred union label
-        pred_union_label = np.maximum(self.__origin["pred"], self.__origin["label"])
+        pred_union_label = np.maximum(self.__origin[PRED], self.__origin[LABEL])
         pred_union_label = pred_union_label * np.where(slice_mask > 0, 1, 0)
         pred_union_label = pred_union_label.astype(np.float32)
 
@@ -160,20 +179,22 @@ class DataSetIDLGTVt(DatasetCore):
             distance_map = distance_transform_edt(np.logical_not(fp_plus_fn))
         distance_map = distance_map.astype(np.float32)
         distance_map = np.where(
-            distance_map >= 2 * weight["distance.step"],
-            -weight["background"],
+            distance_map >= 2 * weight[WEIGHT_DISTANCE_STEP],
+            -weight[WEIGHT_BACKGROUND],
             distance_map,
         )
         distance_map = np.where(
-            distance_map >= weight["distance.step"],
-            -weight["background"] / 2,
+            distance_map >= weight[WEIGHT_DISTANCE_STEP],
+            -weight[WEIGHT_BACKGROUND] / 2,
             distance_map,
         )
         distance_map = np.where(distance_map >= 0, 0, distance_map)
         distance_map *= -1
 
         # weighted fp&fn (after weight map)
-        fp_plus_fn = fp_plus_fn * slice_mask * (weight["fp.fn"] / weight["slice"])
+        fp_plus_fn = (
+            fp_plus_fn * slice_mask * (weight[WEIGHT_FP_FN] / weight[WEIGHT_SLICE])
+        )
 
         # final_weight_map
         weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_plus_fn)
@@ -225,52 +246,48 @@ class DataSetIDLGTVt(DatasetCore):
         final = Dict()
         tmp = Dict()
 
-        origin_label_pred_sum = (
-            self.__origin["label"].sum() + self.__origin["pred"].sum()
-        )
+        origin_label_pred_sum = self.__origin[LABEL].sum() + self.__origin[PRED].sum()
 
         # loop until target volume is big enough
         for k in range(50):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp[SEED] = random.randint(0, 2**16)
 
             # load gtvs
-            for i in ["label", "pred"]:
-                tmp[i] = self._preprocess(
-                    img=self.__origin[i], augment_seed=tmp["seed"]
-                )
+            for i in [LABEL, PRED]:
+                tmp[i] = self._preprocess(img=self.__origin[i], augment_seed=tmp[SEED])
                 tmp[i] = Img.binarize(tmp[i])
 
-            tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
+            tmp_label_pred_sum = tmp[LABEL].sum() + tmp[PRED].sum()
 
             # target volume is not large enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
                 # if "final" dict is empty
                 if final == {}:
-                    for i in ["label", "pred", "seed"]:
+                    for i in [LABEL, PRED, SEED]:
                         final[i] = tmp[i]
                     if origin_label_pred_sum == 0:
                         break
 
                 # keep the seed/label/pred with largest target volume
-                final_label_pred_sum = final["label"].sum() + final["pred"].sum()
+                final_label_pred_sum = final[LABEL].sum() + final[PRED].sum()
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "seed"]:
+                    for i in [LABEL, PRED, SEED]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label", "pred", "seed"]:
+                for i in [LABEL, PRED, SEED]:
                     final[i] = tmp[i]
                 break
 
         # background
-        background = 1 - final["label"]
+        background = 1 - final[LABEL]
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["label"]], dim=0)
+        labels = torch.cat([background, final[LABEL]], dim=0)
 
         # load multi-modal imgs
         input_imgs = None
@@ -278,7 +295,7 @@ class DataSetIDLGTVt(DatasetCore):
         if self._no_pt:
             multi_modal_list.remove(PT)
         for i in multi_modal_list:
-            img = self._preprocess(self.__origin[i], final["seed"])
+            img = self._preprocess(self.__origin[i], final[SEED])
 
             # concat multi-model img
             if input_imgs is None:
@@ -288,49 +305,10 @@ class DataSetIDLGTVt(DatasetCore):
 
         # weight map
         weight_map = self._preprocess(
-            img=self.__origin["weight.map"],
-            augment_seed=final["seed"],
+            img=self.__origin[WEIGHT_MAP],
+            augment_seed=final[SEED],
             normalize=False,
-            clip_up_limit=self.__origin["weight.map"].max(),
+            clip_up_limit=self.__origin[WEIGHT_MAP].max(),
         )
 
         return input_imgs, labels, weight_map
-
-
-# # for testing
-# weight = Dict()
-# weight["fp.fn"] = 3
-# weight["distance.step"] = 10
-# weight["slice"] = 2
-# weight["prev.round.decay"] = 0.5
-# weight["background"] = 0.2
-
-# augment = Dict()
-# augment["methods"] = ["translate"]
-# augment["pct"] = 1
-# augment["min"] = 1
-# augment["max"] = 1
-# augment["times"] = 1
-
-# selected_slices = Dict()
-# selected_slices["round=00"] = [20, 40]
-# selected_slices["round=01"] = [30]
-
-# pred_dir = os.path.join(
-#     g.TRAIN_RESULTS_DIR,
-#     "baseline_2023.02.06.20.59.26_loss.delta=0.5_loss.gamma=0.3_optimal",
-#     "baseline",
-#     "fold=01",
-#     "epoch=171",
-#     "patients",
-#     "patient=336",
-# )
-# # augment_methods = [translate,elastic,rotate,scale,flip.lr,flip.ud]
-# tmp_dataset = DataSetIDLGTVt(
-#     patient="336",
-#     selected_slices=selected_slices,
-#     pred_dir=pred_dir,
-#     augment=augment,
-#     weight=weight,
-# )
-# tmp_dataset.__getitem__(2)

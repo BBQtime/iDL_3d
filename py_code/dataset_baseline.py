@@ -5,6 +5,7 @@ from typing import Tuple
 import torch
 from custom import Dict, Img, Nii
 from dataset_core import DatasetCore
+from str_lib import GTVN, GTVS, GTVT, SEED
 from torch import Tensor
 
 
@@ -34,34 +35,34 @@ class DataSetBaseline(DatasetCore):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp[SEED] = random.randint(0, 2**16)
 
             # load gtvs
-            tmp["gtvs"] = self._preprocess(origin["gtvs"], tmp["seed"])
-            tmp["gtvs"] = Img.binarize(tmp["gtvs"])
+            tmp[GTVS] = self._preprocess(origin[GTVS], tmp[SEED])
+            tmp[GTVS] = Img.binarize(tmp[GTVS])
 
             # target volume is not big enough
-            if tmp["gtvs"].sum() < origin["gtvs"].sum() * 0.999:
+            if tmp[GTVS].sum() < origin[GTVS].sum() * 0.999:
                 # keep the largest gtvs and the augment seed
-                if final["gtvs"] == {} or tmp["gtvs"].sum() > final["gtvs"].sum():
-                    final["gtvs"] = tmp["gtvs"]
-                    final["seed"] = tmp["seed"]
+                if final[GTVS] == {} or tmp[GTVS].sum() > final[GTVS].sum():
+                    final[GTVS] = tmp[GTVS]
+                    final[SEED] = tmp[SEED]
                 continue
             # target volume is large enough, break
             else:
-                final["gtvs"] = tmp["gtvs"]
-                final["seed"] = tmp["seed"]
+                final[GTVS] = tmp[GTVS]
+                final[SEED] = tmp[SEED]
                 break
 
         # preprocess gtvt and gtvn based on final augment seed
-        for gtv in ["gtvt", "gtvn"]:
-            final[gtv] = self._preprocess(origin[gtv], final["seed"])
+        for gtv in [GTVT, GTVN]:
+            final[gtv] = self._preprocess(origin[gtv], final[SEED])
             final[gtv] = Img.binarize(final[gtv])
 
         # load background
-        background = 1 - torch.maximum(final["gtvt"], final["gtvn"])
+        background = 1 - torch.maximum(final[GTVT], final[GTVN])
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
+        labels = torch.cat([background, final[GTVT], final[GTVN]], dim=0)
 
         # load multi-modal imgs
         multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
@@ -79,7 +80,7 @@ class DataSetBaseline(DatasetCore):
             if i == "CT":
                 img = Img.ct_windowing(img)
 
-            img = self._preprocess(img, final["seed"])
+            img = self._preprocess(img, final[SEED])
 
             # concat multi-model img
             if input_imgs is None:
@@ -94,21 +95,3 @@ class DataSetBaseline(DatasetCore):
     def __getitem__(self, idx: int):
         patient = self.__patients[idx]
         return self.get_item(patient)
-
-
-# for testing
-# augment_methods=[translate / elastic / rotate / scale / flip.lr / flip.ud]
-# patients without GTVn: 257 192
-if 0:
-    augment = Dict()
-    # [translate,elastic,rotate,scale,flip.lr,flip.ud]
-    augment["methods"] = []
-    augment["pct"] = 1
-    augment["min"] = 1
-    augment["max"] = 1
-    augment["times"] = 1
-    tmp_dataset = DataSetBaseline(
-        patients=["257"],
-        augment=augment,
-    )
-    tmp_dataset.__getitem__(0)

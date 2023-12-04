@@ -9,7 +9,7 @@
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 200,
-    "fold": 1,
+    "fold": 5,
     "keep.best.cnn.num": 5,
     "loss.asym": true,
     "loss.delta": 0.5,
@@ -19,5 +19,5 @@
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
-    "no.pt": true
+    "no.pt": false
 }

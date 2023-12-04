@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from custom import Dict
+from str_lib import BACKGROUND, GTVN, GTVT
 from torch import Tensor, tensor
 
 
@@ -11,9 +12,9 @@ class UnifiedFocalLoss(nn.Module):
         # dimension: [batch, channel, depth, height, width]
         output_imgs = Dict()
 
-        output_imgs["background"] = input_imgs[:, 0, :, :, :]
-        output_imgs["gtvt"] = input_imgs[:, 1, :, :, :]
-        output_imgs["gtvn"] = input_imgs[:, 2, :, :, :]
+        output_imgs[BACKGROUND] = input_imgs[:, 0, :, :, :]
+        output_imgs[GTVT] = input_imgs[:, 1, :, :, :]
+        output_imgs[GTVN] = input_imgs[:, 2, :, :, :]
 
         return output_imgs
 
@@ -32,19 +33,19 @@ class UnifiedFocalLoss(nn.Module):
 
             # always suppress background
             # suppress foreground when symmetrical
-            if i == "background" or not self.__asym:
+            if i == BACKGROUND or not self.__asym:
                 # suppression (larger gamma, more suppression)
                 # loss always > 0, both before and after this step
                 loss[i] = loss[i] * torch.pow(1 - preds[i], self.__gamma)
 
             # weight given to foreground (delta) amd background (1-delta)
-            if i == "background":
+            if i == BACKGROUND:
                 loss[i] = loss[i] * (1 - self.__delta)
             else:
                 loss[i] = loss[i] * self.__delta
 
             # add weight to loss
-            if weight_map is not None and i == "gtvt":
+            if weight_map is not None and i == GTVT:
                 loss[i] = loss[i] * weight_map
 
         loss = loss.to_list()
@@ -65,7 +66,7 @@ class UnifiedFocalLoss(nn.Module):
 
         # calculate loss through each channel
         for i in preds.keys():
-            if weight_map is not None and i == "gtvt":
+            if weight_map is not None and i == GTVT:
                 tp[i] = torch.sum(labels[i] * preds[i] * weight_map, dim=axis)
                 fn[i] = torch.sum(labels[i] * (1 - preds[i]) * weight_map, dim=axis)
                 fp[i] = torch.sum((1 - labels[i]) * preds[i] * weight_map, dim=axis)
@@ -84,7 +85,7 @@ class UnifiedFocalLoss(nn.Module):
 
             # always enhance foreground, enhance background when symmetrical
             # larger gamma, more enhancement
-            if i != "background" or not self.__asym:
+            if i != BACKGROUND or not self.__asym:
                 # clip values to prevent division by zero error
                 loss[i] = torch.clip(loss[i], self.__epsilon)
                 # loss always > 0, both before and after this step

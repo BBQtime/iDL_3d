@@ -1,8 +1,7 @@
-from custom import IDLStep
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
-from str_lib import CORONAL, CT, SAGITTAL, TRANSVERSE
+from str_lib import CORONAL, CT, PLANE_FIXED, SAGITTAL, TRANSVERSE, IDLStep
 from ui_draggable_cross import DraggableCross
 
 
@@ -172,4 +171,8 @@ class CustomQLabel(QLabel):
         self.window().cur_slice_id[self.plane] -= slice_delta
         # limite slice_id in range (0, slices_count)
         self.window().cur_slice_id[self.plane] %= slices_count
-        self.window().refresh_img_qlabels()
+
+        if self.window().display_mode() == PLANE_FIXED:
+            self.window().refresh_img_qlabels(img_name=self.plane)
+        else:
+            self.window().refresh_img_qlabels()

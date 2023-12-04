@@ -19,6 +19,7 @@ import SimpleITK as sitk
 import torch
 from natsort import natsorted
 from numpy import ndarray
+from str_lib import AU_1MM, AU_3MM, BASELINE, GTVN, GTVS, GTVT, IDL_GTVN, IDL_GTVT, MDA
 from torch import Tensor
 
 
@@ -366,19 +367,19 @@ class Img:
         labels = Dict()
 
         # load gtvt
-        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
+        labels[GTVT] = nii_load_func(paths[GTVT], binary=True)
 
         # load gtvn
-        if os.path.exists(paths["gtvn"]):
-            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
+        if os.path.exists(paths[GTVN]):
+            labels[GTVN] = nii_load_func(paths[GTVN], binary=True)
         else:
-            labels["gtvn"] = np.zeros_like(labels["gtvt"])
+            labels[GTVN] = np.zeros_like(labels[GTVT])
 
         # load gtvs
-        if os.path.exists(paths["gtvs"]):
-            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
+        if os.path.exists(paths[GTVS]):
+            labels[GTVS] = nii_load_func(paths[GTVS], binary=True)
         else:
-            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+            labels[GTVS] = np.maximum(labels[GTVT], labels[GTVN])
 
         return labels
 
@@ -656,53 +657,6 @@ class Time:
         return cur_time
 
 
-class SelectScenario:
-    LARGEST = "largest"
-    GRAVITY_CENTER = "gravity.center"
-    EQUAL_DIVIDE = "equal.divide"
-    RANDOM = "random"
-    USER_CLICK = "user.click"
-
-
-class Orient:
-    HORIZONTAL = "horizontal"
-    VERTICAL = "vertical"
-
-
-class Metric:
-    DSC = "dsc"
-    MSD = "msd"
-    HD95 = "hd95"
-
-
-class DrawingMode:
-    GTVT_PEN = "gtvt.pen"
-    GTVN_PEN = "gtvn.pen"
-    GTVT_ERASER = "gtvt.eraser"
-    GTVN_ERASER = "gtvn.eraser"
-
-
-class IDLStep:
-    CLICK_GTVT_CENTER = "click.gtvt.center"
-    DRAW_GTVT = "draw.gtvt"
-    CLICK_GTVN_CENTER = "click.gtvn.center"
-    CORRECTION = "correction"
-
-
-class DatasetVer:
-    AU_3MM = "au.3mm"
-    AU_1MM = "au.1mm"
-    MDA = "mda"
-
-
-class DatasetPart:
-    TRAIN = "train"
-    VALID = "valid"
-    TEST = "test"
-    TEST_INTER = "test.inter"
-    TEST_EXTER = "test.exter"
-
-
 class Global:
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
     DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
@@ -737,14 +691,14 @@ class Global:
 
     # Windows
     if platform.system().lower() == "windows":
-        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
+        for i in [AU_3MM, AU_1MM, MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
 
     # Linux
     elif platform.system().lower() == "linux":
-        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
+        for i in [AU_3MM, AU_1MM, MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
@@ -753,34 +707,34 @@ class Global:
 
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
-    IMG_SHAPE[DatasetVer.AU_3MM] = List(__settings["img.shape.3mm"])
-    IMG_SHAPE[DatasetVer.AU_1MM] = List(__settings["img.shape.1mm"])
-    IMG_SHAPE[DatasetVer.MDA] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[AU_3MM] = List(__settings["img.shape.3mm"])
+    IMG_SHAPE[AU_1MM] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[MDA] = List(__settings["img.shape.1mm"])
 
     # NII_SPACING (Width, Height, Depth)
     NII_SPACING = Dict()
-    NII_SPACING[DatasetVer.AU_3MM] = List(__settings["nii.spacing.3mm"])
-    NII_SPACING[DatasetVer.AU_1MM] = List(__settings["nii.spacing.1mm"])
-    NII_SPACING[DatasetVer.MDA] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[AU_3MM] = List(__settings["nii.spacing.3mm"])
+    NII_SPACING[AU_1MM] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[MDA] = List(__settings["nii.spacing.1mm"])
 
-    for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
+    for i in [AU_3MM, AU_1MM, MDA]:
         IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
         NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
     # dataset splitting
     DATASET_SPLIT_JSON_PATH = Dict()
-    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[AU_1MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_3MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[AU_3MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[DatasetVer.MDA] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[MDA] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.mda"]
     )
 
     HYPER_JSON_PATH = Dict()
-    for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+    for i in [BASELINE, IDL_GTVT, IDL_GTVN]:
         HYPER_JSON_PATH[i] = os.path.join(
             PROJ_DIR, __settings["hyper.json.{}".format(i)]
         )

@@ -35,7 +35,7 @@ class DraggableCross(QWidget):
     def get_pos_in_3d(self):
         rgb_img_roi = self.parent().window().get_rgb_img_roi()
         img_plane = self.parent().window().get_img_plane()
-        cur_slice = self.parent().window().get_cur_slice()
+        cur_slice = self.parent().window().cur_slice_id
         img_shape = self.parent().window().get_3d_img_shape()
         nii_spacing = self.parent().window().get_nii_spacing()
 

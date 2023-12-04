@@ -4,9 +4,9 @@ from tkinter import Tk, filedialog
 
 import cv2
 import numpy as np
-from custom import DatasetPart, DatasetVer, Debug, Dict, Dir
+from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Metric, Nii, Orient, Value
+from custom import Img, Json, List, Nii, Value
 from numpy import ndarray
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QRect, Qt
@@ -24,23 +24,53 @@ from PyQt5.QtWidgets import (
 )
 from scipy.ndimage import measurements
 from str_lib import (
+    ANNOTATION,
+    AU_1MM,
+    AU_3MM,
+    BASELINE,
     BRIGHT,
+    CLICK,
+    CLICKS,
     COLOR_ENHANCE,
     CONTRAST,
     CORONAL,
+    CORRECTION,
     CT,
     CT_PT_MIX,
+    DATASET_VER,
     DISPLAY_MODE,
+    DSC,
+    GTVN,
+    GTVN_CLICKS,
+    GTVN_CORRECTION,
+    GTVN_LABEL,
+    GTVN_PRED,
+    GTVN_PRED_FINAL,
+    GTVS,
+    GTVT,
+    GTVT_ANNOTATION,
+    GTVT_CLICK,
+    GTVT_CORRECTION,
+    GTVT_LABEL,
+    GTVT_PRED,
+    GTVT_PRED_FINAL,
+    HD95,
+    IDL_GTVN,
+    IDL_GTVT,
+    MDA,
     MODAL,
     MODAL_FIXED,
     MR1,
     MR2,
+    MSD,
+    PATIENT,
     PLANE,
     PLANE_FIXED,
     PT,
     SAGITTAL,
     TRANSVERSE,
     ZOOM,
+    DatasetPart,
 )
 from superqt import QCollapsible
 from toggle_btn import ToggleButton
@@ -56,10 +86,10 @@ class UiReplay(QMainWindow):
         super().__init__()
         self.setupUi(self)
         self._init_data(idl_remark=idl_remark, debug_mode=debug_mode)
-        self._init_widgets()  # after _init_data()
+        self._init_color()  # before init_widgets()
+        self._init_widgets()  # after _init_data() and init_widgets()
         self.setMinimumSize(self.__side_bar_width + 600, 600)  # after _init_data()
         # self.__init_zoomin()
-        self._init_color()
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
         self._load_baseline_data()  # load first baseline result
@@ -70,9 +100,9 @@ class UiReplay(QMainWindow):
         debug_mode: bool = False,  # param: debug_mode is for subclass: UiIDL
     ):
         # load test set patients of au and mda datasets
-        # DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] and [DatasetVer.AU_3MM] are the same
-        dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM])
-        dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
+        # DATASET_SPLIT_JSON_PATH[AU_1MM] and [AU_3MM] are the same
+        dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[AU_1MM])
+        dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH[MDA])
         self._patients = Dict()
         self._patients["au.test.inter"] = List(dataset_split_au[DatasetPart.TEST_INTER])
         self._patients["au.test.exter"] = List(dataset_split_au[DatasetPart.TEST_EXTER])
@@ -87,8 +117,8 @@ class UiReplay(QMainWindow):
 
         self._idl_id = Dict()
         self._idl_round = Dict()
-        for i in ["gtvt", "gtvn"]:
-            self._idl_id[i] = "baseline"
+        for i in [GTVT, GTVN]:
+            self._idl_id[i] = BASELINE
             self._idl_round[i] = "round=00"
 
         self._dataset_ver = None
@@ -120,25 +150,25 @@ class UiReplay(QMainWindow):
             PT,
             MR1,
             MR2,
-            "gtvt.label",
-            "gtvn.label",
-            "gtvt.pred",
-            "gtvn.pred",
-            "gtvt.click",
-            "gtvn.clicks",
-            "gtvt.annotation",
-            "gtvt.correction",
-            "gtvn.correction",
-            "gtvt.pred.final",
-            "gtvn.pred.final",
+            GTVT_LABEL,
+            GTVN_LABEL,
+            GTVT_PRED,
+            GTVN_PRED,
+            GTVT_CLICK,
+            GTVN_CLICKS,
+            GTVT_ANNOTATION,
+            GTVT_CORRECTION,
+            GTVN_CORRECTION,
+            GTVT_PRED_FINAL,
+            GTVN_PRED_FINAL,
         ]:
             self.img_3d[i] = None
 
     def __clear_scores(self):
-        for i in ["gtvt", "gtvn"]:
-            self.__scores[i][Metric.DSC] = None
-            self.__scores[i][Metric.MSD] = None
-            self.__scores[i][Metric.HD95] = None
+        for i in [GTVT, GTVN]:
+            self.__scores[i][DSC] = None
+            self.__scores[i][MSD] = None
+            self.__scores[i][HD95] = None
 
     # def __init_zoomin(self):
     #     self.__zoomin = Dict()
@@ -421,15 +451,15 @@ class UiReplay(QMainWindow):
         self._color["blue"] = (0, 160, 255)
         self._color["yellow"] = (255, 255, 0)
         self._color["orange"] = (255, 120, 0)
-        self._color["gtvt.pred"] = self._color["yellow"]
-        self._color["gtvt.label"] = self._color["orange"]
-        self._color["gtvn.pred"] = self._color["cyan"]
-        self._color["gtvn.label"] = self._color["blue"]
-        self._color["gtvt.annotation"] = self._color["magenta"]
-        self._color["gtvt.correction"] = self._color["red"]
-        self._color["gtvn.correction"] = self._color["red"]
-        self._color["gtvt.click"] = self._color["magenta"]
-        self._color["gtvn.clicks"] = self._color["magenta"]
+        self._color[GTVT_PRED] = self._color["yellow"]
+        self._color[GTVT_LABEL] = self._color["orange"]
+        self._color[GTVN_PRED] = self._color["cyan"]
+        self._color[GTVN_LABEL] = self._color["blue"]
+        self._color[GTVT_ANNOTATION] = self._color["magenta"]
+        self._color[GTVT_CORRECTION] = self._color["red"]
+        self._color[GTVN_CORRECTION] = self._color["red"]
+        self._color[GTVT_CLICK] = self._color["magenta"]
+        self._color[GTVN_CLICKS] = self._color["magenta"]
 
     def setupUi(self, Core):
         Core.setObjectName("Core")
@@ -475,11 +505,11 @@ class UiReplay(QMainWindow):
 
     def _init_widgets_combox(self):
         self._combox = Dict()
-        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+        for i in [BASELINE, PATIENT, IDL_GTVT, IDL_GTVN]:
             self._combox[i] = QtWidgets.QComboBox(self._central_widget)
             self._combox[i].setFixedHeight(30)
             # set combobox dropdown width: 700px
-            if i != "patient":
+            if i != PATIENT:
                 self._combox[i].setStyleSheet(
                     """*
                     QComboBox QAbstractItemView
@@ -488,44 +518,44 @@ class UiReplay(QMainWindow):
                     }
                     """
                 )
-            if i in ["patient", "idl.gtvt", "idl.gtvn"]:
+            if i in [PATIENT, IDL_GTVT, IDL_GTVN]:
                 self._combox[i].setEnabled(False)
 
         # fill combox baseline
         baseline_id_list = Dir.get_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
-        self._combox["baseline"].addItems(baseline_id_list)
+        self._combox[BASELINE].addItems(baseline_id_list)
 
         # set real idl baseline id as default
         for baseline_id in baseline_id_list:
             if "real.idl" in baseline_id:
                 real_idl_baseline_id = baseline_id
-        self._combox["baseline"].setCurrentText(real_idl_baseline_id)
+        self._combox[BASELINE].setCurrentText(real_idl_baseline_id)
 
         # arrow buttons
         self._arrow_btn = Dict()
         for i in ["prev", "next"]:
-            for j in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+            for j in [BASELINE, PATIENT, IDL_GTVT, IDL_GTVN]:
                 self._arrow_btn["{}.{}".format(i, j)] = QtWidgets.QToolButton()
                 self._arrow_btn["{}.{}".format(i, j)].setFixedWidth(30)
                 self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(30)
 
         # set arrow buttons initial state
-        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
+        for i in [BASELINE, PATIENT, IDL_GTVT, IDL_GTVN]:
             self._arrow_btn["prev.{}".format(i)].setArrowType(Qt.LeftArrow)
             self._arrow_btn["next.{}".format(i)].setArrowType(Qt.RightArrow)
-            if i in ["patient", "idl.gtvt", "idl.gtvn"]:
+            if i in [PATIENT, IDL_GTVT, IDL_GTVN]:
                 self._arrow_btn["prev.{}".format(i)].setEnabled(False)
                 self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
         # collapse - baseline/patient/idl.gtvt/gtvn
-        self._collap["baseline"] = QCollapsible("SELECT BASELINE")
-        self._collap["patient"] = QCollapsible("SELECT PATIENT")
-        self._collap["idl.gtvt"] = QCollapsible("SELECT IDL GTVT")
-        self._collap["idl.gtvn"] = QCollapsible("SELECT IDL GTVN")
-        for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            self._collap[i].setFixedHeight(80)
+        self._collap[BASELINE] = QCollapsible("SELECT BASELINE")
+        self._collap[PATIENT] = QCollapsible("SELECT PATIENT")
+        self._collap[IDL_GTVT] = QCollapsible("SELECT IDL GTVT")
+        self._collap[IDL_GTVN] = QCollapsible("SELECT IDL GTVN")
+        for i in [BASELINE, PATIENT, IDL_GTVT, IDL_GTVN]:
+            # self._collap[i].setFixedHeight(90)
             self._collap[i].expand(True)
             h_layout = QHBoxLayout()
             h_layout.setSpacing(1)
@@ -537,16 +567,16 @@ class UiReplay(QMainWindow):
             self._collap[i].addWidget(container)
 
         # connect ctrls to functions
-        self._combox["baseline"].activated.connect(self._load_baseline_data)
+        self._combox[BASELINE].activated.connect(self._load_baseline_data)
         self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
         self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
-        self._combox["patient"].activated.connect(self._load_patient_data)
+        self._combox[PATIENT].activated.connect(self._load_patient_data)
         self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
         self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
-        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_data)
+        self._combox[IDL_GTVT].activated.connect(self._load_idl_gtvt_data)
         self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
         self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
-        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
+        self._combox[IDL_GTVN].activated.connect(self._load_idl_gtvn_data)
         self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
 
@@ -606,8 +636,8 @@ class UiReplay(QMainWindow):
 
         # collapse
         self._collap[COLOR_ENHANCE] = QCollapsible("COLOR ENHANCEMENT")
-        self._collap[COLOR_ENHANCE].setFixedHeight(160)
-        self._collap[COLOR_ENHANCE].expand(True)
+        # self._collap[COLOR_ENHANCE].setFixedHeight(180)
+        self._collap[COLOR_ENHANCE].expand(False)
         v_layout = QVBoxLayout()
 
         # radio buttons: ct/pt/mr1/mr2
@@ -656,33 +686,39 @@ class UiReplay(QMainWindow):
                 break
         self.refresh_img_qlabels(img_name=SAGITTAL)
 
+    def display_mode(self):
+        if self._toggle_btn.isChecked():
+            return PLANE_FIXED
+        else:
+            return MODAL_FIXED
+
     def switch_display_mode(self):
-        plane_fixed_mode = self._toggle_btn.isChecked()
+        display_mode = self.display_mode()
 
         # img qlabels: modalities
         for i in [CT, PT, MR1, MR2]:
-            if plane_fixed_mode:
+            if display_mode == PLANE_FIXED:
                 self.img_qlabel[i].hide()
             else:
                 self.img_qlabel[i].show()
 
         # img qlabels: planes
         for i in [TRANSVERSE, CORONAL, SAGITTAL]:
-            if plane_fixed_mode:
+            if display_mode == PLANE_FIXED:
                 self.img_qlabel[i].show()
             else:
                 self.img_qlabel[i].hide()
 
         # plane fixed mode: text labels
         for i in [CT, PT, TRANSVERSE, CORONAL, SAGITTAL]:
-            if plane_fixed_mode:
+            if display_mode == PLANE_FIXED:
                 self._text_label[i].show()
             else:
                 self._text_label[i].hide()
 
         # radio buttons: modal fixed mode
         for i in self._radio_btn[MODAL_FIXED].keys():
-            if plane_fixed_mode:
+            if display_mode == PLANE_FIXED:
                 self._radio_btn[MODAL_FIXED][i].hide()
             else:
                 self._radio_btn[MODAL_FIXED][i].show()
@@ -690,13 +726,13 @@ class UiReplay(QMainWindow):
         # ratio buttons: plane fixed mode
         for i in [CORONAL, SAGITTAL]:
             for j in [PT, MR1, MR2]:
-                if plane_fixed_mode:
+                if display_mode == PLANE_FIXED:
                     self._radio_btn[PLANE_FIXED][i][j].show()
                 else:
                     self._radio_btn[PLANE_FIXED][i][j].hide()
 
         # color enhancement radio buttons and slider bars
-        if plane_fixed_mode:
+        if display_mode == PLANE_FIXED:
             show_list = [TRANSVERSE, CORONAL, SAGITTAL]
             hide_list = [CT, PT, MR1, MR2]
         else:
@@ -721,7 +757,7 @@ class UiReplay(QMainWindow):
         self.__switch_color_enhance_slider_bars()
 
         # ct/pt mix slider
-        if plane_fixed_mode:
+        if display_mode == PLANE_FIXED:
             self._slider[CT_PT_MIX].show()
         else:
             self._slider[CT_PT_MIX].hide()
@@ -816,14 +852,16 @@ class UiReplay(QMainWindow):
         self._slider[CT_PT_MIX].setMaximum(100)
         self._slider[CT_PT_MIX].setValue(50)
         self._slider[CT_PT_MIX].setFixedWidth(112)
-        self._slider[CT_PT_MIX].valueChanged.connect(self.refresh_img_qlabels)
+        self._slider[CT_PT_MIX].valueChanged.connect(
+            self.__refresh_img_qlabel_trasverse
+        )
 
         # toggle button
         self._toggle_btn = ToggleButton(is_checked=0)
 
         # collapse
         self._collap[DISPLAY_MODE] = QCollapsible("DISPLAY MODE")
-        self._collap[DISPLAY_MODE].setFixedHeight(160)
+        # self._collap[DISPLAY_MODE].setFixedHeight(170)
         self._collap[DISPLAY_MODE].expand(True)
         v_layout = QVBoxLayout()
 
@@ -862,6 +900,9 @@ class UiReplay(QMainWindow):
         self._collap[DISPLAY_MODE].addWidget(container)
 
     def _init_widgets_set_fonts(self):
+        for i in self._collap.keys():
+            self._collap[i].setStyleSheet("font-weight: bold; color: white;")
+
         self._font_bold = QFont("Arial", 10)
         self._font_light = QFont("Arial", 10)
         self._font_bold.setBold(True)
@@ -869,6 +910,7 @@ class UiReplay(QMainWindow):
 
         for i in self._text_label.keys():
             self._text_label[i].setFont(self._font_bold)
+            self._text_label[i].setStyleSheet("color: white;")
 
         for i in self._collap.keys():
             self._collap[i].setFont(self._font_bold)
@@ -894,8 +936,12 @@ class UiReplay(QMainWindow):
         self._slider[ZOOM].setValue(100)
         # add slider into collapsible space
         self._collap[ZOOM] = QCollapsible("ZOOM IN")
-        self._collap[ZOOM].setFixedHeight(70)
+        # self._collap[ZOOM].setFixedHeight(60)
         self._collap[ZOOM].addWidget(self._slider[ZOOM])
+
+    # virtual function (for ui_idl)
+    def _init_widgets_annotation(self):
+        return
 
     def _init_widgets(self):
         self._collap = Dict()
@@ -904,8 +950,9 @@ class UiReplay(QMainWindow):
         self._text_label = Dict()
         self._slider = Dict()
 
-        self._init_widgets_img_qlabels()
         self._init_widgets_combox()
+        self._init_widgets_img_qlabels()
+        self._init_widgets_annotation()
         self._init_widgets_display_mode()
         self._init_widgets_color_enhance()
         self._init_widgets_zoom()
@@ -1072,7 +1119,7 @@ class UiReplay(QMainWindow):
 
     def __switch_color_enhance_slider_bars(self):
         # hide and show sliders
-        if self._toggle_btn.isChecked():
+        if self.display_mode() == PLANE_FIXED:
             show_list = [TRANSVERSE, CORONAL, SAGITTAL]
             hide_list = [CT, PT, MR1, MR2]
         else:
@@ -1091,7 +1138,7 @@ class UiReplay(QMainWindow):
             self._slider[CONTRAST][i].hide()
 
         # update text label
-        if self._toggle_btn.isChecked():
+        if self.display_mode() == PLANE_FIXED:
             for i in [TRANSVERSE, CORONAL, SAGITTAL]:
                 if self._radio_btn[COLOR_ENHANCE][i].isChecked():
                     key_word = i.capitalize()
@@ -1149,10 +1196,10 @@ class UiReplay(QMainWindow):
 
     def _load_dataset_dir_and_nii_spacing(self):
         # load slice thickness from baseline hyper
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, BASELINE)
         fold_dir = Dir.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
         baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
-            "dataset.ver"
+            DATASET_VER
         ]
 
         # set dataset dir based on current patient
@@ -1165,7 +1212,7 @@ class UiReplay(QMainWindow):
             self._dataset_part = DatasetPart.TEST_EXTER
 
         elif self._cur_patient in self._patients["mda.test"]:
-            self._dataset_ver = DatasetVer.MDA
+            self._dataset_ver = MDA
             self._dataset_part = DatasetPart.TEST
         else:
             Debug.error_exit("cant find current patient in test patients")
@@ -1184,8 +1231,8 @@ class UiReplay(QMainWindow):
 
         combox_patients.find_identical_items(self._patients.to_list())
         combox_patients.sort()
-        self._combox["patient"].addItems(combox_patients)
-        self._combox["patient"].setEnabled(True)
+        self._combox[PATIENT].addItems(combox_patients)
+        self._combox[PATIENT].setEnabled(True)
         return combox_patients
 
     def _load_baseline_data(self):
@@ -1195,12 +1242,12 @@ class UiReplay(QMainWindow):
         self._clear_img_qlabels()
 
         # run this after current text of baseline combox is confirmed
-        self._enable_arrow_btns("baseline")
+        self._enable_arrow_btns(BASELINE)
 
-        self._baseline_id = self._combox["baseline"].currentText()
+        self._baseline_id = self._combox[BASELINE].currentText()
 
         # reset comboboxes
-        for i in ["patient", "idl.gtvt", "idl.gtvn"]:
+        for i in [PATIENT, IDL_GTVT, IDL_GTVN]:
             self._combox[i].clear()
             self._combox[i].setEnabled(False)
             self._arrow_btn["prev.{}".format(i)].setEnabled(False)
@@ -1242,42 +1289,42 @@ class UiReplay(QMainWindow):
 
     # ui_idl will inherit this function, do not make it a private function
     def _load_multi_modal_imgs(self):
-        paths = Dict()
-        paths[CT] = "CT"
-        paths[PT] = "PT"
-        paths[MR1] = "T1dr"
-        paths[MR2] = "T2dr"
+        img_path = Dict()
+        img_path[CT] = "CT"
+        img_path[PT] = "PT"
+        img_path[MR1] = "T1dr"
+        img_path[MR2] = "T2dr"
         for i in [CT, PT, MR1, MR2]:
-            paths[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, paths[i])
-            paths[i] = os.path.join(self._dataset_dir, paths[i])
-            self.img_3d[i] = self._load_3d_img(paths[i])
+            img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
+            img_path[i] = os.path.join(self._dataset_dir, img_path[i])
+            self.img_3d[i] = self._load_3d_img(img_path[i])
 
     def _load_patient_data(self, idx: int = None, reset_patient: bool = True):
         # triggered by:
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
         if reset_patient is True:
-            self._cur_patient = self._combox["patient"].currentText()
+            self._cur_patient = self._combox[PATIENT].currentText()
             # self._reset_zoomin()
 
         # triggered by baseline combox update, and find cur patient in new baseline dir
         else:
-            self._combox["patient"].setCurrentText(self._cur_patient)
+            self._combox[PATIENT].setCurrentText(self._cur_patient)
 
         # run these after patient combox current text is set up
-        self._enable_arrow_btns("patient")
+        self._enable_arrow_btns(PATIENT)
         self._load_dataset_dir_and_nii_spacing()
 
         # reset comboboxes
-        for i in ["idl.gtvt", "idl.gtvn"]:
+        for i in [IDL_GTVT, IDL_GTVN]:
             self._combox[i].clear()
             self._combox[i].setEnabled(False)
             self._arrow_btn["prev.{}".format(i)].setEnabled(False)
             self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
         # fill idl comboboxes
-        for i in ["idl.gtvt", "idl.gtvn"]:
-            combox_items = ["baseline"]
+        for i in [IDL_GTVT, IDL_GTVN]:
+            combox_items = [BASELINE]
             # get all round folder under current patient folder
             for idl_result_dir in Dir.get_sub_dirs(
                 os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id),
@@ -1323,8 +1370,8 @@ class UiReplay(QMainWindow):
 
         # choose idl automatically
         # try not to reset idl id/round when patient is changed
-        for gtv in ["gtvt", "gtvn"]:
-            if self._idl_id[gtv] == "baseline":
+        for gtv in [GTVT, GTVN]:
+            if self._idl_id[gtv] == BASELINE:
                 reset_id = False
             elif (
                 os.path.join(self._idl_id[gtv], self._idl_round[gtv])
@@ -1346,10 +1393,10 @@ class UiReplay(QMainWindow):
             nii_load_func=self._load_3d_img,
         )
         # load gtvt and gtvn
-        for gtv in ["gtvt", "gtvn"]:
+        for gtv in [GTVT, GTVN]:
             self.img_3d["{}.label".format(gtv)] = labels[gtv]
         # load gtvs gravity center: (d,h,w)
-        self._gtvs_center = list(measurements.center_of_mass(labels["gtvs"]))
+        self._gtvs_center = list(measurements.center_of_mass(labels[GTVS]))
         # float to int
         for i in range(len(self._gtvs_center)):
             self._gtvs_center[i] = round(self._gtvs_center[i])
@@ -1357,16 +1404,12 @@ class UiReplay(QMainWindow):
     def _load_idl_gtvt_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self._load_idl_gtv_data(
-            gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs
-        )
+        self._load_idl_gtv_data(gtv=GTVT, reset_id=reset_id, refresh_imgs=refresh_imgs)
 
     def _load_idl_gtvn_data(
         self, idx: int = None, reset_id: bool = True, refresh_imgs=True
     ):
-        self._load_idl_gtv_data(
-            gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
-        )
+        self._load_idl_gtv_data(gtv=GTVN, reset_id=reset_id, refresh_imgs=refresh_imgs)
 
     def __clear_gtvt_selected_slices_3d(self):
         self.__gtvt_selected_slices_3d = Dict()
@@ -1382,8 +1425,8 @@ class UiReplay(QMainWindow):
         # (2) patient combox update, but can not find cur patient in idl dir
         if reset_id is True:
             combox_item = self._combox["idl.{}".format(gtv)].currentText()
-            if combox_item == "baseline":
-                self._idl_id[gtv] = "baseline"
+            if combox_item == BASELINE:
+                self._idl_id[gtv] = BASELINE
                 self._idl_round[gtv] = "round=00"
             else:
                 self._idl_id[gtv] = combox_item[: combox_item.index("/")]
@@ -1392,8 +1435,8 @@ class UiReplay(QMainWindow):
 
         # triggered by patient combox update, and find cur patient in idl.gtvn dir
         else:
-            if self._idl_id[gtv] == "baseline":
-                self._combox["idl.{}".format(gtv)].setCurrentText("baseline")
+            if self._idl_id[gtv] == BASELINE:
+                self._combox["idl.{}".format(gtv)].setCurrentText(BASELINE)
             else:
                 self._combox["idl.{}".format(gtv)].setCurrentText(
                     os.path.join(self._idl_id[gtv], self._idl_round[gtv])
@@ -1404,24 +1447,24 @@ class UiReplay(QMainWindow):
 
         # load data (pred/clicks/selected_slices)
         # baseline
-        if self._idl_id[gtv] == "baseline":
+        if self._idl_id[gtv] == BASELINE:
             pred_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
-                "baseline",
+                BASELINE,
                 "patients",
                 "patient={}".format(self._cur_patient),
                 "{}_pred.nii.gz".format(gtv),
             )
             # clear idl.gtvt data
-            if gtv == "gtvt":
-                for i in ["click", "annotation", "correction"]:
+            if gtv == GTVT:
+                for i in [CLICK, ANNOTATION, CORRECTION]:
                     self.img_3d["gtvt.{}".format(i)] = None
                 self.__clear_gtvt_selected_slices_3d()
                 # self.__refresh_gtvt_selected_slices_2d()
             # clear idl.gtvn data
-            elif gtv == "gtvn":
-                for i in ["clicks", "correction"]:
+            elif gtv == GTVN:
+                for i in [CLICKS, CORRECTION]:
                     self.img_3d["gtvn.{}".format(i)] = None
 
         # idl.gtvt/gtvn
@@ -1440,9 +1483,9 @@ class UiReplay(QMainWindow):
             pred_path = os.path.join(cur_round_dir, "{}_pred.nii.gz".format(gtv))
 
             # load gtvt data
-            if gtv == "gtvt":
+            if gtv == GTVT:
                 # load gtvt nii
-                for i in ["click", "annotation", "correction"]:
+                for i in [CLICK, ANNOTATION, CORRECTION]:
                     nii_path = os.path.join(cur_round_dir, "gtvt_{}.nii.gz".format(i))
                     if os.path.exists(nii_path):
                         self.img_3d["gtvt.{}".format(i)] = self._load_3d_img(
@@ -1457,7 +1500,7 @@ class UiReplay(QMainWindow):
                 )
                 if (
                     not os.path.exists(selected_slices_json_path)
-                    or self._idl_round["gtvt"] == "round=00"
+                    or self._idl_round[GTVT] == "round=00"
                 ):
                     self.__clear_gtvt_selected_slices_3d()
                 else:
@@ -1470,7 +1513,7 @@ class UiReplay(QMainWindow):
                             selected_slices_list += List(
                                 self.__gtvt_selected_slices_3d[plane][round_num]
                             )
-                            if (round_num) == self._idl_round["gtvt"]:
+                            if (round_num) == self._idl_round[GTVT]:
                                 break
                         # str to int
                         for i in range(len(selected_slices_list)):
@@ -1482,9 +1525,9 @@ class UiReplay(QMainWindow):
                 # self.__refresh_gtvt_selected_slices_2d()
 
             # load gtvn data
-            elif gtv == "gtvn":
+            elif gtv == GTVN:
                 # load gtvn nii
-                for i in ["clicks", "correction"]:
+                for i in [CLICKS, CORRECTION]:
                     nii_path = os.path.join(cur_round_dir, "gtvn_{}.nii.gz".format(i))
                     if os.path.exists(nii_path):
                         self.img_3d["gtvn.{}".format(i)] = self._load_3d_img(
@@ -1497,16 +1540,16 @@ class UiReplay(QMainWindow):
         self.img_3d["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
 
         # load baseline scores
-        if self._idl_id[gtv] == "baseline":
+        if self._idl_id[gtv] == BASELINE:
             gtvn_score_path = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
-                "baseline",
+                BASELINE,
                 "inference_{}_{}.json".format(self._dataset_ver, self._dataset_part),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                for metric in [DSC, MSD, HD95]:
                     self.__scores[gtv][metric] = gtvn_score[
                         "patient={}".format(self._cur_patient)
                     ][gtv][metric]
@@ -1521,7 +1564,7 @@ class UiReplay(QMainWindow):
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                for metric in [DSC, MSD, HD95]:
                     self.__scores[gtv][metric] = gtvn_score[
                         "patient={}".format(self._cur_patient)
                     ][metric][self._idl_round[gtv]]
@@ -1530,67 +1573,67 @@ class UiReplay(QMainWindow):
             self.refresh_img_qlabels()
 
     def _load_prev_baseline_data(self):
-        idx = self._combox["baseline"].currentIndex() - 1
+        idx = self._combox[BASELINE].currentIndex() - 1
         if idx < 0:
             return
-        prev_baseline = self._combox["baseline"].itemText(idx)
-        self._combox["baseline"].setCurrentText(prev_baseline)
+        prev_baseline = self._combox[BASELINE].itemText(idx)
+        self._combox[BASELINE].setCurrentText(prev_baseline)
         self._load_baseline_data()
 
     def _load_next_baseline_data(self):
-        idx = self._combox["baseline"].currentIndex() + 1
-        if idx > self._combox["baseline"].count() - 1:
+        idx = self._combox[BASELINE].currentIndex() + 1
+        if idx > self._combox[BASELINE].count() - 1:
             return
-        next_baseline = self._combox["baseline"].itemText(idx)
-        self._combox["baseline"].setCurrentText(next_baseline)
+        next_baseline = self._combox[BASELINE].itemText(idx)
+        self._combox[BASELINE].setCurrentText(next_baseline)
         self._load_baseline_data()
 
     def _load_prev_idl_gtvn_data(self):
-        idx = self._combox["idl.gtvn"].currentIndex() - 1
+        idx = self._combox[IDL_GTVN].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
-        self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
+        prev_idl_gtvn = self._combox[IDL_GTVN].itemText(idx)
+        self._combox[IDL_GTVN].setCurrentText(prev_idl_gtvn)
         self._load_idl_gtvn_data()
 
     def _load_next_idl_gtvn_data(self):
-        idx = self._combox["idl.gtvn"].currentIndex() + 1
-        if idx > self._combox["idl.gtvn"].count() - 1:
+        idx = self._combox[IDL_GTVN].currentIndex() + 1
+        if idx > self._combox[IDL_GTVN].count() - 1:
             return
-        next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
-        self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
+        next_idl_gtvn = self._combox[IDL_GTVN].itemText(idx)
+        self._combox[IDL_GTVN].setCurrentText(next_idl_gtvn)
         self._load_idl_gtvn_data()
 
     def _load_prev_idl_gtvt_data(self):
-        idx = self._combox["idl.gtvt"].currentIndex() - 1
+        idx = self._combox[IDL_GTVT].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
-        self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
+        prev_idl_gtvt = self._combox[IDL_GTVT].itemText(idx)
+        self._combox[IDL_GTVT].setCurrentText(prev_idl_gtvt)
         self._load_idl_gtvt_data()
 
     def _load_next_idl_gtvt_data(self):
-        idx = self._combox["idl.gtvt"].currentIndex() + 1
-        if idx > self._combox["idl.gtvt"].count() - 1:
+        idx = self._combox[IDL_GTVT].currentIndex() + 1
+        if idx > self._combox[IDL_GTVT].count() - 1:
             return
-        next_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
-        self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
+        next_idl_gtvt = self._combox[IDL_GTVT].itemText(idx)
+        self._combox[IDL_GTVT].setCurrentText(next_idl_gtvt)
         self._load_idl_gtvt_data()
 
     def _load_prev_patient_data(self):
-        idx = self._combox["patient"].currentIndex() - 1
+        idx = self._combox[PATIENT].currentIndex() - 1
         if idx < 0:
             return
-        prev_patient = self._combox["patient"].itemText(idx)
-        self._combox["patient"].setCurrentText(prev_patient)
+        prev_patient = self._combox[PATIENT].itemText(idx)
+        self._combox[PATIENT].setCurrentText(prev_patient)
         self._load_patient_data()
 
     def _load_next_patient_data(self):
-        idx = self._combox["patient"].currentIndex() + 1
-        if idx > self._combox["patient"].count() - 1:
+        idx = self._combox[PATIENT].currentIndex() + 1
+        if idx > self._combox[PATIENT].count() - 1:
             return
-        next_patient = self._combox["patient"].itemText(idx)
-        self._combox["patient"].setCurrentText(next_patient)
+        next_patient = self._combox[PATIENT].itemText(idx)
+        self._combox[PATIENT].setCurrentText(next_patient)
         self._load_patient_data()
 
     def __gray_to_rgb(self, gray_img: ndarray):
@@ -1604,6 +1647,9 @@ class UiReplay(QMainWindow):
         gray_img = cv2.convertScaleAbs(1 - gray_img, alpha=255.0)
         color_map = cv2.applyColorMap(gray_img, cv2.COLORMAP_JET)
         return color_map
+
+    def __refresh_img_qlabel_trasverse(self):
+        self.refresh_img_qlabels(img_name=TRANSVERSE)
 
     # replay_mode=True will show all contours
     # otherwise correction and annotation will cover pred
@@ -1619,7 +1665,7 @@ class UiReplay(QMainWindow):
         if img_name is not None:
             img_name_list = [img_name]
         else:
-            if self._toggle_btn.isChecked():
+            if self.display_mode() == PLANE_FIXED:
                 img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
             else:
                 img_name_list = [CT, PT, MR1, MR2]
@@ -1629,7 +1675,7 @@ class UiReplay(QMainWindow):
             modal = self.img_qlabel[img_name].modal
 
             # plane fixed mode
-            if self._toggle_btn.isChecked():
+            if self.display_mode() == PLANE_FIXED:
                 cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
                 if img_name == TRANSVERSE:
                     ct_slice = self.img_3d[CT][cur_slice_id, :, :]
@@ -1692,8 +1738,8 @@ class UiReplay(QMainWindow):
             #             self._plane != SAGITTAL
             #             and orient == Orient.VERTICAL
             #             and (
-            #                 self._dataset_ver == DatasetVer.AU_1MM
-            #                 or self._dataset_ver == DatasetVer.MDA
+            #                 self._dataset_ver == AU_1MM
+            #                 or self._dataset_ver == MDA
             #             )
             #         ):
             #             slice_pos = (
@@ -1718,7 +1764,7 @@ class UiReplay(QMainWindow):
             #             img=rgb_img_zeros,
             #             pt1=(x1, y1),
             #             pt2=(x2, y2),
-            #             color=self._color["gtvt.annotation"],
+            #             color=self._color[GTVT_ANNOTATION],
             #             thickness=-1,
             #         )
             #         if selected_slices_mask is None:
@@ -1746,23 +1792,23 @@ class UiReplay(QMainWindow):
             # replay mode, place the name of img on the top layer at the end of the list
             if replay_mode:
                 seg_name_list = [
-                    "gtvn.label",
-                    "gtvt.label",
-                    "gtvn.pred",
-                    "gtvt.pred",
-                    "gtvt.annotation",
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvn.clicks",
-                    "gtvt.click",
+                    GTVN_LABEL,
+                    GTVT_LABEL,
+                    GTVN_PRED,
+                    GTVT_PRED,
+                    GTVT_ANNOTATION,
+                    GTVN_CORRECTION,
+                    GTVT_CORRECTION,
+                    GTVN_CLICKS,
+                    GTVT_CLICK,
                 ]
             # idl mode, correction > annotation > pred
             else:
                 seg_name_list = [
-                    "gtvn.pred.final",
-                    "gtvt.pred.final",
-                    "gtvn.clicks",
-                    "gtvt.click",
+                    GTVN_PRED_FINAL,
+                    GTVT_PRED_FINAL,
+                    GTVN_CLICKS,
+                    GTVT_CLICK,
                 ]
 
             # draw label and pred contour
@@ -1782,9 +1828,9 @@ class UiReplay(QMainWindow):
 
                 # skip if current contour img is empty
                 if seg_name in [
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvt.annotation",
+                    GTVN_CORRECTION,
+                    GTVT_CORRECTION,
+                    GTVT_ANNOTATION,
                 ]:
                     # perfomr erosion to remove overlap of 3 different planes
                     kernel = np.ones((3, 3), np.uint8)
@@ -1798,7 +1844,7 @@ class UiReplay(QMainWindow):
                 segment, _ = self._fit_img_qlabel(segment, self.img_qlabel[img_name])
 
                 # points, higher thickness (otherwise cant see the points)
-                if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
+                if seg_name == GTVT_CLICK or seg_name == GTVN_CLICKS:
                     thickness = 7
                 # contours, lower thickness
                 else:
@@ -1859,13 +1905,13 @@ class UiReplay(QMainWindow):
             qimg=qimg,
             text="GTVt",
             pos=(pos_x[1], pos_y[0]),
-            color=self._color["gtvt.label"],
+            color=self._color[GTVT_LABEL],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
             pos=(pos_x[2], pos_y[0]),
-            color=self._color["gtvn.label"],
+            color=self._color[GTVN_LABEL],
         )
 
         # pred
@@ -1879,13 +1925,13 @@ class UiReplay(QMainWindow):
             qimg=qimg,
             text="GTVt",
             pos=(pos_x[1], pos_y[1]),
-            color=self._color["gtvt.pred"],
+            color=self._color[GTVT_PRED],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
             pos=(pos_x[2], pos_y[1]),
-            color=self._color["gtvn.pred"],
+            color=self._color[GTVN_PRED],
         )
 
         # user input
@@ -1899,13 +1945,13 @@ class UiReplay(QMainWindow):
             qimg=qimg,
             text="Init",
             pos=(pos_x[1], pos_y[2]),
-            color=self._color["gtvt.annotation"],
+            color=self._color[GTVT_ANNOTATION],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="Correction",
             pos=(pos_x[2], pos_y[2]),
-            color=self._color["gtvt.correction"],
+            color=self._color[GTVT_CORRECTION],
         )
 
     def _add_msg_on_qimg(self, qimg: QImage):
@@ -1914,7 +1960,7 @@ class UiReplay(QMainWindow):
     def _add_score_on_qimg(self, qimg: QImage):
         pos_y = 25
 
-        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+        for metric in [DSC, MSD, HD95]:
             pos_x = 10
 
             # "DSC/MSD/HD95: "
@@ -1926,17 +1972,17 @@ class UiReplay(QMainWindow):
                 color=self._color["green"],
             )
             # load scores
-            for i in ["gtvt", "gtvn"]:
+            for i in [GTVT, GTVN]:
                 # text
                 if Value.is_number(self.__scores[i][metric]):
-                    if metric == Metric.DSC:
+                    if metric == DSC:
                         text = "{:.2f}".format(self.__scores[i][metric])
                     else:
                         text = "{:.1f}".format(self.__scores[i][metric])
                 else:
                     text = "NaN"
                 # mod x pos
-                if i == "gtvt":
+                if i == GTVT:
                     pos_x += 55
                 else:
                     pos_x += 50

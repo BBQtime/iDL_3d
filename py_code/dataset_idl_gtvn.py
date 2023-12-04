@@ -10,6 +10,7 @@ from custom import Img, Nii
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import binary_dilation, distance_transform_edt, measurements
+from str_lib import CLICKS, DISTANCE_MAP, GTVN, LABEL, PRED, SEED
 from torch import Tensor
 
 
@@ -40,7 +41,7 @@ class DataSetIDLGTVn(DatasetCore):
         self.__origin = Dict()
 
         # load pred
-        self.__origin["pred"] = Nii.load(
+        self.__origin[PRED] = Nii.load(
             os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self.__baseline_id,
@@ -53,9 +54,9 @@ class DataSetIDLGTVn(DatasetCore):
         )
 
         # load label
-        self.__origin["label"] = Img.load_labels(
+        self.__origin[LABEL] = Img.load_labels(
             dataset_dir=self._dataset_dir, patient=patient
-        )["gtvn"]
+        )[GTVN]
 
         # find augment seed
         final = Dict()
@@ -64,7 +65,7 @@ class DataSetIDLGTVn(DatasetCore):
         # origin_pred needs to be binarized (without changing original img)
         # otherwise origin_label_pred_sum is too high
         origin_label_pred_sum = (
-            self.__origin["label"].sum() + Img.binarize(self.__origin["pred"]).sum()
+            self.__origin[LABEL].sum() + Img.binarize(self.__origin[PRED]).sum()
         )
 
         # loop until target volume is big enough
@@ -72,55 +73,53 @@ class DataSetIDLGTVn(DatasetCore):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp[SEED] = random.randint(0, 2**16)
 
             # load gtvs
-            for i in ["label", "pred"]:
-                tmp[i] = self._preprocess(
-                    img=self.__origin[i], augment_seed=tmp["seed"]
-                )
+            for i in [LABEL, PRED]:
+                tmp[i] = self._preprocess(img=self.__origin[i], augment_seed=tmp[SEED])
                 tmp[i] = Img.binarize(tmp[i])
 
-            tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
+            tmp_label_pred_sum = tmp[LABEL].sum() + tmp[PRED].sum()
 
             # target volume is not large enough
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
                 # if "final" dict is empty
                 if final == {}:
-                    for i in ["label", "pred", "seed"]:
+                    for i in [LABEL, PRED, SEED]:
                         final[i] = tmp[i]
                     if origin_label_pred_sum == 0:
                         break
 
                 # keep the seed/label/pred with largest target volume
-                final_label_pred_sum = final["label"].sum() + final["pred"].sum()
+                final_label_pred_sum = final[LABEL].sum() + final[PRED].sum()
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "seed"]:
+                    for i in [LABEL, PRED, SEED]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label", "pred", "seed"]:
+                for i in [LABEL, PRED, SEED]:
                     final[i] = tmp[i]
                 break
 
         # background
-        background = 1 - final["label"]
+        background = 1 - final[LABEL]
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["label"]], dim=0)
+        labels = torch.cat([background, final[LABEL]], dim=0)
 
         # gtvn_clicks
         if self.__gtvn_clicks is not None:
-            self.__origin["clicks"] = self.__gtvn_clicks
+            self.__origin[CLICKS] = self.__gtvn_clicks
         else:
             # simulate click
-            self.__origin["clicks"] = np.zeros(
-                self.__origin["label"].shape, dtype=np.float32
+            self.__origin[CLICKS] = np.zeros(
+                self.__origin[LABEL].shape, dtype=np.float32
             )
             # loop through each connected components
             # cc_count = 1
-            for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
+            for cur_gtvn_cc in Img.connected_components(self.__origin[LABEL]):
                 if self.__random_click:
                     # random point (d,h,w)
                     pos = Img.find_random_point(cur_gtvn_cc)
@@ -130,23 +129,23 @@ class DataSetIDLGTVn(DatasetCore):
                     # float to int
                     for i in range(len(pos)):
                         pos[i] = round(pos[i])
-                self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
+                self.__origin[CLICKS][pos[0]][pos[1]][pos[2]] = 1
 
         # generate distance map based on clicks
-        if np.sum(self.__origin["label"]) > 0:
-            self.__origin["distance.map"] = distance_transform_edt(
-                np.logical_not(self.__origin["clicks"])
+        if np.sum(self.__origin[LABEL]) > 0:
+            self.__origin[DISTANCE_MAP] = distance_transform_edt(
+                np.logical_not(self.__origin[CLICKS])
             ).astype(np.float32)
-            self.__origin["distance.map"] = np.exp(-0.1 * self.__origin["distance.map"])
+            self.__origin[DISTANCE_MAP] = np.exp(-0.1 * self.__origin[DISTANCE_MAP])
         else:
-            self.__origin["distance.map"] = np.zeros_like(self.__origin["label"])
+            self.__origin[DISTANCE_MAP] = np.zeros_like(self.__origin[LABEL])
 
         input_imgs = None
-        clicks = self._preprocess(self.__origin["clicks"], final["seed"])
+        clicks = self._preprocess(self.__origin[CLICKS], final[SEED])
 
         # pred + click
-        for i in ["distance.map"]:  # ["pred", "distance.map"]:
-            final[i] = self._preprocess(self.__origin[i], final["seed"])
+        for i in [DISTANCE_MAP]:  # [PRED, DISTANCE_MAP]:
+            final[i] = self._preprocess(self.__origin[i], final[SEED])
             if input_imgs is None:
                 input_imgs = final[i]
             else:
@@ -166,7 +165,7 @@ class DataSetIDLGTVn(DatasetCore):
             if i == "CT":
                 img = Img.ct_windowing(img)
 
-            img = self._preprocess(img, final["seed"])
+            img = self._preprocess(img, final[SEED])
 
             # concat multi-model img
             input_imgs = torch.cat([input_imgs, img], dim=0)
@@ -179,28 +178,3 @@ class DataSetIDLGTVn(DatasetCore):
     def __getitem__(self, idx: int):
         patient = self.__patients[idx]
         return self.get_item(patient)
-
-
-# # for testing
-# augment = Dict()
-# # [translate,elastic,rotate,scale,flip.lr,flip.ud]
-# augment["methods"] = []
-# augment["pct"] = 1
-# augment["min"] = 1
-# augment["max"] = 1
-# augment["times"] = 1
-
-# baseline_epoch_dir = os.path.join(
-#     g.TRAIN_RESULTS_DIR,
-#     "baseline_2023.02.27.07.08.09_loss.gamma=0.5",
-#     "fold=1",
-#     "epoch=205",
-# )
-# # augment_methods =
-# tmp_dataset = DataSetIDLGTVn(
-#     patients=["129"],
-#     baseline_epoch_dir=baseline_epoch_dir,
-#     augment=None,
-#     random_click=True,
-# )
-# tmp_dataset.__getitem__(0)
