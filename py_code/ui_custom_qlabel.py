@@ -1,8 +1,16 @@
+from custom import Dict, Value
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
-from str_lib import CORONAL, CT, PLANE_FIXED, SAGITTAL, TRANSVERSE, IDLStep
+from str_lib import CORONAL, CT, SAGITTAL, TRANSVERSE, DisplayMode, IDLStep
 from ui_draggable_cross import DraggableCross
+
+
+class ROI:
+    x = None
+    y = None
+    width = None
+    height = None
 
 
 class CustomQLabel(QLabel):
@@ -12,6 +20,9 @@ class CustomQLabel(QLabel):
         # record plane and modality here instead of main window
         self.plane = None
         self.modal = None
+
+        # rgb img - region of interest
+        self.roi = ROI()
 
         # clicks
         self.selected_cross = None
@@ -45,16 +56,34 @@ class CustomQLabel(QLabel):
 
             elif idl_step == IDLStep.CLICK_GTVT_CENTER:
                 # remove old crosses
-                self.window().delete_all_crosses_on_4_qlabels()
-                self.window().clear_gtvt_click_pos_3d()
-                # add new crosses
-                self.window().add_4_crosses(event.pos(), record_click_pos=True)
+                self.window().delete_all_crosses()
+                # add new 3d pos
+                pos_3d = self.get_pos_in_3d(event.pos())
+                self.window().gtvt_click_pos_3d = pos_3d
+                self.window().reset_cur_slice_id()
+                if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                    # only refresh other img_qlabels
+                    img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+                    img_name_list.remove(self.plane)
+                    for i in img_name_list:
+                        self.window().refresh_img_qlabels(i)
+                self.window().refresh_crosses_on_qlabels()
 
             elif idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
                 self.window().draw_on_4_qlabels_press(event)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
-                self.window().add_4_crosses(event.pos(), record_click_pos=True)
+                pos_3d = self.get_pos_in_3d(event.pos())
+                if pos_3d not in self.window().gtvn_clicks_pos_3d:
+                    self.window().gtvn_clicks_pos_3d.append(pos_3d)
+                    self.window().reset_cur_slice_id()
+                    if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                        # only refresh other img_qlabels
+                        img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+                        img_name_list.remove(self.plane)
+                        for i in img_name_list:
+                            self.window().refresh_img_qlabels(i)
+                    self.window().refresh_crosses_on_qlabels()
 
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
@@ -114,7 +143,7 @@ class CustomQLabel(QLabel):
             self.selected_cross.select(False)
             self.selected_cross = None
 
-    def select_cross(self, cross_id: int):
+    def select_cross(self, cross_id: tuple):
         self.deselect_cross()
         # select new cross
         for cross in self.crosses_list:
@@ -136,17 +165,111 @@ class CustomQLabel(QLabel):
             self.selected_cross.deleteLater()
             self.selected_cross = None
 
-    def add_cross(self, pos: QPoint, cross_id: int):
+    def get_pos_in_3d(self, pos: QPoint):
+        if self.roi.x is None:
+            return
+
+        cur_slice = self.window().cur_slice_id[self.plane]
+        img_shape_3d = self.window().get_3d_img_shape()
+
+        x = pos.x() - self.roi.x
+        y = pos.y() - self.roi.y
+
+        x = x / self.roi.width
+        y = y / self.roi.height
+
+        d, h, w = img_shape_3d
+
+        # 2d to 3d
+        if self.plane == TRANSVERSE:
+            w *= x
+            h *= y
+            d = cur_slice
+        elif self.plane == CORONAL:
+            w *= x
+            h = cur_slice
+            d *= y
+        elif self.plane == SAGITTAL:
+            w = cur_slice
+            h *= x
+            d *= y
+
+        w = round(w)
+        h = round(h)
+        d = round(d)
+        w = Value.limit_range(w, (0, img_shape_3d[2] - 1))
+        h = Value.limit_range(h, (0, img_shape_3d[1] - 1))
+        d = Value.limit_range(d, (0, img_shape_3d[0] - 1))
+
+        # dont neet to turn upside down
+        # flip left/right back for 1mm data
+        if self.window().get_nii_spacing() == 1.0:
+            w = img_shape_3d[2] - w
+
+        return d, h, w
+
+    def refresh_crosses(self):
+        idl_step = self.window().get_cur_patient_idl_step()
+
+        if idl_step not in [IDLStep.CLICK_GTVT_CENTER, IDLStep.CLICK_GTVN_CENTER]:
+            return
+
+        # remove old crosses
+        self.delete_all_crosses()
+
+        # load crosses position from gtvt/gtvn_clicks_pos_3d
+        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+            if self.window().gtvt_click_pos_3d is None:
+                return
+            else:
+                clicks_pos_3d = [self.window().gtvt_click_pos_3d]
+
+        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+            if len(self.window().gtvn_clicks_pos_3d) <= 0:
+                return
+            else:
+                clicks_pos_3d = self.window().gtvn_clicks_pos_3d
+
+        img_shape = self.window().get_3d_img_shape()
+
+        # loop through all clicks
+        for d, h, w in clicks_pos_3d:
+            x = y = None
+            if self.plane == TRANSVERSE and self.window().cur_slice_id[TRANSVERSE] == d:
+                x = w / img_shape[2]
+                y = h / img_shape[1]
+
+            elif self.plane == CORONAL and self.window().cur_slice_id[CORONAL] == h:
+                x = w / img_shape[2]
+                y = d / img_shape[0]
+
+            elif self.plane == SAGITTAL and self.window().cur_slice_id[SAGITTAL] == w:
+                x = h / img_shape[1]
+                y = d / img_shape[0]
+
+            # find click on current slice
+            if x is not None and y is not None:
+                x *= self.roi.width
+                y *= self.roi.height
+                x = round(x)
+                y = round(y)
+                x += self.roi.x
+                y += self.roi.y
+
+                # do not record click pos when refreshing
+                self.add_cross(pos=QPoint(x, y), click_pos_3d=(d, h, w))
+
+    def add_cross(self, pos: QPoint, click_pos_3d: tuple):
         self.deselect_cross()
-        # create new cross
-        new_cross = DraggableCross(parent=self, cross_id=cross_id)
+        # create new cross (use click_pos_3d as cross_id)
+        new_cross = DraggableCross(parent=self, cross_id=click_pos_3d)
         new_cross.setGeometry(
             pos.x() - round(new_cross.CROSS_SIZE / 2),
             pos.y() - round(new_cross.CROSS_SIZE / 2),
             new_cross.CROSS_SIZE,
             new_cross.CROSS_SIZE,
         )
-        new_cross.load_png(new_cross.CROSS_ICON_DIR_UNSELECTED)
+        new_cross.load_png(new_cross.UNSELECTED_CROSS_ICON_PATH)
         new_cross.show()
         self.crosses_list.append(new_cross)
 
@@ -172,7 +295,7 @@ class CustomQLabel(QLabel):
         # limite slice_id in range (0, slices_count)
         self.window().cur_slice_id[self.plane] %= slices_count
 
-        if self.window().display_mode() == PLANE_FIXED:
+        if self.window().display_mode() == DisplayMode.PLANE_FIXED:
             self.window().refresh_img_qlabels(img_name=self.plane)
         else:
             self.window().refresh_img_qlabels()

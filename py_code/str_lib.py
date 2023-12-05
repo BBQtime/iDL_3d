@@ -28,6 +28,21 @@ class DatasetPart:
     TEST_EXTER = "test.exter"
 
 
+# ui-display mode
+DISPLAY_MODE = "display.mode"
+
+
+class DisplayMode:
+    MODAL_FIXED = "modal.fixed"
+    PLANE_FIXED = "plane.fixed"
+
+
+# dataset versions
+AU_3MM = "au.3mm"
+AU_1MM = "au.1mm"
+MDA = "mda"
+
+
 # ui
 MODAL = "modal"
 PLANE = "plane"
@@ -50,10 +65,6 @@ ERASER = "eraser"
 CLEAR = "clear"
 CONFIRM = "confirm"
 
-# ui-display mode
-MODAL_FIXED = "modal.fixed"
-PLANE_FIXED = "plane.fixed"
-DISPLAY_MODE = "display.mode"
 
 # anatomical planes
 TRANSVERSE = "transverse"
@@ -102,10 +113,6 @@ DSC = "dsc"
 MSD = "msd"
 HD95 = "hd95"
 
-# dataset versions
-AU_3MM = "au.3mm"
-AU_1MM = "au.1mm"
-MDA = "mda"
 
 # gtv
 GTVT = "gtvt"

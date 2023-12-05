@@ -6,7 +6,7 @@ import numpy as np
 import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Nii, Time, Value
+from custom import Img, Json, List, Nii, Time
 from PyQt5.QtCore import QPoint, QSize, Qt
 from PyQt5.QtGui import (
     QColor,
@@ -61,23 +61,23 @@ from str_lib import (
     GTVT_PRED_FINAL,
     IDL_GTVN,
     IDL_GTVT,
-    MODAL_FIXED,
     MR1,
     MR2,
     PATIENT,
     PEN,
     PEN_SIZE,
-    PLANE_FIXED,
     PRED,
     PT,
     SAGITTAL,
     TRANSVERSE,
+    DisplayMode,
     DrawingMode,
     IDLStep,
 )
 from superqt import QCollapsible
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
+from ui_custom_qlabel import CustomQLabel
 from ui_draggable_cross import DraggableCross
 from ui_replay import UiReplay
 
@@ -189,7 +189,7 @@ class UiIDL(UiReplay):
         # add annotation_2d on 3d annotation
         idl_step = self.get_cur_patient_idl_step()
         if idl_step == IDLStep.DRAW_GTVT:
-            t, c, s = self.__gtvt_click_pos_3d
+            t, c, s = self.gtvt_click_pos_3d
             if self._plane == TRANSVERSE:
                 segment = self.img_3d[GTVT_ANNOTATION][t, :, :]
             elif self._plane == CORONAL:
@@ -372,7 +372,7 @@ class UiIDL(UiReplay):
 
     def __click_btn_confirm(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
-            if self.__gtvt_click_pos_3d is None:
+            if self.gtvt_click_pos_3d is None:
                 QMessageBox.information(
                     self,
                     "Information",
@@ -382,7 +382,7 @@ class UiIDL(UiReplay):
                 return
 
             # add clicks into 3d img
-            pos = self.__gtvt_click_pos_3d
+            pos = self.gtvt_click_pos_3d
             if self.img_3d[GTVT_CLICK] is None:
                 self.img_3d[GTVT_CLICK] = np.zeros_like(self.img_3d[CT])
             # pos 0-transverse 1-coronal 2-saggital
@@ -425,7 +425,7 @@ class UiIDL(UiReplay):
             )
 
             # clean current step elements
-            self.delete_all_crosses_on_4_qlabels()
+            self.delete_all_crosses()
             # new step
             self.set_cur_patient_idl_step(IDLStep.DRAW_GTVT)
             self.__save_idl_step()
@@ -500,12 +500,12 @@ class UiIDL(UiReplay):
             # add clicks into 3d img
             if self.img_3d[GTVN_CLICKS] is None:
                 self.img_3d[GTVN_CLICKS] = np.zeros_like(self.img_3d[CT])
-            for pos in self.__gtvn_clicks_pos_3d:
+            for pos in self.gtvn_clicks_pos_3d:
                 # pos 0-transverse 1-coronal 2-saggital
                 self.img_3d[GTVN_CLICKS][pos[0]][pos[1]][pos[2]] = 1
 
             # clean current step elements
-            self.delete_all_crosses_on_4_qlabels()
+            self.delete_all_crosses()
 
             # show gtvn center
             self.refresh_img_qlabels()
@@ -579,7 +579,7 @@ class UiIDL(UiReplay):
     def refresh_img_qlabels(self, img_name=None):
         # no patient loaded
         if self.img_3d[CT] is None:
-            if self.display_mode() == PLANE_FIXED:
+            if self.display_mode() == DisplayMode.PLANE_FIXED:
                 img_name = TRANSVERSE
             else:
                 img_name = CT
@@ -626,11 +626,11 @@ class UiIDL(UiReplay):
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.clear_gtvt_click_pos_3d()
-            self.__refresh_crosses_on_4_qlabels()
+            self.refresh_crosses_on_qlabels()
 
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.clear_gtvn_clicks_pos_3d()
-            self.__refresh_crosses_on_4_qlabels()
+            self.refresh_crosses_on_qlabels()
 
         elif idl_step == IDLStep.DRAW_GTVT:
             # clear annotation on cur plane
@@ -681,35 +681,35 @@ class UiIDL(UiReplay):
 
     def __get_gtvt_center_slices_id(self):
         center_slices_id = Dict()
-        if self.__gtvt_click_pos_3d is None:
+        if self.gtvt_click_pos_3d is None:
             center_slices_id[TRANSVERSE] = None
             center_slices_id[CORONAL] = None
             center_slices_id[SAGITTAL] = None
         else:
-            center_slices_id[TRANSVERSE] = self.__gtvt_click_pos_3d[0]
-            center_slices_id[CORONAL] = self.__gtvt_click_pos_3d[1]
-            center_slices_id[SAGITTAL] = self.__gtvt_click_pos_3d[2]
+            center_slices_id[TRANSVERSE] = self.gtvt_click_pos_3d[0]
+            center_slices_id[CORONAL] = self.gtvt_click_pos_3d[1]
+            center_slices_id[SAGITTAL] = self.gtvt_click_pos_3d[2]
         return center_slices_id
 
     def __get_gtvn_center_slices_id(self):
         center_slices_id = Dict()
-        if len(self.__gtvn_clicks_pos_3d) == 0:
+        if len(self.gtvn_clicks_pos_3d) == 0:
             center_slices_id[TRANSVERSE] = None
             center_slices_id[CORONAL] = None
             center_slices_id[SAGITTAL] = None
         else:
-            center_slices_id[TRANSVERSE] = self.__gtvn_clicks_pos_3d[-1][0]
-            center_slices_id[CORONAL] = self.__gtvn_clicks_pos_3d[-1][1]
-            center_slices_id[SAGITTAL] = self.__gtvn_clicks_pos_3d[-1][2]
+            center_slices_id[TRANSVERSE] = self.gtvn_clicks_pos_3d[-1][0]
+            center_slices_id[CORONAL] = self.gtvn_clicks_pos_3d[-1][1]
+            center_slices_id[SAGITTAL] = self.gtvn_clicks_pos_3d[-1][2]
         return center_slices_id
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.__refresh_crosses_on_4_qlabels()
+        self.refresh_crosses_on_qlabels()
 
     def wheelEvent(self, event):
         super().wheelEvent(event)
-        self.__refresh_crosses_on_4_qlabels()
+        self.refresh_crosses_on_qlabels()
 
     def _modal_fixed_mode_switch_plane(
         self, connected_radio_btn: QRadioButton = None, new_plane: str = None
@@ -717,127 +717,89 @@ class UiIDL(UiReplay):
         super()._modal_fixed_mode_switch_plane(
             connected_radio_btn=connected_radio_btn, new_plane=new_plane
         )
-        self.__refresh_crosses_on_4_qlabels()
+        self.refresh_crosses_on_qlabels()
 
-    def delete_all_crosses_on_4_qlabels(self):
-        for i in [CT, PT, MR1, MR2]:
+    def delete_all_crosses(self):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            img_name_list = [CT, PT, MR1, MR2]
+        else:
+            img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+        for i in img_name_list:
             self.img_qlabel[i].delete_all_crosses()
 
-    def __refresh_crosses_on_4_qlabels(self):
-        if (
-            self.get_cur_patient_idl_step() != IDLStep.CLICK_GTVT_CENTER
-            and self.get_cur_patient_idl_step() != IDLStep.CLICK_GTVN_CENTER
-        ):
-            return
+    def refresh_crosses_on_qlabels(self, img_name: str = None):
+        if img_name is not None:
+            img_name_list = [img_name]
+        else:
+            if self.display_mode() == DisplayMode.PLANE_FIXED:
+                img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+            else:
+                img_name_list = [CT, PT, MR1, MR2]
 
-        # remove old crosses
-        self.delete_all_crosses_on_4_qlabels()
+        for i in img_name_list:
+            self.img_qlabel[i].refresh_crosses()
 
-        # load crosses position from gtvt/gtvn_clicks_pos_3d
-        if (
-            self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER
-            or self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER
-        ):
-            if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
-                if self.__gtvt_click_pos_3d is None:
-                    return
-                else:
-                    clicks_pos_3d = [self.__gtvt_click_pos_3d]
-            elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
-                if len(self.__gtvn_clicks_pos_3d) <= 0:
-                    return
-                else:
-                    clicks_pos_3d = self.__gtvn_clicks_pos_3d
+    def update_cross_id(
+        self,
+        cross: DraggableCross,
+        old_cross_id: tuple,
+        new_cross_id: tuple,
+    ):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            for i in [CT, PT, MR1, MR2]:
+                cross = self.img_qlabel[i].get_cross_by_id(old_cross_id)
+                cross.cross_id = new_cross_id
+        else:
+            cross.cross_id = new_cross_id
 
-            img_shape = self.get_3d_img_shape()
-
-            for d, h, w in clicks_pos_3d:
-                x = y = None
-                if self._plane == TRANSVERSE:
-                    if self.cur_slice_id == d:
-                        x = w / img_shape[2]
-                        y = h / img_shape[1]
-
-                elif self._plane == CORONAL:
-                    if self.cur_slice_id == h:
-                        x = w / img_shape[2]
-                        y = d / img_shape[0]
-
-                elif self._plane == SAGITTAL:
-                    if self.cur_slice_id == w:
-                        x = h / img_shape[1]
-                        y = d / img_shape[0]
-
-                # find click on current slice
-                if x is not None and y is not None:
-                    x *= self._rgb_img_roi["width"]
-                    y *= self._rgb_img_roi["height"]
-                    x = round(x)
-                    y = round(y)
-                    x += self._rgb_img_roi["x"]
-                    y += self._rgb_img_roi["y"]
-
-                    # do not record click pos when refreshing
-                    self.add_4_crosses(QPoint(x, y), record_click_pos=False)
-
-    def delete_click_pos(self, cross: DraggableCross):
+    def remove_3d_pos_of_selected_cross(self, cross: DraggableCross):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
-            self.__gtvt_click_pos_3d = None
+            self.gtvt_click_pos_3d = None
         elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
-            pos = cross.get_pos_in_3d()
-            self.__gtvn_clicks_pos_3d.remove(pos)
+            pos_3d = cross.cross_id
+            self.gtvn_clicks_pos_3d.remove(pos_3d)
 
-    def add_click_pos(self, cross: DraggableCross):
-        pos = cross.get_pos_in_3d()
+    def add_3d_pos_of_selected_cross(self, cross: DraggableCross):
+        pos_3d = cross.cross_id
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
-            self.__gtvt_click_pos_3d = pos
+            self.gtvt_click_pos_3d = pos_3d
         elif self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
-            self.__gtvn_clicks_pos_3d.append(pos)
+            self.gtvn_clicks_pos_3d.append(pos_3d)
 
-    def set_4_crosses_dragging_offset(self, pos: QPoint):
-        for i in [CT, PT, MR1, MR2]:
-            self.img_qlabel[i].selected_cross.offset = pos
+    def set_cross_dragging_offset(self, img_qlabel: CustomQLabel, pos: QPoint):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            for i in [CT, PT, MR1, MR2]:
+                self.img_qlabel[i].selected_cross.offset = pos
+        else:
+            img_qlabel.selected_cross.offset = pos
 
-    def set_4_crosses_dragging_state(self, dragging: bool):
-        for i in [CT, PT, MR1, MR2]:
-            self.img_qlabel[i].selected_cross.dragging = dragging
+    def set_cross_dragging_state(self, img_qlabel: CustomQLabel, dragging: bool):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            for i in [CT, PT, MR1, MR2]:
+                self.img_qlabel[i].selected_cross.dragging = dragging
+        else:
+            img_qlabel.selected_cross.dragging = dragging
 
-    def move_4_crosses(self, pos: QPoint):
-        for i in [CT, PT, MR1, MR2]:
-            self.img_qlabel[i].selected_cross.move(pos)
+    def move_cross(self, img_qlabel: CustomQLabel, pos: QPoint):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            for i in [CT, PT, MR1, MR2]:
+                self.img_qlabel[i].selected_cross.move(pos)
+        else:
+            img_qlabel.selected_cross.move(pos)
 
     def delete_4_crosses(self):
         cross = self.img_qlabel[CT].selected_cross
-        self.delete_click_pos(cross)
+        self.remove_3d_pos_of_selected_cross(cross)
         for i in [CT, PT, MR1, MR2]:
             self.img_qlabel[i].delete_selected_cross()
 
-    # make this function public, CustomQLabel will use it
-    def add_4_crosses(self, pos: QPoint, record_click_pos: bool):
-        if self.img_3d[CT] is None:
-            return
-
-        # make sure new cross id is unique
-        crosses_id_list = self.img_qlabel[CT].get_crosses_id_list()
-        while 1:
-            cross_id = random.randint(0, 2**16)
-            if cross_id not in crosses_id_list:
-                break
-        # add crosses
-        for i in [CT, PT, MR1, MR2]:
-            self.img_qlabel[i].add_cross(pos=pos, cross_id=cross_id)
-
-        # add clicks into 3d img
-        if record_click_pos:
-            new_cross = self.img_qlabel[CT].get_cross_by_id(cross_id)
-            self.add_click_pos(new_cross)
-
-    def select_4_crosses(self, cross_id: int):
-        for i in [CT, PT, MR1, MR2]:
+    def select_cross(self, cross_id: tuple):
+        if self.display_mode() == DisplayMode.MODAL_FIXED:
+            img_name_list = [CT, PT, MR1, MR2]
+        else:
+            img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+        for i in img_name_list:
             self.img_qlabel[i].select_cross(cross_id)
-
-    def get_rgb_img_roi(self):
-        return self._rgb_img_roi
 
     def get_nii_spacing(self):
         return self._nii_spacing
@@ -978,10 +940,10 @@ class UiIDL(UiReplay):
         #     self._slider[i].setEnabled(False)
 
     def clear_gtvt_click_pos_3d(self):
-        self.__gtvt_click_pos_3d = None
+        self.gtvt_click_pos_3d = None
 
     def clear_gtvn_clicks_pos_3d(self):
-        self.__gtvn_clicks_pos_3d = List()
+        self.gtvn_clicks_pos_3d = List()
 
     def _init_data(self, idl_remark: str = None, debug_mode: bool = False):
         super()._init_data()
@@ -1191,18 +1153,18 @@ class UiIDL(UiReplay):
         # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()
         # reset current slice id after ct img loaded
-        self._reset_cur_slice_id()
+        self.reset_cur_slice_id()
         self._load_idl_gtvt_data()
         self._load_idl_gtvn_data()
         self.refresh_img_qlabels()
-        self.__refresh_crosses_on_4_qlabels()
+        self.refresh_crosses_on_qlabels()
         self.__save_idl_step()
 
-    def _reset_cur_slice_id(self):
+    def reset_cur_slice_id(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER or idl_step == IDLStep.DRAW_GTVT:
-            if self.__gtvt_click_pos_3d is None:
+            if self.gtvt_click_pos_3d is None:
                 self.cur_slice_id[TRANSVERSE] = self.img_3d[CT].shape[0] // 2
                 self.cur_slice_id[CORONAL] = self.img_3d[CT].shape[1] // 2
                 self.cur_slice_id[SAGITTAL] = self.img_3d[CT].shape[2] // 2
@@ -1210,7 +1172,7 @@ class UiIDL(UiReplay):
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
-            if len(self.__gtvn_clicks_pos_3d) == 0:
+            if len(self.gtvn_clicks_pos_3d) == 0:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
             else:
                 self.cur_slice_id = self.__get_gtvn_center_slices_id()
@@ -1219,7 +1181,7 @@ class UiIDL(UiReplay):
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                if len(self.__gtvn_clicks_pos_3d) == 0:
+                if len(self.gtvn_clicks_pos_3d) == 0:
                     self.cur_slice_id = self.__get_gtvt_center_slices_id()
                 else:
                     self.cur_slice_id = self.__get_gtvn_center_slices_id()
