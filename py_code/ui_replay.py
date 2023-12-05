@@ -550,7 +550,7 @@ class UiReplay(QMainWindow):
         self._collap[IDL_GTVN] = QCollapsible("SELECT IDL GTVN")
         for i in [BASELINE, PATIENT, IDL_GTVT, IDL_GTVN]:
             # self._collap[i].setFixedHeight(90)
-            self._collap[i].expand(True)
+            self._collap[i].expand()
             h_layout = QHBoxLayout()
             h_layout.setSpacing(1)
             h_layout.addWidget(self._arrow_btn["prev.{}".format(i)])
@@ -631,7 +631,7 @@ class UiReplay(QMainWindow):
         # collapse
         self._collap[COLOR_ENHANCE] = QCollapsible("COLOR ENHANCEMENT")
         # self._collap[COLOR_ENHANCE].setFixedHeight(180)
-        self._collap[COLOR_ENHANCE].expand(False)
+        self._collap[COLOR_ENHANCE].collapse()
         v_layout = QVBoxLayout()
 
         # radio buttons: ct/pt/mr1/mr2
@@ -872,7 +872,7 @@ class UiReplay(QMainWindow):
         # collapse
         self._collap[DISPLAY_MODE] = QCollapsible("DISPLAY MODE")
         # self._collap[DISPLAY_MODE].setFixedHeight(170)
-        self._collap[DISPLAY_MODE].expand(True)
+        self._collap[DISPLAY_MODE].expand()
         v_layout = QVBoxLayout()
 
         # toggle btn and display mode text
@@ -947,6 +947,7 @@ class UiReplay(QMainWindow):
         # add slider into collapsible space
         self._collap[ZOOM] = QCollapsible("ZOOM IN")
         # self._collap[ZOOM].setFixedHeight(60)
+        self._collap[ZOOM].collapse()
         self._collap[ZOOM].addWidget(self._slider[ZOOM])
 
     # virtual function (for ui_idl)

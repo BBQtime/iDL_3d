@@ -70,7 +70,7 @@ class CustomQLabel(QLabel):
                 self.window().refresh_crosses_on_qlabels()
 
             elif idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
-                self.window().draw_on_4_qlabels_press(event)
+                self.window().draw_on_img_qlabels_press(event)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
                 pos_3d = self.get_pos_in_3d(event.pos())
@@ -94,7 +94,7 @@ class CustomQLabel(QLabel):
             idl_step = self.window().get_cur_patient_idl_step()
 
             if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
-                self.window().draw_on_4_qlabels_move(event)
+                self.window().draw_on_img_qlabels_move(event=event, img_qlabel=self)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
@@ -103,7 +103,7 @@ class CustomQLabel(QLabel):
             idl_step = self.window().get_cur_patient_idl_step()
 
             if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
-                self.window().draw_on_4_qlabels_release()
+                self.window().draw_on_img_qlabels_release(self)
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -160,6 +160,7 @@ class CustomQLabel(QLabel):
 
     def delete_selected_cross(self):
         if self.selected_cross:
+            self.window().remove_3d_pos_of_selected_cross(self.selected_cross)
             self.crosses_list.remove(self.selected_cross)
             self.selected_cross.setParent(None)
             self.selected_cross.deleteLater()

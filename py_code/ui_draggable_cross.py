@@ -31,61 +31,13 @@ class DraggableCross(QWidget):
         self.png_label = QLabel(self)
         self.png_label.setGeometry(0, 0, self.CROSS_SIZE, self.CROSS_SIZE)
 
-    # def get_pos_in_3d(self):
-    #     rgb_img_roi = self.window().get_rgb_img_roi()
-    #     img_plane = self.window().get_img_plane()
-    #     cur_slice = self.window().cur_slice_id
-    #     img_shape = self.window().get_3d_img_shape()
-    #     nii_spacing = self.window().get_nii_spacing()
-
-    #     if rgb_img_roi is None:
-    #         return None
-
-    #     x = self.pos().x() + round(self.CROSS_SIZE / 2) - rgb_img_roi["x"]
-    #     y = self.pos().y() + round(self.CROSS_SIZE / 2) - rgb_img_roi["y"]
-
-    #     x = x / rgb_img_roi["width"]
-    #     y = y / rgb_img_roi["height"]
-
-    #     d, h, w = img_shape
-
-    #     # 2d to 3d
-    #     if img_plane == TRANSVERSE:
-    #         w *= x
-    #         h *= y
-    #         d = cur_slice
-    #     elif img_plane == CORONAL:
-    #         w *= x
-    #         h = cur_slice
-    #         d *= y
-    #     elif img_plane == SAGITTAL:
-    #         w = cur_slice
-    #         h *= x
-    #         d *= y
-
-    #     w = round(w)
-    #     h = round(h)
-    #     d = round(d)
-    #     w = Value.limit_range(w, (0, img_shape[2] - 1))
-    #     h = Value.limit_range(h, (0, img_shape[1] - 1))
-    #     d = Value.limit_range(d, (0, img_shape[0] - 1))
-
-    #     # dont neet to turn upside down
-    #     # d = img_shape[0] - d
-
-    #     # flip left/right back for 1mm data
-    #     if nii_spacing == 1.0:
-    #         w = img_shape[2] - w
-
-    #     return d, h, w
-
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
             self.window().select_cross(self.cross_id)
-            self.window().set_cross_dragging_state(
+            self.window().set_crosses_dragging_state(
                 img_qlabel=self.parent(), dragging=True
             )
-            self.window().set_cross_dragging_offset(
+            self.window().set_crosses_dragging_offset(
                 img_qlabel=self.parent(), pos=event.pos()
             )
             self.window().remove_3d_pos_of_selected_cross(self)
@@ -102,7 +54,7 @@ class DraggableCross(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
-            self.window().set_cross_dragging_state(
+            self.window().set_crosses_dragging_state(
                 img_qlabel=self.parent(), dragging=False
             )
             # update cross_id (3d position)
