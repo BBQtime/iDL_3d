@@ -7,7 +7,7 @@ from custom import Global as g
 from custom import Img
 from medpy.metric import asd, assd, hd, hd95
 from numpy import ndarray
-from str_lib import DSC, HD95, MSD
+from str_lib import Metric
 from torch import Tensor
 
 
@@ -538,6 +538,8 @@ class SegmentationMetric(nn.Module):
     ):
         super().__init__()
         self.__metric = metric
+        if self.__metric not in [Metric.DSC, Metric.MSD, Metric.HD95]:
+            Debug.error_exit("Value of metric must be one of dsc/msd/hd95!")
         self.__nii_spacing = g.NII_SPACING[dataset_ver]
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
@@ -564,14 +566,14 @@ class SegmentationMetric(nn.Module):
         else:
             pass
 
-        if self.__metric == DSC:
+        if self.__metric == Metric.DSC:
             return dice(
                 test=preds,
                 reference=labels,
                 nan_for_nonexisting=False,
             )
 
-        elif self.__metric == MSD:
+        elif self.__metric == Metric.MSD:
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
@@ -579,13 +581,10 @@ class SegmentationMetric(nn.Module):
                 voxel_spacing=self.__nii_spacing,
             )
 
-        elif self.__metric == HD95:
+        elif self.__metric == Metric.HD95:
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,
                 none_for_nonexisting=True,
                 voxel_spacing=self.__nii_spacing,
             )
-
-        else:
-            Debug.error_exit("SegmentationMetric: value of self.__metric error")

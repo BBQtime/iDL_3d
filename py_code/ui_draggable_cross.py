@@ -4,7 +4,7 @@ from custom import Global as g
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
-from str_lib import CORONAL, SAGITTAL, TRANSVERSE, DisplayMode
+from str_lib import DisplayMode, Plane
 
 
 class DraggableCross(QWidget):
@@ -68,7 +68,7 @@ class DraggableCross(QWidget):
             self.window().add_3d_pos_of_selected_cross(self)
             self.window().reset_cur_slice_id()
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+                img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
                 img_name_list.remove(self.parent().plane)
                 for i in img_name_list:
                     self.window().refresh_img_qlabels(i)

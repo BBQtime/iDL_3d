@@ -10,47 +10,7 @@ from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from str_lib import (
-    AUGMENT_MAX,
-    AUGMENT_METHODS,
-    AUGMENT_MIN,
-    AUGMENT_PCT,
-    AVG,
-    BASELINE,
-    CNN,
-    DATASET_VER,
-    DSC,
-    EARLY_STOP_EPOCHS,
-    EPOCHS,
-    EPOCHS_ACTUAL,
-    GTVN,
-    GTVS,
-    GTVT,
-    HD95,
-    IDL_GTVN,
-    KEEP_BEST_CNN_NUM,
-    LABEL,
-    LOSS_ASYM,
-    LOSS_DELTA,
-    LOSS_FUNC,
-    LOSS_GAMMA,
-    LOSS_WEIGHT,
-    LR,
-    LR_ACTUAL,
-    LR_DECAY_PATIENCE,
-    LR_MIN,
-    MDA,
-    MEDIAN,
-    MSD,
-    NO_PT,
-    OPTIM,
-    PRED,
-    SCHEDULER,
-    TIME_SPENT,
-    TRAIN_LOADER,
-    VALID_LOADER,
-    DatasetPart,
-)
+from str_lib import DatasetPart, DatasetVer, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -67,42 +27,42 @@ class TrainingBaseline(TrainingCore):
         # epochs
         if debug_mode:
             # only train 2 epoch in debug mode
-            hyper[EPOCHS] = 2
+            hyper["epochs"] = 2
         else:
-            hyper[EPOCHS] = Value.limit_range(hyper[EPOCHS], (1, None))
+            hyper["epochs"] = Value.limit_range(hyper["epochs"], (1, None))
 
         # record actual epochs because of early stop
-        hyper[EPOCHS_ACTUAL] = 0
+        hyper["epochs.actual"] = 0
 
         # early stop, based on epoch
-        hyper[EARLY_STOP_EPOCHS] = Value.limit_range(
-            hyper[EARLY_STOP_EPOCHS], (1, hyper[EPOCHS])
+        hyper["early.stop.epochs"] = Value.limit_range(
+            hyper["early.stop.epochs"], (1, hyper["epochs"])
         )
 
         # lr
-        hyper[LR] = Value.limit_range(hyper[LR], (Value.EPS, 1.0))
+        hyper["lr"] = Value.limit_range(hyper["lr"], (Value.EPS, 1.0))
 
         # actual lr
         if GPU.used_count() > 1:
-            hyper[LR_ACTUAL] = hyper[LR] * GPU.used_count()
+            hyper["lr.actual"] = hyper["lr"] * GPU.used_count()
         else:
-            hyper[LR_ACTUAL] = hyper[LR]
+            hyper["lr.actual"] = hyper["lr"]
 
         # min lr
-        hyper[LR_MIN] = Value.limit_range(hyper[LR_MIN], (Value.EPS, hyper[LR]))
+        hyper["lr.min"] = Value.limit_range(hyper["lr.min"], (Value.EPS, hyper["lr"]))
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper[LR_DECAY_PATIENCE] = Value.limit_range(
-            hyper[LR_DECAY_PATIENCE], (1, hyper[EPOCHS])
+        hyper["lr.decay.patience"] = Value.limit_range(
+            hyper["lr.decay.patience"], (1, hyper["epochs"])
         )
 
         # number of best valid loss cnn retained
-        hyper[KEEP_BEST_CNN_NUM] = Value.limit_range(
-            hyper[KEEP_BEST_CNN_NUM], (1, hyper[EPOCHS])
+        hyper["keep.best.cnn.num"] = Value.limit_range(
+            hyper["keep.best.cnn.num"], (1, hyper["epochs"])
         )
 
         # augment percent
-        hyper[AUGMENT_PCT] = Value.limit_range(hyper[AUGMENT_PCT], (0.0, 1.0))
+        hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
 
         self._load_hyper_dataset_version(
             hyper=hyper,
@@ -111,7 +71,7 @@ class TrainingBaseline(TrainingCore):
 
         # load patients after dataset version is selected
         patients = self._load_patients(
-            dataset_ver=hyper[DATASET_VER],
+            dataset_ver=hyper["dataset.ver"],
             fold=fold,
             debug_mode=debug_mode,
         )
@@ -133,16 +93,16 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_optim_and_scheduler(hyper=hyper)
 
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
-        if hyper[NO_PT]:
+        if hyper["no.pt"]:
             in_chan -= 1
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
-        hyper[LOSS_FUNC] = UnifiedFocalLoss(
-            asym=hyper[LOSS_ASYM],
-            weight=hyper[LOSS_WEIGHT],
-            delta=hyper[LOSS_DELTA],
-            gamma=hyper[LOSS_GAMMA],
+        hyper["loss.func"] = UnifiedFocalLoss(
+            asym=hyper["loss.asym"],
+            weight=hyper["loss.weight"],
+            delta=hyper["loss.delta"],
+            gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
     def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str = None):
@@ -151,16 +111,16 @@ class TrainingBaseline(TrainingCore):
             # only use data augmentation on training set
             if i == DatasetPart.TRAIN:
                 augment = Dict()
-                augment[AUGMENT_METHODS] = hyper[AUGMENT_METHODS]
-                augment[AUGMENT_PCT] = hyper[AUGMENT_PCT]
-                augment[AUGMENT_MIN] = hyper[AUGMENT_MIN]
-                augment[AUGMENT_MAX] = hyper[AUGMENT_MAX]
+                augment["augment.methods"] = hyper["augment.methods"]
+                augment["augment.pct"] = hyper["augment.pct"]
+                augment["augment.min"] = hyper["augment.min"]
+                augment["augment.max"] = hyper["augment.max"]
             else:
                 augment = None
             hyper["{}.set".format(i)] = DataSetBaseline(
                 patients=hyper["{}.patients".format(i)],
-                dataset_ver=hyper[DATASET_VER],
-                no_pt=hyper[NO_PT],
+                dataset_ver=hyper["dataset.ver"],
+                no_pt=hyper["no.pt"],
                 augment=augment,
             )
 
@@ -223,7 +183,7 @@ class TrainingBaseline(TrainingCore):
         for i in lr_dict:
             lr_list.append(lr_dict[i])
 
-        plt.plot(range(1, len(lr_list) + 1), lr_list, label=LR)
+        plt.plot(range(1, len(lr_list) + 1), lr_list, label="lr")
         plt.legend()
         plt.savefig(lr_json_path[:-4] + "png")
 
@@ -248,8 +208,8 @@ class TrainingBaseline(TrainingCore):
     def _calculate_loss(self, item: tuple, hyper: Dict):
         input_imgs = item[0].to(g.DEVICE)
         labels = item[1].to(g.DEVICE)
-        preds = hyper[CNN](input_imgs)
-        loss = hyper[LOSS_FUNC](preds, labels)
+        preds = hyper["cnn"](input_imgs)
+        loss = hyper["loss.func"](preds, labels)
         return loss
 
     def _training_all_epochs(self, hyper: Dict, fold_dir: str):
@@ -258,21 +218,21 @@ class TrainingBaseline(TrainingCore):
         lr_json_path = os.path.join(fold_dir, "lr.json")
         patience = 0
 
-        for epoch in range(1, hyper[EPOCHS] + 1):
+        for epoch in range(1, hyper["epochs"] + 1):
             print("")
             print("epoch: {}".format(epoch))
             print("training:")
-            hyper[CNN].train()
+            hyper["cnn"].train()
             train_loss = 0
             batch_count = 0
 
             # training
-            for item in tqdm(hyper[TRAIN_LOADER]):
+            for item in tqdm(hyper["train.loader"]):
                 # zero grad at the begining of each mini-batch
-                hyper[OPTIM].zero_grad()
+                hyper["optim"].zero_grad()
                 loss = self._calculate_loss(item=item, hyper=hyper)
                 loss.backward()  # get grad (must after: optim.zero_grad())
-                hyper[OPTIM].step()  # update param
+                hyper["optim"].step()  # update param
                 train_loss += loss.item()
                 batch_count += 1
             train_loss /= batch_count
@@ -281,39 +241,39 @@ class TrainingBaseline(TrainingCore):
             print("validation:")
             valid_loss = 0
             batch_count = 0
-            hyper[CNN].eval()
+            hyper["cnn"].eval()
             with torch.no_grad():
-                for item in tqdm(hyper[VALID_LOADER]):
+                for item in tqdm(hyper["valid.loader"]):
                     loss = self._calculate_loss(item=item, hyper=hyper)
                     valid_loss += loss.item()
                     batch_count += 1
             valid_loss /= batch_count
-            hyper[SCHEDULER].step(valid_loss)
+            hyper["scheduler"].step(valid_loss)
 
             # current epoch finished
-            hyper[EPOCHS_ACTUAL] = epoch
+            hyper["epochs.actual"] = epoch
 
             # save loss in json
             loss_dict = Json.load(loss_json_path)
             epoch_loss = Dict()
             epoch_loss[DatasetPart.TRAIN] = train_loss
             epoch_loss[DatasetPart.VALID] = valid_loss
-            loss_dict["epoch={:03d}".format(hyper[EPOCHS_ACTUAL])] = epoch_loss
+            loss_dict["epoch={:03d}".format(hyper["epochs.actual"])] = epoch_loss
             Json.save(loss_dict, loss_json_path)
             # draw loss figure
             self._plot_loss_fig(loss_json_path)
 
             # save lr in json
             lr_dict = Json.load(lr_json_path)
-            for param_group in hyper[OPTIM].param_groups:
-                epoch_lr = param_group[LR]
-            lr_dict["epoch={:03d}".format(hyper[EPOCHS_ACTUAL])] = epoch_lr
+            for param_group in hyper["optim"].param_groups:
+                epoch_lr = param_group["lr"]
+            lr_dict["epoch={:03d}".format(hyper["epochs.actual"])] = epoch_lr
             Json.save(lr_dict, lr_json_path)
             # draw lr figure
             self._plot_lr_fig(lr_json_path)
 
             # save cnn
-            if len(best_loss_dict) < hyper[KEEP_BEST_CNN_NUM]:
+            if len(best_loss_dict) < hyper["keep.best.cnn.num"]:
                 best_loss_dict[epoch] = valid_loss
                 epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
                 Dir.create(epoch_dir)
@@ -339,7 +299,7 @@ class TrainingBaseline(TrainingCore):
                     patience = 0
                 else:
                     patience += 1
-                    if patience >= hyper[EARLY_STOP_EPOCHS]:
+                    if patience >= hyper["early.stop.epochs"]:
                         break
 
     def _training_all_folds(
@@ -389,10 +349,10 @@ class TrainingBaseline(TrainingCore):
             self._save_hyper(hyper, hyper_save_path)
 
             # start training
-            hyper[TIME_SPENT] = datetime.now()
+            hyper["time.spent"] = datetime.now()
             self._training_all_epochs(hyper, fold_dir)
-            hyper[TIME_SPENT] = datetime.now() - hyper[TIME_SPENT]
-            hyper[TIME_SPENT] = str(hyper[TIME_SPENT]).split(".", 2)[0]
+            hyper["time.spent"] = datetime.now() - hyper["time.spent"]
+            hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
             # save hyper after training
             self._save_hyper(hyper, hyper_save_path)
@@ -426,9 +386,9 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         if idl_gtvn_baseline_id is None:
-            hyper_json_path = g.HYPER_JSON_PATH[BASELINE]
+            hyper_json_path = g.HYPER_JSON_PATH["baseline"]
         else:
-            hyper_json_path = g.HYPER_JSON_PATH[IDL_GTVN]
+            hyper_json_path = g.HYPER_JSON_PATH["idl.gtvn"]
 
         for hyper in self._load_hyper_series_from_json(hyper_json_path):
             # init train id
@@ -446,7 +406,7 @@ class TrainingBaseline(TrainingCore):
             print(train_id)
 
             if idl_gtvn_baseline_id is None:
-                train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, BASELINE)
+                train_dir = os.path.join(g.TRAIN_RESULTS_DIR, train_id, "baseline")
             else:
                 train_dir = os.path.join(
                     g.TRAIN_RESULTS_DIR, idl_gtvn_baseline_id, train_id
@@ -460,7 +420,7 @@ class TrainingBaseline(TrainingCore):
             )
 
             # inference
-            if hyper[DATASET_VER] == MDA:
+            if hyper["dataset.ver"] == DatasetVer.MDA:
                 dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST]
             else:
                 dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST_INTER]
@@ -472,7 +432,7 @@ class TrainingBaseline(TrainingCore):
             for dataset_part in dataset_part_list:
                 self._fold_wise_inference(
                     train_id=train_id,
-                    dataset_ver=hyper[DATASET_VER],
+                    dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
                     debug_mode=debug_mode,
                 )
@@ -485,7 +445,7 @@ class TrainingBaseline(TrainingCore):
             for dataset_part in dataset_part_list:
                 self._cross_valid_inference(
                     train_id=train_id,
-                    dataset_ver=hyper[DATASET_VER],
+                    dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
                     debug_mode=debug_mode,
                 )
@@ -517,15 +477,15 @@ class TrainingBaseline(TrainingCore):
 
         train_dir = self._find_train_dir(train_id)
         if train_dir is None:
-            Debug.error_exit("training id not found")
+            Debug.error_exit("'train_id' not found!")
 
         baseline_id = Path(train_dir).parent.name
 
         fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
-        no_pt = hyper[NO_PT]
-        training_dataset_ver = hyper[DATASET_VER]
+        no_pt = hyper["no.pt"]
+        training_dataset_ver = hyper["dataset.ver"]
 
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
@@ -633,10 +593,10 @@ class TrainingBaseline(TrainingCore):
         patients: Dict = None,
     ) -> Dict:
         scores = Dict()
-        for stats in [MEDIAN, AVG]:
-            for gtv in [GTVS, GTVT, GTVN]:
-                for metric in [DSC, MSD, HD95]:
-                    scores[stats][gtv][metric] = List()
+        for stat in [Stat.MEDIAN, Stat.AVG]:
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                    scores[stat][gtv][metric] = List()
 
         return scores
 
@@ -655,9 +615,9 @@ class TrainingBaseline(TrainingCore):
         )
         Dir.create(patient_dir)
 
-        for gtv in [GTVT, GTVN]:
+        for gtv in ["gtvt", "gtvn"]:
             Nii.save(
-                img=patient_outputs[gtv][PRED],
+                img=patient_outputs[gtv]["pred"],
                 save_path=os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv)),
                 spacing=g.NII_SPACING[dataset_ver],
             )
@@ -666,22 +626,24 @@ class TrainingBaseline(TrainingCore):
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for gtv in patient_outputs.keys():
-            for metric in [DSC, MSD, HD95]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 # save cur patient score
                 scores["patient={}".format(patient)][gtv][metric] = patient_outputs[
                     gtv
                 ][metric]
                 # add scores of current patient into avg and median
-                for stats in [MEDIAN, AVG]:
-                    scores[stats][gtv][metric].append(patient_outputs[gtv][metric])
+                for stat in [Stat.MEDIAN, Stat.AVG]:
+                    scores[stat][gtv][metric].append(patient_outputs[gtv][metric])
 
     def _inference_calculate_save_avg_median(
         self, scores: Dict, save_dir: str, dataset_ver: str, dataset_part: str
     ):
-        for gtv in [GTVS, GTVT, GTVN]:
-            for metric in [DSC, MSD, HD95]:
-                scores[MEDIAN][gtv][metric] = Value.median(scores[MEDIAN][gtv][metric])
-                scores[AVG][gtv][metric] = Value.avg(scores[AVG][gtv][metric])
+        for gtv in ["gtvs", "gtvt", "gtvn"]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                scores[Stat.MEDIAN][gtv][metric] = Value.median(
+                    scores[Stat.MEDIAN][gtv][metric]
+                )
+                scores[Stat.AVG][gtv][metric] = Value.avg(scores[Stat.AVG][gtv][metric])
 
         # save scores in json
         Json.save(
@@ -718,14 +680,14 @@ class TrainingBaseline(TrainingCore):
 
         train_dir = self._find_train_dir(train_id)
         if train_dir is None:
-            Debug.error_exit("training id not found")
+            Debug.error_exit("'train_id' not found!")
 
         baseline_id = Path(train_dir).parent.name
 
         fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
-        training_dataset_ver = hyper[DATASET_VER]
+        training_dataset_ver = hyper["dataset.ver"]
 
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
@@ -761,7 +723,7 @@ class TrainingBaseline(TrainingCore):
         for patient in tqdm(patients[dataset_part]):
             # initialize preds
             preds = Dict()
-            for gtv in [GTVS, GTVT, GTVN]:
+            for gtv in ["gtvs", "gtvt", "gtvn"]:
                 preds[gtv] = None
 
             for fold_dir in fold_dirs:
@@ -781,7 +743,7 @@ class TrainingBaseline(TrainingCore):
                 patient_dir = os.path.join(
                     epoch_dir, "patients", "patient={}".format(patient)
                 )
-                for gtv in [GTVT, GTVN]:
+                for gtv in ["gtvt", "gtvn"]:
                     pred_path = os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv))
                     if os.path.exists(pred_path):
                         img = Nii.load(path=pred_path, binary=False)
@@ -791,9 +753,9 @@ class TrainingBaseline(TrainingCore):
                             preds[gtv] += img
 
             # all folds is traversed
-            # for idl.gtvn pred[GTVT] will be None
-            if preds[GTVT] is not None:
-                preds[GTVS] = preds[GTVT] + preds[GTVN]
+            # for idl.gtvn pred["gtvt"] will be None
+            if preds["gtvt"] is not None:
+                preds["gtvs"] = preds["gtvt"] + preds["gtvn"]
 
             for gtv in preds.keys():
                 if preds[gtv] is None:
@@ -811,7 +773,7 @@ class TrainingBaseline(TrainingCore):
 
             # save cross_valid preds (only save gtvt and gtvn)
             for gtv in preds.keys():
-                if gtv != GTVS:
+                if gtv != "gtvs":
                     Nii.save(
                         img=preds[gtv],
                         save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
@@ -847,7 +809,7 @@ class TrainingBaseline(TrainingCore):
         dataset_ver: str,
     ):
         if DatasetPart.VALID in dataset_part:
-            Debug.error_exit("set dataset_part to 'train' instead of 'valid'")
+            Debug.error_exit("Set dataset_part to 'train' instead of 'valid'!")
 
         self._is_valid_dataset_part(
             dataset_part=dataset_part,
@@ -863,13 +825,13 @@ class TrainingBaseline(TrainingCore):
         scores: Dict,
     ):
         for gtv in preds.keys():
-            for metric in [DSC, MSD, HD95]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 score = segment_metrics[metric](preds[gtv], labels[gtv])
                 # record current score
                 scores["patient={}".format(patient)][gtv][metric] = score
                 # record scores for avg and median score calculation
-                for stats in [MEDIAN, AVG]:
-                    scores[stats][gtv][metric].append(score)
+                for stat in [Stat.MEDIAN, Stat.AVG]:
+                    scores[stat][gtv][metric].append(score)
 
     def remove_non_optimal_epochs(self, baseline_id: str):
         self._is_valid_baseline_id(baseline_id)
@@ -883,7 +845,7 @@ class TrainingBaseline(TrainingCore):
         fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         # load dataset version
-        dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))[DATASET_VER]
+        dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
         inference_json_name = "inference_{}_valid.json".format(dataset_ver)
@@ -918,29 +880,29 @@ class TrainingBaseline(TrainingCore):
     def _remove_non_optimal_epochs_record_epoch_scores(
         self, fold_scores: Dict, epoch_scores: Dict, epoch: str
     ):
-        for stats in [MEDIAN, AVG]:
-            fold_scores[epoch][stats] = epoch_scores[stats]
+        for stat in [Stat.MEDIAN, Stat.AVG]:
+            fold_scores[epoch][stat] = epoch_scores[stat]
 
     # a sub function of _remove_non_optimal_epochs()
     def _remove_non_optimal_epochs_find_best_epoch(
-        self, scores: Dict, gtv_list: list = [GTVS, GTVT, GTVN]
+        self, scores: Dict, gtv_list: list = ["gtvs", "gtvt", "gtvn"]
     ):
-        for stats in [MEDIAN, AVG]:
+        for stat in [Stat.MEDIAN, Stat.AVG]:
             for gtv in gtv_list:
-                for metric in [DSC, MSD, HD95]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     # create a tmp list to sort
                     list_to_sort = List()
 
                     # add elements into the list
                     for epoch in scores.keys():
                         if len(gtv_list) > 1:
-                            cur_score = scores[epoch][stats][gtv][metric]
+                            cur_score = scores[epoch][stat][gtv][metric]
                         else:
-                            cur_score = scores[epoch][stats][metric]
+                            cur_score = scores[epoch][stat][metric]
                         list_to_sort.append(cur_score)
 
                     # sort the list
-                    if metric == DSC:
+                    if metric == Metric.DSC:
                         list_to_sort.sort(reverse=False)
                     else:
                         list_to_sort.sort(reverse=True)
@@ -948,41 +910,41 @@ class TrainingBaseline(TrainingCore):
                     # update value based on the idx in the list
                     for epoch in scores.keys():
                         if len(gtv_list) > 1:
-                            cur_score = scores[epoch][stats][gtv][metric]
+                            cur_score = scores[epoch][stat][gtv][metric]
                         else:
-                            cur_score = scores[epoch][stats][metric]
+                            cur_score = scores[epoch][stat][metric]
 
                         new_value = list_to_sort.index(cur_score)
-                        if metric == DSC:
+                        if metric == Metric.DSC:
                             new_value *= 2
 
                         if len(gtv_list) > 1:
-                            scores[epoch][stats][gtv][metric] = new_value
+                            scores[epoch][stat][gtv][metric] = new_value
                         else:
-                            scores[epoch][stats][metric] = new_value
+                            scores[epoch][stat][metric] = new_value
 
         evaluation = Dict()
         for epoch in scores:
             evaluation[epoch] = 0
-            for stats in [AVG, MEDIAN]:
+            for stat in [Stat.AVG, Stat.MEDIAN]:
                 for gtv in gtv_list:
-                    for metric in [DSC, MSD, HD95]:
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                         if len(gtv_list) > 1:
-                            evaluation[epoch] += scores[epoch][stats][gtv][metric]
+                            evaluation[epoch] += scores[epoch][stat][gtv][metric]
                         else:
-                            evaluation[epoch] += scores[epoch][stats][metric]
+                            evaluation[epoch] += scores[epoch][stat][metric]
 
         return evaluation.key_with_max_value()
 
     def _inference_single_patient_record_labels(self, labels: Dict):
         outputs = Dict()
-        for gtv in [GTVT, GTVN, GTVS]:
-            outputs[gtv][LABEL] = labels[gtv]
+        for gtv in ["gtvt", "gtvn", "gtvs"]:
+            outputs[gtv]["label"] = labels[gtv]
         return outputs
 
     def _inference_single_patient_record_outputs(
         self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
     ):
-        outputs[GTVT][PRED] = preds[1]
-        outputs[GTVN][PRED] = preds[2]
-        outputs[GTVS][PRED] = np.maximum(preds[1], preds[2])
+        outputs["gtvt"]["pred"] = preds[1]
+        outputs["gtvn"]["pred"] = preds[2]
+        outputs["gtvs"]["pred"] = np.maximum(preds[1], preds[2])

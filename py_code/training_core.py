@@ -12,40 +12,7 @@ from custom import Img, Json, List, Time, Value
 from dataset_baseline import DataSetBaseline
 from numpy import ndarray
 from segment_metric import SegmentationMetric
-from str_lib import (
-    ADAM,
-    AU_1MM,
-    AU_3MM,
-    AUGMENT_MAX,
-    AUGMENT_METHODS,
-    AUGMENT_MIN,
-    BATCH_SIZE,
-    BATCH_SIZE_ACTUAL,
-    CNN,
-    DATASET_VER,
-    DEVICE,
-    DROPOUT,
-    DSC,
-    HD95,
-    LABEL,
-    LOSS_DELTA,
-    LOSS_FUNC,
-    LOSS_WEIGHT,
-    LR_ACTUAL,
-    LR_DECAY_FACTOR,
-    LR_DECAY_PATIENCE,
-    LR_MIN,
-    MDA,
-    MSD,
-    OPTIM,
-    PRED,
-    REDUCE_LR_ON_PLATEAU,
-    SCHEDULER,
-    UNET_PP_SLIM,
-    UNET_SLIM,
-    UNIFIED_FOCAL_LOSS,
-    DatasetPart,
-)
+from str_lib import DatasetPart, DatasetVer, Metric
 from torch import Tensor, optim
 from torch.nn import DataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -97,23 +64,23 @@ class TrainingCore:
     # if float64 needed, use: "cnn.to(torch.double)"
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
         # cnn architecture
-        if hyper[CNN] == UNET_PP_SLIM:
+        if hyper["cnn"] == "unet.pp.slim":
             cnn = UNetPPSlim
-        elif hyper[CNN] == UNET_SLIM:
+        elif hyper["cnn"] == "unet.slim":
             cnn = UNetSlim
         else:
-            Debug.error_exit("wrong hyper[cnn] value")
-        hyper[CNN] = cnn(
+            Debug.error_exit("Incorrect hyper[cnn] value!")
+        hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
-            dataset_ver=hyper[DATASET_VER],
-            dropout=hyper[DROPOUT],
+            dataset_ver=hyper["dataset.ver"],
+            dropout=hyper["dropout"],
         )
         # set multi-GPU
         if GPU.used_count() > 1:
-            hyper[CNN] = DataParallel(hyper[CNN])
+            hyper["cnn"] = DataParallel(hyper["cnn"])
         # to gpu (if gpu available)
-        hyper[CNN] = hyper[CNN].to(g.DEVICE)
+        hyper["cnn"] = hyper["cnn"].to(g.DEVICE)
 
     def _load_exist_cnn(self, cnn_path: str):
         cnn = torch.load(cnn_path)
@@ -124,7 +91,7 @@ class TrainingCore:
 
     def _load_segment_metrics(self, dataset_ver: str) -> Dict:
         segment_metrics = Dict()
-        for metric in [DSC, MSD, HD95]:
+        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             segment_metrics[metric] = SegmentationMetric(
                 metric=metric, dataset_ver=dataset_ver
             )
@@ -137,8 +104,8 @@ class TrainingCore:
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
         # baseline
         if idl_baseline_id is None:
-            hyper[DATASET_VER] = self._is_valid_dataset_version(
-                dataset_ver=hyper[DATASET_VER]
+            hyper["dataset.ver"] = self._is_valid_dataset_version(
+                dataset_ver=hyper["dataset.ver"]
             )
 
         # idl
@@ -151,102 +118,102 @@ class TrainingCore:
             )[0]
             baseline_dataset_ver = Json.load(
                 os.path.join(baseline_fold_dir, "hyper.json")
-            )[DATASET_VER]
-            hyper[DATASET_VER] = self._is_valid_dataset_version(
-                dataset_ver=hyper[DATASET_VER],
+            )["dataset.ver"]
+            hyper["dataset.ver"] = self._is_valid_dataset_version(
+                dataset_ver=hyper["dataset.ver"],
                 origin_dataset_ver=baseline_dataset_ver,
             )
 
     def _load_hyper(self, hyper: Dict) -> None:
         # device name
         if GPU.used_count() < 1:
-            hyper[DEVICE] = "cpu"
+            hyper["device"] = "cpu"
         else:
-            hyper[DEVICE] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
+            hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper[DROPOUT] = Value.limit_range(hyper[DROPOUT], (0.0, 1.0))
+        hyper["dropout"] = Value.limit_range(hyper["dropout"], (0.0, 1.0))
 
         # batch size
-        hyper[BATCH_SIZE] = Value.limit_range(hyper[BATCH_SIZE], (1, None))
+        hyper["batch.size"] = Value.limit_range(hyper["batch.size"], (1, None))
         if GPU.used_count() > 1:
-            hyper[BATCH_SIZE_ACTUAL] = hyper[BATCH_SIZE] * GPU.used_count()
+            hyper["batch.size.actual"] = hyper["batch.size"] * GPU.used_count()
         else:
-            hyper[BATCH_SIZE_ACTUAL] = hyper[BATCH_SIZE]
+            hyper["batch.size.actual"] = hyper["batch.size"]
 
         # = 1 will cause error
-        hyper[LR_DECAY_FACTOR] = Value.limit_range(
-            hyper[LR_DECAY_FACTOR], (Value.EPS, 1 - Value.EPS)
+        hyper["lr.decay.factor"] = Value.limit_range(
+            hyper["lr.decay.factor"], (Value.EPS, 1 - Value.EPS)
         )
 
         # augment methods
-        hyper[AUGMENT_METHODS] = List(hyper[AUGMENT_METHODS])
+        hyper["augment.methods"] = List(hyper["augment.methods"])
 
         # augment lower/upper limit
-        hyper[AUGMENT_MAX] = Value.limit_range(
-            hyper[AUGMENT_MAX], (1, len(hyper[AUGMENT_METHODS]))
+        hyper["augment.max"] = Value.limit_range(
+            hyper["augment.max"], (1, len(hyper["augment.methods"]))
         )
-        hyper[AUGMENT_MIN] = Value.limit_range(
-            hyper[AUGMENT_MIN], (1, hyper[AUGMENT_MAX])
+        hyper["augment.min"] = Value.limit_range(
+            hyper["augment.min"], (1, hyper["augment.max"])
         )
 
         # loss function parameters
-        hyper[LOSS_WEIGHT] = Value.limit_range(hyper[LOSS_WEIGHT], (0.0, 1.0))
-        hyper[LOSS_DELTA] = Value.limit_range(hyper[LOSS_DELTA], (0.0, 1.0))
+        hyper["loss.weight"] = Value.limit_range(hyper["loss.weight"], (0.0, 1.0))
+        hyper["loss.delta"] = Value.limit_range(hyper["loss.delta"], (0.0, 1.0))
 
     def _load_hyper_optim_and_scheduler(self, hyper: Dict, lr: float = None):
         if lr is None:
-            lr = hyper[LR_ACTUAL]
+            lr = hyper["lr.actual"]
 
         # optimizer (no need to move to cuda)
-        hyper[OPTIM] = optim.Adam(params=hyper[CNN].parameters(), lr=lr)
+        hyper["optim"] = optim.Adam(params=hyper["cnn"].parameters(), lr=lr)
 
         # scheduler
         # (1) mode = min(default): lr will reduce when the watched parameter stops decreasing
         # (2) mode = max: lr will reduce when the watched parameter stops increasing
         # (3) factor: new_lr = lr * factor
         # (4) patience: lr will reduce after how many epochs
-        hyper[SCHEDULER] = ReduceLROnPlateau(
-            optimizer=hyper[OPTIM],
+        hyper["scheduler"] = ReduceLROnPlateau(
+            optimizer=hyper["optim"],
             mode="min",
-            factor=hyper[LR_DECAY_FACTOR],  # "factor=1" will cause an error
-            patience=hyper[LR_DECAY_PATIENCE],
-            min_lr=hyper[LR_MIN],
+            factor=hyper["lr.decay.factor"],  # "factor=1" will cause an error
+            patience=hyper["lr.decay.patience"],
+            min_lr=hyper["lr.min"],
         )
 
     def _simplify_hyper(self, hyper: Dict) -> Dict:
         simple_hyper = Dict()
 
         for key_name in hyper.keys():
-            # AUGMENT_METHODS is a list
-            if key_name == AUGMENT_METHODS:
+            # "augment.methods" is a list
+            if key_name == "augment.methods":
                 simple_hyper[key_name] = hyper[key_name].to_str()
 
             # only save loss function name
-            elif key_name == LOSS_FUNC:
-                simple_hyper[key_name] = UNIFIED_FOCAL_LOSS
+            elif key_name == "loss.func":
+                simple_hyper[key_name] = "unified.focal.loss"
 
             # only save cnn name
-            elif key_name == CNN:
+            elif key_name == "cnn":
                 if isinstance(hyper[key_name], DataParallel):
                     cnn = hyper[key_name].module
                 else:
                     cnn = hyper[key_name]
 
                 if isinstance(cnn, UNetPPSlim):
-                    simple_hyper[key_name] = UNET_PP_SLIM
+                    simple_hyper[key_name] = "unet.pp.slim"
                 elif isinstance(cnn, UNetSlim):
-                    simple_hyper[key_name] = UNET_SLIM
+                    simple_hyper[key_name] = "unet.slim"
                 else:
-                    Debug.error_exit("_simplify_hyper(): wrong cnn type")
+                    Debug.error_exit("Incorrect cnn type!")
 
             # only save optimizer name
-            elif key_name == OPTIM:
-                simple_hyper[key_name] = ADAM
+            elif key_name == "optim":
+                simple_hyper[key_name] = "adam"
 
             # only save scheduler name
-            elif key_name == SCHEDULER:
-                simple_hyper[key_name] = REDUCE_LR_ON_PLATEAU
+            elif key_name == "scheduler":
+                simple_hyper[key_name] = "reduce.lr.on.plateau"
 
             # others
             else:
@@ -288,9 +255,9 @@ class TrainingCore:
         if not save_path.endswith(".pt"):
             save_path += ".pt"
         if GPU.used_count() > 1:
-            torch.save(hyper[CNN].module, save_path)
+            torch.save(hyper["cnn"].module, save_path)
         else:
-            torch.save(hyper[CNN], save_path)
+            torch.save(hyper["cnn"], save_path)
 
     # train_id = start_time + train_remark
     def _init_train_id(
@@ -326,12 +293,12 @@ class TrainingCore:
 
     # evenly distribute the data into each batch
     def _optimize_batch_size(self, dataset, hyper: Dict):
-        if dataset.__len__() > hyper[BATCH_SIZE]:
-            hyper[BATCH_SIZE] = math.ceil(
-                dataset.__len__() / (math.ceil(dataset.__len__() / hyper[BATCH_SIZE]))
+        if dataset.__len__() > hyper["batch.size"]:
+            hyper["batch.size"] = math.ceil(
+                dataset.__len__() / (math.ceil(dataset.__len__() / hyper["batch.size"]))
             )
         else:
-            hyper[BATCH_SIZE] = dataset.__len__()
+            hyper["batch.size"] = dataset.__len__()
 
     def _load_hyper_series_from_json(self, path: str) -> List:
         hyper_series_list = List()
@@ -432,7 +399,7 @@ class TrainingCore:
         for gtv in outputs.keys():
             for i in outputs[gtv].keys():
                 outputs[gtv][i] = Img.central_pad_and_crop(
-                    outputs[gtv][i], outputs[gtv][LABEL].shape
+                    outputs[gtv][i], outputs[gtv]["label"].shape
                 )
 
         # post processing (after pad and crop, before calculate scores)
@@ -444,10 +411,10 @@ class TrainingCore:
         # calculate scores of current patient
         if dataset_part != DatasetPart.TRAIN:
             for gtv in outputs.keys():
-                for metric in [DSC, MSD, HD95]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     outputs[gtv][metric] = segment_metrics[metric](
-                        outputs[gtv][PRED],
-                        outputs[gtv][LABEL],
+                        outputs[gtv]["pred"],
+                        outputs[gtv]["label"],
                     )
 
         return outputs
@@ -488,13 +455,11 @@ class TrainingCore:
 
     # make this function protected, idl will use it
     def _is_valid_baseline_id(self, baseline_id: str):
-        err_msg = "baseline id error"
-
         if not baseline_id.startswith("baseline_"):
-            Debug.error_exit(err_msg)
+            Debug.error_exit("'baseline_id' must start with 'baseline_'!")
 
         if not os.path.exists(os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)):
-            Debug.error_exit(err_msg)
+            Debug.error_exit("'baseline_id' does not exist!")
 
     def _is_valid_dataset_version(
         self,
@@ -506,33 +471,30 @@ class TrainingCore:
             if dataset_ver is None:
                 dataset_ver = origin_dataset_ver
 
-            if origin_dataset_ver == MDA:
-                if dataset_ver != MDA:
+            if origin_dataset_ver == DatasetVer.MDA:
+                if dataset_ver != DatasetVer.MDA:
                     Debug.error_exit(
-                        "due to existing train info, 'dataset_ver' is restricted to 'mda' only"
+                        "Due to existing train info, 'dataset_ver' is restricted to 'MDA' only!"
                     )
 
-            elif origin_dataset_ver == AU_1MM:
-                if dataset_ver == AU_3MM:
+            elif origin_dataset_ver == DatasetVer.AU_1MM:
+                if dataset_ver == DatasetVer.AU_3MM:
                     Debug.error_exit(
-                        "due to existing train info, 'dataset_ver' can not be 'au.3mm'"
+                        "Due to existing train info, 'dataset_ver' can not be 'AU.3mm'!"
                     )
 
-            elif origin_dataset_ver == AU_3MM:
-                if dataset_ver != AU_3MM:
+            elif origin_dataset_ver == DatasetVer.AU_3MM:
+                if dataset_ver != DatasetVer.AU_3MM:
                     Debug.error_exit(
-                        "due to existing train info, 'dataset_ver' is restricted to 'au.3mm' only"
+                        "Due to existing train info, 'dataset_ver' is restricted to 'AU.3mm' only!"
                     )
             else:
                 Debug.error_exit(
-                    "'origin_dataset_ver' can not take on any values other than 'au.1mm/au.3mm/mda'"
+                    "'origin_dataset_ver' must be one of 'AU.1mm/AU.3mm/MDA'!"
                 )
 
-        # origin_dataset_ver is None
-        elif dataset_ver != AU_1MM and dataset_ver != AU_3MM and dataset_ver != MDA:
-            Debug.error_exit(
-                "'dataset_ver' can not take on any values other than 'au.1mm/au.3mm/mda'"
-            )
+        elif dataset_ver not in [DatasetVer.AU_1MM, DatasetVer.AU_3MM, DatasetVer.MDA]:
+            Debug.error_exit("'dataset_ver' must be one of 'AU.1mm/AU.3mm/MDA'!")
 
         return dataset_ver
 
@@ -549,24 +511,24 @@ class TrainingCore:
             DatasetPart.TEST_EXTER,
         ]:
             Debug.error_exit(
-                "'dataset_part' can not take on any values other than 'train/valid/test/test.inter/test.exter'"
+                "'dataset_part' must be one of 'train/valid/test/test.inter/test.exter'!"
             )
 
         # check dataset section based on dataset version
         if dataset_ver is not None:
             dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
-            if dataset_ver == MDA:
+            if dataset_ver == DatasetVer.MDA:
                 if (
                     dataset_part == DatasetPart.TEST_INTER
                     or dataset_part == DatasetPart.TEST_EXTER
                 ):
                     Debug.error_exit(
-                        "use 'test' instead of 'test.inter/test.exter' for mda dataset"
+                        "Use 'test' instead of 'test.inter/test.exter' for MDA dataset!"
                     )
 
-            elif dataset_ver == AU_3MM or dataset_ver == AU_1MM:
+            elif dataset_ver == DatasetVer.AU_3MM or dataset_ver == DatasetVer.AU_1MM:
                 if dataset_part == DatasetPart.TEST:
                     Debug.error_exit(
-                        "use 'test.inter/test.exter' instead of 'test' for au dataset"
+                        "Use 'test.inter/test.exter' instead of 'test' for AU dataset!"
                     )

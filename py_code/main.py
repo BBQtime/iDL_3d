@@ -3,7 +3,7 @@ import sys
 from custom import GPU, Debug
 from darktheme.widget_template import DarkPalette
 from PyQt5.QtWidgets import QApplication
-from str_lib import AU_1MM, MDA, DatasetPart
+from str_lib import DatasetPart, DatasetVer
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
@@ -20,12 +20,12 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 1:
+if 0:
     # app = DarkApplication(sys.argv)
     app = QApplication(sys.argv)
     app.setPalette(DarkPalette())
 
-    if 1:
+    if 0:
         main_win = UiIDL(
             idl_remark="",
             debug_mode=1,
@@ -48,13 +48,13 @@ if 0:
     baseline.fold_wise_inference(
         "baseline_real.idl",
         dataset_part=DatasetPart.TEST_INTER,
-        # dataset_ver=MDA,
+        # dataset_ver=DatasetVer.MDA,
     )
 if 0:
     baseline.cross_valid_inference(
         "baseline_2023.07.05.16.49.25_1mm_best",
         dataset_part=DatasetPart.TEST,
-        dataset_ver=MDA,
+        dataset_ver=DatasetVer.MDA,
     )
 
 
@@ -70,20 +70,20 @@ if 0:
     idl_gtvn.fold_wise_inference(
         idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
         dataset_part=DatasetPart.TEST_INTER,
-        dataset_ver=AU_1MM,
+        dataset_ver=DatasetVer.AU_1MM,
     )
 if 0:
     idl_gtvn.cross_valid_inference(
         idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
         dataset_part=DatasetPart.TEST_INTER,
-        dataset_ver=AU_1MM,
+        dataset_ver=DatasetVer.AU_1MM,
     )
 if 0:
     idl_gtvn.real_idl(
         idl_gtvn_id="idl.gtvn_test",
         patient="106",
         dataset_part=DatasetPart.TEST_INTER,
-        dataset_ver=AU_1MM,
+        dataset_ver=DatasetVer.AU_1MM,
     )
 
 

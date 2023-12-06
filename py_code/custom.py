@@ -19,12 +19,12 @@ import SimpleITK as sitk
 import torch
 from natsort import natsorted
 from numpy import ndarray
-from str_lib import AU_1MM, AU_3MM, BASELINE, GTVN, GTVS, GTVT, IDL_GTVN, IDL_GTVT, MDA
+from str_lib import DatasetVer
 from torch import Tensor
 
 
 # nested dictionary
-# (1) new_dict=Dict(origin_dict), change new_dict will not change my_dict
+# (1) new_dict=Dict(origin_dict), change new_dict will not change origin_dict
 # (2) better make all keys "str", because Json.load() will change key type(int type) into string
 class Dict(dict):
     def __getitem__(self, item):
@@ -190,7 +190,7 @@ class Value:
         elif isinstance(origin_data, list):
             data_list = origin_data.copy()
         else:
-            Debug.error_exit("input data format should be list, dict or tuple")
+            Debug.error_exit("Input data should be a list, dict or tuple instance!")
         return data_list
 
     def median(origin_data: Union[list, dict, tuple]) -> float:
@@ -367,19 +367,19 @@ class Img:
         labels = Dict()
 
         # load gtvt
-        labels[GTVT] = nii_load_func(paths[GTVT], binary=True)
+        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
 
         # load gtvn
-        if os.path.exists(paths[GTVN]):
-            labels[GTVN] = nii_load_func(paths[GTVN], binary=True)
+        if os.path.exists(paths["gtvn"]):
+            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
         else:
-            labels[GTVN] = np.zeros_like(labels[GTVT])
+            labels["gtvn"] = np.zeros_like(labels["gtvt"])
 
         # load gtvs
-        if os.path.exists(paths[GTVS]):
-            labels[GTVS] = nii_load_func(paths[GTVS], binary=True)
+        if os.path.exists(paths["gtvs"]):
+            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
         else:
-            labels[GTVS] = np.maximum(labels[GTVT], labels[GTVN])
+            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
 
         return labels
 
@@ -474,7 +474,7 @@ class Dir:
             shutil.rmtree(path)
             os.makedirs(path, exist_ok=True)
         else:
-            Debug.error_exit("path is not a dir")
+            Debug.error_exit("'path' is not a dir!")
 
     def rename(parent_dir: str, old_name: str, new_name: str):
         old_path = os.path.join(parent_dir, old_name)
@@ -491,7 +491,7 @@ class Dir:
                 # print(file_md5)
                 return file_md5
         else:
-            Debug.error_exit("path is not a file")
+            Debug.error_exit("'file_path' is not a file!")
 
     def get_file_sha1(file_path: str):
         if os.path.isfile(file_path):
@@ -502,7 +502,7 @@ class Dir:
                 # print(file_sha1)
                 return file_sha1
         else:
-            Debug.error_exit("path is not a file")
+            Debug.error_exit("'file_path' is not a file!")
 
     def delete(path: str):
         if os.path.isdir(path):
@@ -691,50 +691,50 @@ class Global:
 
     # Windows
     if platform.system().lower() == "windows":
-        for i in [AU_3MM, AU_1MM, MDA]:
+        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
 
     # Linux
     elif platform.system().lower() == "linux":
-        for i in [AU_3MM, AU_1MM, MDA]:
+        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
         NUM_WORKERS = __settings["num.workers"]
 
     else:
-        Debug.error_exit("platform error, only support linux or windows")
+        Debug.error_exit("Platform error, only support linux or windows!")
 
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
-    IMG_SHAPE[AU_3MM] = List(__settings["img.shape.3mm"])
-    IMG_SHAPE[AU_1MM] = List(__settings["img.shape.1mm"])
-    IMG_SHAPE[MDA] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[DatasetVer.AU_3MM] = List(__settings["img.shape.3mm"])
+    IMG_SHAPE[DatasetVer.AU_1MM] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE[DatasetVer.MDA] = List(__settings["img.shape.1mm"])
 
     # NII_SPACING (Width, Height, Depth)
     NII_SPACING = Dict()
-    NII_SPACING[AU_3MM] = List(__settings["nii.spacing.3mm"])
-    NII_SPACING[AU_1MM] = List(__settings["nii.spacing.1mm"])
-    NII_SPACING[MDA] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[DatasetVer.AU_3MM] = List(__settings["nii.spacing.3mm"])
+    NII_SPACING[DatasetVer.AU_1MM] = List(__settings["nii.spacing.1mm"])
+    NII_SPACING[DatasetVer.MDA] = List(__settings["nii.spacing.1mm"])
 
-    for i in [AU_3MM, AU_1MM, MDA]:
+    for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
         IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
         NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
 
     # dataset splitting
     DATASET_SPLIT_JSON_PATH = Dict()
-    DATASET_SPLIT_JSON_PATH[AU_1MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[AU_3MM] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_3MM] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.au"]
     )
-    DATASET_SPLIT_JSON_PATH[MDA] = os.path.join(
+    DATASET_SPLIT_JSON_PATH[DatasetVer.MDA] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.mda"]
     )
 
     HYPER_JSON_PATH = Dict()
-    for i in [BASELINE, IDL_GTVT, IDL_GTVN]:
+    for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
         HYPER_JSON_PATH[i] = os.path.join(
             PROJ_DIR, __settings["hyper.json.{}".format(i)]
         )

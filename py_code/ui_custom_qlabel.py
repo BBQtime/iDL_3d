@@ -1,8 +1,8 @@
-from custom import Dict, Value
+from custom import Value
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
-from str_lib import CORONAL, CT, SAGITTAL, TRANSVERSE, DisplayMode, IDLStep
+from str_lib import DisplayMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
@@ -63,7 +63,7 @@ class CustomQLabel(QLabel):
                 self.window().reset_cur_slice_id()
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                     # only refresh other img_qlabels
-                    img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+                    img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
                     img_name_list.remove(self.plane)
                     for i in img_name_list:
                         self.window().refresh_img_qlabels(i)
@@ -79,7 +79,11 @@ class CustomQLabel(QLabel):
                     self.window().reset_cur_slice_id()
                     if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                         # only refresh other img_qlabels
-                        img_name_list = [TRANSVERSE, CORONAL, SAGITTAL]
+                        img_name_list = [
+                            Plane.TRANSVERSE,
+                            Plane.CORONAL,
+                            Plane.SAGITTAL,
+                        ]
                         img_name_list.remove(self.plane)
                         for i in img_name_list:
                             self.window().refresh_img_qlabels(i)
@@ -182,15 +186,15 @@ class CustomQLabel(QLabel):
         d, h, w = img_shape_3d
 
         # 2d to 3d
-        if self.plane == TRANSVERSE:
+        if self.plane == Plane.TRANSVERSE:
             w *= x
             h *= y
             d = cur_slice
-        elif self.plane == CORONAL:
+        elif self.plane == Plane.CORONAL:
             w *= x
             h = cur_slice
             d *= y
-        elif self.plane == SAGITTAL:
+        elif self.plane == Plane.SAGITTAL:
             w = cur_slice
             h *= x
             d *= y
@@ -236,15 +240,24 @@ class CustomQLabel(QLabel):
         # loop through all clicks
         for d, h, w in clicks_pos_3d:
             x = y = None
-            if self.plane == TRANSVERSE and self.window().cur_slice_id[TRANSVERSE] == d:
+            if (
+                self.plane == Plane.TRANSVERSE
+                and self.window().cur_slice_id[Plane.TRANSVERSE] == d
+            ):
                 x = w / img_shape[2]
                 y = h / img_shape[1]
 
-            elif self.plane == CORONAL and self.window().cur_slice_id[CORONAL] == h:
+            elif (
+                self.plane == Plane.CORONAL
+                and self.window().cur_slice_id[Plane.CORONAL] == h
+            ):
                 x = w / img_shape[2]
                 y = d / img_shape[0]
 
-            elif self.plane == SAGITTAL and self.window().cur_slice_id[SAGITTAL] == w:
+            elif (
+                self.plane == Plane.SAGITTAL
+                and self.window().cur_slice_id[Plane.SAGITTAL] == w
+            ):
                 x = h / img_shape[1]
                 y = d / img_shape[0]
 
@@ -277,19 +290,19 @@ class CustomQLabel(QLabel):
     def wheelEvent(self, event):
         super().wheelEvent(event)
 
-        ct_img = self.window().img_3d[CT]
-        if self.plane == SAGITTAL:
+        ct_img = self.window().img_3d[Modal.CT]
+        if self.plane == Plane.SAGITTAL:
             slices_count = ct_img.shape[2]
-        elif self.plane == CORONAL:
+        elif self.plane == Plane.CORONAL:
             slices_count = ct_img.shape[1]
-        elif self.plane == TRANSVERSE:
+        elif self.plane == Plane.TRANSVERSE:
             slices_count = ct_img.shape[0]
 
         if slices_count == 0:
             return
 
         slice_delta = event.angleDelta().y() // 120
-        if self.plane == CORONAL:
+        if self.plane == Plane.CORONAL:
             slice_delta = -slice_delta
 
         self.window().cur_slice_id[self.plane] -= slice_delta
