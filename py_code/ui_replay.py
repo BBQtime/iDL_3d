@@ -505,13 +505,13 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["baseline"].activated.connect(self._load_baseline_data)
         self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
         self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
-        self._combox["patient"].activated.connect(self._load_patient_data)
+        self._combox["patient"].activated.connect(self.__on_combox_patient_clicked)
         self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
         self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
-        self._combox["idl.gtvt"].activated.connect(self._load_idl_gtvt_data)
+        self._combox["idl.gtvt"].activated.connect(self.__on_combox_idl_gtvt_clicked)
         self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
         self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
-        self._combox["idl.gtvn"].activated.connect(self._load_idl_gtvn_data)
+        self._combox["idl.gtvn"].activated.connect(self.__on_combox_idl_gtvn_clicked)
         self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
 
@@ -625,12 +625,19 @@ class UiReplay(QtWidgets.QMainWindow):
                 Plane.CORONAL,
                 Plane.SAGITTAL,
             ]:
-                self._slider[i][j].valueChanged.connect(self.refresh_img_qlabels)
+                self._slider[i][j].valueChanged.connect(
+                    self.__color_enhance_slider_value_update
+                )
         for i in ["modal", "plane"]:
             self._radio_group["color.enhance"][i].buttonClicked.connect(
                 self.__switch_color_enhance_slider_bars
             )
 
+    # this function is connected to widget, dont set input params to this function
+    def __color_enhance_slider_value_update(self):
+        self.refresh_img_qlabels()
+
+    # this function is connected to widget, dont set input params to this function
     def _plane_fixed_mode_switch_coronal_modal(self):
         for modal in self._radio_btn[DisplayMode.PLANE_FIXED][Plane.CORONAL].keys():
             if self._radio_btn[DisplayMode.PLANE_FIXED][Plane.CORONAL][
@@ -640,6 +647,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 break
         self.refresh_img_qlabels(img_name=Plane.CORONAL)
 
+    # this function is connected to widget, dont set input params to this function
     def _plane_fixed_mode_switch_sagittal_modal(self):
         for modal in self._radio_btn[DisplayMode.PLANE_FIXED][Plane.SAGITTAL].keys():
             if self._radio_btn[DisplayMode.PLANE_FIXED][Plane.SAGITTAL][
@@ -766,7 +774,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._radio_btn[DisplayMode.MODAL_FIXED][Plane.TRANSVERSE].setChecked(True)
         # connect ui to functions
         self._radio_group[DisplayMode.MODAL_FIXED].buttonClicked.connect(
-            self._modal_fixed_mode_switch_plane
+            self.__on_modal_fixed_radio_group_clicked
         )
 
         # display mode: plane fixed
@@ -1023,17 +1031,20 @@ class UiReplay(QtWidgets.QMainWindow):
         #     radio_btn_height,
         # )
 
+    # this function is connected to widget, dont set input params to this function
+    def __on_modal_fixed_radio_group_clicked(self):
+        self._modal_fixed_mode_switch_plane()
+
     # new_plane = None will read from radio buttons
-    def _modal_fixed_mode_switch_plane(
-        self, connected_radio_btn: QtWidgets.QRadioButton = None, new_plane: str = None
-    ):
+    def _modal_fixed_mode_switch_plane(self, new_plane: str = None):
+        # switch plane based on the radio buttons
         if new_plane is None:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if self._radio_btn[DisplayMode.MODAL_FIXED][plane].isChecked():
                     for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                         self.img_qlabel[modal].plane = plane
                     break
-
+        # switch to a new plane
         else:
             for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                 self.img_qlabel[modal].plane = new_plane
@@ -1099,6 +1110,7 @@ class UiReplay(QtWidgets.QMainWindow):
             self.cur_slice_id[Plane.CORONAL] = self._gtvs_center[1]
             self.cur_slice_id[Plane.SAGITTAL] = self._gtvs_center[2]
 
+    # this function is connected to widget, dont set input params to this function
     def __switch_color_enhance_slider_bars(self):
         # hide and show sliders
         if self.display_mode() == DisplayMode.PLANE_FIXED:
@@ -1217,6 +1229,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["patient"].setEnabled(True)
         return combox_patients
 
+    # this function is connected to widget, dont set input params to this function
     def _load_baseline_data(self):
         # self._reset_zoomin()
         self.__clear_scores()
@@ -1244,7 +1257,7 @@ class UiReplay(QtWidgets.QMainWindow):
             reset_patient = True
         else:
             reset_patient = False
-        self._load_patient_data(idx=None, reset_patient=reset_patient)
+        self._load_patient_data(reset_patient)
 
     def _load_3d_img(self, path: str, binary: bool = False):
         img = Nii.load(path, binary=False)
@@ -1281,7 +1294,11 @@ class UiReplay(QtWidgets.QMainWindow):
             img_path[i] = os.path.join(self._dataset_dir, img_path[i])
             self.img_3d[i] = self._load_3d_img(img_path[i])
 
-    def _load_patient_data(self, idx: int = None, reset_patient: bool = True):
+    # this function is connected to widget, dont set input params to this function
+    def __on_combox_patient_clicked(self):
+        self._load_patient_data()
+
+    def _load_patient_data(self, reset_patient: bool = True):
         # triggered by:
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
@@ -1383,16 +1400,20 @@ class UiReplay(QtWidgets.QMainWindow):
         for i in range(len(self._gtvs_center)):
             self._gtvs_center[i] = round(self._gtvs_center[i])
 
-    def _load_idl_gtvt_data(
-        self, idx: int = None, reset_id: bool = True, refresh_imgs=True
-    ):
+    # this function is connected to widget, dont set input params to this function
+    def __on_combox_idl_gtvt_clicked(self):
+        self._load_idl_gtvt_data()
+
+    def _load_idl_gtvt_data(self, reset_id: bool = True, refresh_imgs=True):
         self._load_idl_gtv_data(
             gtv="gtvt", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
-    def _load_idl_gtvn_data(
-        self, idx: int = None, reset_id: bool = True, refresh_imgs=True
-    ):
+    # this function is connected to widget, dont set input params to this function
+    def __on_combox_idl_gtvn_clicked(self):
+        self._load_idl_gtvn_data()
+
+    def _load_idl_gtvn_data(self, reset_id: bool = True, refresh_imgs=True):
         self._load_idl_gtv_data(
             gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
@@ -1558,6 +1579,7 @@ class UiReplay(QtWidgets.QMainWindow):
         if refresh_imgs:
             self.refresh_img_qlabels()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_prev_baseline_data(self):
         idx = self._combox["baseline"].currentIndex() - 1
         if idx < 0:
@@ -1566,6 +1588,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["baseline"].setCurrentText(prev_baseline)
         self._load_baseline_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_next_baseline_data(self):
         idx = self._combox["baseline"].currentIndex() + 1
         if idx > self._combox["baseline"].count() - 1:
@@ -1574,6 +1597,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["baseline"].setCurrentText(next_baseline)
         self._load_baseline_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_prev_idl_gtvn_data(self):
         idx = self._combox["idl.gtvn"].currentIndex() - 1
         if idx < 0:
@@ -1582,6 +1606,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
         self._load_idl_gtvn_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_next_idl_gtvn_data(self):
         idx = self._combox["idl.gtvn"].currentIndex() + 1
         if idx > self._combox["idl.gtvn"].count() - 1:
@@ -1590,6 +1615,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
         self._load_idl_gtvn_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_prev_idl_gtvt_data(self):
         idx = self._combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
@@ -1598,6 +1624,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
         self._load_idl_gtvt_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_next_idl_gtvt_data(self):
         idx = self._combox["idl.gtvt"].currentIndex() + 1
         if idx > self._combox["idl.gtvt"].count() - 1:
@@ -1606,6 +1633,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
         self._load_idl_gtvt_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_prev_patient_data(self):
         idx = self._combox["patient"].currentIndex() - 1
         if idx < 0:
@@ -1614,6 +1642,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["patient"].setCurrentText(prev_patient)
         self._load_patient_data()
 
+    # this function is connected to widget, dont set input params to this function
     def _load_next_patient_data(self):
         idx = self._combox["patient"].currentIndex() + 1
         if idx > self._combox["patient"].count() - 1:
@@ -1634,6 +1663,7 @@ class UiReplay(QtWidgets.QMainWindow):
         color_map = cv2.applyColorMap(gray_img, cv2.COLORMAP_JET)
         return color_map
 
+    # this function is connected to widget, dont set input params to this function
     def __refresh_img_qlabel_trasverse(self):
         self.refresh_img_qlabels(img_name=Plane.TRANSVERSE)
 
@@ -1641,7 +1671,6 @@ class UiReplay(QtWidgets.QMainWindow):
     # otherwise correction and annotation will cover pred
     def refresh_img_qlabels(
         self,
-        slider_value=None,  # get this value when function is triggerrd by QtWidgets.QSlider, ignore it
         replay_mode: bool = True,
         img_name: str = None,
     ):

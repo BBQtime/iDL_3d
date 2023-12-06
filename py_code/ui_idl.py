@@ -6,8 +6,9 @@ import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Time
+from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
-from PyQt5.QtCore import QPoint, QSize, Qt
+from PyQt5.QtCore import QPoint, QSize, Qt, QThread, pyqtSignal
 from scipy import ndimage
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from superqt import QCollapsible
@@ -16,6 +17,65 @@ from training_idl_gtvt import TrainingIDLGTVt
 from ui_custom_qlabel import CustomQLabel
 from ui_draggable_cross import DraggableCross
 from ui_replay import UiReplay
+
+
+class IDLGTVnThread(QThread):
+    signal = pyqtSignal(str)
+
+    def __init__(
+        self,
+        idl_gtvn_id: str,
+        patient: str,
+        idl_gtvn_clicks: ndarray,
+        dataset_part: str,
+        dataset_ver: str,
+    ):
+        super().__init__()
+        self.__idl_gtvn_id = idl_gtvn_id
+        self.__patient = patient
+        self.__idl_gtvn_clicks = idl_gtvn_clicks
+        self.__dataset_part = dataset_part
+        self.__dataset_ver = dataset_ver
+
+    def run(self):
+        training_idl_gtvn = TrainingIDLGTVn()
+        training_idl_gtvn.real_idl(
+            idl_gtvn_id=self.__idl_gtvn_id,
+            patient=self.__patient,
+            idl_gtvn_clicks=self.__idl_gtvn_clicks,
+            dataset_part=self.__dataset_part,
+            dataset_ver=self.__dataset_ver,
+        )
+        self.signal.emit("idl gtvn done")
+
+
+class IDLGTVtThread(QThread):
+    signal = pyqtSignal(str)
+
+    def __init__(
+        self,
+        idl_gtvt_id: str,
+        patient: str,
+        dataset_ver: str,
+        debug_mode: bool,
+    ):
+        super().__init__()
+        self.__idl_gtvt_id = idl_gtvt_id
+        self.__patient = patient
+        self.__dataset_ver = dataset_ver
+        self.__debug_mode = debug_mode
+
+    def run(self):
+        # result = time_consuming_function(self.param1, self.param2)
+        training_idl_gtvt = TrainingIDLGTVt()
+        training_idl_gtvt.new_training(
+            baseline_id="baseline_real.idl",
+            real_idl_gtvt_id=self.__idl_gtvt_id,
+            real_idl_patient=self.__patient,
+            dataset_ver=self.__dataset_ver,
+            debug_mode=self.__debug_mode,
+        )
+        self.signal.emit("idl gtvt done")
 
 
 class UiIDL(UiReplay):
@@ -261,7 +321,8 @@ class UiIDL(UiReplay):
                 spacing=self._nii_spacing,
             )
 
-    def __click_btn_pen(self):
+    # this function is connected to widget, dont set input params to this function
+    def __on_btn_pen_clicked(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.DRAW_GTVT:
@@ -277,7 +338,8 @@ class UiIDL(UiReplay):
             self.__set_mouse_cursor("pen")
             self._text_label["pen.size"].setText("Pen Size")
 
-    def __click_btn_eraser(self):
+    # this function is connected to widget, dont set input params to this function
+    def __on_btn_eraser_clicked(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.DRAW_GTVT:
@@ -359,6 +421,7 @@ class UiIDL(UiReplay):
             self.__btn[i].setEnabled(True)
 
     def __confirm_gtvt_annotation(self):
+        # (1)check gtvt annotated statues
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if self.__gtvt_annotated_status[plane] is False:
                 QtWidgets.QMessageBox.information(
@@ -367,14 +430,14 @@ class UiIDL(UiReplay):
                     "Please draw GTVt in {} plane.".format(plane),
                     QtWidgets.QMessageBox.Ok,
                 )
-                self._modal_fixed_mode_switch_plane(new_plane=plane)
+                self._modal_fixed_mode_switch_plane(plane)
                 if self.drawing_mode == DrawingMode.GTVT_ERASER:
                     self.drawing_mode = DrawingMode.GTVT_PEN
                     self.__set_mouse_cursor("pen")
                     self._text_label["pen.size"].setText("Pen Size")
                 return
 
-        # save gtvt annotation
+        # (2)save gtvt annotation
         cur_round_dir = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
@@ -396,42 +459,51 @@ class UiIDL(UiReplay):
             spacing=self._nii_spacing,
         )
 
-        # start real idl gtvt
-        training_idl_gtvt = TrainingIDLGTVt()
-        training_idl_gtvt.new_training(
-            baseline_id="baseline_real.idl",
-            real_idl_gtvt_id=self._idl_id["gtvt"],
-            real_idl_patient=self._cur_patient,
+        # (3)start real idl gtvt
+        self._text_label["gtvt.progress"].show()
+        self.__progress_bar["gtvt"].show()
+        self.__idl_thread["gtvt"] = IDLGTVtThread(
+            idl_gtvt_id=self._idl_id["gtvt"],
+            patient=self._cur_patient,
             dataset_ver=self._dataset_ver,
             debug_mode=self.__debug_mode,
         )
+        self.__idl_thread["gtvt"].signal.connect(self.__idl_gtvt_thread_finished)
+        self.__idl_thread["gtvt"].start()
 
-        # clean current step elements
-        # self.__clear_all_drawing_layers()
-        # new step
+        # (4)goto next step
         self.set_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
         self.__save_idl_step()
-        self._load_idl_gtvt_data()
-        self.__combine_pred_annotation_correction()
-        self.refresh_img_qlabels()
         self.setCursor(Qt.ArrowCursor)
         for i in ["pen", "eraser"]:
             self.__btn[i].setEnabled(False)
+        # refresh msg on qlabel (only refresh the top-left img_qlabel)
+        if self.display_mode == DisplayMode.MODAL_FIXED:
+            self.refresh_img_qlabels(Modal.CT)
+        else:
+            self.refresh_img_qlabels(Plane.TRANSVERSE)
+
+    def __idl_gtvt_thread_finished(self, msg: str):
+        print(msg)
+        self._text_label["gtvt.progress"].hide()
+        self.__progress_bar["gtvt"].hide()
+        self._load_idl_gtvt_data()
+        self.__combine_pred_annotation_correction()
+        self.refresh_img_qlabels()
 
     def __confirm_gtvn_center(self):
-        # add clicks into 3d img
+        # (1)add clicks into 3d img
         if self.img_3d["gtvn.clicks"] is None:
             self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
         for pos in self.gtvn_clicks_pos_3d:
             # pos 0-transverse 1-coronal 2-saggital
             self.img_3d["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
 
-        # clean current step elements
+        # (2)delete cross and show gtvn clicks
         self.delete_all_crosses()
-
-        # show gtvn center
         self.refresh_img_qlabels()
 
+        # (3) save gtvn clicks into nii file
         # copy data (dont change origin ndarray)
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
         # flip left/right for 1mm data
@@ -441,18 +513,31 @@ class UiIDL(UiReplay):
         idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
         # start real idl gtvn
-        training_idl_gtvn = TrainingIDLGTVn()
-        training_idl_gtvn.real_idl(
+        self._text_label["gtvn.progress"].show()
+        self.__progress_bar["gtvn"].show()
+        self.__idl_thread["gtvn"] = IDLGTVnThread(
             idl_gtvn_id=self._idl_id["gtvn"],
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
             dataset_part=self._dataset_part,
             dataset_ver=self._dataset_ver,
         )
+        self.__idl_thread["gtvn"].signal.connect(self.__idl_gtvn_thread_finished)
+        self.__idl_thread["gtvn"].start()
 
-        # new step
+        # goto next step
         self.set_cur_patient_idl_step(IDLStep.CORRECTION)
         self.__save_idl_step()
+
+    def __idl_gtvn_thread_finished(self, msg: str):
+        print(msg)
+        # update widgets
+        self._text_label["gtvn.progress"].hide()
+        self.__progress_bar["gtvn"].hide()
+        for i in ["gtvt", "gtvn"]:
+            self._radio_btn["draw.{}".format(i)].show()
+
+        # reload data
         self._load_idl_gtvn_data()
         self.__combine_pred_annotation_correction()
         self.refresh_img_qlabels()
@@ -473,7 +558,8 @@ class UiIDL(UiReplay):
             self.__btn[i].setEnabled(True)
         self.__btn["confirm"].setEnabled(False)
 
-    def __click_btn_confirm(self):
+    # this function is connected to widget, dont set input params to this function
+    def __on_btn_confirm_clicked(self):
         if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVT_CENTER:
             self.__confirm_gtvt_center()
 
@@ -555,7 +641,8 @@ class UiIDL(UiReplay):
         self._color["gtvt.pred.final"] = self._color["gtvt.pred"]
         self._color["gtvn.pred.final"] = self._color["gtvn.pred"]
 
-    def __click_btn_clear(self):
+    # this function is connected to widget, dont set input params to this function
+    def __on_btn_clear_clicked(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
@@ -666,12 +753,8 @@ class UiIDL(UiReplay):
         super().wheelEvent(event)
         self.refresh_crosses_on_qlabels()
 
-    def _modal_fixed_mode_switch_plane(
-        self, connected_radio_btn: QtWidgets.QRadioButton = None, new_plane: str = None
-    ):
-        super()._modal_fixed_mode_switch_plane(
-            connected_radio_btn=connected_radio_btn, new_plane=new_plane
-        )
+    def _modal_fixed_mode_switch_plane(self, new_plane: str = None):
+        super()._modal_fixed_mode_switch_plane(new_plane)
         self.refresh_crosses_on_qlabels()
 
     def delete_all_crosses(self):
@@ -796,6 +879,8 @@ class UiIDL(UiReplay):
         self._text_label["pen.size"].setText("Pen Size")
         self._text_label["gtvt.progress"].setText("Generating GTVt")
         self._text_label["gtvn.progress"].setText("Generating GTVn")
+        for i in ["gtvt", "gtvn"]:
+            self._text_label["{}.progress".format(i)].hide()
 
         # radio button
         for i in ["gtvt", "gtvn"]:
@@ -820,15 +905,16 @@ class UiIDL(UiReplay):
                 self.__btn[i].setIconSize(QSize(25, 25))
             self.__btn[i].setIcon(icon)
         # connect btns to functions
-        self.__btn["pen"].clicked.connect(self.__click_btn_pen)
-        self.__btn["eraser"].clicked.connect(self.__click_btn_eraser)
-        self.__btn["clear"].clicked.connect(self.__click_btn_clear)
-        self.__btn["confirm"].clicked.connect(self.__click_btn_confirm)
+        self.__btn["pen"].clicked.connect(self.__on_btn_pen_clicked)
+        self.__btn["eraser"].clicked.connect(self.__on_btn_eraser_clicked)
+        self.__btn["clear"].clicked.connect(self.__on_btn_clear_clicked)
+        self.__btn["confirm"].clicked.connect(self.__on_btn_confirm_clicked)
 
         # gtvt/gtvn progress bars
         self.__progress_bar = Dict()
         for i in ["gtvt", "gtvn"]:
             self.__progress_bar[i] = QtWidgets.QProgressBar()
+            self.__progress_bar[i].hide()
 
         # pen size slider
         self._slider["pen.size"] = QtWidgets.QSlider()
@@ -837,12 +923,13 @@ class UiIDL(UiReplay):
         self._slider["pen.size"].setMaximum(7)
         self._slider["pen.size"].setValue(4)
 
-        self.__btn_group_drawing_mode_gtv = QtWidgets.QButtonGroup()
+        self.__radio_group_drawing_mode = QtWidgets.QButtonGroup()
         for i in ["gtvt", "gtvn"]:
-            self.__btn_group_drawing_mode_gtv.addButton(
+            self.__radio_group_drawing_mode.addButton(
                 self._radio_btn["draw.{}".format(i)]
             )
-        self.__btn_group_drawing_mode_gtv.buttonClicked.connect(
+            self._radio_btn["draw.{}".format(i)].hide()
+        self.__radio_group_drawing_mode.buttonClicked.connect(
             self.__switch_drawing_mode_gtv
         )
 
@@ -915,6 +1002,11 @@ class UiIDL(UiReplay):
         super()._init_data()
         self.__debug_mode = debug_mode
 
+        # idl gtvt/gtvn thread
+        self.__idl_thread = Dict()
+        for i in ["gtvt", "gtvn"]:
+            self.__idl_thread[i] = None
+
         # keep idl.gtvt and idl.gtvn id unchanged
         cur_time = Time.cur_time_str()
         for i in ["gtvt", "gtvn"]:
@@ -971,6 +1063,7 @@ class UiIDL(UiReplay):
             self.img_qlabel[i].drawing_layer.fill(Qt.transparent)
             self.img_qlabel[i].update()
 
+    # this function is connected to widget, dont set input params to this function
     def __switch_drawing_mode_gtv(self):
         if self._radio_btn["draw.gtvt"].isChecked():
             if self.drawing_mode == DrawingMode.GTVN_PEN:
@@ -1090,7 +1183,7 @@ class UiIDL(UiReplay):
                 )
                 pos_x += 45
 
-    def _load_patient_data(self, idx: int = None):
+    def _load_patient_data(self):
         # # enable all controls
         # for i in [
         #     Modal.CT,

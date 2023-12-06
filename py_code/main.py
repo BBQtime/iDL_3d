@@ -20,12 +20,12 @@ Debug.clear_linux_trash()
 
 
 ############# UI #############
-if 0:
+if 1:
     # app = DarkApplication(sys.argv)
     app = QApplication(sys.argv)
     app.setPalette(DarkPalette())
 
-    if 0:
+    if 1:
         main_win = UiIDL(
             idl_remark="",
             debug_mode=1,

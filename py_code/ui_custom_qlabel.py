@@ -291,15 +291,15 @@ class CustomQLabel(QLabel):
         super().wheelEvent(event)
 
         ct_img = self.window().img_3d[Modal.CT]
+        if ct_img is None:
+            return
+
         if self.plane == Plane.SAGITTAL:
             slices_count = ct_img.shape[2]
         elif self.plane == Plane.CORONAL:
             slices_count = ct_img.shape[1]
         elif self.plane == Plane.TRANSVERSE:
             slices_count = ct_img.shape[0]
-
-        if slices_count == 0:
-            return
 
         slice_delta = event.angleDelta().y() // 120
         if self.plane == Plane.CORONAL:
