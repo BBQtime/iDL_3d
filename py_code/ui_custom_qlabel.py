@@ -6,7 +6,7 @@ from str_lib import DisplayMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
-class ROI:
+class CustomQLabelROI:
     x = None
     y = None
     width = None
@@ -22,7 +22,7 @@ class CustomQLabel(QLabel):
         self.modal = None
 
         # rgb img - region of interest
-        self.roi = ROI()
+        self.roi = CustomQLabelROI()
 
         # clicks
         self.selected_cross = None
@@ -69,7 +69,13 @@ class CustomQLabel(QLabel):
                         self.window().refresh_img_qlabels(i)
                 self.window().refresh_crosses_on_qlabels()
 
-            elif idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            # draw/correct
+            elif idl_step in [
+                IDLStep.DRAW_GTVT,
+                IDLStep.CORRECT_GTVT,
+                IDLStep.CORRECT_GTVN,
+                IDLStep.CORRECT_BOTH,
+            ]:
                 self.window().draw_on_img_qlabels_press(event)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
@@ -92,21 +98,27 @@ class CustomQLabel(QLabel):
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
 
-        # use event.buttons() instead of event.button()
+        # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
         if event.buttons() == Qt.LeftButton:
-            idl_step = self.window().get_cur_patient_idl_step()
-
-            if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            if self.window().get_cur_patient_idl_step() in [
+                IDLStep.DRAW_GTVT,
+                IDLStep.CORRECT_GTVT,
+                IDLStep.CORRECT_GTVN,
+                IDLStep.CORRECT_BOTH,
+            ]:
                 self.window().draw_on_img_qlabels_move(event=event, img_qlabel=self)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
         if event.button() == Qt.LeftButton:
-            idl_step = self.window().get_cur_patient_idl_step()
-
-            if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECTION]:
+            if self.window().get_cur_patient_idl_step() in [
+                IDLStep.DRAW_GTVT,
+                IDLStep.CORRECT_GTVT,
+                IDLStep.CORRECT_GTVN,
+                IDLStep.CORRECT_BOTH,
+            ]:
                 self.window().draw_on_img_qlabels_release(self)
 
     def paintEvent(self, event):

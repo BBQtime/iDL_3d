@@ -17,7 +17,10 @@ class IDLStep:
     CLICK_GTVT_CENTER = "click.gtvt.center"
     DRAW_GTVT = "draw.gtvt"
     CLICK_GTVN_CENTER = "click.gtvn.center"
-    CORRECTION = "correction"
+    WAITING = "waiting"
+    CORRECT_GTVT = "correct.gtvt"
+    CORRECT_GTVN = "correct.gtvn"
+    CORRECT_BOTH = "correct.both"
 
 
 class DatasetPart:

@@ -4,7 +4,7 @@ from custom import Global as g
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
-from str_lib import DisplayMode, Plane
+from str_lib import DisplayMode, IDLStep, Plane
 
 
 class DraggableCross(QWidget):
@@ -64,8 +64,14 @@ class DraggableCross(QWidget):
                 old_cross_id=self.cross_id,
                 new_cross_id=pos_3d,
             )
+            # add cross id (3d position) into main window
+            idl_step = self.window().get_cur_patient_idl_step()
+            if idl_step == IDLStep.CLICK_GTVT_CENTER:
+                self.window().gtvt_click_pos_3d = self.cross_id
+            elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+                self.window().gtvn_clicks_pos_3d.append(self.cross_id)
+
             # refresh data and img after cross id updated
-            self.window().add_3d_pos_of_selected_cross(self)
             self.window().reset_cur_slice_id()
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
