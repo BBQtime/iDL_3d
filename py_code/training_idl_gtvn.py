@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom import Img, Json, List, Nii, Timer, Value
 from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from numpy import ndarray
@@ -64,9 +64,10 @@ class TrainingIDLGTVn(TrainingBaseline):
         self,
         idl_gtvn_id: str,
         patient: str,
-        idl_gtvn_clicks: ndarray,
         dataset_part: str,  # train/valid/test.inter/test.exter/test
         dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        idl_gtvn_clicks: ndarray = None,  # None means no gtvn click
+        debug_mode=False,
     ):
         print("")
         print("real idl: {}".format(idl_gtvn_id))
@@ -74,16 +75,16 @@ class TrainingIDLGTVn(TrainingBaseline):
         baseline_id = "baseline_real.idl"
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
 
-        cnn_idl_gtvn_dir = os.path.join(baseline_dir, "idl.gtvn_real.idl")
-        if not os.path.exists(cnn_idl_gtvn_dir):
+        real_idl_cnns_base_dir = os.path.join(baseline_dir, "idl.gtvn_real.idl")
+        if not os.path.exists(real_idl_cnns_base_dir):
             Debug.error_exit("'idl.gtvn_real.idl' folder not found!")
 
-        output_idl_gtvn_dir = os.path.join(baseline_dir, idl_gtvn_id)
-        if not os.path.exists(output_idl_gtvn_dir):
-            Dir.create(output_idl_gtvn_dir)
+        real_idl_output_dir = os.path.join(baseline_dir, idl_gtvn_id)
+        if not os.path.exists(real_idl_output_dir):
+            Dir.create(real_idl_output_dir)
 
         cnn_fold_dirs = Dir.get_sub_dirs(
-            cnn_idl_gtvn_dir, key_word="fold=", full_path=True
+            real_idl_cnns_base_dir, key_word="fold=", full_path=True
         )
         hyper = Json.load(os.path.join(cnn_fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
@@ -103,13 +104,23 @@ class TrainingIDLGTVn(TrainingBaseline):
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics(dataset_ver)
 
+        # idl progress
+        step_1, step_2, step_3, step_4, step_5 = 1, 12, 1, 2, 7
+        cur_progress = 0
+        if debug_mode:
+            # step: 1/2/3/4/5
+            total_progress = step_1 + step_2 + step_3 + step_4 + step_5
+        else:
+            # step: (1/2/3)*5 + 4/5
+            total_progress = (step_1 + step_2 + step_3) * 5 + step_4 + step_5
+
         # loop through fold dirs
-        for cnn_fold_dir in tqdm(cnn_fold_dirs):
+        for cnn_fold_dir in cnn_fold_dirs:
             # fold = int(Path(cnn_fold_dir).name[len("fold=") :])
             # print("")
             # print("fold: ", fold)
 
-            output_fold_dir = os.path.join(output_idl_gtvn_dir, Path(cnn_fold_dir).name)
+            output_fold_dir = os.path.join(real_idl_output_dir, Path(cnn_fold_dir).name)
             Dir.create(output_fold_dir)
 
             # loop through epoch dirs
@@ -138,6 +149,12 @@ class TrainingIDLGTVn(TrainingBaseline):
                     patients=patients,
                 )
 
+                # step 1 - load cnn
+                cur_progress += step_1
+                if self._idl_progress_signal is not None:
+                    self._idl_progress_signal.emit(cur_progress / total_progress)
+                # print(cur_progress, total_progress)
+
                 # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
                 patient_outputs = self._inference_single_patient(
                     patient=patient,
@@ -149,6 +166,12 @@ class TrainingIDLGTVn(TrainingBaseline):
                     idl_gtvn_baseline_id=baseline_id,
                     idl_gtvn_clicks=idl_gtvn_clicks,
                 )
+
+                # step 2 - single patient inference
+                cur_progress += step_2
+                if self._idl_progress_signal is not None:
+                    self._idl_progress_signal.emit(cur_progress / total_progress)
+                # print(cur_progress, total_progress)
 
                 # create folder and save preds of current patient
                 self._fold_wise_inference_save_patient_preds(
@@ -175,7 +198,17 @@ class TrainingIDLGTVn(TrainingBaseline):
                     dataset_part=dataset_part,
                 )
 
+                # step 3 - fold wise inference save results
+                cur_progress += step_3
+                if self._idl_progress_signal is not None:
+                    self._idl_progress_signal.emit(cur_progress / total_progress)
+                # print(cur_progress, total_progress)
+
                 continue  # next epoch
+
+            # only execute inference on 1 fold for debugging mode
+            if debug_mode:
+                break
 
         # cross valid
         # initialize scores dict
@@ -194,7 +227,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             preds[gtv] = None
 
         output_fold_dirs = Dir.get_sub_dirs(
-            output_idl_gtvn_dir, key_word="fold=", full_path=True
+            real_idl_output_dir, key_word="fold=", full_path=True
         )
         for output_fold_dir in output_fold_dirs:
             # find epoch dir
@@ -230,7 +263,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         # create cross_valid dir
         pred_dir = os.path.join(
-            output_idl_gtvn_dir, "patients", "patient={}".format(patient)
+            real_idl_output_dir, "patients", "patient={}".format(patient)
         )
         pred_dir = os.path.join(pred_dir, "round=01")
         Dir.create(pred_dir)
@@ -243,6 +276,12 @@ class TrainingIDLGTVn(TrainingBaseline):
                     save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
                     spacing=g.NII_SPACING[dataset_ver],
                 )
+
+        # step 4 - cross valid init
+        cur_progress += step_4
+        if self._idl_progress_signal is not None:
+            self._idl_progress_signal.emit(cur_progress / total_progress)
+        # print(cur_progress, total_progress)
 
         # load labels and calculate metrics
         labels = Img.load_labels(
@@ -259,10 +298,16 @@ class TrainingIDLGTVn(TrainingBaseline):
         # calculate avg and median score
         self._inference_calculate_save_avg_median(
             scores=cross_valid_scores,
-            save_dir=output_idl_gtvn_dir,
+            save_dir=real_idl_output_dir,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
         )
+
+        # step 5 - cross valid inference save results
+        cur_progress += step_5
+        if self._idl_progress_signal is not None:
+            self._idl_progress_signal.emit(cur_progress / total_progress)
+        # print(cur_progress, total_progress)
 
         print("")
         print("real idl done!")

@@ -471,8 +471,22 @@ class TrainingIDLGTVt(TrainingCore):
             num_workers=g.NUM_WORKERS,
         )
 
-        # iter loop
-        for iter_num in tqdm(range(hyper["iter"])):
+        # function is runing in QThread, run in background and hide tqdm bar
+        if self._idl_progress_signal is not None:
+            # iter_range = range(hyper["iter"])
+            iter_range = tqdm(range(hyper["iter"]))
+            dataset_len = len(idl_gtvt_loader.dataset) / hyper["batch.size.actual"]
+            full_progress = hyper["iter"] * dataset_len
+
+        # not in QThread, show tqdm bar
+        else:
+            # iter_range = range(hyper["iter"])
+            iter_range = tqdm(range(hyper["iter"]))
+            dataset_len = len(idl_gtvt_loader.dataset) / hyper["batch.size.actual"]
+            full_progress = hyper["iter"] * dataset_len
+
+        # iter loop through iterations
+        for cur_iter in iter_range:
             hyper["cnn"].train()
             iter_loss = 0
             batch_count = 0
@@ -499,6 +513,15 @@ class TrainingIDLGTVt(TrainingCore):
                 iter_loss += loss.item()
                 batch_count += 1
 
+                # emit qthread signal
+                if self._idl_progress_signal is not None:
+                    cur_progress = cur_iter * dataset_len + batch_count
+                    self._idl_progress_signal.emit(cur_progress / full_progress)
+                else:
+                    cur_progress = cur_iter * dataset_len + batch_count
+                    progress = cur_progress / full_progress
+                    print(progress)
+
             # cur iter finished
             # update scheduler
             iter_loss /= batch_count
@@ -506,7 +529,7 @@ class TrainingIDLGTVt(TrainingCore):
 
             # record loss
             loss_dict[
-                "iter={:03d}".format((round_num - 1) * hyper["iter"] + (iter_num + 1))
+                "iter={:03d}".format((round_num - 1) * hyper["iter"] + (cur_iter + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
             patient_dirs_list = Dir.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))

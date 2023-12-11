@@ -8,9 +8,10 @@ from pathlib import Path
 import torch
 from custom import GPU, Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Time, Value
+from custom import Img, Json, List, Timer, Value
 from dataset_baseline import DataSetBaseline
 from numpy import ndarray
+from PyQt5.QtCore import pyqtSignal
 from segment_metric import SegmentationMetric
 from str_lib import DatasetPart, DatasetVer, Metric
 from torch import Tensor, optim
@@ -21,6 +22,9 @@ from unet_slim import UNetSlim
 
 
 class TrainingCore:
+    def __init__(self, idl_progress_signal: pyqtSignal = None):
+        self._idl_progress_signal = idl_progress_signal
+
     def _load_patients(
         self,
         dataset_ver: str,
@@ -263,7 +267,7 @@ class TrainingCore:
     def _init_train_id(
         self, hyper: Dict, hyper_json_path: str, train_remark: str, debug_mode: bool
     ) -> str:
-        train_id = Time.cur_time_str()
+        train_id = Timer.cur_time_str()
 
         if debug_mode:
             train_id += "_"

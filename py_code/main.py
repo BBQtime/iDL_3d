@@ -1,6 +1,7 @@
 import sys
 
 from custom import GPU, Debug
+from custom import Global as g
 from darktheme.widget_template import DarkPalette
 from PyQt5.QtWidgets import QApplication
 from str_lib import DatasetPart, DatasetVer
@@ -15,8 +16,14 @@ Debug.clear_debug_data()
 Debug.clear_linux_trash()
 
 
+# consider about gtvt done but gtvn clicks are not added
+# change clear button icon
+# add pop-up when user do not add gtvn clicks
+# make plane fixed mode default
+# generate exe file, ask user to input their name and choose history records
 # progress bar: multi thread
 # list of idl step
+# show popup description on annotation buttons
 
 
 ############# UI #############
@@ -28,7 +35,7 @@ if 1:
     if 1:
         main_win = UiIDL(
             idl_remark="",
-            debug_mode=1,
+            debug_mode=0,
         )
     else:
         main_win = UiReplay()
@@ -58,6 +65,20 @@ if 0:
     )
 
 
+############# IDL.GTVt #############
+idl_gtvt = TrainingIDLGTVt()
+if 0:
+    idl_gtvt.new_training(
+        baseline_id="baseline_2023.07.05.16.49.25_1mm",
+        debug_mode=1,
+    )
+if 0:
+    idl_gtvt.inference(
+        "idl.gtvt_2023.08.24.16.21.09_no.pt",
+        dataset_part=DatasetPart.TEST_INTER,
+    )
+
+
 ############# IDL.GTVn #############
 idl_gtvn = TrainingIDLGTVn()
 if 0:
@@ -80,24 +101,11 @@ if 0:
     )
 if 0:
     idl_gtvn.real_idl(
-        idl_gtvn_id="idl.gtvn_test",
+        idl_gtvn_id="idl.gtvn_" + Debug.DELETE_FLAG,
         patient="106",
         dataset_part=DatasetPart.TEST_INTER,
         dataset_ver=DatasetVer.AU_1MM,
-    )
-
-
-############# IDL.GTVt #############
-idl_gtvt = TrainingIDLGTVt()
-if 0:
-    idl_gtvt.new_training(
-        baseline_id="baseline_2023.07.05.16.49.25_1mm",
-        debug_mode=1,
-    )
-if 0:
-    idl_gtvt.inference(
-        "idl.gtvt_2023.08.24.16.21.09_no.pt",
-        dataset_part=DatasetPart.TEST_INTER,
+        debug_mode=0,
     )
 
 

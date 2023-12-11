@@ -5,7 +5,7 @@ import numpy as np
 import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Nii, Time
+from custom import Img, Json, List, Nii, Timer, Value
 from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QPoint, QSize, Qt, QThread, pyqtSignal
@@ -20,48 +20,51 @@ from ui_replay import UiReplay
 
 
 class IDLGTVnThread(QThread):
-    signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(float)
+    complete_signal = pyqtSignal()
 
-    def __init__(
+    def set_param(
         self,
         idl_gtvn_id: str,
         patient: str,
         idl_gtvn_clicks: ndarray,
         dataset_part: str,
         dataset_ver: str,
+        debug_mode: bool,
     ):
-        super().__init__()
         self.__idl_gtvn_id = idl_gtvn_id
         self.__patient = patient
         self.__idl_gtvn_clicks = idl_gtvn_clicks
         self.__dataset_part = dataset_part
         self.__dataset_ver = dataset_ver
+        self.__debug_mode = debug_mode
         self.is_completed = False
 
     def run(self):
-        training_idl_gtvn = TrainingIDLGTVn()
+        training_idl_gtvn = TrainingIDLGTVn(self.progress_signal)
         training_idl_gtvn.real_idl(
             idl_gtvn_id=self.__idl_gtvn_id,
             patient=self.__patient,
             idl_gtvn_clicks=self.__idl_gtvn_clicks,
             dataset_part=self.__dataset_part,
             dataset_ver=self.__dataset_ver,
+            debug_mode=self.__debug_mode,
         )
         self.is_completed = True
-        self.signal.emit("idl gtvn done")
+        self.complete_signal.emit()
 
 
 class IDLGTVtThread(QThread):
-    signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(float)
+    complete_signal = pyqtSignal()
 
-    def __init__(
+    def set_param(
         self,
         idl_gtvt_id: str,
         patient: str,
         dataset_ver: str,
         debug_mode: bool,
     ):
-        super().__init__()
         self.__idl_gtvt_id = idl_gtvt_id
         self.__patient = patient
         self.__dataset_ver = dataset_ver
@@ -69,8 +72,7 @@ class IDLGTVtThread(QThread):
         self.is_completed = False
 
     def run(self):
-        # result = time_consuming_function(self.param1, self.param2)
-        training_idl_gtvt = TrainingIDLGTVt()
+        training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
         training_idl_gtvt.new_training(
             baseline_id="baseline_real.idl",
             real_idl_gtvt_id=self.__idl_gtvt_id,
@@ -79,7 +81,7 @@ class IDLGTVtThread(QThread):
             debug_mode=self.__debug_mode,
         )
         self.is_completed = True
-        self.signal.emit("idl gtvt done")
+        self.complete_signal.emit()
 
 
 class UiIDL(UiReplay):
@@ -524,17 +526,20 @@ class UiIDL(UiReplay):
         # (4)start real idl gtvt
         self._text_label["gtvt.progress"].show()
         self.__progress_bar["gtvt"].show()
-        self.__idl_gtvt_thread = IDLGTVtThread(
+        self.__idl_gtvt_thread.set_param(
             idl_gtvt_id=self._idl_id["gtvt"],
             patient=self._cur_patient,
             dataset_ver=self._dataset_ver,
             debug_mode=self.__debug_mode,
         )
-        self.__idl_gtvt_thread.signal.connect(self.__on_idl_gtvt_thread_finished)
         self.__idl_gtvt_thread.start()
 
-    def __on_idl_gtvt_thread_finished(self, msg: str):
-        print(msg)
+    def __update_idl_gtvt_progress_bar(self, progress_signal: float):
+        progress_int = round(progress_signal * 100)
+        Value.limit_range(progress_int, (0, 100))
+        self.__progress_bar["gtvt"].setValue(progress_int)
+
+    def __on_idl_gtvt_thread_finished(self):
         self._text_label["gtvt.progress"].hide()
         self.__progress_bar["gtvt"].hide()
 
@@ -612,18 +617,22 @@ class UiIDL(UiReplay):
         # (4) start real idl gtvn
         self._text_label["gtvn.progress"].show()
         self.__progress_bar["gtvn"].show()
-        self.__idl_gtvn_thread = IDLGTVnThread(
+        self.__idl_gtvn_thread.set_param(
             idl_gtvn_id=self._idl_id["gtvn"],
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
             dataset_part=self._dataset_part,
             dataset_ver=self._dataset_ver,
+            debug_mode=self.__debug_mode,
         )
-        self.__idl_gtvn_thread.signal.connect(self.__on_idl_gtvn_thread_finished)
         self.__idl_gtvn_thread.start()
 
-    def __on_idl_gtvn_thread_finished(self, msg: str):
-        print(msg)
+    def __update_idl_gtvn_progress_bar(self, progress_signal: float):
+        progress_int = round(progress_signal * 100)
+        Value.limit_range(progress_int, (0, 100))
+        self.__progress_bar["gtvn"].setValue(progress_int)
+
+    def __on_idl_gtvn_thread_finished(self):
         # update widgets
         self._text_label["gtvn.progress"].hide()
         self.__progress_bar["gtvn"].hide()
@@ -1019,6 +1028,8 @@ class UiIDL(UiReplay):
         self.__progress_bar = Dict()
         for i in ["gtvt", "gtvn"]:
             self.__progress_bar[i] = QtWidgets.QProgressBar()
+            self.__progress_bar[i].setRange(0, 100)
+            self.__progress_bar[i].setValue(0)
             self.__progress_bar[i].hide()
 
         # pen size slider
@@ -1103,7 +1114,7 @@ class UiIDL(UiReplay):
         # (1) baseline id
         self._baseline_id = "baseline_real.idl"
         # (2) idl.gtvt/gtvn id
-        cur_time = Time.cur_time_str()
+        cur_time = Timer.cur_time_str()
         for i in ["gtvt", "gtvn"]:
             self._idl_id[i] = "idl.{}_".format(i) + cur_time
             if debug_mode:
@@ -1142,8 +1153,20 @@ class UiIDL(UiReplay):
             self.__gtvt_annotated_status[plane] = False
 
         # idl gtvt/gtvn thread
-        self.__idl_gtvt_thread = None
-        self.__idl_gtvn_thread = None
+        self.__idl_gtvt_thread = IDLGTVtThread()
+        self.__idl_gtvt_thread.progress_signal.connect(
+            self.__update_idl_gtvt_progress_bar
+        )
+        self.__idl_gtvt_thread.complete_signal.connect(
+            self.__on_idl_gtvt_thread_finished
+        )
+        self.__idl_gtvn_thread = IDLGTVnThread()
+        self.__idl_gtvn_thread.progress_signal.connect(
+            self.__update_idl_gtvn_progress_bar
+        )
+        self.__idl_gtvn_thread.complete_signal.connect(
+            self.__on_idl_gtvn_thread_finished
+        )
 
     def __save_idl_step_of_all_patients(self):
         for i in ["gtvt", "gtvn"]:
