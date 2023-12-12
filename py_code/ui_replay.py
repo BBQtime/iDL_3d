@@ -846,7 +846,7 @@ class UiReplay(QtWidgets.QMainWindow):
         )
 
         # toggle button
-        self._toggle_btn = ToggleButton(is_checked=0)
+        self._toggle_btn = ToggleButton(is_checked=True)
 
         # collapse
         self._collap["display.mode"] = QCollapsible("DISPLAY MODE")

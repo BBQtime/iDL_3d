@@ -21,9 +21,24 @@ from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
 
 
+class RealIDLProgress:
+    def __init__(self):
+        self.cur_step = None
+        self.total_step = None
+        self.progress_signal = None
+
+    def emit_signal(self):
+        if (
+            self.progress_signal is not None
+            and self.cur_step is not None
+            and self.total_step is not None
+        ):
+            self.progress_signal.emit(self.cur_step / self.total_step)
+
+
 class TrainingCore:
-    def __init__(self, idl_progress_signal: pyqtSignal = None):
-        self._idl_progress_signal = idl_progress_signal
+    def __init__(self):
+        self._timer = Timer()
 
     def _load_patients(
         self,
@@ -61,6 +76,7 @@ class TrainingCore:
         if debug_mode:
             for key_name in patients.keys():
                 # keep 2 patients to test median score calculation
+                # keep 1 patient for faster debugging
                 patients[key_name] = patients[key_name][:2]
 
         return patients
@@ -353,7 +369,7 @@ class TrainingCore:
         dataset_ver: str,
         dataset_part: str,
         no_pt: str,
-        segment_metrics: Dict,
+        segment_metrics: Dict = None,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
         idl_gtvn_clicks: ndarray = None,  # only for idl.gtvn
         idl_gtvt_masked_label: ndarray = None,  # only for idl.gtvt post processing
@@ -384,12 +400,24 @@ class TrainingCore:
         input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
 
+        # idl progress INFERENCE_LOAD_IMG
+        self._timer.cal_duration("INFERENCE_LOAD_IMG")
+        if self._idl_progress is not None:
+            self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_LOAD_IMG
+            self._idl_progress.emit_signal()
+
         # get predictions from cnn
         cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
             preds = cnn.forward(input_imgs)
         # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
+
+        # idl progress INFERENCE_FORWARD
+        self._timer.cal_duration("INFERENCE_FORWARD")
+        if self._idl_progress is not None:
+            self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_FORWARD
+            self._idl_progress.emit_signal()
 
         # record img into outputs
         self._inference_single_patient_record_outputs(
@@ -413,13 +441,15 @@ class TrainingCore:
         self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate scores of current patient
-        if dataset_part != DatasetPart.TRAIN:
+        if dataset_part != DatasetPart.TRAIN and self._idl_progress is None:
             for gtv in outputs.keys():
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     outputs[gtv][metric] = segment_metrics[metric](
                         outputs[gtv]["pred"],
                         outputs[gtv]["label"],
                     )
+
+        self._timer.cal_duration("INFERENCE_CAL_SCORES")
 
         return outputs
 

@@ -23,6 +23,10 @@ class IDLGTVnThread(QThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
 
+    def __init__(self):
+        super().__init__()
+        self.is_completed = False
+
     def set_param(
         self,
         idl_gtvn_id: str,
@@ -58,6 +62,10 @@ class IDLGTVtThread(QThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
 
+    def __init__(self):
+        super().__init__()
+        self.is_completed = False
+
     def set_param(
         self,
         idl_gtvt_id: str,
@@ -73,10 +81,9 @@ class IDLGTVtThread(QThread):
 
     def run(self):
         training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
-        training_idl_gtvt.new_training(
-            baseline_id="baseline_real.idl",
-            real_idl_gtvt_id=self.__idl_gtvt_id,
-            real_idl_patient=self.__patient,
+        training_idl_gtvt.real_idl(
+            idl_gtvt_id=self.__idl_gtvt_id,
+            patient=self.__patient,
             dataset_ver=self.__dataset_ver,
             debug_mode=self.__debug_mode,
         )
@@ -453,8 +460,10 @@ class UiIDL(UiReplay):
 
         # (5) clean cross and refresh imgs
         self.delete_all_crosses()
-        # next step
+        # goto next step
         self.update_cur_patient_idl_step(IDLStep.DRAW_GTVT)
+        self.__idl_gtvt_thread.is_completed = False
+        self.__idl_gtvn_thread.is_completed = False
         # refresh to show gtvt click
         self.refresh_img_qlabels()
         self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
@@ -511,6 +520,7 @@ class UiIDL(UiReplay):
         # (for better user experience)
         # update idl step here because refresh_img_qlabels() will need it
         self.update_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
+        self.__idl_gtvn_thread.is_completed = False
         # restore default cursor
         self.setCursor(Qt.ArrowCursor)
         for i in ["pen", "eraser"]:
@@ -554,16 +564,26 @@ class UiIDL(UiReplay):
 
         # (2) idl.gtvn thread is not completed, only correct gtvt
         else:
-            self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
-            self._radio_btn["correct.gtvt"].setChecked(True)
-            self.__set_mouse_cursor("pen")
-            self.drawing_mode = DrawingMode.GTVT_PEN
-            for i in ["pen", "eraser", "clear"]:
-                self.__btn[i].setEnabled(True)
-            self._slider["draw.size"].show()
-            self._text_label["draw.size"].show()
+            # do nothing if user has not submitted gtvn clicks
+            if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+                pass
 
-        # update 3d imgs and qlabels
+            # if idl step is "waiting", show correction tools for gtvt pred
+            elif self.get_cur_patient_idl_step() == IDLStep.WAITING:
+                self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
+                self._radio_btn["correct.gtvt"].setChecked(True)
+                self.__set_mouse_cursor("pen")
+                self.drawing_mode = DrawingMode.GTVT_PEN
+                for i in ["pen", "eraser", "clear"]:
+                    self.__btn[i].setEnabled(True)
+                self._slider["draw.size"].show()
+                self._text_label["draw.size"].show()
+
+            # idl step can not be other values
+            else:
+                Debug.error_exit("idl step error")
+
+        # update gtvt 3d imgs and qlabels
         self._load_idl_gtvt_data()
         self.__combine_pred_annotation_correction()
         self.refresh_img_qlabels()

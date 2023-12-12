@@ -5,17 +5,39 @@ import numpy as np
 import torch
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Img, Json, List, Nii, Timer, Value
+from custom import Img, Json, List, Nii, Value
 from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from numpy import ndarray
+from PyQt5.QtCore import pyqtSignal
 from str_lib import DatasetPart, Metric, Stat
 from torch import Tensor
-from tqdm import tqdm
 from training_baseline import TrainingBaseline
+from training_core import RealIDLProgress
+
+
+class RealIDLGTVnProgress(RealIDLProgress):
+    class ProgressStep:
+        INFERENCE_INIT = 1
+        INFERENCE_LOAD_IMG = 3
+        INFERENCE_FORWARD = 1
+        INFERENCE_SAVE_PRED = 1
+        CROSS_VALID = 3
+
+    def __init__(self):
+        super().__init__()
+        self.step = self.ProgressStep()
 
 
 class TrainingIDLGTVn(TrainingBaseline):
+    def __init__(self, idl_progress_signal: pyqtSignal = None):
+        super().__init__()
+        if idl_progress_signal is not None:
+            self._idl_progress = RealIDLGTVnProgress()
+            self._idl_progress.progress_signal = idl_progress_signal
+        else:
+            self._idl_progress = None
+
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 5, out_chan: int = 2):
         # no need to reduce cnn input channel here if no_pt=true
         # it will be reduced in super()._load_hyper_new_cnn
@@ -98,129 +120,86 @@ class TrainingIDLGTVn(TrainingBaseline):
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
         )
-        print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_part))
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics(dataset_ver)
 
-        # idl progress
-        step_1, step_2, step_3, step_4, step_5 = 1, 12, 1, 2, 7
-        cur_progress = 0
-        if debug_mode:
-            # step: 1/2/3/4/5
-            total_progress = step_1 + step_2 + step_3 + step_4 + step_5
-        else:
-            # step: (1/2/3)*5 + 4/5
-            total_progress = (step_1 + step_2 + step_3) * 5 + step_4 + step_5
+        # idl progress init
+        if self._idl_progress is not None:
+            self._idl_progress.cur_step = 0
+            if debug_mode:
+                self._idl_progress.total_step = (
+                    self._idl_progress.step.INFERENCE_INIT
+                    + self._idl_progress.step.INFERENCE_LOAD_IMG
+                    + self._idl_progress.step.INFERENCE_FORWARD
+                    + self._idl_progress.step.INFERENCE_SAVE_PRED
+                    + self._idl_progress.step.CROSS_VALID
+                )
+            else:
+                self._idl_progress.total_step = (
+                    self._idl_progress.step.INFERENCE_INIT
+                    + self._idl_progress.step.INFERENCE_LOAD_IMG
+                    + self._idl_progress.step.INFERENCE_FORWARD
+                    + self._idl_progress.step.INFERENCE_SAVE_PRED
+                ) * len(cnn_fold_dirs) + self._idl_progress.step.CROSS_VALID
 
         # loop through fold dirs
         for cnn_fold_dir in cnn_fold_dirs:
-            # fold = int(Path(cnn_fold_dir).name[len("fold=") :])
-            # print("")
-            # print("fold: ", fold)
-
             output_fold_dir = os.path.join(real_idl_output_dir, Path(cnn_fold_dir).name)
             Dir.create(output_fold_dir)
 
-            # loop through epoch dirs
-            for cnn_epoch_dir in Dir.get_sub_dirs(
+            cnn_epoch_dir = Dir.get_sub_dirs(
                 cnn_fold_dir, key_word="epoch=", full_path=True
-            ):
-                epoch = int(Path(cnn_epoch_dir).name[len("epoch=") :])
-                # print("epoch: ", epoch)
+            )[0]
+            epoch = int(Path(cnn_epoch_dir).name[len("epoch=") :])
 
-                output_epoch_dir = os.path.join(
-                    output_fold_dir, Path(cnn_epoch_dir).name
+            output_epoch_dir = os.path.join(output_fold_dir, Path(cnn_epoch_dir).name)
+            Dir.create(output_epoch_dir)
+
+            # load cnn
+            cnn_path = os.path.join(cnn_epoch_dir, "epoch={:03d}.pt".format(epoch))
+            cnn = self._load_exist_cnn(cnn_path)
+
+            # idl progress INFERENCE_INIT
+            self._timer.cal_duration("INFERENCE_INIT")
+            if self._idl_progress is not None:
+                self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_INIT
+                self._idl_progress.emit_signal()
+
+            # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+            patient_outputs = self._inference_single_patient(
+                patient=patient,
+                cnn=cnn,
+                dataset_ver=dataset_ver,
+                dataset_part=dataset_part,
+                no_pt=no_pt,
+                segment_metrics=segment_metrics,
+                idl_gtvn_baseline_id=baseline_id,
+                idl_gtvn_clicks=idl_gtvn_clicks,
+            )
+
+            # create folder and save preds of current patient
+            self._fold_wise_inference_save_patient_preds(
+                patient=patient,
+                epoch_dir=output_epoch_dir,
+                patient_outputs=patient_outputs,
+                dataset_ver=dataset_ver,
+                dataset_part=dataset_part,
+            )
+
+            # idl progress INFERENCE_SAVE_PRED
+            self._timer.cal_duration("INFERENCE_SAVE_PRED")
+            if self._idl_progress is not None:
+                self._idl_progress.cur_step += (
+                    self._idl_progress.step.INFERENCE_SAVE_PRED
                 )
-                Dir.create(output_epoch_dir)
+                self._idl_progress.emit_signal()
 
-                # load cnn
-                cnn_path = os.path.join(cnn_epoch_dir, "epoch={:03d}.pt".format(epoch))
-                cnn = self._load_exist_cnn(cnn_path)
-
-                # initialize scores dict
-                patients = Dict()
-                patients[dataset_part] = [patient]
-                epoch_scores = self._inference_init_scores(
-                    baseline_id=baseline_id,
-                    dataset_ver=dataset_ver,
-                    dataset_part=dataset_part,
-                    patients=patients,
-                )
-
-                # step 1 - load cnn
-                cur_progress += step_1
-                if self._idl_progress_signal is not None:
-                    self._idl_progress_signal.emit(cur_progress / total_progress)
-                # print(cur_progress, total_progress)
-
-                # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
-                patient_outputs = self._inference_single_patient(
-                    patient=patient,
-                    cnn=cnn,
-                    dataset_ver=dataset_ver,
-                    dataset_part=dataset_part,
-                    no_pt=no_pt,
-                    segment_metrics=segment_metrics,
-                    idl_gtvn_baseline_id=baseline_id,
-                    idl_gtvn_clicks=idl_gtvn_clicks,
-                )
-
-                # step 2 - single patient inference
-                cur_progress += step_2
-                if self._idl_progress_signal is not None:
-                    self._idl_progress_signal.emit(cur_progress / total_progress)
-                # print(cur_progress, total_progress)
-
-                # create folder and save preds of current patient
-                self._fold_wise_inference_save_patient_preds(
-                    patient=patient,
-                    epoch_dir=output_epoch_dir,
-                    patient_outputs=patient_outputs,
-                    dataset_ver=dataset_ver,
-                    dataset_part=dataset_part,
-                )
-
-                # record score of current patient (test and valid sets only)
-                self._fold_wise_inference_record_patient_score(
-                    patient=patient,
-                    patient_outputs=patient_outputs,
-                    scores=epoch_scores,
-                )
-
-                # all patients under current epoch have been traversed
-                # calculate median and avg score of current epoch
-                self._inference_calculate_save_avg_median(
-                    scores=epoch_scores,
-                    save_dir=output_epoch_dir,
-                    dataset_ver=dataset_ver,
-                    dataset_part=dataset_part,
-                )
-
-                # step 3 - fold wise inference save results
-                cur_progress += step_3
-                if self._idl_progress_signal is not None:
-                    self._idl_progress_signal.emit(cur_progress / total_progress)
-                # print(cur_progress, total_progress)
-
-                continue  # next epoch
-
-            # only execute inference on 1 fold for debugging mode
+            # only run 1 fold in debugging mode
             if debug_mode:
                 break
 
         # cross valid
-        # initialize scores dict
-        patients = Dict()
-        patients[dataset_part] = [patient]
-        cross_valid_scores = self._inference_init_scores(
-            baseline_id=baseline_id,
-            dataset_ver=dataset_ver,
-            dataset_part=dataset_part,
-            patients=patients,
-        )
-
         # initialize preds
         preds = Dict()
         for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -277,40 +256,17 @@ class TrainingIDLGTVn(TrainingBaseline):
                     spacing=g.NII_SPACING[dataset_ver],
                 )
 
-        # step 4 - cross valid init
-        cur_progress += step_4
-        if self._idl_progress_signal is not None:
-            self._idl_progress_signal.emit(cur_progress / total_progress)
-        # print(cur_progress, total_progress)
+        # idl progress CROSS_VALID
+        self._timer.cal_duration("CROSS_VALID")
+        if self._idl_progress is not None:
+            self._idl_progress.cur_step += self._idl_progress.step.CROSS_VALID
+            self._idl_progress.emit_signal()
 
-        # load labels and calculate metrics
-        labels = Img.load_labels(
-            dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
-        )
-        self._cross_valid_inference_record_patient_score(
-            patient=patient,
-            preds=preds,
-            labels=labels,
-            segment_metrics=segment_metrics,
-            scores=cross_valid_scores,
-        )
-
-        # calculate avg and median score
-        self._inference_calculate_save_avg_median(
-            scores=cross_valid_scores,
-            save_dir=real_idl_output_dir,
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
-
-        # step 5 - cross valid inference save results
-        cur_progress += step_5
-        if self._idl_progress_signal is not None:
-            self._idl_progress_signal.emit(cur_progress / total_progress)
-        # print(cur_progress, total_progress)
+        if self._idl_progress is not None:
+            print(self._idl_progress.cur_step, self._idl_progress.total_step)
 
         print("")
-        print("real idl done!")
+        print("real idl.gtvn done!")
 
     def fold_wise_inference(
         self,
@@ -328,7 +284,11 @@ class TrainingIDLGTVn(TrainingBaseline):
         )
 
     def _inference_init_scores(
-        self, baseline_id: str, dataset_ver: str, dataset_part: str, patients: Dict
+        self,
+        baseline_id: str,
+        dataset_ver: str,
+        dataset_part: str,
+        patients: Dict,
     ) -> Dict:
         scores = Dict()
 

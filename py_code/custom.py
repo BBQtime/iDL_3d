@@ -652,7 +652,7 @@ class Timer:
     def cur_time_str(hide_microsecond=True) -> str:
         cur_time = datetime.now()
         if hide_microsecond:
-            cur_time.replace(microsecond=0)
+            cur_time = cur_time.replace(microsecond=0)
         cur_time = str(cur_time)
         cur_time = cur_time.replace(":", ".")
         cur_time = cur_time.replace("-", ".")
@@ -661,11 +661,14 @@ class Timer:
 
     def __init__(self, log_path: str = None):
         self._time_point = datetime.now()
+        self.set_log_path(log_path)
+
+    def set_log_path(self, log_path: str = None):
         self._log_path = log_path
         if self._log_path is not None:
             Json.save(dict(), self._log_path)
 
-    def cal_duration(self, description: str = None, hide_microsecond=False):
+    def cal_duration(self, description: str = None, hide_microsecond=True):
         time_now = datetime.now()
         duration = time_now - self._time_point
         self._time_point = time_now
@@ -679,9 +682,11 @@ class Timer:
 
         if description is not None:
             print(description, duration)
-            time_log = Json.load(self._log_path)
-            time_log[description] = duration
-            Json.save(time_log, self._log_path)
+            # save log
+            if self._log_path is not None:
+                time_log = Json.load(self._log_path)
+                time_log[description] = duration
+                Json.save(time_log, self._log_path)
         else:
             print(duration)
 

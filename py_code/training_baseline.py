@@ -10,6 +10,7 @@ from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
+from PyQt5.QtCore import pyqtSignal
 from str_lib import DatasetPart, DatasetVer, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -18,6 +19,9 @@ from training_core import TrainingCore
 
 
 class TrainingBaseline(TrainingCore):
+    def __init__(self):
+        super().__init__()
+
     def _load_hyper(
         self, hyper: Dict, fold: int, idl_gtvn_baseline_id: str, debug_mode: bool
     ):
@@ -587,10 +591,10 @@ class TrainingBaseline(TrainingCore):
 
     def _inference_init_scores(
         self,
-        baseline_id: str = None,
-        dataset_ver: str = None,
-        dataset_part: str = None,
-        patients: Dict = None,
+        baseline_id: str = None,  # this is for idl.gtvn
+        dataset_ver: str = None,  # this is for idl.gtvn
+        dataset_part: str = None,  # this is for idl.gtvn
+        patients: Dict = None,  # this is for idl.gtvn
     ) -> Dict:
         scores = Dict()
         for stat in [Stat.MEDIAN, Stat.AVG]:
@@ -606,7 +610,7 @@ class TrainingBaseline(TrainingCore):
         epoch_dir: str,
         patient_outputs: Dict,
         dataset_ver: str,
-        dataset_part: str,
+        dataset_part: str,  # this is for idl.gtvn
     ):
         patient_dir = os.path.join(
             epoch_dir,
