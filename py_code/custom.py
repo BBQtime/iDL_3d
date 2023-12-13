@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Union
 
 import cc3d
+import cv2
 import numpy as np
 import SimpleITK as sitk
 import torch
@@ -349,6 +350,18 @@ class Img:
 
         # Return the tuple (x, y, z) corresponding to the random coordinate
         return random_pos
+
+    def gray_to_rgb(gray_img: ndarray) -> ndarray:
+        # rgb_img = np.uint8((gray_img - gray_img.min()) / gray_img.ptp() * 255.0)
+        gray_img = cv2.convertScaleAbs(gray_img, alpha=255.0)
+        # after cv2.cvtColor, rgb_img has 3 channels, but still a ndarray
+        rgb_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2RGB)
+        return rgb_img
+
+    def gray_to_colormap(gray_img: ndarray) -> ndarray:
+        gray_img = cv2.convertScaleAbs(1 - gray_img, alpha=255.0)
+        color_map = cv2.applyColorMap(gray_img, cv2.COLORMAP_JET)
+        return color_map
 
     # use this in case there is no gtvn or gtvs nii file
     def load_labels(

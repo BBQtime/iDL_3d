@@ -17,6 +17,6 @@
     "img.shape.3mm": "72,256,256",
     "nii.spacing.1mm": "1.0,1.0,1.0",
     "nii.spacing.3mm": "1.171875,1.171875,3.0",
-    "num.workers": 16,
+    "num.workers": 2,
     "train.results.dir": "train_results"
 }

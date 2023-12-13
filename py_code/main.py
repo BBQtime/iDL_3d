@@ -18,26 +18,25 @@ Debug.clear_linux_trash()
 
 # consider about gtvt done but gtvn clicks are not added (done)
 # make plane fixed mode default (done)
-
+# progress bar: multi thread (done)
+# mix ct with selected modality (done)
 
 # change clear button icon
 # add pop-up when user do not add gtvn clicks
 # generate exe file, ask user to input their name and choose history records
-# progress bar: multi thread
 # list of idl step
 # show popup description on annotation buttons
 
 
 ############# UI #############
 if 1:
-    # app = DarkApplication(sys.argv)
     app = QApplication(sys.argv)
     app.setPalette(DarkPalette())
 
     if 1:
         main_win = UiIDL(
             idl_remark="",
-            debug_mode=0,
+            debug_mode=1,
         )
     else:
         main_win = UiReplay()
@@ -53,7 +52,7 @@ if 0:
         idl_gtvt_id="idl.gtvt_" + Debug.DELETE_FLAG,
         patient="106",
         dataset_ver=DatasetVer.AU_1MM,
-        debug_mode=1,
+        debug_mode=0,
     )
 if 0:
     idl_gtvn = TrainingIDLGTVn()

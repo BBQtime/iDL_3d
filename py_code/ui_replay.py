@@ -436,7 +436,7 @@ class UiReplay(QtWidgets.QMainWindow):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self.img_qlabel[i].modal = i
 
-        self.img_qlabel[Plane.TRANSVERSE].modal = "ct.pt.mix"
+        self.img_qlabel[Plane.TRANSVERSE].modal = "mix"
 
     def _init_widgets_combox(self):
         self._combox = Dict()
@@ -517,33 +517,22 @@ class UiReplay(QtWidgets.QMainWindow):
 
     def _init_widgets_color_enhance(self):
         # init radio btns
-        for i in ["modal", "plane"]:
-            self._radio_group["color.enhance"][i] = QtWidgets.QButtonGroup()
+        self._radio_group["color.enhance"] = QtWidgets.QButtonGroup()
 
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self._radio_btn["color.enhance"][i] = QtWidgets.QRadioButton()
-            self._radio_group["color.enhance"]["modal"].addButton(
+            self._radio_group["color.enhance"].addButton(
                 self._radio_btn["color.enhance"][i]
             )
 
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self._radio_btn["color.enhance"][i] = QtWidgets.QRadioButton()
-            self._radio_group["color.enhance"]["plane"].addButton(
-                self._radio_btn["color.enhance"][i]
-            )
-
-        # set text modal
+        # set text
         self._radio_btn["color.enhance"][Modal.CT].setText("CT")
         self._radio_btn["color.enhance"][Modal.PT].setText("PT")
         self._radio_btn["color.enhance"][Modal.MR1].setText("MR-T1")
         self._radio_btn["color.enhance"][Modal.MR2].setText("MR-T2")
-        # set text plane
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self._radio_btn["color.enhance"][i].setText(i.capitalize())
 
         # set checked
         self._radio_btn["color.enhance"][Modal.CT].setChecked(True)
-        self._radio_btn["color.enhance"][Plane.TRANSVERSE].setChecked(True)
 
         # text labels
         for i in ["bright", "contrast"]:
@@ -558,9 +547,6 @@ class UiReplay(QtWidgets.QMainWindow):
                 Modal.PT,
                 Modal.MR1,
                 Modal.MR2,
-                Plane.TRANSVERSE,
-                Plane.CORONAL,
-                Plane.SAGITTAL,
             ]:
                 self._slider[i][j] = QtWidgets.QSlider()
                 slider = self._slider[i][j]
@@ -579,19 +565,11 @@ class UiReplay(QtWidgets.QMainWindow):
 
         # collapse
         self._collap["color.enhance"] = QCollapsible("COLOR ENHANCEMENT")
-        # self._collap["color.enhance"].setFixedHeight(180)
-        self._collap["color.enhance"].collapse()
         v_layout = QtWidgets.QVBoxLayout()
 
         # radio buttons: ct/pt/mr1/mr2
         h_layout = QtWidgets.QHBoxLayout()
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            h_layout.addWidget(self._radio_btn["color.enhance"][i])
-        v_layout.addLayout(h_layout)
-
-        # radio buttons: transverse/coronal/sagittal
-        h_layout = QtWidgets.QHBoxLayout()
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             h_layout.addWidget(self._radio_btn["color.enhance"][i])
         v_layout.addLayout(h_layout)
 
@@ -603,16 +581,15 @@ class UiReplay(QtWidgets.QMainWindow):
                 Modal.PT,
                 Modal.MR1,
                 Modal.MR2,
-                Plane.TRANSVERSE,
-                Plane.CORONAL,
-                Plane.SAGITTAL,
             ]:
                 v_layout.addWidget(self._slider[i][j])
 
         # add final layout into collapsible space
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
+        container.setFixedHeight(120)
         self._collap["color.enhance"].addWidget(container)
+        self._collap["color.enhance"].collapse()
 
         # connect widgets to functions
         for i in ["bright", "contrast"]:
@@ -621,41 +598,34 @@ class UiReplay(QtWidgets.QMainWindow):
                 Modal.PT,
                 Modal.MR1,
                 Modal.MR2,
-                Plane.TRANSVERSE,
-                Plane.CORONAL,
-                Plane.SAGITTAL,
             ]:
                 self._slider[i][j].valueChanged.connect(
                     self.__color_enhance_slider_value_update
                 )
-        for i in ["modal", "plane"]:
-            self._radio_group["color.enhance"][i].buttonClicked.connect(
-                self.__switch_color_enhance_slider_bars
-            )
+        self._radio_group["color.enhance"].buttonClicked.connect(
+            self.__switch_color_enhance_slider_bars
+        )
 
     # this function is connected to widget, dont set input params to this function
     def __color_enhance_slider_value_update(self):
         self.refresh_img_qlabels()
 
     # this function is connected to widget, dont set input params to this function
-    def _plane_fixed_mode_switch_coronal_modal(self):
-        for modal in self._radio_btn[DisplayMode.PLANE_FIXED][Plane.CORONAL].keys():
-            if self._radio_btn[DisplayMode.PLANE_FIXED][Plane.CORONAL][
-                modal
-            ].isChecked():
-                self.img_qlabel[Plane.CORONAL].modal = modal
+    def _plane_fixed_mode_switch_modal(self):
+        # update modality
+        for modal in self._radio_btn[DisplayMode.PLANE_FIXED].keys():
+            if self._radio_btn[DisplayMode.PLANE_FIXED][modal].isChecked():
+                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                    self.img_qlabel[plane].modal = modal
                 break
-        self.refresh_img_qlabels(img_name=Plane.CORONAL)
-
-    # this function is connected to widget, dont set input params to this function
-    def _plane_fixed_mode_switch_sagittal_modal(self):
-        for modal in self._radio_btn[DisplayMode.PLANE_FIXED][Plane.SAGITTAL].keys():
-            if self._radio_btn[DisplayMode.PLANE_FIXED][Plane.SAGITTAL][
-                modal
-            ].isChecked():
-                self.img_qlabel[Plane.SAGITTAL].modal = modal
-                break
-        self.refresh_img_qlabels(img_name=Plane.SAGITTAL)
+        # update textlabel
+        if self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].isChecked():
+            self._text_label["other.modal"].setText("PT")
+        elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].isChecked():
+            self._text_label["other.modal"].setText("MR-T1")
+        elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
+            self._text_label["other.modal"].setText("MR-T2")
+        self.refresh_img_qlabels()
 
     def display_mode(self):
         if self._toggle_btn.isChecked():
@@ -681,7 +651,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 self.img_qlabel[i].hide()
 
         # plane fixed mode: text labels
-        for i in [Modal.CT, Modal.PT, Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        for i in [Modal.CT, "other.modal"]:
             if display_mode == DisplayMode.PLANE_FIXED:
                 self._text_label[i].show()
             else:
@@ -695,43 +665,42 @@ class UiReplay(QtWidgets.QMainWindow):
                 self._radio_btn[DisplayMode.MODAL_FIXED][i].show()
 
         # ratio buttons: plane fixed mode
-        for i in [Plane.CORONAL, Plane.SAGITTAL]:
-            for j in [Modal.PT, Modal.MR1, Modal.MR2]:
-                if display_mode == DisplayMode.PLANE_FIXED:
-                    self._radio_btn[DisplayMode.PLANE_FIXED][i][j].show()
-                else:
-                    self._radio_btn[DisplayMode.PLANE_FIXED][i][j].hide()
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
+            if display_mode == DisplayMode.PLANE_FIXED:
+                self._radio_btn[DisplayMode.PLANE_FIXED][i].show()
+            else:
+                self._radio_btn[DisplayMode.PLANE_FIXED][i].hide()
 
-        # color enhancement radio buttons and slider bars
-        if display_mode == DisplayMode.PLANE_FIXED:
-            show_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-            hide_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-        else:
-            show_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-            hide_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+        # # color enhancement radio buttons and slider bars
+        # if display_mode == DisplayMode.PLANE_FIXED:
+        #     show_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+        #     hide_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+        # else:
+        #     show_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+        #     hide_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
 
-        # hide radio buttons
-        for i in hide_list:
-            self._radio_btn["color.enhance"][i].hide()
-            # # hide slider bars
-            # for j in ["bright", "contrast"]:
-            #     self._slider[j][i].hide()
+        # # hide radio buttons
+        # for i in hide_list:
+        #     self._radio_btn["color.enhance"][i].hide()
+        #     # # hide slider bars
+        #     # for j in ["bright", "contrast"]:
+        #     #     self._slider[j][i].hide()
 
-        # show radio buttons
-        for i in show_list:
-            self._radio_btn["color.enhance"][i].show()
-            # # show slider bars
-            # if self._radio_btn["color.enhance"][i].isChecked():
-            #     for j in ["bright", "contrast"]:
-            #         self._slider[j][i].show()
+        # # show radio buttons
+        # for i in show_list:
+        #     self._radio_btn["color.enhance"][i].show()
+        #     # # show slider bars
+        #     # if self._radio_btn["color.enhance"][i].isChecked():
+        #     #     for j in ["bright", "contrast"]:
+        #     #         self._slider[j][i].show()
 
-        self.__switch_color_enhance_slider_bars()
+        # self.__switch_color_enhance_slider_bars()
 
         # ct/pt mix slider
         if display_mode == DisplayMode.PLANE_FIXED:
-            self._slider["ct.pt.mix"].show()
+            self._slider["mix"].show()
         else:
-            self._slider["ct.pt.mix"].hide()
+            self._slider["mix"].hide()
 
         self.reset_cur_slice_id()
         self.refresh_img_qlabels()
@@ -746,10 +715,15 @@ class UiReplay(QtWidgets.QMainWindow):
         return
 
     def _init_widgets_display_mode(self):
+        widgets_total_height = 100
+
         # toggle display mode
+        self._toggle_btn = ToggleButton(is_checked=True)
+
         for i in [DisplayMode.MODAL_FIXED, DisplayMode.PLANE_FIXED]:
             self._text_label[i] = QtWidgets.QLabel()
-            # self._text_label[i].setStyleSheet("border: 1px solid black;")
+            self._text_label[i].setFixedHeight(self._toggle_btn.height())
+
         self._text_label[DisplayMode.MODAL_FIXED].setText("Modality Fixed")
         self._text_label[DisplayMode.MODAL_FIXED].setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter
@@ -765,6 +739,12 @@ class UiReplay(QtWidgets.QMainWindow):
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self._radio_btn[DisplayMode.MODAL_FIXED][i] = QtWidgets.QRadioButton()
             self._radio_btn[DisplayMode.MODAL_FIXED][i].setText(i.capitalize())
+            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFixedHeight(
+                widgets_total_height - self._toggle_btn.height()
+            )
+            # self._radio_btn[DisplayMode.MODAL_FIXED][i].setAlignment(
+            #     Qt.AlignLeft | Qt.AlignVCenter
+            # )
             self._radio_group[DisplayMode.MODAL_FIXED].addButton(
                 self._radio_btn[DisplayMode.MODAL_FIXED][i]
             )
@@ -779,30 +759,26 @@ class UiReplay(QtWidgets.QMainWindow):
 
         # display mode: plane fixed
         # radio buttons
-        for i in [Plane.CORONAL, Plane.SAGITTAL]:
-            self._radio_group[DisplayMode.PLANE_FIXED][i] = QtWidgets.QButtonGroup()
-            for j in [Modal.PT, Modal.MR1, Modal.MR2]:
-                self._radio_btn[DisplayMode.PLANE_FIXED][i][
-                    j
-                ] = QtWidgets.QRadioButton()
-                self._radio_group[DisplayMode.PLANE_FIXED][i].addButton(
-                    self._radio_btn[DisplayMode.PLANE_FIXED][i][j]
-                )
+        self._radio_group[DisplayMode.PLANE_FIXED] = QtWidgets.QButtonGroup()
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
+            self._radio_btn[DisplayMode.PLANE_FIXED][i] = QtWidgets.QRadioButton()
+            self._radio_group[DisplayMode.PLANE_FIXED].addButton(
+                self._radio_btn[DisplayMode.PLANE_FIXED][i]
+            )
         # connect functions
-        self._radio_group[DisplayMode.PLANE_FIXED][Plane.CORONAL].buttonClicked.connect(
-            self._plane_fixed_mode_switch_coronal_modal
+        self._radio_group[DisplayMode.PLANE_FIXED].buttonClicked.connect(
+            self._plane_fixed_mode_switch_modal
         )
-        self._radio_group[DisplayMode.PLANE_FIXED][
-            Plane.SAGITTAL
-        ].buttonClicked.connect(self._plane_fixed_mode_switch_sagittal_modal)
 
-        for i in [Plane.CORONAL, Plane.SAGITTAL]:
-            # set checked
-            self._radio_btn[DisplayMode.PLANE_FIXED][i][Modal.MR1].setChecked(True)
-            # set text
-            self._radio_btn[DisplayMode.PLANE_FIXED][i][Modal.PT].setText("PT")
-            self._radio_btn[DisplayMode.PLANE_FIXED][i][Modal.MR1].setText("MR-T1")
-            self._radio_btn[DisplayMode.PLANE_FIXED][i][Modal.MR2].setText("MR-T2")
+        # set checked
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setChecked(True)
+        # set text
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setText("PT")
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].setText("MR-T1")
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].setText("MR-T2")
+        # set size
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setFixedWidth(120)
+        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].setFixedWidth(120)
 
         # reset image plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -812,45 +788,37 @@ class UiReplay(QtWidgets.QMainWindow):
                 break
 
         # reset img modality
-        for plane in [Plane.CORONAL, Plane.SAGITTAL]:
-            for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
-                if self._radio_btn[DisplayMode.PLANE_FIXED][plane][modal].isChecked():
+        for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
+            if self._radio_btn[DisplayMode.PLANE_FIXED][modal].isChecked():
+                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                     self.img_qlabel[plane].modal = modal
-                    continue
+                break
 
         # text label for plane fixed mode
-        for i in [Modal.CT, Modal.PT]:
+        for i in [Modal.CT, "other.modal"]:
             self._text_label[i] = QtWidgets.QLabel()
-            self._text_label[i].setText(i.upper())
-            # self._text_label[i].setStyleSheet("border: 1px solid black;")
+        # set text
+        self._text_label[Modal.CT].setText("CT")
+        if self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].isChecked():
+            self._text_label["other.modal"].setText("PT")
+        elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].isChecked():
+            self._text_label["other.modal"].setText("MR-T1")
+        elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
+            self._text_label["other.modal"].setText("MR-T2")
+        # alignment
         self._text_label[Modal.CT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._text_label[Modal.PT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._text_label[Modal.CT].setFixedWidth(30)
-
-        for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self._text_label[i] = QtWidgets.QLabel()
-            self._text_label[i].setText(i.capitalize())
-            if i != Plane.TRANSVERSE:
-                self._text_label[i].setFixedWidth(63)
-        # self._text_label[Plane.TRANSVERSE].setStyleSheet("border: 1px solid black;")
+        self._text_label["other.modal"].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         # ct/pt weight slider bar
-        self._slider["ct.pt.mix"] = QtWidgets.QSlider()
-        self._slider["ct.pt.mix"].setOrientation(Qt.Horizontal)
-        self._slider["ct.pt.mix"].setMinimum(0)
-        self._slider["ct.pt.mix"].setMaximum(100)
-        self._slider["ct.pt.mix"].setValue(50)
-        self._slider["ct.pt.mix"].setFixedWidth(112)
-        self._slider["ct.pt.mix"].valueChanged.connect(
-            self.__refresh_img_qlabel_trasverse
-        )
-
-        # toggle button
-        self._toggle_btn = ToggleButton(is_checked=True)
+        self._slider["mix"] = QtWidgets.QSlider()
+        self._slider["mix"].setOrientation(Qt.Horizontal)
+        self._slider["mix"].setMinimum(0)
+        self._slider["mix"].setMaximum(100)
+        self._slider["mix"].setValue(50)
+        self._slider["mix"].valueChanged.connect(self.__on_mix_slider_changed)
 
         # collapse
         self._collap["display.mode"] = QCollapsible("DISPLAY MODE")
-        # self._collap["display.mode"].setFixedHeight(170)
         self._collap["display.mode"].expand()
         v_layout = QtWidgets.QVBoxLayout()
 
@@ -867,26 +835,25 @@ class UiReplay(QtWidgets.QMainWindow):
             h_layout.addWidget(self._radio_btn[DisplayMode.MODAL_FIXED][i])
         v_layout.addLayout(h_layout)
 
-        # plane fixed widgets - transverse
+        # plane fixed widgets - mix slider
         h_layout = QtWidgets.QHBoxLayout()
-        h_layout.addWidget(self._text_label[Plane.TRANSVERSE])
         h_layout.addWidget(self._text_label[Modal.CT])
-        h_layout.addWidget(self._slider["ct.pt.mix"])
-        h_layout.addWidget(self._text_label[Modal.PT])
+        h_layout.addWidget(self._slider["mix"])
+        h_layout.addWidget(self._text_label["other.modal"])
         v_layout.addLayout(h_layout)
 
         # plane fixed widgets
-        for i in [Plane.CORONAL, Plane.SAGITTAL]:
-            h_layout = QtWidgets.QHBoxLayout()
-            h_layout.addWidget(self._text_label[i])
-            for j in [Modal.PT, Modal.MR1, Modal.MR2]:
-                h_layout.addWidget(self._radio_btn[DisplayMode.PLANE_FIXED][i][j])
-            v_layout.addLayout(h_layout)
+        h_layout = QtWidgets.QHBoxLayout()
+        for i in [Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn[DisplayMode.PLANE_FIXED][i])
+        v_layout.addLayout(h_layout)
 
         # put v_layout into collapsible space
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
+        container.setFixedHeight(widgets_total_height)
         self._collap["display.mode"].addWidget(container)
+        self._collap["display.mode"].expand()
 
     def _init_widgets_set_fonts(self):
         for i in self._collap.keys():
@@ -911,8 +878,7 @@ class UiReplay(QtWidgets.QMainWindow):
             self._radio_btn["color.enhance"][i].setFont(self._font_bold)
 
         for i in self._radio_btn[DisplayMode.PLANE_FIXED].keys():
-            for j in self._radio_btn[DisplayMode.PLANE_FIXED][i].keys():
-                self._radio_btn[DisplayMode.PLANE_FIXED][i][j].setFont(self._font_bold)
+            self._radio_btn[DisplayMode.PLANE_FIXED][i].setFont(self._font_bold)
 
         for i in self._radio_btn[DisplayMode.MODAL_FIXED].keys():
             self._radio_btn[DisplayMode.MODAL_FIXED][i].setFont(self._font_bold)
@@ -1113,40 +1079,25 @@ class UiReplay(QtWidgets.QMainWindow):
     # this function is connected to widget, dont set input params to this function
     def __switch_color_enhance_slider_bars(self):
         # hide and show sliders
-        if self.display_mode() == DisplayMode.PLANE_FIXED:
-            show_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-            hide_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-        else:
-            show_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-            hide_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-
-        for i in show_list:
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if self._radio_btn["color.enhance"][i].isChecked():
                 self._slider["bright"][i].show()
                 self._slider["contrast"][i].show()
             else:
                 self._slider["bright"][i].hide()
                 self._slider["contrast"][i].hide()
-        for i in hide_list:
-            self._slider["bright"][i].hide()
-            self._slider["contrast"][i].hide()
 
         # update text label
-        if self.display_mode() == DisplayMode.PLANE_FIXED:
-            for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                if self._radio_btn["color.enhance"][i].isChecked():
-                    key_word = i.capitalize()
-        else:
-            for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                if self._radio_btn["color.enhance"][i].isChecked():
-                    if i == Modal.CT:
-                        key_word = "CT"
-                    elif i == Modal.PT:
-                        key_word = "PT"
-                    elif i == Modal.MR1:
-                        key_word = "MR-T1"
-                    elif i == Modal.MR2:
-                        key_word = "MR-T2"
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            if self._radio_btn["color.enhance"][i].isChecked():
+                if i == Modal.CT:
+                    key_word = "CT"
+                elif i == Modal.PT:
+                    key_word = "PT"
+                elif i == Modal.MR1:
+                    key_word = "MR-T1"
+                elif i == Modal.MR2:
+                    key_word = "MR-T2"
 
         self._text_label["bright"].setText(
             "{} ({})".format("bright".capitalize(), key_word)
@@ -1651,21 +1602,9 @@ class UiReplay(QtWidgets.QMainWindow):
         self._combox["patient"].setCurrentText(next_patient)
         self._load_patient_data()
 
-    def __gray_to_rgb(self, gray_img: ndarray):
-        # rgb_img = np.uint8((gray_img - gray_img.min()) / gray_img.ptp() * 255.0)
-        gray_img = cv2.convertScaleAbs(gray_img, alpha=255.0)
-        # after cv2.cvtColor, rgb_img has 3 channels, but is still numpy
-        rgb_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2RGB)
-        return rgb_img
-
-    def __gray_to_colormap(self, gray_img: ndarray):
-        gray_img = cv2.convertScaleAbs(1 - gray_img, alpha=255.0)
-        color_map = cv2.applyColorMap(gray_img, cv2.COLORMAP_JET)
-        return color_map
-
     # this function is connected to widget, dont set input params to this function
-    def __refresh_img_qlabel_trasverse(self):
-        self.refresh_img_qlabels(img_name=Plane.TRANSVERSE)
+    def __on_mix_slider_changed(self):
+        self.refresh_img_qlabels()
 
     # replay_mode=True will show all contours
     # otherwise correction and annotation will cover pred
@@ -1677,6 +1616,7 @@ class UiReplay(QtWidgets.QMainWindow):
         if self.img_3d[Modal.CT] is None:
             return
 
+        # img name
         if img_name is not None:
             img_name_list = [img_name]
         else:
@@ -1688,54 +1628,71 @@ class UiReplay(QtWidgets.QMainWindow):
         # load rgb imgs
         for img_name in img_name_list:
             modal = self.img_qlabel[img_name].modal
+            cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
 
             # plane fixed mode
             if self.display_mode() == DisplayMode.PLANE_FIXED:
-                cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
                 if img_name == Plane.TRANSVERSE:
-                    ct_slice = self.img_3d[Modal.CT][cur_slice_id, :, :]
-                    pt_slice = self.img_3d[Modal.PT][cur_slice_id, :, :]
+                    slice_ct = self.img_3d[Modal.CT][cur_slice_id, :, :]
+                    slice_2d = self.img_3d[modal][cur_slice_id, :, :]
                 elif img_name == Plane.CORONAL:
+                    slice_ct = self.img_3d[Modal.CT][:, cur_slice_id, :]
                     slice_2d = self.img_3d[modal][:, cur_slice_id, :]
                 elif img_name == Plane.SAGITTAL:
+                    slice_ct = self.img_3d[Modal.CT][:, :, cur_slice_id]
                     slice_2d = self.img_3d[modal][:, :, cur_slice_id]
+
+                slice_ct = Img.gray_to_rgb(slice_ct)
+                if modal == Modal.PT:
+                    slice_2d = Img.gray_to_colormap(slice_2d)
+                else:
+                    slice_2d = Img.gray_to_rgb(slice_2d)
+
+                # brightness and contrast
+                slice_ct = cv2.addWeighted(
+                    src1=slice_ct,
+                    alpha=self._slider["contrast"][Modal.CT].value() / 100,
+                    src2=np.zeros_like(slice_ct),
+                    beta=0,
+                    gamma=self._slider["bright"][Modal.CT].value(),
+                )
+                slice_2d = cv2.addWeighted(
+                    src1=slice_2d,
+                    alpha=self._slider["contrast"][modal].value() / 100,
+                    src2=np.zeros_like(slice_2d),
+                    beta=0,
+                    gamma=self._slider["bright"][modal].value(),
+                )
+
+                # mix ct and the other modality
+                alpha = self._slider["mix"].value() / 100
+                rgb_img = cv2.addWeighted(
+                    src1=slice_2d,
+                    alpha=alpha,
+                    src2=slice_ct,
+                    beta=1 - alpha,
+                    gamma=0,
+                )
 
             # modality fixed mode
             else:
-                cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
                 if self.img_qlabel[img_name].plane == Plane.TRANSVERSE:
                     slice_2d = self.img_3d[img_name][cur_slice_id, :, :]
                 elif self.img_qlabel[img_name].plane == Plane.CORONAL:
                     slice_2d = self.img_3d[img_name][:, cur_slice_id, :]
                 elif self.img_qlabel[img_name].plane == Plane.SAGITTAL:
                     slice_2d = self.img_3d[img_name][:, :, cur_slice_id]
+                slice_2d = Img.gray_to_rgb(slice_2d)
 
-            if img_name == Plane.TRANSVERSE:
-                pt_slice = self.__gray_to_colormap(pt_slice)
-                ct_slice = self.__gray_to_rgb(ct_slice)
-                alpha = self._slider["ct.pt.mix"].value() / 100
+                # brightness and contrast
+                # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
                 rgb_img = cv2.addWeighted(
-                    src1=pt_slice,
-                    alpha=alpha,
-                    src2=ct_slice,
-                    beta=1 - alpha,
-                    gamma=0,
+                    src1=slice_2d,
+                    alpha=self._slider["contrast"][modal].value() / 100,
+                    src2=np.zeros_like(slice_2d),
+                    beta=0,
+                    gamma=self._slider["bright"][modal].value(),
                 )
-            else:
-                if modal == Modal.PT:
-                    rgb_img = self.__gray_to_colormap(slice_2d)
-                else:
-                    rgb_img = self.__gray_to_rgb(slice_2d)
-
-            # brightness and contrast
-            # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
-            rgb_img = cv2.addWeighted(
-                src1=rgb_img,
-                alpha=self._slider["contrast"][img_name].value() / 100,
-                src2=np.zeros_like(rgb_img),
-                beta=0,
-                gamma=self._slider["bright"][img_name].value(),
-            )
 
             # # add mask to gtvt selected slices
             # rgb_img_zeros = np.zeros((rgb_img.shape), dtype=np.uint8)
