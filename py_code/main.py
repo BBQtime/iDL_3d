@@ -20,9 +20,9 @@ Debug.clear_linux_trash()
 # make plane fixed mode default (done)
 # progress bar: multi thread (done)
 # mix ct with selected modality (done)
+# add pop-up when user do not add gtvn clicks (done)
 
 # change clear button icon
-# add pop-up when user do not add gtvn clicks
 # generate exe file, ask user to input their name and choose history records
 # list of idl step
 # show popup description on annotation buttons

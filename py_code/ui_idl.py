@@ -592,6 +592,17 @@ class UiIDL(UiReplay):
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
     def __confirm_gtvn_center(self):
+        if len(self.gtvn_clicks_pos_3d) == 0:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Message",
+                "No GTVn clicks detected, would you like to continue? (assuming there is no GTVn)",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if reply == QtWidgets.QMessageBox.No:
+                return
+
         # (1)add clicks into 3d img
         if self.img_3d["gtvn.clicks"] is None:
             self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
@@ -628,11 +639,13 @@ class UiIDL(UiReplay):
         # (3) transform gtvn clicks for idl.gtvn thread
         # copy data (dont change origin ndarray)
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
-        # flip left/right for 1mm data
-        if self._nii_spacing[2] == 1.0:
-            idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
-        # turn upside down
-        idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
+        # no need to flip empty img
+        if idl_gtvn_clicks.max() > 0:
+            # flip left/right for 1mm data
+            if self._nii_spacing[2] == 1.0:
+                idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
+            # turn upside down
+            idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
         # (4) start real idl gtvn
         self._text_label["gtvn.progress"].show()
