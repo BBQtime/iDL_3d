@@ -7,14 +7,14 @@ import numpy as np
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Value
-from numpy import ndarray
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from scipy.ndimage import measurements
 from str_lib import DatasetPart, DatasetVer, DisplayMode, Metric, Modal, Plane
 from superqt import QCollapsible
-from toggle_btn import ToggleButton
-from ui_custom_qlabel import CustomQLabel
+from ui_img_box import ImgBox
+from ui_text_box import TextBox
+from ui_toggle_btn import ToggleButton
 
 SIDE_BAR_WIDTH = 310
 
@@ -83,6 +83,11 @@ class UiReplay(QtWidgets.QMainWindow):
         # self.__total_slices_count_2d[Orient.HORIZONTAL] = 0
         # self.__total_slices_count_2d[Orient.VERTICAL] = 0
 
+    def _add_border(self, input_widget: QtWidgets.QWidget):
+        random_name = Value.random_str()
+        input_widget.setObjectName(random_name)
+        input_widget.setStyleSheet(f"#{random_name} {{border: 2px solid gray;}}")
+
     def _clear_img_3d(self):
         for i in [
             Modal.CT,
@@ -125,10 +130,10 @@ class UiReplay(QtWidgets.QMainWindow):
 
     #     # loop 4 img frames
     #     for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-    #         left = self.img_qlabel[i].x()
-    #         top = self.img_qlabel[i].y()
-    #         width = self.img_qlabel[i].width()
-    #         height = self.img_qlabel[i].height()
+    #         left = self.img_box[i].x()
+    #         top = self.img_box[i].y()
+    #         width = self.img_box[i].width()
+    #         height = self.img_box[i].height()
     #         # if start pos is in current img frame
     #         if (
     #             event.x() >= left
@@ -139,7 +144,7 @@ class UiReplay(QtWidgets.QMainWindow):
     #             # already zoomed in, clear zoomin (only click in img frame area)
     #             if self.__zoomin["start"] is not None:
     #                 self._reset_zoomin()
-    #                 self.refresh_img_qlabels()
+    #                 self.refresh_imgs()
     #                 return
     #             # zoom in
     #             else:
@@ -158,17 +163,17 @@ class UiReplay(QtWidgets.QMainWindow):
 
     # def __mouse_move_event(self, event):
     #     # limit zoomin frame in img frame
-    #     img_qlabel = self.img_qlabel[self.__zoomin["img"]]
-    #     img_qlabel_right = img_qlabel.x() + img_qlabel.width() - 1
-    #     if event.x() < img_qlabel.x():
-    #         event_x = img_qlabel.x()
+    #     img_box = self.img_box[self.__zoomin["img"]]
+    #     img_qlabel_right = img_box.x() + img_box.width() - 1
+    #     if event.x() < img_box.x():
+    #         event_x = img_box.x()
     #     elif event.x() > img_qlabel_right:
     #         event_x = img_qlabel_right
     #     else:
     #         event_x = event.x()
-    #     img_qlabel_buttom = img_qlabel.y() + img_qlabel.height() - 1
-    #     if event.y() < img_qlabel.y():
-    #         event_y = img_qlabel.y()
+    #     img_qlabel_buttom = img_box.y() + img_box.height() - 1
+    #     if event.y() < img_box.y():
+    #         event_y = img_box.y()
     #     elif event.y() > img_qlabel_buttom:
     #         event_y = img_qlabel_buttom
     #     else:
@@ -220,9 +225,9 @@ class UiReplay(QtWidgets.QMainWindow):
     #         y = start_y
     #         start_y = end_y
     #         end_y = y
-    #     # get img_qlabel related position
-    #     img_qlabel_left = self.img_qlabel[self.__zoomin["img"]].x()
-    #     img_qlabel_top = self.img_qlabel[self.__zoomin["img"]].y()
+    #     # get img_box related position
+    #     img_qlabel_left = self.img_box[self.__zoomin["img"]].x()
+    #     img_qlabel_top = self.img_box[self.__zoomin["img"]].y()
     #     start_x -= img_qlabel_left
     #     end_x -= img_qlabel_left
     #     start_y -= img_qlabel_top
@@ -230,18 +235,18 @@ class UiReplay(QtWidgets.QMainWindow):
 
     #     # get actual_img_area related position
     #     rgb_img_roi = self._rgb_img_roi
-    #     start_x -= img_qlabel.roi.x
-    #     start_y -= img_qlabel.roi.y
-    #     end_x -= img_qlabel.roi.x
-    #     end_y -= img_qlabel.roi.y
+    #     start_x -= img_box.roi.x
+    #     start_y -= img_box.roi.y
+    #     end_x -= img_box.roi.x
+    #     end_y -= img_box.roi.y
     #     # out of range
     #     if (start_x < 0 and end_x < 0) or (
-    #         start_x > img_qlabel.roi.width and end_x > img_qlabel.roi.width
+    #         start_x > img_box.roi.width and end_x > img_box.roi.width
     #     ):
     #         self._reset_zoomin()
     #         return
     #     if (start_y < 0 and end_y < 0) or (
-    #         start_y > img_qlabel.roi.height and end_y > img_qlabel.roi.height
+    #         start_y > img_box.roi.height and end_y > img_box.roi.height
     #     ):
     #         self._reset_zoomin()
     #         return
@@ -250,10 +255,10 @@ class UiReplay(QtWidgets.QMainWindow):
     #         start_x = 0
     #     if start_y < 0:
     #         start_y = 0
-    #     if end_x > img_qlabel.roi.width:
-    #         end_x = img_qlabel.roi.width
-    #     if end_y > img_qlabel.roi.height:
-    #         end_y = img_qlabel.roi.height
+    #     if end_x > img_box.roi.width:
+    #         end_x = img_box.roi.width
+    #     if end_y > img_box.roi.height:
+    #         end_y = img_box.roi.height
 
     #     # get actual zoom position
     #     if self._plane == Plane.SAGITTAL:
@@ -272,20 +277,20 @@ class UiReplay(QtWidgets.QMainWindow):
     #         origin_width = self.img_3d[Modal.CT].shape[2]
     #         origin_height = self.img_3d[Modal.CT].shape[1]
 
-    #     start_x = round(start_x * origin_width / img_qlabel.roi.width)
-    #     end_x = round(end_x * origin_width / img_qlabel.roi.width)
-    #     start_y = round(start_y * origin_height / img_qlabel.roi.height)
-    #     end_y = round(end_y * origin_height / img_qlabel.roi.height)
+    #     start_x = round(start_x * origin_width / img_box.roi.width)
+    #     end_x = round(end_x * origin_width / img_box.roi.width)
+    #     start_y = round(start_y * origin_height / img_box.roi.height)
+    #     end_y = round(end_y * origin_height / img_box.roi.height)
 
     #     self.__zoomin["start"] = QPoint(start_x, start_y)
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
-    #     self.refresh_img_qlabels()
+    #     self.refresh_imgs()
 
-    def _fit_img_qlabel(self, img, img_qlabel: CustomQLabel):
+    def _fit_img_qlabel(self, img, img_box: ImgBox):
         err_msg = "MainWindow._fit_img_qlabel(), img.shape should == 2 or 3"
 
         # spacing upscalling
-        if self._nii_spacing[2] != 1.0 and img_qlabel.plane == Plane.SAGITTAL:
+        if self._nii_spacing[2] != 1.0 and img_box.plane == Plane.SAGITTAL:
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
             )
@@ -297,7 +302,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 ),
                 interpolation=cv2.INTER_CUBIC,
             )
-        elif self._nii_spacing[2] != 1.0 and img_qlabel.plane == Plane.CORONAL:
+        elif self._nii_spacing[2] != 1.0 and img_box.plane == Plane.CORONAL:
             spacing_height = round(
                 img.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
             )
@@ -329,47 +334,47 @@ class UiReplay(QtWidgets.QMainWindow):
         # resize to fit image frame
         origin_height = img.shape[0]
         origin_width = img.shape[1]
-        final_width = img_qlabel.width()
-        final_height = img_qlabel.height()
+        final_width = img_box.width()
+        final_height = img_box.height()
 
         # border on left and right
         if origin_height * final_width > final_height * origin_width:
-            img_qlabel.roi.width = int(final_height * origin_width / origin_height)
-            img_qlabel.roi.height = final_height
-            img_qlabel.roi.x = int((final_width - img_qlabel.roi.width) / 2)
-            if img_qlabel.roi.x < 0:
-                img_qlabel.roi.x = 0
-            img_qlabel.roi.y = 0
+            img_box.roi.width = int(final_height * origin_width / origin_height)
+            img_box.roi.height = final_height
+            img_box.roi.x = int((final_width - img_box.roi.width) / 2)
+            if img_box.roi.x < 0:
+                img_box.roi.x = 0
+            img_box.roi.y = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((final_height, img_qlabel.roi.x, 3), np.uint8)
+                black_border = np.zeros((final_height, img_box.roi.x, 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((final_height, img_qlabel.roi.x), np.uint8)
+                black_border = np.zeros((final_height, img_box.roi.x), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (img_qlabel.roi.width, img_qlabel.roi.height),
+                (img_box.roi.width, img_box.roi.height),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=1)
 
         # border on up and down
         else:
-            img_qlabel.roi.width = final_width
-            img_qlabel.roi.height = int(final_width * origin_height / origin_width)
-            img_qlabel.roi.y = int((final_height - img_qlabel.roi.height) / 2)
-            if img_qlabel.roi.y < 0:
-                img_qlabel.roi.y = 0
-            img_qlabel.roi.x = 0
+            img_box.roi.width = final_width
+            img_box.roi.height = int(final_width * origin_height / origin_width)
+            img_box.roi.y = int((final_height - img_box.roi.height) / 2)
+            if img_box.roi.y < 0:
+                img_box.roi.y = 0
+            img_box.roi.x = 0
             if len(img.shape) == 3:
-                black_border = np.zeros((img_qlabel.roi.y, final_width, 3), np.uint8)
+                black_border = np.zeros((img_box.roi.y, final_width, 3), np.uint8)
             elif len(img.shape) == 2:
-                black_border = np.zeros((img_qlabel.roi.y, final_width), np.uint8)
+                black_border = np.zeros((img_box.roi.y, final_width), np.uint8)
             else:
                 raise ValueError(err_msg)
             img = cv2.resize(
                 img,
-                (img_qlabel.roi.width, img_qlabel.roi.height),
+                (img_box.roi.width, img_box.roi.height),
                 interpolation=cv2.INTER_AREA,
             )
             img = np.concatenate((black_border, img, black_border), axis=0)
@@ -408,8 +413,8 @@ class UiReplay(QtWidgets.QMainWindow):
         _translate = QtCore.QCoreApplication.translate
         Core.setWindowTitle(_translate("Core", "Interactive Learning Tool"))
 
-    def _init_widgets_img_qlabels(self):
-        self.img_qlabel = Dict()
+    def _init_widgets_img_boxes(self):
+        self.img_box = Dict()
         pal = QtGui.QPalette()
         pal.setColor(QtGui.QPalette.Window, Qt.black)
 
@@ -422,21 +427,21 @@ class UiReplay(QtWidgets.QMainWindow):
             Plane.CORONAL,
             Plane.SAGITTAL,
         ]:
-            self.img_qlabel[i] = CustomQLabel(self._central_widget)
-            self.img_qlabel[i].setObjectName("")
+            self.img_box[i] = ImgBox(self._central_widget)
+            self.img_box[i].setObjectName("")
             # black background
-            self.img_qlabel[i].setAutoFillBackground(True)
-            self.img_qlabel[i].setPalette(pal)
+            self.img_box[i].setAutoFillBackground(True)
+            self.img_box[i].setPalette(pal)
 
         # fixed plane
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self.img_qlabel[i].plane = i
+            self.img_box[i].plane = i
 
         # fixed modal
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            self.img_qlabel[i].modal = i
+            self.img_box[i].modal = i
 
-        self.img_qlabel[Plane.TRANSVERSE].modal = "mix"
+        self.img_box[Plane.TRANSVERSE].modal = "mix"
 
     def _init_widgets_combox(self):
         self._combox = Dict()
@@ -490,8 +495,6 @@ class UiReplay(QtWidgets.QMainWindow):
         self._collap["idl.gtvt"] = QCollapsible("SELECT IDL GTVT")
         self._collap["idl.gtvn"] = QCollapsible("SELECT IDL GTVN")
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            # self._collap[i].setFixedHeight(90)
-            self._collap[i].expand()
             h_layout = QtWidgets.QHBoxLayout()
             h_layout.setSpacing(1)
             h_layout.addWidget(self._arrow_btn["prev.{}".format(i)])
@@ -499,7 +502,10 @@ class UiReplay(QtWidgets.QMainWindow):
             h_layout.addWidget(self._arrow_btn["next.{}".format(i)])
             container = QtWidgets.QWidget()
             container.setLayout(h_layout)
+            container.setFixedHeight(50)
+            self._add_border(container)
             self._collap[i].addWidget(container)
+            self._collap[i].expand()
 
         # connect ctrls to functions
         self._combox["baseline"].activated.connect(self._load_baseline_data)
@@ -537,8 +543,8 @@ class UiReplay(QtWidgets.QMainWindow):
         # text labels
         for i in ["bright", "contrast"]:
             self._text_label[i] = QtWidgets.QLabel()
-        self._text_label["bright"].setText("Brightness (Modal.CT)")
-        self._text_label["contrast"].setText("Contrast (Modal.CT)")
+        self._text_label["bright"].setText("Brightness (CT)")
+        self._text_label["contrast"].setText("Contrast (CT)")
 
         # slider bars
         for i in ["bright", "contrast"]:
@@ -563,15 +569,8 @@ class UiReplay(QtWidgets.QMainWindow):
                 if j != Modal.CT:
                     slider.hide()
 
-        # collapse
-        self._collap["color.enhance"] = QCollapsible("COLOR ENHANCEMENT")
+        # v layout
         v_layout = QtWidgets.QVBoxLayout()
-
-        # radio buttons: ct/pt/mr1/mr2
-        h_layout = QtWidgets.QHBoxLayout()
-        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            h_layout.addWidget(self._radio_btn["color.enhance"][i])
-        v_layout.addLayout(h_layout)
 
         # text labels and slider bars
         for i in ["bright", "contrast"]:
@@ -584,10 +583,19 @@ class UiReplay(QtWidgets.QMainWindow):
             ]:
                 v_layout.addWidget(self._slider[i][j])
 
+        # radio buttons: ct/pt/mr1/mr2
+        h_layout = QtWidgets.QHBoxLayout()
+        for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+            h_layout.addWidget(self._radio_btn["color.enhance"][i])
+        v_layout.addLayout(h_layout)
+
         # add final layout into collapsible space
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
-        container.setFixedHeight(120)
+        self._add_border(container)
+        container.setFixedHeight(130)
+        # collapse
+        self._collap["color.enhance"] = QCollapsible("COLOR ENHANCEMENT")
         self._collap["color.enhance"].addWidget(container)
         self._collap["color.enhance"].collapse()
 
@@ -608,7 +616,7 @@ class UiReplay(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __color_enhance_slider_value_update(self):
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
     def _plane_fixed_mode_switch_modal(self):
@@ -616,7 +624,7 @@ class UiReplay(QtWidgets.QMainWindow):
         for modal in self._radio_btn[DisplayMode.PLANE_FIXED].keys():
             if self._radio_btn[DisplayMode.PLANE_FIXED][modal].isChecked():
                 for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                    self.img_qlabel[plane].modal = modal
+                    self.img_box[plane].modal = modal
                 break
         # update textlabel
         if self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].isChecked():
@@ -625,7 +633,7 @@ class UiReplay(QtWidgets.QMainWindow):
             self._text_label["other.modal"].setText("MR-T1")
         elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
             self._text_label["other.modal"].setText("MR-T2")
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
     def display_mode(self):
         if self._toggle_btn.isChecked():
@@ -636,19 +644,19 @@ class UiReplay(QtWidgets.QMainWindow):
     def switch_display_mode(self):
         display_mode = self.display_mode()
 
-        # img qlabels: modalities
+        # img_boxes: modalities
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if display_mode == DisplayMode.PLANE_FIXED:
-                self.img_qlabel[i].hide()
+                self.img_box[i].hide()
             else:
-                self.img_qlabel[i].show()
+                self.img_box[i].show()
 
-        # img qlabels: planes
+        # img_boxes: planes
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if display_mode == DisplayMode.PLANE_FIXED:
-                self.img_qlabel[i].show()
+                self.img_box[i].show()
             else:
-                self.img_qlabel[i].hide()
+                self.img_box[i].hide()
 
         # plane fixed mode: text labels
         for i in [Modal.CT, "other.modal"]:
@@ -703,19 +711,19 @@ class UiReplay(QtWidgets.QMainWindow):
             self._slider["mix"].hide()
 
         self.reset_cur_slice_id()
-        self.refresh_img_qlabels()
-        self.refresh_crosses_on_qlabels()
+        self.refresh_imgs()
+        self.refresh_crosses()
 
     # abstract function
     def reset_cur_slice_id(self):
         return
 
     # abstract function
-    def refresh_crosses_on_qlabels(self):
+    def refresh_crosses(self):
         return
 
     def _init_widgets_display_mode(self):
-        widgets_total_height = 100
+        widgets_total_height = 105
 
         # toggle display mode
         self._toggle_btn = ToggleButton(is_checked=True)
@@ -784,14 +792,14 @@ class UiReplay(QtWidgets.QMainWindow):
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if self._radio_btn[DisplayMode.MODAL_FIXED][plane].isChecked():
                 for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                    self.img_qlabel[modal].plane = plane
+                    self.img_box[modal].plane = plane
                 break
 
         # reset img modality
         for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
             if self._radio_btn[DisplayMode.PLANE_FIXED][modal].isChecked():
                 for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                    self.img_qlabel[plane].modal = modal
+                    self.img_box[plane].modal = modal
                 break
 
         # text label for plane fixed mode
@@ -807,7 +815,8 @@ class UiReplay(QtWidgets.QMainWindow):
             self._text_label["other.modal"].setText("MR-T2")
         # alignment
         self._text_label[Modal.CT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._text_label["other.modal"].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._text_label["other.modal"].setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        self._text_label["other.modal"].setFixedWidth(40)
 
         # ct/pt weight slider bar
         self._slider["mix"] = QtWidgets.QSlider()
@@ -852,6 +861,7 @@ class UiReplay(QtWidgets.QMainWindow):
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
         container.setFixedHeight(widgets_total_height)
+        self._add_border(container)
         self._collap["display.mode"].addWidget(container)
         self._collap["display.mode"].expand()
 
@@ -859,29 +869,24 @@ class UiReplay(QtWidgets.QMainWindow):
         for i in self._collap.keys():
             self._collap[i].setStyleSheet("font-weight: bold; color: white;")
 
-        self._font_bold = QtGui.QFont("Arial", 10)
-        self._font_light = QtGui.QFont("Arial", 10)
-        self._font_bold.setBold(True)
-        self._font_light.setBold(False)
+        self._font = QtGui.QFont("Arial", 10)
+        self._font.setBold(True)
 
         for i in self._text_label.keys():
-            self._text_label[i].setFont(self._font_bold)
-            self._text_label[i].setStyleSheet("color: white;")
-
-        for i in self._collap.keys():
-            self._collap[i].setFont(self._font_bold)
+            if not isinstance(self._text_label[i], TextBox):
+                self._text_label[i].setFont(self._font)
 
         for i in self._combox.keys():
-            self._combox[i].setFont(self._font_bold)
+            self._combox[i].setFont(self._font)
 
         for i in self._radio_btn["color.enhance"].keys():
-            self._radio_btn["color.enhance"][i].setFont(self._font_bold)
+            self._radio_btn["color.enhance"][i].setFont(self._font)
 
         for i in self._radio_btn[DisplayMode.PLANE_FIXED].keys():
-            self._radio_btn[DisplayMode.PLANE_FIXED][i].setFont(self._font_bold)
+            self._radio_btn[DisplayMode.PLANE_FIXED][i].setFont(self._font)
 
         for i in self._radio_btn[DisplayMode.MODAL_FIXED].keys():
-            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFont(self._font_bold)
+            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFont(self._font)
 
     def _init_widgets_zoom(self):
         self._slider["zoom"] = QtWidgets.QSlider()
@@ -889,11 +894,20 @@ class UiReplay(QtWidgets.QMainWindow):
         self._slider["zoom"].setMinimum(100)
         self._slider["zoom"].setMaximum(200)
         self._slider["zoom"].setValue(100)
+
         # add slider into collapsible space
+        v_layout = QtWidgets.QVBoxLayout()
+        v_layout.addWidget(self._slider["zoom"])
+        container = QtWidgets.QWidget()
+        container.setLayout(v_layout)
+        self._add_border(container)
         self._collap["zoom"] = QCollapsible("ZOOM IN")
-        # self._collap["zoom"].setFixedHeight(60)
         self._collap["zoom"].collapse()
-        self._collap["zoom"].addWidget(self._slider["zoom"])
+        self._collap["zoom"].addWidget(container)
+
+    # virtual function (for ui_idl)
+    def _init_widgets_todo_list(self):
+        return
 
     # virtual function (for ui_idl)
     def _init_widgets_annotation(self):
@@ -906,8 +920,9 @@ class UiReplay(QtWidgets.QMainWindow):
         self._text_label = Dict()
         self._slider = Dict()
 
+        self._init_widgets_todo_list()
         self._init_widgets_combox()
-        self._init_widgets_img_qlabels()
+        self._init_widgets_img_boxes()
         self._init_widgets_annotation()
         self._init_widgets_display_mode()
         self._init_widgets_color_enhance()
@@ -1008,12 +1023,12 @@ class UiReplay(QtWidgets.QMainWindow):
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if self._radio_btn[DisplayMode.MODAL_FIXED][plane].isChecked():
                     for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                        self.img_qlabel[modal].plane = plane
+                        self.img_box[modal].plane = plane
                     break
         # switch to a new plane
         else:
             for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.img_qlabel[modal].plane = new_plane
+                self.img_box[modal].plane = new_plane
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if plane == new_plane:
                     self._radio_btn[DisplayMode.MODAL_FIXED][plane].setChecked(True)
@@ -1022,7 +1037,7 @@ class UiReplay(QtWidgets.QMainWindow):
 
         # self.__refresh_gtvt_selected_slices_2d()
         # self._reset_zoomin()
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
     # def __refresh_gtvt_selected_slices_2d(self):
     #     if self.img_3d[Modal.CT] is None:
@@ -1099,26 +1114,22 @@ class UiReplay(QtWidgets.QMainWindow):
                 elif i == Modal.MR2:
                     key_word = "MR-T2"
 
-        self._text_label["bright"].setText(
-            "{} ({})".format("bright".capitalize(), key_word)
-        )
-        self._text_label["contrast"].setText(
-            "{} ({})".format("contrast".capitalize(), key_word)
-        )
+        self._text_label["bright"].setText("Brightness ({})".format(key_word))
+        self._text_label["contrast"].setText("Contrast ({})".format(key_word))
 
-    def _clear_img_qlabels(self):
+    def _clear_img_boxes(self):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            width = self.img_qlabel[i].width()
-            height = self.img_qlabel[i].height()
+            width = self.img_box[i].width()
+            height = self.img_box[i].height()
             black_img = np.zeros([width, height, 3])
             qt_image = QtGui.QImage(
                 black_img,
-                self.img_qlabel[i].width(),
-                self.img_qlabel[i].height(),
-                self.img_qlabel[i].width() * 3,
+                self.img_box[i].width(),
+                self.img_box[i].height(),
+                self.img_box[i].width() * 3,
                 QtGui.QImage.Format_RGB888,
             )
-            self.img_qlabel[i].set_background(qt_image)
+            self.img_box[i].set_background(qt_image)
 
     def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
@@ -1185,7 +1196,7 @@ class UiReplay(QtWidgets.QMainWindow):
         # self._reset_zoomin()
         self.__clear_scores()
         self._clear_img_3d()
-        self._clear_img_qlabels()
+        self._clear_img_boxes()
 
         # run this after current text of baseline combox is confirmed
         self._enable_arrow_btns("baseline")
@@ -1333,7 +1344,7 @@ class UiReplay(QtWidgets.QMainWindow):
             # refresh imgs after idl.gtvn is chosen
             self._load_idl_gtv_data(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
     # load labels and gtvs gravity center
     def __load_labels(self):
@@ -1528,7 +1539,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
-            self.refresh_img_qlabels()
+            self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
     def _load_prev_baseline_data(self):
@@ -1604,11 +1615,11 @@ class UiReplay(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_mix_slider_changed(self):
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
     # replay_mode=True will show all contours
     # otherwise correction and annotation will cover pred
-    def refresh_img_qlabels(
+    def refresh_imgs(
         self,
         replay_mode: bool = True,
         img_name: str = None,
@@ -1627,8 +1638,8 @@ class UiReplay(QtWidgets.QMainWindow):
 
         # load rgb imgs
         for img_name in img_name_list:
-            modal = self.img_qlabel[img_name].modal
-            cur_slice_id = self.cur_slice_id[self.img_qlabel[img_name].plane]
+            modal = self.img_box[img_name].modal
+            cur_slice_id = self.cur_slice_id[self.img_box[img_name].plane]
 
             # plane fixed mode
             if self.display_mode() == DisplayMode.PLANE_FIXED:
@@ -1649,6 +1660,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     slice_2d = Img.gray_to_rgb(slice_2d)
 
                 # brightness and contrast
+                # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
                 slice_ct = cv2.addWeighted(
                     src1=slice_ct,
                     alpha=self._slider["contrast"][Modal.CT].value() / 100,
@@ -1676,11 +1688,11 @@ class UiReplay(QtWidgets.QMainWindow):
 
             # modality fixed mode
             else:
-                if self.img_qlabel[img_name].plane == Plane.TRANSVERSE:
+                if self.img_box[img_name].plane == Plane.TRANSVERSE:
                     slice_2d = self.img_3d[img_name][cur_slice_id, :, :]
-                elif self.img_qlabel[img_name].plane == Plane.CORONAL:
+                elif self.img_box[img_name].plane == Plane.CORONAL:
                     slice_2d = self.img_3d[img_name][:, cur_slice_id, :]
-                elif self.img_qlabel[img_name].plane == Plane.SAGITTAL:
+                elif self.img_box[img_name].plane == Plane.SAGITTAL:
                     slice_2d = self.img_3d[img_name][:, :, cur_slice_id]
                 slice_2d = Img.gray_to_rgb(slice_2d)
 
@@ -1754,7 +1766,7 @@ class UiReplay(QtWidgets.QMainWindow):
             #     )
 
             # resize and fit img qlabel
-            rgb_img = self._fit_img_qlabel(rgb_img, self.img_qlabel[img_name])
+            rgb_img = self._fit_img_qlabel(rgb_img, self.img_box[img_name])
 
             # blur after _fit_img_qlabel will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
@@ -1787,15 +1799,15 @@ class UiReplay(QtWidgets.QMainWindow):
                     continue
 
                 # load data of current slice
-                if self.img_qlabel[img_name].plane == Plane.SAGITTAL:
+                if self.img_box[img_name].plane == Plane.SAGITTAL:
                     segment = self.img_3d[seg_name][
                         :, :, self.cur_slice_id[Plane.SAGITTAL]
                     ]
-                elif self.img_qlabel[img_name].plane == Plane.CORONAL:
+                elif self.img_box[img_name].plane == Plane.CORONAL:
                     segment = self.img_3d[seg_name][
                         :, self.cur_slice_id[Plane.CORONAL], :
                     ]
-                elif self.img_qlabel[img_name].plane == Plane.TRANSVERSE:
+                elif self.img_box[img_name].plane == Plane.TRANSVERSE:
                     segment = self.img_3d[seg_name][
                         self.cur_slice_id[Plane.TRANSVERSE], :, :
                     ]
@@ -1817,7 +1829,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     if segment.max() <= 0:
                         continue
 
-                segment = self._fit_img_qlabel(segment, self.img_qlabel[img_name])
+                segment = self._fit_img_qlabel(segment, self.img_box[img_name])
 
                 # points, higher thickness (otherwise cant see the points)
                 if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
@@ -1863,8 +1875,8 @@ class UiReplay(QtWidgets.QMainWindow):
             if img_name == Plane.TRANSVERSE or img_name == Modal.MR1:
                 self._add_contour_description_on_qimg(qimg)
 
-            self.img_qlabel[img_name].set_background(qimg)
-            self.img_qlabel[img_name].update()
+            self.img_box[img_name].set_background(qimg)
+            self.img_box[img_name].update()
 
     def _add_contour_description_on_qimg(self, qimg: QtGui.QImage):
         pos_x = [10, 65, 110]
@@ -2008,11 +2020,11 @@ class UiReplay(QtWidgets.QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.__resize_img_qlabels()
+        self.__resize_img_boxes()
         self._refresh_side_bar()
-        self.refresh_img_qlabels()
+        self.refresh_imgs()
 
-    def __resize_img_qlabels(self):
+    def __resize_img_boxes(self):
         gap = 1
         # pos: w0 w1 h0 h1
         pos = Dict()
@@ -2036,27 +2048,27 @@ class UiReplay(QtWidgets.QMainWindow):
             pos[i][1] = pos[j][0] + gap * 2
 
         # ct
-        self.img_qlabel[Modal.CT].setGeometry(
+        self.img_box[Modal.CT].setGeometry(
             QtCore.QRect(pos["x"][0], pos["y"][0], pos["w"][0], pos["h"][0])
         )
         # transverse
-        self.img_qlabel[Plane.TRANSVERSE].setGeometry(
+        self.img_box[Plane.TRANSVERSE].setGeometry(
             QtCore.QRect(
                 pos["x"][0], pos["y"][0], pos["w"][0], pos["h"][0] + 1 + pos["h"][1]
             )
         )
-        # pt / coronal
+        # pt and coronal
         for i in [Modal.PT, Plane.CORONAL]:
-            self.img_qlabel[i].setGeometry(
+            self.img_box[i].setGeometry(
                 QtCore.QRect(pos["x"][1], pos["y"][0], pos["w"][1], pos["h"][0])
             )
         # mr1
-        self.img_qlabel[Modal.MR1].setGeometry(
+        self.img_box[Modal.MR1].setGeometry(
             QtCore.QRect(pos["x"][0], pos["y"][1], pos["w"][0], pos["h"][1])
         )
-        # mr2 sagittal
+        # mr2 and sagittal
         for i in [Modal.MR2, Plane.SAGITTAL]:
-            self.img_qlabel[i].setGeometry(
+            self.img_box[i].setGeometry(
                 QtCore.QRect(pos["x"][1], pos["y"][1], pos["w"][1], pos["h"][1])
             )
 

@@ -7,6 +7,7 @@ import platform
 import random
 import shutil
 import statistics
+import string
 import sys
 import unicodedata
 import warnings
@@ -127,6 +128,11 @@ class List(list):
 
 class Value:
     EPS = sys.float_info.epsilon
+
+    def random_str(length=10):
+        # Generate a random string of fixed length
+        letters = string.ascii_letters
+        return "".join(random.choice(letters) for i in range(length))
 
     def replace_char(input_str: str, idx: int, new_char: str) -> str:
         return input_str[:idx] + new_char + input_str[idx + 1 :]

@@ -14,8 +14,12 @@ class DrawingMode:
 
 
 class IDLStep:
+    SELECT_PATIENT = "select.patient"
     CLICK_GTVT_CENTER = "click.gtvt.center"
     DRAW_GTVT = "draw.gtvt"
+    DRAW_GTVT_TRANSVERSE = "draw.gtvt.transverse"
+    DRAW_GTVT_CORONAL = "draw.gtvt.coronal"
+    DRAW_GTVT_SAGITTAL = "draw.gtvt.sagittal"
     CLICK_GTVN_CENTER = "click.gtvn.center"
     WAITING = "waiting"
     CORRECT_GTVT = "correct.gtvt"

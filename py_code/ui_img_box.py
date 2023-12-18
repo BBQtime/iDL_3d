@@ -6,14 +6,14 @@ from str_lib import DisplayMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
-class CustomQLabelROI:
+class ImgBoxROI:
     x = None
     y = None
     width = None
     height = None
 
 
-class CustomQLabel(QLabel):
+class ImgBox(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -22,7 +22,7 @@ class CustomQLabel(QLabel):
         self.modal = None
 
         # rgb img - region of interest
-        self.roi = CustomQLabelROI()
+        self.roi = ImgBoxROI()
 
         # clicks
         self.selected_cross = None
@@ -62,12 +62,12 @@ class CustomQLabel(QLabel):
                 self.window().gtvt_click_pos_3d = pos_3d
                 self.window().reset_cur_slice_id()
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                    # only refresh other img_qlabels
+                    # only refresh other img_boxes
                     img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
                     img_name_list.remove(self.plane)
                     for i in img_name_list:
-                        self.window().refresh_img_qlabels(i)
-                self.window().refresh_crosses_on_qlabels()
+                        self.window().refresh_imgs(i)
+                self.window().refresh_crosses()
 
             # draw/correct
             elif idl_step in [
@@ -76,7 +76,7 @@ class CustomQLabel(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_qlabels_press(event)
+                self.window().draw_on_img_boxes_press(event)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
                 pos_3d = self.get_pos_in_3d(event.pos())
@@ -84,7 +84,7 @@ class CustomQLabel(QLabel):
                     self.window().gtvn_clicks_pos_3d.append(pos_3d)
                     self.window().reset_cur_slice_id()
                     if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                        # only refresh other img_qlabels
+                        # only refresh other img_boxes
                         img_name_list = [
                             Plane.TRANSVERSE,
                             Plane.CORONAL,
@@ -92,8 +92,8 @@ class CustomQLabel(QLabel):
                         ]
                         img_name_list.remove(self.plane)
                         for i in img_name_list:
-                            self.window().refresh_img_qlabels(i)
-                    self.window().refresh_crosses_on_qlabels()
+                            self.window().refresh_imgs(i)
+                    self.window().refresh_crosses()
 
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
@@ -107,7 +107,7 @@ class CustomQLabel(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_qlabels_move(event=event, img_qlabel=self)
+                self.window().draw_on_img_boxes_move(event=event, img_box=self)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
@@ -119,7 +119,7 @@ class CustomQLabel(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_qlabels_release(self)
+                self.window().draw_on_img_boxes_release(self)
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -322,6 +322,6 @@ class CustomQLabel(QLabel):
         self.window().cur_slice_id[self.plane] %= slices_count
 
         if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-            self.window().refresh_img_qlabels(img_name=self.plane)
+            self.window().refresh_imgs(img_name=self.plane)
         else:
-            self.window().refresh_img_qlabels()
+            self.window().refresh_imgs()
