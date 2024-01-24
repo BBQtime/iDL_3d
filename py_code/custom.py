@@ -1,4 +1,5 @@
 import copy
+import gc
 import hashlib
 import json
 import math
@@ -635,11 +636,11 @@ class Dir:
 
 class GPU:
     def clear_cache():
+        # garbage collector
+        gc.collect()
+        # empty torch cache
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            return True
-        else:
-            return False
 
     def used_count() -> int:
         if Global.DEVICE == torch.device("cpu"):

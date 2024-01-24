@@ -4,6 +4,7 @@ from tkinter import Tk, filedialog
 
 import cv2
 import numpy as np
+from adjust_combox import AdjustableComboBox
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Value
@@ -12,8 +13,8 @@ from PyQt5.QtCore import Qt
 from scipy.ndimage import measurements
 from str_lib import DatasetPart, DatasetVer, DisplayMode, Metric, Modal, Plane
 from superqt import QCollapsible
+from ui_idl_step_label import IDLStepLabel
 from ui_img_box import ImgBox
-from ui_text_box import TextBox
 from ui_toggle_btn import ToggleButton
 
 SIDE_BAR_WIDTH = 310
@@ -286,8 +287,8 @@ class UiReplay(QtWidgets.QMainWindow):
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
     #     self.refresh_imgs()
 
-    def _fit_img_qlabel(self, img, img_box: ImgBox):
-        err_msg = "MainWindow._fit_img_qlabel(), img.shape should == 2 or 3"
+    def _fit_img_box(self, img, img_box: ImgBox):
+        err_msg = "MainWindow._fit_img_box(), img.shape should == 2 or 3"
 
         # spacing upscalling
         if self._nii_spacing[2] != 1.0 and img_box.plane == Plane.SAGITTAL:
@@ -444,13 +445,14 @@ class UiReplay(QtWidgets.QMainWindow):
         self.img_box[Plane.TRANSVERSE].modal = "mix"
 
     def _init_widgets_combox(self):
-        self._combox = Dict()
+        self.combox = Dict()
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            self._combox[i] = QtWidgets.QComboBox(self._central_widget)
-            self._combox[i].setFixedHeight(30)
+            # self.combox[i] = QtWidgets.QComboBox(self._central_widget)
+            self.combox[i] = AdjustableComboBox(self._central_widget)
+            self.combox[i].setFixedHeight(30)
             # set combobox dropdown width: 700px
             if i != "patient":
-                self._combox[i].setStyleSheet(
+                self.combox[i].setStyleSheet(
                     """*
                     QComboBox QAbstractItemView
                     {
@@ -459,19 +461,19 @@ class UiReplay(QtWidgets.QMainWindow):
                     """
                 )
             if i in ["patient", "idl.gtvt", "idl.gtvn"]:
-                self._combox[i].setEnabled(False)
+                self.combox[i].setEnabled(False)
 
         # fill combox baseline
         baseline_id_list = Dir.get_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
-        self._combox["baseline"].addItems(baseline_id_list)
+        self.combox["baseline"].addItems(baseline_id_list)
 
         # set real idl baseline id as default
         for baseline_id in baseline_id_list:
             if "real.idl" in baseline_id:
                 real_idl_baseline_id = baseline_id
-        self._combox["baseline"].setCurrentText(real_idl_baseline_id)
+        self.combox["baseline"].setCurrentText(real_idl_baseline_id)
 
         # arrow buttons
         self._arrow_btn = Dict()
@@ -498,7 +500,7 @@ class UiReplay(QtWidgets.QMainWindow):
             h_layout = QtWidgets.QHBoxLayout()
             h_layout.setSpacing(1)
             h_layout.addWidget(self._arrow_btn["prev.{}".format(i)])
-            h_layout.addWidget(self._combox[i])
+            h_layout.addWidget(self.combox[i])
             h_layout.addWidget(self._arrow_btn["next.{}".format(i)])
             container = QtWidgets.QWidget()
             container.setLayout(h_layout)
@@ -508,16 +510,16 @@ class UiReplay(QtWidgets.QMainWindow):
             self._collap[i].expand()
 
         # connect ctrls to functions
-        self._combox["baseline"].activated.connect(self._load_baseline_data)
+        self.combox["baseline"].activated.connect(self._load_baseline_data)
         self._arrow_btn["prev.baseline"].clicked.connect(self._load_prev_baseline_data)
         self._arrow_btn["next.baseline"].clicked.connect(self._load_next_baseline_data)
-        self._combox["patient"].activated.connect(self.__on_combox_patient_clicked)
+        self.combox["patient"].activated.connect(self.__on_combox_patient_clicked)
         self._arrow_btn["prev.patient"].clicked.connect(self._load_prev_patient_data)
         self._arrow_btn["next.patient"].clicked.connect(self._load_next_patient_data)
-        self._combox["idl.gtvt"].activated.connect(self.__on_combox_idl_gtvt_clicked)
+        self.combox["idl.gtvt"].activated.connect(self.__on_combox_idl_gtvt_clicked)
         self._arrow_btn["prev.idl.gtvt"].clicked.connect(self._load_prev_idl_gtvt_data)
         self._arrow_btn["next.idl.gtvt"].clicked.connect(self._load_next_idl_gtvt_data)
-        self._combox["idl.gtvn"].activated.connect(self.__on_combox_idl_gtvn_clicked)
+        self.combox["idl.gtvn"].activated.connect(self.__on_combox_idl_gtvn_clicked)
         self._arrow_btn["prev.idl.gtvn"].clicked.connect(self._load_prev_idl_gtvn_data)
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
 
@@ -873,11 +875,11 @@ class UiReplay(QtWidgets.QMainWindow):
         self._font.setBold(True)
 
         for i in self._text_label.keys():
-            if not isinstance(self._text_label[i], TextBox):
+            if not isinstance(self._text_label[i], IDLStepLabel):
                 self._text_label[i].setFont(self._font)
 
-        for i in self._combox.keys():
-            self._combox[i].setFont(self._font)
+        for i in self.combox.keys():
+            self.combox[i].setFont(self._font)
 
         for i in self._radio_btn["color.enhance"].keys():
             self._radio_btn["color.enhance"][i].setFont(self._font)
@@ -990,7 +992,7 @@ class UiReplay(QtWidgets.QMainWindow):
         #     # combobox
         #     tmp_left += arrow_btn_width
         #     rect = QtCore.QRect(tmp_left + 1, top, width - arrow_btn_width * 2 - 2, bar_height)
-        #     self._combox[i].setGeometry(rect)
+        #     self.combox[i].setGeometry(rect)
 
         #     # btn next
         #     tmp_left += width - arrow_btn_width * 2
@@ -1133,13 +1135,13 @@ class UiReplay(QtWidgets.QMainWindow):
 
     def _enable_arrow_btns(self, combox_name: str):
         # enable/disable prev/next round buttons
-        idx = self._combox[combox_name].currentIndex()
+        idx = self.combox[combox_name].currentIndex()
         if idx == 0:
             self._arrow_btn["prev.{}".format(combox_name)].setEnabled(False)
         else:
             self._arrow_btn["prev.{}".format(combox_name)].setEnabled(True)
 
-        if idx == (self._combox[combox_name].count() - 1):
+        if idx == (self.combox[combox_name].count() - 1):
             self._arrow_btn["next.{}".format(combox_name)].setEnabled(False)
         else:
             self._arrow_btn["next.{}".format(combox_name)].setEnabled(True)
@@ -1187,8 +1189,8 @@ class UiReplay(QtWidgets.QMainWindow):
 
         combox_patients.find_identical_items(self._patients.to_list())
         combox_patients.sort()
-        self._combox["patient"].addItems(combox_patients)
-        self._combox["patient"].setEnabled(True)
+        self.combox["patient"].addItems(combox_patients)
+        self.combox["patient"].setEnabled(True)
         return combox_patients
 
     # this function is connected to widget, dont set input params to this function
@@ -1201,12 +1203,12 @@ class UiReplay(QtWidgets.QMainWindow):
         # run this after current text of baseline combox is confirmed
         self._enable_arrow_btns("baseline")
 
-        self._baseline_id = self._combox["baseline"].currentText()
+        self._baseline_id = self.combox["baseline"].currentText()
 
         # reset comboboxes
         for i in ["patient", "idl.gtvt", "idl.gtvn"]:
-            self._combox[i].clear()
-            self._combox[i].setEnabled(False)
+            self.combox[i].clear()
+            self.combox[i].setEnabled(False)
             self._arrow_btn["prev.{}".format(i)].setEnabled(False)
             self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
@@ -1265,12 +1267,12 @@ class UiReplay(QtWidgets.QMainWindow):
         # (1) patient combox update
         # (2) baseline combox update, but can not find cur patient in new baseline dir
         if reset_patient is True:
-            self._cur_patient = self._combox["patient"].currentText()
+            self._cur_patient = self.combox["patient"].currentText()
             # self._reset_zoomin()
 
         # triggered by baseline combox update, and find cur patient in new baseline dir
         else:
-            self._combox["patient"].setCurrentText(self._cur_patient)
+            self.combox["patient"].setCurrentText(self._cur_patient)
 
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
@@ -1278,8 +1280,8 @@ class UiReplay(QtWidgets.QMainWindow):
 
         # reset comboboxes
         for i in ["idl.gtvt", "idl.gtvn"]:
-            self._combox[i].clear()
-            self._combox[i].setEnabled(False)
+            self.combox[i].clear()
+            self.combox[i].setEnabled(False)
             self._arrow_btn["prev.{}".format(i)].setEnabled(False)
             self._arrow_btn["next.{}".format(i)].setEnabled(False)
 
@@ -1310,18 +1312,18 @@ class UiReplay(QtWidgets.QMainWindow):
                             os.path.join(Path(idl_result_dir).name, round_folder)
                         )
 
-            self._combox[i].addItems(combox_items)
+            self.combox[i].addItems(combox_items)
 
             # enable idl.gtvt/gtvn combobox
-            self._combox[i].setEnabled(True)
+            self.combox[i].setEnabled(True)
             self._enable_arrow_btns(i)
 
             # no idl found, show baseline
-            if self._combox[i].count() == 1:
-                self._combox[i].setCurrentIndex(0)
+            if self.combox[i].count() == 1:
+                self.combox[i].setCurrentIndex(0)
             # otherwise, show first idl result
             else:
-                self._combox[i].setCurrentIndex(1)
+                self.combox[i].setCurrentIndex(1)
 
         self._load_multi_modal_imgs()
         self.__load_labels()
@@ -1336,7 +1338,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 reset_id = False
             elif (
                 os.path.join(self._idl_id[gtv], self._idl_round[gtv])
-                not in self._combox["idl.{}".format(gtv)].currentText()
+                not in self.combox["idl.{}".format(gtv)].currentText()
             ):
                 reset_id = True
             else:
@@ -1393,7 +1395,7 @@ class UiReplay(QtWidgets.QMainWindow):
         # (1) idl combox update
         # (2) patient combox update, but can not find cur patient in idl dir
         if reset_id is True:
-            combox_item = self._combox["idl.{}".format(gtv)].currentText()
+            combox_item = self.combox["idl.{}".format(gtv)].currentText()
             if combox_item == "baseline":
                 self._idl_id[gtv] = "baseline"
                 self._idl_round[gtv] = "round=00"
@@ -1405,9 +1407,9 @@ class UiReplay(QtWidgets.QMainWindow):
         # triggered by patient combox update, and find cur patient in idl.gtvn dir
         else:
             if self._idl_id[gtv] == "baseline":
-                self._combox["idl.{}".format(gtv)].setCurrentText("baseline")
+                self.combox["idl.{}".format(gtv)].setCurrentText("baseline")
             else:
-                self._combox["idl.{}".format(gtv)].setCurrentText(
+                self.combox["idl.{}".format(gtv)].setCurrentText(
                     os.path.join(self._idl_id[gtv], self._idl_round[gtv])
                 )
 
@@ -1543,74 +1545,74 @@ class UiReplay(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def _load_prev_baseline_data(self):
-        idx = self._combox["baseline"].currentIndex() - 1
+        idx = self.combox["baseline"].currentIndex() - 1
         if idx < 0:
             return
-        prev_baseline = self._combox["baseline"].itemText(idx)
-        self._combox["baseline"].setCurrentText(prev_baseline)
+        prev_baseline = self.combox["baseline"].itemText(idx)
+        self.combox["baseline"].setCurrentText(prev_baseline)
         self._load_baseline_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_next_baseline_data(self):
-        idx = self._combox["baseline"].currentIndex() + 1
-        if idx > self._combox["baseline"].count() - 1:
+        idx = self.combox["baseline"].currentIndex() + 1
+        if idx > self.combox["baseline"].count() - 1:
             return
-        next_baseline = self._combox["baseline"].itemText(idx)
-        self._combox["baseline"].setCurrentText(next_baseline)
+        next_baseline = self.combox["baseline"].itemText(idx)
+        self.combox["baseline"].setCurrentText(next_baseline)
         self._load_baseline_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_prev_idl_gtvn_data(self):
-        idx = self._combox["idl.gtvn"].currentIndex() - 1
+        idx = self.combox["idl.gtvn"].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
-        self._combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
+        prev_idl_gtvn = self.combox["idl.gtvn"].itemText(idx)
+        self.combox["idl.gtvn"].setCurrentText(prev_idl_gtvn)
         self._load_idl_gtvn_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_next_idl_gtvn_data(self):
-        idx = self._combox["idl.gtvn"].currentIndex() + 1
-        if idx > self._combox["idl.gtvn"].count() - 1:
+        idx = self.combox["idl.gtvn"].currentIndex() + 1
+        if idx > self.combox["idl.gtvn"].count() - 1:
             return
-        next_idl_gtvn = self._combox["idl.gtvn"].itemText(idx)
-        self._combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
+        next_idl_gtvn = self.combox["idl.gtvn"].itemText(idx)
+        self.combox["idl.gtvn"].setCurrentText(next_idl_gtvn)
         self._load_idl_gtvn_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_prev_idl_gtvt_data(self):
-        idx = self._combox["idl.gtvt"].currentIndex() - 1
+        idx = self.combox["idl.gtvt"].currentIndex() - 1
         if idx < 0:
             return
-        prev_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
-        self._combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
+        prev_idl_gtvt = self.combox["idl.gtvt"].itemText(idx)
+        self.combox["idl.gtvt"].setCurrentText(prev_idl_gtvt)
         self._load_idl_gtvt_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_next_idl_gtvt_data(self):
-        idx = self._combox["idl.gtvt"].currentIndex() + 1
-        if idx > self._combox["idl.gtvt"].count() - 1:
+        idx = self.combox["idl.gtvt"].currentIndex() + 1
+        if idx > self.combox["idl.gtvt"].count() - 1:
             return
-        next_idl_gtvt = self._combox["idl.gtvt"].itemText(idx)
-        self._combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
+        next_idl_gtvt = self.combox["idl.gtvt"].itemText(idx)
+        self.combox["idl.gtvt"].setCurrentText(next_idl_gtvt)
         self._load_idl_gtvt_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_prev_patient_data(self):
-        idx = self._combox["patient"].currentIndex() - 1
+        idx = self.combox["patient"].currentIndex() - 1
         if idx < 0:
             return
-        prev_patient = self._combox["patient"].itemText(idx)
-        self._combox["patient"].setCurrentText(prev_patient)
+        prev_patient = self.combox["patient"].itemText(idx)
+        self.combox["patient"].setCurrentText(prev_patient)
         self._load_patient_data()
 
     # this function is connected to widget, dont set input params to this function
     def _load_next_patient_data(self):
-        idx = self._combox["patient"].currentIndex() + 1
-        if idx > self._combox["patient"].count() - 1:
+        idx = self.combox["patient"].currentIndex() + 1
+        if idx > self.combox["patient"].count() - 1:
             return
-        next_patient = self._combox["patient"].itemText(idx)
-        self._combox["patient"].setCurrentText(next_patient)
+        next_patient = self.combox["patient"].itemText(idx)
+        self.combox["patient"].setCurrentText(next_patient)
         self._load_patient_data()
 
     # this function is connected to widget, dont set input params to this function
@@ -1766,9 +1768,9 @@ class UiReplay(QtWidgets.QMainWindow):
             #     )
 
             # resize and fit img qlabel
-            rgb_img = self._fit_img_qlabel(rgb_img, self.img_box[img_name])
+            rgb_img = self._fit_img_box(rgb_img, self.img_box[img_name])
 
-            # blur after _fit_img_qlabel will gain better effect
+            # blur after _fit_img_box will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
             # replay mode, place the name of img on the top layer at the end of the list
@@ -1829,7 +1831,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     if segment.max() <= 0:
                         continue
 
-                segment = self._fit_img_qlabel(segment, self.img_box[img_name])
+                segment = self._fit_img_box(segment, self.img_box[img_name])
 
                 # points, higher thickness (otherwise cant see the points)
                 if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
@@ -1838,7 +1840,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 else:
                     thickness = 2
                     # blur, make the contours looks better on the UI
-                    # blur after _fit_img_qlabel()
+                    # blur after _fit_img_box()
                     segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
 
                 # find and draw contours
@@ -2084,3 +2086,34 @@ class UiReplay(QtWidgets.QMainWindow):
             print("Current focus:", focused_widget.objectName())
         else:
             print("No focus at the moment.")
+
+    # def keyPressEvent(self, event: QtGui.QKeyEvent):
+    #         if event.key() == Qt.Key_Space:  # Check if the spacebar is pressed
+    #             self.setStyleSheet("QWidget { background-color: %s }" % QtGui.QColor(Qt.yellow).name())
+    #         else:
+    #             super().keyPressEvent(event)
+
+    # def
+    #     ct_img = self.window().img_3d[Modal.CT]
+    #     if ct_img is None:
+    #         return
+
+    #     if self.plane == Plane.SAGITTAL:
+    #         slices_count = ct_img.shape[2]
+    #     elif self.plane == Plane.CORONAL:
+    #         slices_count = ct_img.shape[1]
+    #     elif self.plane == Plane.TRANSVERSE:
+    #         slices_count = ct_img.shape[0]
+
+    #     slice_delta = event.angleDelta().y() // 120
+    #     if self.plane == Plane.CORONAL:
+    #         slice_delta = -slice_delta
+
+    #     self.window().cur_slice_id[self.plane] -= slice_delta
+    #     # limite slice_id in range (0, slices_count)
+    #     self.window().cur_slice_id[self.plane] %= slices_count
+
+    #     if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+    #         self.window().refresh_imgs(img_name=self.plane)
+    #     else:
+    #         self.window().refresh_imgs()
