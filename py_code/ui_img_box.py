@@ -325,3 +325,13 @@ class ImgBox(QLabel):
             self.window().refresh_imgs(img_name=self.plane)
         else:
             self.window().refresh_imgs()
+
+    # This function is called when the mouse enters the QLabel area
+    def enterEvent(self, event):
+        self.window().change_mouse_cursor()
+        super().enterEvent(event)
+
+    # This function is called when the mouse leaves the QLabel area
+    def leaveEvent(self, event):
+        self.window().restore_mouse_cursor()
+        super().leaveEvent(event)

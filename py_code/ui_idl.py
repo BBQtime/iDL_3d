@@ -407,7 +407,7 @@ class UiIDL(UiReplay):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            self.__set_mouse_cursor("pen")
+            # self.__set_mouse_cursor("pen")
             self._text_label["draw.size"].setText("Pen Size")
 
     def _init_widgets_todo_list(self):
@@ -463,7 +463,9 @@ class UiIDL(UiReplay):
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
         v_layout.setSpacing(3)
-        v_layout.addWidget(self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight)
+        v_layout.addWidget(
+            self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
+        )
 
         for i in self._text_label.keys():
             if i in idl_step_list:
@@ -599,7 +601,7 @@ class UiIDL(UiReplay):
         self.__idl_gtvn_thread.stop()
 
         # update widgets
-        self.__set_mouse_cursor("pen")
+        # self.__set_mouse_cursor("pen")
 
         # enable pen and eraser for gtvt delineation
         for i in ["pen", "eraser"]:
@@ -643,7 +645,7 @@ class UiIDL(UiReplay):
                 self._modal_fixed_mode_switch_plane(plane)
                 if self.drawing_mode == DrawingMode.GTVT_ERASER:
                     self.drawing_mode = DrawingMode.GTVT_PEN
-                    self.__set_mouse_cursor("pen")
+                    # self.__set_mouse_cursor("pen")
                     self._text_label["draw.size"].setText("Pen Size")
                 return
 
@@ -840,7 +842,7 @@ class UiIDL(UiReplay):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            self.__set_mouse_cursor("eraser")
+            # self.__set_mouse_cursor("eraser")
             self._text_label["draw.size"].setText("Eraser Size")
 
     def __update_idl_gtvt_progress_bar(self, progress_signal: float):
@@ -874,12 +876,15 @@ class UiIDL(UiReplay):
             elif self.get_cur_patient_idl_step() == IDLStep.WAITING:
                 self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
                 self._radio_btn["correct.gtvt"].setChecked(True)
-                self.__set_mouse_cursor("pen")
                 self.drawing_mode = DrawingMode.GTVT_PEN
                 for i in ["pen", "eraser", "clear"]:
                     self._btn[i].setEnabled(True)
                 self._slider["draw.size"].show()
                 self._text_label["draw.size"].show()
+                # change mouse cursor after:
+                # (1) idl step updated
+                # (2) drawing mode updated
+                self.change_mouse_cursor(check_mouse_hover=True)
 
             # idl step can not be other values
             else:
@@ -920,7 +925,7 @@ class UiIDL(UiReplay):
             # update idl step before refresh img_boxes
             self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
             self._radio_btn["correct.gtvt"].setChecked(True)
-            self.__set_mouse_cursor("pen")
+            # self.__set_mouse_cursor("pen")
             self.drawing_mode = DrawingMode.GTVT_PEN
             for i in ["pen", "eraser", "clear"]:
                 self._btn[i].setEnabled(True)
@@ -975,6 +980,7 @@ class UiIDL(UiReplay):
         self.__progress_bar["gtvn"].hide()
 
         # update idl step and widgets
+
         # (1) gtvt thread is completed
         if not self.__idl_gtvt_thread.is_running:
             self.update_cur_patient_idl_step(IDLStep.CORRECT_BOTH)
@@ -983,16 +989,19 @@ class UiIDL(UiReplay):
                 self._radio_btn["correct.{}".format(i)].show()
             # dont change drawing mode, because user is correcting gtvt
 
-        # (2) only correct gtvn
+        # (2) idl.gtvt thread is still running, only correct gtvn
         else:
             self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVN)
             self._radio_btn["correct.gtvn"].setChecked(True)
-            self.__set_mouse_cursor("pen")
             self.drawing_mode = DrawingMode.GTVN_PEN
             for i in ["pen", "eraser", "clear"]:
                 self._btn[i].setEnabled(True)
             self._slider["draw.size"].show()
             self._text_label["draw.size"].show()
+            # change mouse cursor after:
+            # (1) idl step updated
+            # (2) drawing mode updated
+            self.change_mouse_cursor(check_mouse_hover=True)
 
         # show gtvt/gtvn switch radio buttons
         if self.get_cur_patient_idl_step() == IDLStep.CORRECT_BOTH:
@@ -1088,32 +1097,73 @@ class UiIDL(UiReplay):
                     image.setPixelColor(x, y, new_qcolor)
         return QtGui.QPixmap.fromImage(image)
 
-    def __set_mouse_cursor(self, cursor_type: str):
-        if cursor_type not in ["pen", "eraser"]:
-            Debug.error_exit("'cursor_type' must be one of 'pen' or 'eraser'!")
+    def restore_mouse_cursor(self):
+        if self.get_cur_patient_idl_step() in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            self.setCursor(Qt.ArrowCursor)
 
-        cursor_size = 32  # no larger than 32
-        cursor_pixmap = QtGui.QPixmap(
-            (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(cursor_type)))
-        )
+    def change_mouse_cursor(self, check_mouse_hover: bool = False):
+        if self.get_cur_patient_idl_step() not in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            return
 
-        # # change color
-        # old_color = (2, 252, 240)
-        # cursor_pixmap = self.__change_color(
-        #     pixmap=cursor_pixmap,
-        #     old_color=old_color,
-        #     new_color=self._color["gtvt.pred"],
-        # )
+        if check_mouse_hover:
+            is_mouse_over_img = False
+            for i in self.img_box.keys():
+                if self.img_box[i].underMouse():
+                    is_mouse_over_img = True
+            if not is_mouse_over_img:
+                return
 
-        cursor_pixmap = cursor_pixmap.scaled(
-            cursor_size, cursor_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        if cursor_type == "pen":
-            self.setCursor(QtGui.QCursor(cursor_pixmap, 0, cursor_size * 0.95))
-        elif cursor_type == "eraser":
-            self.setCursor(
-                QtGui.QCursor(cursor_pixmap, cursor_size * 0.2, cursor_size * 0.8)
+        if self.drawing_mode == DrawingMode.GTVT_PEN:
+            cursor_pixmap = self.__cursor["gtvt"]["pen"]
+        elif self.drawing_mode == DrawingMode.GTVT_ERASER:
+            cursor_pixmap = self.__cursor["gtvt"]["eraser"]
+        elif self.drawing_mode == DrawingMode.GTVN_PEN:
+            cursor_pixmap = self.__cursor["gtvn"]["pen"]
+        elif self.drawing_mode == DrawingMode.GTVN_ERASER:
+            cursor_pixmap = self.__cursor["gtvn"]["eraser"]
+
+        cursor_size = 32
+        if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+            pos_x = 0
+            pos_y = cursor_size * 0.95
+        elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            pos_x = cursor_size * 0.2
+            pos_y = cursor_size * 0.8
+
+        self.setCursor(QtGui.QCursor(cursor_pixmap, pos_x, pos_y))
+
+    def _init_widgets_cursor(self):
+        self.__cursor = Dict()
+        cursor_size = 32  # cursor size is no larger than 32
+        origin_color = (0, 0, 0)
+        for i in ["pen", "eraser"]:
+            origin_cursor = QtGui.QPixmap(
+                (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(i)))
             )
+            for gtv in ["gtvt", "gtvn"]:
+                self.__cursor[gtv][i] = origin_cursor.scaled(
+                    cursor_size,
+                    cursor_size,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                # change color (after cursor pixmap is scaled to 32*32)
+                # as __change_color is not efficiency
+                self.__cursor[gtv][i] = self.__change_color(
+                    pixmap=self.__cursor[gtv][i],
+                    old_color=origin_color,
+                    new_color=self._color["{}.pred".format(gtv)],
+                )
 
     def _init_color(self):
         super()._init_color()
@@ -1386,7 +1436,9 @@ class UiIDL(UiReplay):
             self._btn[i].setFixedWidth(50)
             self._btn[i].setFixedHeight(40)
             # set btn icons
-            icon = QtGui.QIcon(os.path.join(g.PROJ_DIR, "icons", "{}.png".format(i)))
+            icon = QtGui.QIcon(
+                os.path.join(g.PROJ_DIR, "icons", "{}_btn.png".format(i))
+            )
             if i == "pen":
                 self._btn[i].setIconSize(QSize(24, 24))
             elif i == "eraser":

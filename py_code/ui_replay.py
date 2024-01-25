@@ -915,6 +915,10 @@ class UiReplay(QtWidgets.QMainWindow):
     def _init_widgets_annotation(self):
         return
 
+    # virtual function (for ui_idl)
+    def _init_widgets_cursor(self):
+        return
+
     def _init_widgets(self):
         self._collap = Dict()
         self._radio_btn = Dict()
@@ -923,6 +927,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._slider = Dict()
         self._btn = Dict()
 
+        self._init_widgets_cursor()
         self._init_widgets_todo_list()
         self._init_widgets_combox()
         self._init_widgets_img_boxes()
