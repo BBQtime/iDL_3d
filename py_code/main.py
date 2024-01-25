@@ -19,6 +19,7 @@ Debug.clear_linux_trash()
 ############# UI #############
 if 1:
     app = QApplication(sys.argv)
+    # dark theme
     app.setPalette(DarkPalette())
 
     if 1:
@@ -30,6 +31,12 @@ if 1:
         main_win = UiReplay()
 
     main_win.show()
+
+    # install the event filter on the QApplication instance
+    # This ensures that key press events will always trigger the main window's event handler,
+    # regardless of which widget currently has focus.
+    app.installEventFilter(main_win)
+
     sys.exit(app.exec_())
 
 

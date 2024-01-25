@@ -442,7 +442,7 @@ class UiIDL(UiReplay):
         #     self._text_label[i].hide()
 
         # button size 562*187
-        btn_h = 30
+        btn_h = 27
         btn_w = round(btn_h * 562 / 187)
         self._btn["next.step"] = QtWidgets.QPushButton()
         self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))

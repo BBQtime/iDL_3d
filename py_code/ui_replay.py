@@ -2088,33 +2088,19 @@ class UiReplay(QtWidgets.QMainWindow):
         else:
             print("No focus at the moment.")
 
-    # def keyPressEvent(self, event: QtGui.QKeyEvent):
-    #         if event.key() == Qt.Key_Space:  # Check if the spacebar is pressed
-    #             self.setStyleSheet("QWidget { background-color: %s }" % QtGui.QColor(Qt.yellow).name())
-    #         else:
-    #             super().keyPressEvent(event)
-
-    # def
-    #     ct_img = self.window().img_3d[Modal.CT]
-    #     if ct_img is None:
-    #         return
-
-    #     if self.plane == Plane.SAGITTAL:
-    #         slices_count = ct_img.shape[2]
-    #     elif self.plane == Plane.CORONAL:
-    #         slices_count = ct_img.shape[1]
-    #     elif self.plane == Plane.TRANSVERSE:
-    #         slices_count = ct_img.shape[0]
-
-    #     slice_delta = event.angleDelta().y() // 120
-    #     if self.plane == Plane.CORONAL:
-    #         slice_delta = -slice_delta
-
-    #     self.window().cur_slice_id[self.plane] -= slice_delta
-    #     # limite slice_id in range (0, slices_count)
-    #     self.window().cur_slice_id[self.plane] %= slices_count
-
-    #     if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-    #         self.window().refresh_imgs(img_name=self.plane)
-    #     else:
-    #         self.window().refresh_imgs()
+    def eventFilter(self, source, event):
+        # Check if the event is a key press event
+        if event.type() == QtCore.QEvent.KeyPress:
+            # Check if the key pressed is the spacebar
+            if event.key() == Qt.Key_Space:
+                # only switch the mix slider in PLANE_FIXED mode
+                if self.display_mode() == DisplayMode.PLANE_FIXED:
+                    if self._slider["mix"].value() >= 50:
+                        new_val = self._slider["mix"].minimum()
+                        self._slider["mix"].setValue(new_val)
+                    else:
+                        new_val = self._slider["mix"].maximum()
+                        self._slider["mix"].setValue(new_val)
+                return True  # Event is handled
+        # For other events, call the base class method to ensure standard event processing
+        return super().eventFilter(source, event)
