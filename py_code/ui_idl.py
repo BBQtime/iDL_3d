@@ -441,8 +441,30 @@ class UiIDL(UiReplay):
         # ]:
         #     self._text_label[i].hide()
 
+        # button size 562*187
+        btn_h = 30
+        btn_w = round(btn_h * 562 / 187)
+        self._btn["next.step"] = QtWidgets.QPushButton()
+        self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
+        self._btn["next.step"].clicked.connect(self.__on_btn_next_step_clicked)
+        # set btn icons
+        pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next_step.png"))
+        # pixmap = pixmap.scaled(100, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        pixmap = pixmap.scaled(
+            btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+        )
+        icon = QtGui.QIcon(pixmap)
+        self._btn["next.step"].setIconSize(QSize(btn_w, btn_h))
+        self._btn["next.step"].setIcon(icon)
+        self._btn["next.step"].setStyleSheet(
+            "QPushButton { border: none; margin: 0px; padding: 0px; }"
+        )
+
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
+        v_layout.setSpacing(3)
+        v_layout.addWidget(self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight)
+
         for i in self._text_label.keys():
             if i in idl_step_list:
                 v_layout.addWidget(self._text_label[i])
@@ -465,11 +487,11 @@ class UiIDL(UiReplay):
 
         # disable pen and eraser as clicking gtvt center dont need them
         for i in ["pen", "eraser"]:
-            self.__btn[i].setEnabled(False)
+            self._btn[i].setEnabled(False)
 
         # enable buttons
-        for i in ["clear", "confirm"]:
-            self.__btn[i].setEnabled(True)
+        for i in ["clear", "next.step"]:
+            self._btn[i].setEnabled(True)
 
         # restore default cursor
         self.setCursor(Qt.ArrowCursor)
@@ -581,7 +603,7 @@ class UiIDL(UiReplay):
 
         # enable pen and eraser for gtvt delineation
         for i in ["pen", "eraser"]:
-            self.__btn[i].setEnabled(True)
+            self._btn[i].setEnabled(True)
         self._slider["draw.size"].show()
         self._text_label["draw.size"].show()
 
@@ -666,7 +688,7 @@ class UiIDL(UiReplay):
         # restore default cursor
         self.setCursor(Qt.ArrowCursor)
         for i in ["pen", "eraser"]:
-            self.__btn[i].setEnabled(False)
+            self._btn[i].setEnabled(False)
         self._slider["draw.size"].hide()
         self._text_label["draw.size"].hide()
 
@@ -855,7 +877,7 @@ class UiIDL(UiReplay):
                 self.__set_mouse_cursor("pen")
                 self.drawing_mode = DrawingMode.GTVT_PEN
                 for i in ["pen", "eraser", "clear"]:
-                    self.__btn[i].setEnabled(True)
+                    self._btn[i].setEnabled(True)
                 self._slider["draw.size"].show()
                 self._text_label["draw.size"].show()
 
@@ -901,7 +923,7 @@ class UiIDL(UiReplay):
             self.__set_mouse_cursor("pen")
             self.drawing_mode = DrawingMode.GTVT_PEN
             for i in ["pen", "eraser", "clear"]:
-                self.__btn[i].setEnabled(True)
+                self._btn[i].setEnabled(True)
             self._slider["draw.size"].show()
             self._text_label["draw.size"].show()
 
@@ -909,10 +931,10 @@ class UiIDL(UiReplay):
         else:
             # update idl step before refresh img_boxes
             self.update_cur_patient_idl_step(IDLStep.WAITING)
-            self.__btn["clear"].setEnabled(False)
+            self._btn["clear"].setEnabled(False)
 
-        # disable "confirm" button, its not needed anymore
-        self.__btn["confirm"].setEnabled(False)
+        # disable "next.step" button, its not needed anymore
+        self._btn["next.step"].setEnabled(False)
 
         #  delete cross and refresh to show gtvn clicks
         self.delete_all_crosses()
@@ -968,7 +990,7 @@ class UiIDL(UiReplay):
             self.__set_mouse_cursor("pen")
             self.drawing_mode = DrawingMode.GTVN_PEN
             for i in ["pen", "eraser", "clear"]:
-                self.__btn[i].setEnabled(True)
+                self._btn[i].setEnabled(True)
             self._slider["draw.size"].show()
             self._text_label["draw.size"].show()
 
@@ -986,7 +1008,7 @@ class UiIDL(UiReplay):
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
     # this function is connected to widget, dont set input params to this function
-    def __on_btn_confirm_clicked(self):
+    def __on_btn_next_step_clicked(self):
         idl_step = self.get_cur_patient_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
@@ -1359,26 +1381,24 @@ class UiIDL(UiReplay):
         self._radio_btn["correct.gtvt"].setChecked(True)
 
         # annotation buttons
-        self.__btn = Dict()
-        for i in ["pen", "eraser", "clear", "confirm"]:
-            self.__btn[i] = QtWidgets.QPushButton()
-            self.__btn[i].setFixedWidth(50)
-            self.__btn[i].setFixedHeight(40)
+        for i in ["pen", "eraser", "clear"]:
+            self._btn[i] = QtWidgets.QPushButton()
+            self._btn[i].setFixedWidth(50)
+            self._btn[i].setFixedHeight(40)
             # set btn icons
             icon = QtGui.QIcon(os.path.join(g.PROJ_DIR, "icons", "{}.png".format(i)))
             if i == "pen":
-                self.__btn[i].setIconSize(QSize(24, 24))
+                self._btn[i].setIconSize(QSize(24, 24))
             elif i == "eraser":
-                self.__btn[i].setIconSize(QSize(31, 31))
-            else:
-                self.__btn[i].setIconSize(QSize(25, 25))
-            self.__btn[i].setIcon(icon)
+                self._btn[i].setIconSize(QSize(31, 31))
+            elif i == "clear":
+                self._btn[i].setIconSize(QSize(25, 25))
+            self._btn[i].setIcon(icon)
 
         # connect btns to functions
-        self.__btn["pen"].clicked.connect(self.__on_btn_pen_clicked)
-        self.__btn["eraser"].clicked.connect(self.__on_btn_eraser_clicked)
-        self.__btn["clear"].clicked.connect(self.__on_btn_clear_clicked)
-        self.__btn["confirm"].clicked.connect(self.__on_btn_confirm_clicked)
+        self._btn["pen"].clicked.connect(self.__on_btn_pen_clicked)
+        self._btn["eraser"].clicked.connect(self.__on_btn_eraser_clicked)
+        self._btn["clear"].clicked.connect(self.__on_btn_clear_clicked)
 
         # gtvt/gtvn progress bars
         self.__progress_bar = Dict()
@@ -1412,8 +1432,8 @@ class UiIDL(UiReplay):
 
         # add buttons
         h_layout = QtWidgets.QHBoxLayout()
-        for i in ["pen", "eraser", "clear", "confirm"]:
-            h_layout.addWidget(self.__btn[i])
+        for i in ["pen", "eraser", "clear"]:
+            h_layout.addWidget(self._btn[i])
         v_layout.addLayout(h_layout)
 
         # add draw size slider

@@ -921,6 +921,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self._radio_group = Dict()
         self._text_label = Dict()
         self._slider = Dict()
+        self._btn = Dict()
 
         self._init_widgets_todo_list()
         self._init_widgets_combox()
