@@ -1435,6 +1435,18 @@ class UiIDL(UiReplay):
             self._btn[i] = QtWidgets.QPushButton()
             self._btn[i].setFixedWidth(50)
             self._btn[i].setFixedHeight(40)
+            # add too tip and set stylesheet
+            self._btn[i].setStyleSheet(
+                """
+            QToolTip {
+                font-weight: light;
+                color: dark-gray;
+                background-color: #fff;
+                border: 1px solid black;
+            }
+            """
+            )
+            self._btn[i].setToolTip(i.capitalize())
             # set btn icons
             icon = QtGui.QIcon(
                 os.path.join(g.PROJ_DIR, "icons", "{}_btn.png".format(i))
