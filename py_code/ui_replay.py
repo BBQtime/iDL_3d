@@ -2096,8 +2096,11 @@ class UiReplay(QtWidgets.QMainWindow):
     def eventFilter(self, source, event):
         # Check if the event is a key press event
         if event.type() == QtCore.QEvent.KeyPress:
-            # Check if the key pressed is the spacebar
+            # spacebar pressed
             if event.key() == Qt.Key_Space:
+                # image not loaded
+                if self.img_3d[Modal.CT] is None:
+                    return True
                 # only switch the mix slider in PLANE_FIXED mode
                 if self.display_mode() == DisplayMode.PLANE_FIXED:
                     if self._slider["mix"].value() >= 50:
@@ -2107,5 +2110,41 @@ class UiReplay(QtWidgets.QMainWindow):
                         new_val = self._slider["mix"].maximum()
                         self._slider["mix"].setValue(new_val)
                 return True  # Event is handled
+
+            # pageup or pagedown pressed
+            elif event.key() == Qt.Key_PageUp or event.key() == Qt.Key_PageDown:
+                # image not loaded
+                if self.img_3d[Modal.CT] is None:
+                    return True
+
+                # check which img is under mouse
+                focus_img = None
+                for i in self.img_box.keys():
+                    if self.img_box[i].underMouse():
+                        focus_img = i
+                if focus_img is None:
+                    return True
+
+                focus_plane = self.img_box[focus_img].plane
+                if focus_plane == Plane.SAGITTAL:
+                    slices_count = self.img_3d[Modal.CT].shape[2]
+                elif focus_plane == Plane.CORONAL:
+                    slices_count = self.img_3d[Modal.CT].shape[1]
+                elif focus_plane == Plane.TRANSVERSE:
+                    slices_count = self.img_3d[Modal.CT].shape[0]
+
+                if event.key() == Qt.Key_PageUp:
+                    self.cur_slice_id[focus_plane] -= 1
+                elif event.key() == Qt.Key_PageDown:
+                    self.cur_slice_id[focus_plane] += 1
+                # limite slice_id in range (0, slices_count)
+                self.cur_slice_id[focus_plane] %= slices_count
+
+                if self.display_mode() == DisplayMode.PLANE_FIXED:
+                    self.refresh_imgs(img_name=focus_img)
+                else:
+                    self.refresh_imgs()
+                return True  # Event is handled
+
         # For other events, call the base class method to ensure standard event processing
         return super().eventFilter(source, event)
