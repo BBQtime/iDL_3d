@@ -1,8 +1,9 @@
-from custom import Value
+from custom import Debug, Value
+from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
-from str_lib import DisplayMode, IDLStep, Modal, Plane
+from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
@@ -34,6 +35,9 @@ class ImgBox(QLabel):
         self.drawing_layer = QPixmap(self.size())
         self.drawing_layer.fill(Qt.transparent)
         self.pen_mode = True
+
+        # eraser circle
+        self.__circle_pos = None
 
     def clear_drawing_layer(self):
         self.drawing_layer = QPixmap(self.size())
@@ -98,16 +102,30 @@ class ImgBox(QLabel):
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
 
+        should_paint_eraser_circle = self.__should_paint_eraser_circle()
+
+        # put this infromt of draw_on_img_boxes_move()
+        # because draw_on_img_boxes_move will trigger repaint
+        if should_paint_eraser_circle:
+            self.__circle_pos = event.pos()
+
         # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
-        if event.buttons() == Qt.LeftButton:
-            if self.window().get_cur_patient_idl_step() in [
+        if (
+            event.buttons() == Qt.LeftButton
+            and self.window().get_cur_patient_idl_step()
+            in [
                 IDLStep.DRAW_GTVT,
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
-            ]:
-                self.window().draw_on_img_boxes_move(event=event, img_box=self)
+            ]
+        ):
+            # this function will trigger repaint repaint
+            self.window().draw_on_img_boxes_move(event=event, img_box=self)
+
+        elif should_paint_eraser_circle:
+            self.update()  # repaint
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
@@ -120,6 +138,38 @@ class ImgBox(QLabel):
                 IDLStep.CORRECT_BOTH,
             ]:
                 self.window().draw_on_img_boxes_release(self)
+
+    def __should_paint_eraser_circle(self):
+        if self.window().get_cur_patient_idl_step() in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ] and self.window().drawing_mode in [
+            DrawingMode.GTVT_ERASER,
+            DrawingMode.GTVN_ERASER,
+        ]:
+            return True
+        else:
+            return False
+
+    # This function is called when the mouse enters the QLabel area
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.window().change_mouse_cursor()
+        if self.__should_paint_eraser_circle():
+            self.__circle_pos = event.pos()
+            self.update()  # repaint
+        else:
+            self.__circle_pos = None
+
+    # This function is called when the mouse leaves the QLabel area
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.window().restore_mouse_cursor()
+        self.__circle_pos = None
+        if self.__should_paint_eraser_circle():
+            self.update()  # repaint
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -136,6 +186,26 @@ class ImgBox(QLabel):
             else:
                 painter.setOpacity(180 / 255)
             painter.drawPixmap(self.rect(), self.drawing_layer)
+
+        # draw eraser circle
+        if self.__circle_pos:
+            # circle color
+            if self.window().drawing_mode == DrawingMode.GTVT_ERASER:
+                circle_color = self.window().color["gtvt.pred"]
+            elif self.window().drawing_mode == DrawingMode.GTVN_ERASER:
+                circle_color = self.window().color["gtvn.pred"]
+            else:
+                Debug.error_exit("Invalid drawing_mode value!")
+            circle_color = QtGui.QColor(*circle_color)
+            pen = QtGui.QPen(circle_color)
+            # circle size
+            pen_size = 2
+            pen.setWidth(pen_size)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            eraser_size = self.window().get_eraser_size() - pen_size
+            # Draw circle at the mouse position
+            painter.drawEllipse(self.__circle_pos, eraser_size, eraser_size)
 
     def set_background(self, img: QImage):
         self.background_img = QPixmap.fromImage(img)
@@ -325,13 +395,3 @@ class ImgBox(QLabel):
             self.window().refresh_imgs(img_name=self.plane)
         else:
             self.window().refresh_imgs()
-
-    # This function is called when the mouse enters the QLabel area
-    def enterEvent(self, event):
-        self.window().change_mouse_cursor()
-        super().enterEvent(event)
-
-    # This function is called when the mouse leaves the QLabel area
-    def leaveEvent(self, event):
-        self.window().restore_mouse_cursor()
-        super().leaveEvent(event)

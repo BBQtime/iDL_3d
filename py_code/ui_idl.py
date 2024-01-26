@@ -158,8 +158,8 @@ class UiIDL(UiReplay):
             return
 
         pen_size = self.get_pen_size()
-        eraser_size = pen_size + 2
-        eraser_color = QtGui.QColor(*self._color["eraser"])
+        eraser_size = self.get_eraser_size()
+        eraser_color = QtGui.QColor(*self.color["eraser"])
 
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
@@ -181,9 +181,9 @@ class UiIDL(UiReplay):
             painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
 
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                pen_color = QtGui.QColor(*self._color["gtvt.pred"])
+                pen_color = QtGui.QColor(*self.color["gtvt.pred"])
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                pen_color = QtGui.QColor(*self._color["gtvn.pred"])
+                pen_color = QtGui.QColor(*self.color["gtvn.pred"])
 
             if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
                 painter.setPen(
@@ -1162,17 +1162,17 @@ class UiIDL(UiReplay):
                 self.__cursor[gtv][i] = self.__change_color(
                     pixmap=self.__cursor[gtv][i],
                     old_color=origin_color,
-                    new_color=self._color["{}.pred".format(gtv)],
+                    new_color=self.color["{}.pred".format(gtv)],
                 )
 
     def _init_color(self):
         super()._init_color()
-        self._color["gtvt.annotation"] = self._color["yellow"]
-        self._color["gtvt.correction"] = self._color["yellow"]
-        self._color["gtvn.correction"] = self._color["cyan"]
-        self._color["eraser"] = self._color["black"]  # transparent
-        self._color["gtvt.pred.final"] = self._color["gtvt.pred"]
-        self._color["gtvn.pred.final"] = self._color["gtvn.pred"]
+        self.color["gtvt.annotation"] = self.color["yellow"]
+        self.color["gtvt.correction"] = self.color["yellow"]
+        self.color["gtvn.correction"] = self.color["cyan"]
+        self.color["eraser"] = self.color["black"]  # transparent
+        self.color["gtvt.pred.final"] = self.color["gtvt.pred"]
+        self.color["gtvn.pred.final"] = self.color["gtvn.pred"]
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
@@ -1651,6 +1651,9 @@ class UiIDL(UiReplay):
     def get_pen_size(self):
         return self._slider["draw.size"].value()
 
+    def get_eraser_size(self):
+        return self._slider["draw.size"].value() + 4
+
     def _load_baseline_data(self):
         # self._reset_zoomin()
         self._clear_img_3d()
@@ -1670,7 +1673,7 @@ class UiIDL(UiReplay):
                 qimg=qimg,
                 text=text,
                 pos=(pos_x, pos_y),
-                color=self._color["green"],
+                color=self.color["green"],
             )
             return
 
@@ -1695,7 +1698,7 @@ class UiIDL(UiReplay):
             qimg=qimg,
             text=text,
             pos=(pos_x, pos_y),
-            color=self._color["green"],
+            color=self.color["green"],
         )
 
         # add info of annotated status for drawing gtvt
@@ -1706,10 +1709,10 @@ class UiIDL(UiReplay):
                 text = plane.capitalize()
                 if self.__gtvt_annotated_status[plane] is True:
                     text += " ✓"
-                    color = self._color["green"]
+                    color = self.color["green"]
                 else:
                     text += " ✕"
-                    color = self._color["red"]
+                    color = self.color["red"]
                 self._qimg_draw_text(
                     qimg=qimg,
                     text=text,
@@ -1736,7 +1739,7 @@ class UiIDL(UiReplay):
                     qimg=qimg,
                     text=text,
                     pos=(pos_x, pos_y),
-                    color=self._color["gtv{}.pred".format(i)],
+                    color=self.color["gtv{}.pred".format(i)],
                 )
                 pos_x += 45
 

@@ -383,24 +383,24 @@ class UiReplay(QtWidgets.QMainWindow):
         return img
 
     def _init_color(self):
-        self._color = Dict()
-        self._color["black"] = (0, 0, 0)
-        self._color["red"] = (255, 50, 0)
-        self._color["green"] = (0, 255, 64)
-        self._color["magenta"] = (255, 70, 200)
-        self._color["cyan"] = (0, 255, 255)
-        self._color["blue"] = (0, 160, 255)
-        self._color["yellow"] = (255, 255, 0)
-        self._color["orange"] = (255, 120, 0)
-        self._color["gtvt.pred"] = self._color["yellow"]
-        self._color["gtvt.label"] = self._color["orange"]
-        self._color["gtvn.pred"] = self._color["cyan"]
-        self._color["gtvn.label"] = self._color["blue"]
-        self._color["gtvt.annotation"] = self._color["magenta"]
-        self._color["gtvt.correction"] = self._color["red"]
-        self._color["gtvn.correction"] = self._color["red"]
-        self._color["gtvt.click"] = self._color["magenta"]
-        self._color["gtvn.clicks"] = self._color["magenta"]
+        self.color = Dict()
+        self.color["black"] = (0, 0, 0)
+        self.color["red"] = (255, 50, 0)
+        self.color["green"] = (0, 255, 64)
+        self.color["magenta"] = (255, 70, 200)
+        self.color["cyan"] = (0, 255, 255)
+        self.color["blue"] = (0, 160, 255)
+        self.color["yellow"] = (255, 255, 0)
+        self.color["orange"] = (255, 120, 0)
+        self.color["gtvt.pred"] = self.color["yellow"]
+        self.color["gtvt.label"] = self.color["orange"]
+        self.color["gtvn.pred"] = self.color["cyan"]
+        self.color["gtvn.label"] = self.color["blue"]
+        self.color["gtvt.annotation"] = self.color["magenta"]
+        self.color["gtvt.correction"] = self.color["red"]
+        self.color["gtvn.correction"] = self.color["red"]
+        self.color["gtvt.click"] = self.color["magenta"]
+        self.color["gtvn.clicks"] = self.color["magenta"]
 
     def setupUi(self, Core):
         Core.setObjectName("Core")
@@ -1756,7 +1756,7 @@ class UiReplay(QtWidgets.QMainWindow):
             #             img=rgb_img_zeros,
             #             pt1=(x1, y1),
             #             pt2=(x2, y2),
-            #             color=self._color["gtvt.annotation"],
+            #             color=self.color["gtvt.annotation"],
             #             thickness=-1,
             #         )
             #         if selected_slices_mask is None:
@@ -1857,7 +1857,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     image=rgb_img,
                     contours=contours,
                     contourIdx=-1,
-                    color=self._color[seg_name],
+                    color=self.color[seg_name],
                     thickness=thickness,
                 )
 
@@ -1895,19 +1895,19 @@ class UiReplay(QtWidgets.QMainWindow):
             qimg=qimg,
             text="Label:",
             pos=(pos_x[0], pos_y[0]),
-            color=self._color["green"],
+            color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVt",
             pos=(pos_x[1], pos_y[0]),
-            color=self._color["gtvt.label"],
+            color=self.color["gtvt.label"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
             pos=(pos_x[2], pos_y[0]),
-            color=self._color["gtvn.label"],
+            color=self.color["gtvn.label"],
         )
 
         # pred
@@ -1915,19 +1915,19 @@ class UiReplay(QtWidgets.QMainWindow):
             qimg=qimg,
             text="Pred:",
             pos=(pos_x[0], pos_y[1]),
-            color=self._color["green"],
+            color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVt",
             pos=(pos_x[1], pos_y[1]),
-            color=self._color["gtvt.pred"],
+            color=self.color["gtvt.pred"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
             pos=(pos_x[2], pos_y[1]),
-            color=self._color["gtvn.pred"],
+            color=self.color["gtvn.pred"],
         )
 
         # user input
@@ -1935,19 +1935,19 @@ class UiReplay(QtWidgets.QMainWindow):
             qimg=qimg,
             text="User:",
             pos=(pos_x[0], pos_y[2]),
-            color=self._color["green"],
+            color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="Init",
             pos=(pos_x[1], pos_y[2]),
-            color=self._color["gtvt.annotation"],
+            color=self.color["gtvt.annotation"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="Correction",
             pos=(pos_x[2], pos_y[2]),
-            color=self._color["gtvt.correction"],
+            color=self.color["gtvt.correction"],
         )
 
     def _add_msg_on_qimg(self, qimg: QtGui.QImage):
@@ -1965,7 +1965,7 @@ class UiReplay(QtWidgets.QMainWindow):
                 qimg=qimg,
                 text=text,
                 pos=(pos_x, pos_y),
-                color=self._color["green"],
+                color=self.color["green"],
             )
             # load scores
             for i in ["gtvt", "gtvn"]:
@@ -1987,7 +1987,7 @@ class UiReplay(QtWidgets.QMainWindow):
                     qimg=qimg,
                     text=text,
                     pos=(pos_x, pos_y),
-                    color=self._color["{}.pred".format(i)],
+                    color=self.color["{}.pred".format(i)],
                 )
             # mod y pos
             pos_y += 20
