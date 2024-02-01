@@ -767,8 +767,25 @@ class IDLWindow(ReplayWindow):
         self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
 
         # refresh images and crosses
+        self.__combine_pred_annotation_correction()
         self.refresh_imgs()
         self.refresh_crosses()
+
+    def __goto_idl_step_correct_both(self):
+        # stop idl qthreads (if running)
+        self.__idl_gtvt_thread.stop()
+        self.__idl_gtvn_thread.stop()
+
+        # update widgets
+        self.__enable_annotation_tools()
+
+        # update status
+        self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
+        self.drawing_mode = DrawingMode.GTVT_PEN
+
+        # combine and refresh imgs
+        self.__combine_pred_annotation_correction()
+        self.refresh_imgs()
 
     def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
         cur_idl_step = self.cur_idl_step()
