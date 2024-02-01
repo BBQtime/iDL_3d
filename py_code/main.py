@@ -1,43 +1,13 @@
-import sys
-
 from custom import GPU, Debug
 from custom import Global as g
-from darktheme.widget_template import DarkPalette
-from PyQt5.QtWidgets import QApplication
 from str_lib import DatasetPart, DatasetVer
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
-from ui_idl import UiIDL
-from ui_replay import UiReplay
 
 GPU.clear_cache()
 Debug.clear_debug_data()
 Debug.clear_linux_trash()
-
-
-############# UI #############
-if 1:
-    app = QApplication(sys.argv)
-    # dark theme
-    app.setPalette(DarkPalette())
-
-    if 1:
-        main_win = UiIDL(
-            idl_remark="",
-            debug_mode=1,
-        )
-    else:
-        main_win = UiReplay()
-
-    main_win.show()
-
-    # install the event filter on the QApplication instance
-    # This ensures that key press events will always trigger the main window's event handler,
-    # regardless of which widget currently has focus.
-    app.installEventFilter(main_win)
-
-    sys.exit(app.exec_())
 
 
 ############# Real IDL #############

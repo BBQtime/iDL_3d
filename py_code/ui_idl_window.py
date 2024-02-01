@@ -19,7 +19,7 @@ from training_idl_gtvt import TrainingIDLGTVt
 from ui_draggable_cross import DraggableCross
 from ui_idl_step_label import IDLStepLabel
 from ui_img_box import ImgBox
-from ui_replay import UiReplay
+from ui_replay_window import ReplayWindow
 
 
 class IDLThread(QThread):
@@ -124,7 +124,19 @@ class IDLGTVtThread(IDLThread):
         self.complete_signal.emit()
 
 
-class UiIDL(UiReplay):
+class IDLWindow(ReplayWindow):
+    def __init__(
+        self,
+        user_name: str,
+        train_id: str,
+        debug_mode: bool = False,
+    ):
+        self.__user_name = user_name
+        self.__train_id = train_id
+        self.__debug_mode = debug_mode
+        # pass debug_mode parameter to the parent class
+        super().__init__()
+
     def draw_on_img_boxes_press(self, event: QtGui.QMouseEvent, img_box: ImgBox):
         idl_step = self.cur_idl_step()
 
@@ -1351,14 +1363,6 @@ class UiIDL(UiReplay):
         else:
             return None
 
-    def __init__(
-        self,
-        idl_remark: str = None,
-        debug_mode: bool = False,
-    ):
-        # pass debug_mode parameter to the parent class
-        super().__init__(idl_remark=idl_remark, debug_mode=debug_mode)
-
     def __enable_annotation_tools(self):
         for i in ["pen", "eraser", "clear"]:
             self._btn[i].setEnabled(True)
@@ -1526,40 +1530,59 @@ class UiIDL(UiReplay):
         for i in ["gtvt.correction.mask", "gtvn.correction.mask"]:
             self.img_3d[i] = None
 
-    def _init_data(self, idl_remark: str = None, debug_mode: bool = False):
+    def _init_data(self):
         super()._init_data()
-        self.__debug_mode = debug_mode
 
         # init baseline id and idl.gtvt/gtvn id, keep them unchanged
-        # (1) baseline id
         self._baseline_id = "baseline_real.idl"
-        # (2) idl.gtvt/gtvn id
-        cur_time = Timer.cur_time_str()
-        for i in ["gtvt", "gtvn"]:
-            self._idl_id[i] = "idl.{}_".format(i) + cur_time
-            if debug_mode:
-                self._idl_id[i] += "_" + Debug.DELETE_FLAG
 
-            if idl_remark != "" and idl_remark is not None:
-                while idl_remark.startswith("_"):
-                    idl_remark = idl_remark[1:]
-                while idl_remark.endswith("_"):
-                    idl_remark = idl_remark[:-1]
-                self._idl_id[i] += "_" + idl_remark
+        # (1) new training
+        # initlize idl.gtvt/gtvn id
+        if self.__train_id == "Start a new experiment":
+            cur_time = Timer.cur_time_str()
+            for i in ["gtvt", "gtvn"]:
+                self._idl_id[i] = "idl.{}_".format(i) + cur_time
 
-        # create idl.gtvt/gtvn folders
-        for i in ["gtvt", "gtvn"]:
-            Dir.create(
-                os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i])
+                if self.__user_name != "" and self.__user_name is not None:
+                    while self.__user_name.startswith("_"):
+                        self.__user_name = self.__user_name[1:]
+                    while self.__user_name.endswith("_"):
+                        self.__user_name = self.__user_name[:-1]
+                    self._idl_id[i] += "_" + self.__user_name
+
+                if self.__debug_mode:
+                    self._idl_id[i] += "_" + Debug.DELETE_FLAG
+
+            # create idl.gtvt/gtvn folders
+            for i in ["gtvt", "gtvn"]:
+                Dir.create(
+                    os.path.join(
+                        g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i]
+                    )
+                )
+
+            # init and save idl step of all patients
+            self.__idl_step_of_all_patients = Dict()
+            for patient in self._patients.to_list():
+                self.__idl_step_of_all_patients[
+                    "patient={}".format(patient)
+                ] = IDLStep.CLICK_GTVT_CENTER
+            self.__save_idl_step_of_all_patients()
+
+        # (2) existing train id
+        else:
+            for i in ["gtvt", "gtvn"]:
+                self._idl_id[i] = "idl.{}_{}".format(i, self.__train_id)
+
+            # load idl step of all patients
+            self.__idl_step_of_all_patients = Json.load(
+                os.path.join(
+                    g.TRAIN_RESULTS_DIR,
+                    self._baseline_id,
+                    self._idl_id["gtvt"],
+                    "idl_step.json",
+                )
             )
-
-        # init and save idl step of all patients
-        self.__idl_step_of_all_patients = Dict()
-        for patient in self._patients.to_list():
-            self.__idl_step_of_all_patients[
-                "patient={}".format(patient)
-            ] = IDLStep.CLICK_GTVT_CENTER
-        self.__save_idl_step_of_all_patients()
 
         # initialize the position of gtvt click / gtvn clicks
         self.gtvt_click_pos_3d = None

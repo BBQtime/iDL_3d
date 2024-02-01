@@ -20,15 +20,11 @@ from ui_toggle_btn import ToggleButton
 SIDE_BAR_WIDTH = 310
 
 
-class UiReplay(QtWidgets.QMainWindow):
-    def __init__(
-        self,
-        idl_remark: str = None,  # param: idl_remark is for subclass: UiIDL
-        debug_mode: bool = False,  # param: debug_mode is for subclass: UiIDL
-    ):
+class ReplayWindow(QtWidgets.QMainWindow):
+    def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self._init_data(idl_remark=idl_remark, debug_mode=debug_mode)
+        self._init_data()
         self._init_color()  # before init_widgets()
         self._init_widgets()  # after _init_data() and init_widgets()
         self.setMinimumSize(SIDE_BAR_WIDTH + 600, 600)  # after _init_data()
@@ -37,11 +33,7 @@ class UiReplay(QtWidgets.QMainWindow):
         self.showMaximized()
         self._load_baseline_data()  # load first baseline result
 
-    def _init_data(
-        self,
-        idl_remark: str = None,  # param: idl_remark is for subclass: UiIDL
-        debug_mode: bool = False,  # param: debug_mode is for subclass: UiIDL
-    ):
+    def _init_data(self):
         # load test set patients of au and mda datasets
         # DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] and [AU_3MM] are the same
         dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM])
@@ -1008,7 +1000,7 @@ class UiReplay(QtWidgets.QMainWindow):
         #     # next element
         #     top += bar_height
 
-        # # return the followings for UiIDL
+        # # return the followings for IDLWindow
         # return (
         #     left,
         #     top,
