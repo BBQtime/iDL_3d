@@ -11,6 +11,8 @@ class DrawingMode:
     GTVN_PEN = "gtvn.pen"
     GTVT_ERASER = "gtvt.eraser"
     GTVN_ERASER = "gtvn.eraser"
+    GTVT_CLEAR = "gtvt.clear"
+    GTVN_CLEAR = "gtvn.clear"
 
 
 class IDLStep:

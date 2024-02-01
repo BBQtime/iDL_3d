@@ -904,8 +904,8 @@ class UiReplay(QtWidgets.QMainWindow):
         container.setLayout(v_layout)
         self._add_border(container)
         self._collap["zoom"] = QCollapsible("ZOOM IN")
-        self._collap["zoom"].collapse()
         self._collap["zoom"].addWidget(container)
+        self._collap["zoom"].collapse()
 
     # virtual function (for ui_idl)
     def _init_widgets_todo_list(self):
@@ -1992,8 +1992,18 @@ class UiReplay(QtWidgets.QMainWindow):
             # mod y pos
             pos_y += 20
 
-    def get_cur_patient_idl_step(self):
+    def cur_idl_step(self):
         return None
+
+    # this is for ImgBox.enterEvent()
+    def change_mouse_cursor(self):
+        # do nothing
+        return
+
+    # this is for ImgBox.leaveEvent()
+    def restore_mouse_cursor(self):
+        # do nothing
+        return
 
     def _qimg_draw_text(
         self,

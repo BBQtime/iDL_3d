@@ -53,7 +53,7 @@ class ImgBox(QLabel):
         super().mousePressEvent(event)
 
         if event.button() == Qt.LeftButton:
-            idl_step = self.window().get_cur_patient_idl_step()
+            idl_step = self.window().cur_idl_step()
 
             if idl_step is None:
                 return
@@ -80,7 +80,7 @@ class ImgBox(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_boxes_press(event)
+                self.window().draw_on_img_boxes_press(event=event, img_box=self)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
                 pos_3d = self.get_pos_in_3d(event.pos())
@@ -111,16 +111,12 @@ class ImgBox(QLabel):
 
         # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
-        if (
-            event.buttons() == Qt.LeftButton
-            and self.window().get_cur_patient_idl_step()
-            in [
-                IDLStep.DRAW_GTVT,
-                IDLStep.CORRECT_GTVT,
-                IDLStep.CORRECT_GTVN,
-                IDLStep.CORRECT_BOTH,
-            ]
-        ):
+        if event.buttons() == Qt.LeftButton and self.window().cur_idl_step() in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
             # this function will trigger repaint repaint
             self.window().draw_on_img_boxes_move(event=event, img_box=self)
 
@@ -131,7 +127,7 @@ class ImgBox(QLabel):
         super().mouseReleaseEvent(event)
 
         if event.button() == Qt.LeftButton:
-            if self.window().get_cur_patient_idl_step() in [
+            if self.window().cur_idl_step() in [
                 IDLStep.DRAW_GTVT,
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
@@ -140,22 +136,26 @@ class ImgBox(QLabel):
                 self.window().draw_on_img_boxes_release(self)
 
     def __should_paint_eraser_circle(self):
-        if self.window().get_cur_patient_idl_step() in [
+        if self.window().cur_idl_step() in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
-        ] and self.window().drawing_mode in [
-            DrawingMode.GTVT_ERASER,
-            DrawingMode.GTVN_ERASER,
         ]:
-            return True
+            if self.window().drawing_mode in [
+                DrawingMode.GTVT_ERASER,
+                DrawingMode.GTVN_ERASER,
+            ]:
+                return True
+            else:
+                return False
         else:
             return False
 
     # This function is called when the mouse enters the QLabel area
     def enterEvent(self, event):
         super().enterEvent(event)
+
         self.window().change_mouse_cursor()
         if self.__should_paint_eraser_circle():
             self.__circle_pos = event.pos()
@@ -166,6 +166,7 @@ class ImgBox(QLabel):
     # This function is called when the mouse leaves the QLabel area
     def leaveEvent(self, event):
         super().leaveEvent(event)
+
         self.window().restore_mouse_cursor()
         self.__circle_pos = None
         if self.__should_paint_eraser_circle():
@@ -296,7 +297,7 @@ class ImgBox(QLabel):
         return d, h, w
 
     def refresh_crosses(self):
-        idl_step = self.window().get_cur_patient_idl_step()
+        idl_step = self.window().cur_idl_step()
 
         if idl_step not in [IDLStep.CLICK_GTVT_CENTER, IDLStep.CLICK_GTVN_CENTER]:
             return

@@ -65,7 +65,7 @@ class DraggableCross(QWidget):
                 new_cross_id=pos_3d,
             )
             # add cross id (3d position) into main window
-            idl_step = self.window().get_cur_patient_idl_step()
+            idl_step = self.window().cur_idl_step()
             if idl_step == IDLStep.CLICK_GTVT_CENTER:
                 self.window().gtvt_click_pos_3d = self.cross_id
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:

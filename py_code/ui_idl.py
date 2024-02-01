@@ -125,8 +125,8 @@ class IDLGTVtThread(IDLThread):
 
 
 class UiIDL(UiReplay):
-    def draw_on_img_boxes_press(self, event: QtGui.QMouseEvent):
-        idl_step = self.get_cur_patient_idl_step()
+    def draw_on_img_boxes_press(self, event: QtGui.QMouseEvent, img_box: ImgBox):
+        idl_step = self.cur_idl_step()
 
         if idl_step not in [
             IDLStep.DRAW_GTVT,
@@ -136,22 +136,88 @@ class UiIDL(UiReplay):
         ]:
             return
 
+        # if current slice isn't the gtvt center slice, switch to the gtvt center slice.
         if idl_step == IDLStep.DRAW_GTVT:
-            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()
-            # (1) if on center slice, start painting
-            if self.cur_slice_id == gtvt_center_slice_id:
-                self.paint_pos = event.pos()
-            # (2) if on other slices, switch to center slice
-            else:
-                self.cur_slice_id = gtvt_center_slice_id
+            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_box.plane]
+            if self.cur_slice_id[img_box.plane] != gtvt_center_slice_id:
+                self.cur_slice_id[img_box.plane] = gtvt_center_slice_id
                 self.refresh_imgs()
+                return
 
-        elif idl_step in [
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-            IDLStep.CORRECT_BOTH,
+        # (1) for pen/eraser mode, record paint position
+        if self.drawing_mode in [
+            DrawingMode.GTVT_PEN,
+            DrawingMode.GTVN_PEN,
+            DrawingMode.GTVT_ERASER,
+            DrawingMode.GTVN_ERASER,
         ]:
             self.paint_pos = event.pos()
+
+        # (2) for clear mode, wipe out delineation
+        elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
+            # drawing gtvt
+            if idl_step == IDLStep.DRAW_GTVT:
+                # get the position of gtvt center
+                t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
+                t, c, s = int(t), int(c), int(s)
+
+                # clear annotation on cur plane
+                # use mask to make sure to filter out the annotation on current anatomical plane only
+                if img_box.plane == Plane.TRANSVERSE:
+                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][t, :, :])
+                    mask[c, :] = 1
+                    mask[:, s] = 1
+                    self.img_3d["gtvt.annotation"][t, :, :] *= mask
+                elif img_box.plane == Plane.CORONAL:
+                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, c, :])
+                    mask[t, :] = 1
+                    mask[:, s] = 1
+                    self.img_3d["gtvt.annotation"][:, c, :] *= mask
+                elif img_box.plane == Plane.SAGITTAL:
+                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, :, s])
+                    mask[t, :] = 1
+                    mask[:, c] = 1
+                    self.img_3d["gtvt.annotation"][:, :, s] *= mask
+
+                # update gtvt annotated status
+                self.__gtvt_annotated_status[img_box.plane] = False
+                # update todo list
+                self._text_label[
+                    "draw.gtvt.{}".format(img_box.plane)
+                ].set_status_missing()
+
+            # correcting gtvt/gtvn
+            elif idl_step in [
+                IDLStep.CORRECT_GTVT,
+                IDLStep.CORRECT_GTVN,
+                IDLStep.CORRECT_BOTH,
+            ]:
+                if self.drawing_mode == DrawingMode.GTVT_CLEAR:
+                    gtv = "gtvt"
+                elif self.drawing_mode == DrawingMode.GTVN_CLEAR:
+                    gtv = "gtvn"
+
+                # clear correction on cur plane
+                # use ct img qlabel's plane
+                t = c = s = self.cur_slice_id[img_box.plane]
+                _3d_img = self.img_3d["{}.correction".format(gtv)]
+                _3d_mask = self.img_3d["{}.correction.mask".format(gtv)]
+
+                if img_box.plane == Plane.TRANSVERSE:
+                    _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
+                    _3d_mask[t, :, :] = np.zeros_like(_3d_mask[t, :, :])
+                elif img_box.plane == Plane.CORONAL:
+                    _3d_img[:, c, :] = np.zeros_like(_3d_img[:, c, :])
+                    _3d_mask[:, c, :] = np.zeros_like(_3d_mask[:, c, :])
+                elif img_box.plane == Plane.SAGITTAL:
+                    _3d_img[:, :, s] = np.zeros_like(_3d_img[:, :, s])
+                    _3d_mask[:, :, s] = np.zeros_like(_3d_mask[:, :, s])
+
+                self.__save_corrections_and_masks(gtv)
+
+            # update 3d np arrays and refresh imgs
+            self.__combine_pred_annotation_correction()
+            self.refresh_imgs()
 
     def draw_on_img_boxes_move(self, event: QtGui.QMouseEvent, img_box: ImgBox):
         if self.paint_pos is None:
@@ -245,7 +311,7 @@ class UiIDL(UiReplay):
         annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
         # add 2d annotation on 3d annotation ndarray
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
         # (1)gtvt annotation
         if idl_step == IDLStep.DRAW_GTVT:
             t, c, s = self.gtvt_click_pos_3d
@@ -387,7 +453,7 @@ class UiIDL(UiReplay):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_pen_clicked(self):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         # (1) update drawing mode
         if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
@@ -395,9 +461,9 @@ class UiIDL(UiReplay):
         elif idl_step == IDLStep.CORRECT_GTVN:
             self.drawing_mode = DrawingMode.GTVN_PEN
         elif idl_step == IDLStep.CORRECT_BOTH:
-            if self.drawing_mode == DrawingMode.GTVT_ERASER:
+            if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_PEN
-            elif self.drawing_mode == DrawingMode.GTVN_ERASER:
+            elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_PEN
 
         # (2) update widgets
@@ -407,7 +473,6 @@ class UiIDL(UiReplay):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            # self.__set_mouse_cursor("pen")
             self._text_label["draw.size"].setText("Pen Size")
 
     def _init_widgets_todo_list(self):
@@ -487,20 +552,9 @@ class UiIDL(UiReplay):
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # disable pen and eraser as clicking gtvt center dont need them
-        for i in ["pen", "eraser"]:
-            self._btn[i].setEnabled(False)
-
-        # enable buttons
-        for i in ["clear", "next.step"]:
-            self._btn[i].setEnabled(True)
-
-        # restore default cursor
-        self.setCursor(Qt.ArrowCursor)
-
-        # hide pen/eraser size
-        self._slider["draw.size"].hide()
-        self._text_label["draw.size"].hide()
+        self.__disable_annotation_tools()
+        self._btn["next.step"].setEnabled(True)
+        self.restore_mouse_cursor()
 
         # update todolist
         self._text_label[IDLStep.SELECT_PATIENT].set_status_done()
@@ -601,13 +655,7 @@ class UiIDL(UiReplay):
         self.__idl_gtvn_thread.stop()
 
         # update widgets
-        # self.__set_mouse_cursor("pen")
-
-        # enable pen and eraser for gtvt delineation
-        for i in ["pen", "eraser"]:
-            self._btn[i].setEnabled(True)
-        self._slider["draw.size"].show()
-        self._text_label["draw.size"].show()
+        self.__enable_annotation_tools()
 
         # clear images
         self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
@@ -625,7 +673,7 @@ class UiIDL(UiReplay):
         # DO NOT clear self.gtvt_click_pos_3d and self.gtvn_clicks_pos_3d
 
         # update status
-        self.update_cur_patient_idl_step(IDLStep.DRAW_GTVT)
+        self.update_cur_idl_step(IDLStep.DRAW_GTVT)
         self.drawing_mode = DrawingMode.GTVT_PEN
 
         # remove crosses and refresh images
@@ -645,7 +693,6 @@ class UiIDL(UiReplay):
                 self._modal_fixed_mode_switch_plane(plane)
                 if self.drawing_mode == DrawingMode.GTVT_ERASER:
                     self.drawing_mode = DrawingMode.GTVT_PEN
-                    # self.__set_mouse_cursor("pen")
                     self._text_label["draw.size"].setText("Pen Size")
                 return
 
@@ -687,12 +734,9 @@ class UiIDL(UiReplay):
         # stop idl gtvn qthread (if running)
         self.__idl_gtvn_thread.stop()
 
-        # restore default cursor
-        self.setCursor(Qt.ArrowCursor)
-        for i in ["pen", "eraser"]:
-            self._btn[i].setEnabled(False)
-        self._slider["draw.size"].hide()
-        self._text_label["draw.size"].hide()
+        # update widgets
+        self.restore_mouse_cursor()
+        self.__disable_annotation_tools()
 
         # clear images
         for i in [
@@ -708,14 +752,14 @@ class UiIDL(UiReplay):
         self.gtvn_clicks_pos_3d = List()
 
         # update status (before refresh images)
-        self.update_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
+        self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
 
         # refresh images and crosses
         self.refresh_imgs()
         self.refresh_crosses()
 
     def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
-        cur_idl_step = self.get_cur_patient_idl_step()
+        cur_idl_step = self.cur_idl_step()
 
         # jump to SELECT_PATIENT
         if text_box == self._text_label[IDLStep.SELECT_PATIENT]:
@@ -760,7 +804,7 @@ class UiIDL(UiReplay):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_patient_idl_step(IDLStep.CLICK_GTVT_CENTER)
+            self.update_cur_idl_step(IDLStep.CLICK_GTVT_CENTER)
             self.__goto_idl_step_click_gtvt_center()
 
         # jump to DRAW_GTVT
@@ -789,7 +833,7 @@ class UiIDL(UiReplay):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_patient_idl_step(IDLStep.DRAW_GTVT)
+            self.update_cur_idl_step(IDLStep.DRAW_GTVT)
             self.__goto_idl_step_draw_gtvt()
 
         # jump to CLICK_GTVN_CENTER
@@ -817,12 +861,12 @@ class UiIDL(UiReplay):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_patient_idl_step(IDLStep.CLICK_GTVN_CENTER)
+            self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
             self.__goto_idl_step_click_gtvn_center()
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         # (1) update drawing mode
         if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
@@ -830,9 +874,9 @@ class UiIDL(UiReplay):
         elif idl_step == IDLStep.CORRECT_GTVN:
             self.drawing_mode = DrawingMode.GTVN_ERASER
         elif idl_step == IDLStep.CORRECT_BOTH:
-            if self.drawing_mode == DrawingMode.GTVT_PEN:
+            if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_ERASER
-            elif self.drawing_mode == DrawingMode.GTVN_PEN:
+            elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_ERASER
 
         # (2) update widgets
@@ -842,7 +886,6 @@ class UiIDL(UiReplay):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            # self.__set_mouse_cursor("eraser")
             self._text_label["draw.size"].setText("Eraser Size")
 
     def __update_idl_gtvt_progress_bar(self, progress_signal: float):
@@ -856,11 +899,11 @@ class UiIDL(UiReplay):
         # (1) idl.gtvn thread is not running
         if not self.__idl_gtvn_thread.is_running:
             # do nothing if user has not submitted gtvn clicks
-            if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+            if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
                 pass
             # gtvn thread is over, correct both gtvt/gtvn
             else:
-                self.update_cur_patient_idl_step(IDLStep.CORRECT_BOTH)
+                self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
                 # show radio buttons
                 for i in ["gtvt", "gtvn"]:
                     self._radio_btn["correct.{}".format(i)].show()
@@ -869,18 +912,15 @@ class UiIDL(UiReplay):
         # (2) idl.gtvn thread is running, only correct gtvt
         else:
             # do nothing if user has not submitted gtvn clicks
-            if self.get_cur_patient_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+            if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
                 pass
 
             # if idl step is "waiting", show correction tools for gtvt pred
-            elif self.get_cur_patient_idl_step() == IDLStep.WAITING:
-                self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
+            elif self.cur_idl_step() == IDLStep.WAITING:
+                self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
                 self._radio_btn["correct.gtvt"].setChecked(True)
                 self.drawing_mode = DrawingMode.GTVT_PEN
-                for i in ["pen", "eraser", "clear"]:
-                    self._btn[i].setEnabled(True)
-                self._slider["draw.size"].show()
-                self._text_label["draw.size"].show()
+                self.__enable_annotation_tools()
                 # change mouse cursor after:
                 # (1) idl step updated
                 # (2) drawing mode updated
@@ -923,19 +963,16 @@ class UiIDL(UiReplay):
         # gtvn thread is still running, only correct gtvt
         if not self.__idl_gtvt_thread.is_running:
             # update idl step before refresh img_boxes
-            self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVT)
+            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
             self._radio_btn["correct.gtvt"].setChecked(True)
             # self.__set_mouse_cursor("pen")
             self.drawing_mode = DrawingMode.GTVT_PEN
-            for i in ["pen", "eraser", "clear"]:
-                self._btn[i].setEnabled(True)
-            self._slider["draw.size"].show()
-            self._text_label["draw.size"].show()
+            self.__enable_annotation_tools()
 
         # gtvt thread is not completedgoto waiting step
         else:
             # update idl step before refresh img_boxes
-            self.update_cur_patient_idl_step(IDLStep.WAITING)
+            self.update_cur_idl_step(IDLStep.WAITING)
             self._btn["clear"].setEnabled(False)
 
         # disable "next.step" button, its not needed anymore
@@ -983,7 +1020,7 @@ class UiIDL(UiReplay):
 
         # (1) gtvt thread is completed
         if not self.__idl_gtvt_thread.is_running:
-            self.update_cur_patient_idl_step(IDLStep.CORRECT_BOTH)
+            self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
             # show radio buttons
             for i in ["gtvt", "gtvn"]:
                 self._radio_btn["correct.{}".format(i)].show()
@@ -991,20 +1028,17 @@ class UiIDL(UiReplay):
 
         # (2) idl.gtvt thread is still running, only correct gtvn
         else:
-            self.update_cur_patient_idl_step(IDLStep.CORRECT_GTVN)
+            self.update_cur_idl_step(IDLStep.CORRECT_GTVN)
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
-            for i in ["pen", "eraser", "clear"]:
-                self._btn[i].setEnabled(True)
-            self._slider["draw.size"].show()
-            self._text_label["draw.size"].show()
+            self.__enable_annotation_tools()
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_hover=True)
 
         # show gtvt/gtvn switch radio buttons
-        if self.get_cur_patient_idl_step() == IDLStep.CORRECT_BOTH:
+        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
             for i in ["gtvt", "gtvn"]:
                 self._radio_btn["correct.{}".format(i)].show()
 
@@ -1018,7 +1052,7 @@ class UiIDL(UiReplay):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_next_step_clicked(self):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.__confirm_gtvt_center()
@@ -1098,16 +1132,10 @@ class UiIDL(UiReplay):
         return QtGui.QPixmap.fromImage(image)
 
     def restore_mouse_cursor(self):
-        if self.get_cur_patient_idl_step() in [
-            IDLStep.DRAW_GTVT,
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-            IDLStep.CORRECT_BOTH,
-        ]:
-            self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.ArrowCursor)
 
     def change_mouse_cursor(self, check_mouse_hover: bool = False):
-        if self.get_cur_patient_idl_step() not in [
+        if self.cur_idl_step() not in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -1123,22 +1151,18 @@ class UiIDL(UiReplay):
             if not is_mouse_over_img:
                 return
 
-        if self.drawing_mode == DrawingMode.GTVT_PEN:
-            cursor_pixmap = self.__cursor["gtvt"]["pen"]
-        elif self.drawing_mode == DrawingMode.GTVT_ERASER:
-            cursor_pixmap = self.__cursor["gtvt"]["eraser"]
-        elif self.drawing_mode == DrawingMode.GTVN_PEN:
-            cursor_pixmap = self.__cursor["gtvn"]["pen"]
-        elif self.drawing_mode == DrawingMode.GTVN_ERASER:
-            cursor_pixmap = self.__cursor["gtvn"]["eraser"]
-
+        cursor_pixmap = self.__cursor[self.drawing_mode]
         cursor_size = 32
+
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
             pos_x = 0
             pos_y = cursor_size * 0.95
         elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
             pos_x = cursor_size * 0.2
             pos_y = cursor_size * 0.8
+        elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
+            pos_x = cursor_size * 0.5
+            pos_y = cursor_size * 0.5
 
         self.setCursor(QtGui.QCursor(cursor_pixmap, pos_x, pos_y))
 
@@ -1146,12 +1170,13 @@ class UiIDL(UiReplay):
         self.__cursor = Dict()
         cursor_size = 32  # cursor size is no larger than 32
         origin_color = (0, 0, 0)
-        for i in ["pen", "eraser"]:
+        for i in ["pen", "eraser", "clear"]:
             origin_cursor = QtGui.QPixmap(
                 (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(i)))
             )
             for gtv in ["gtvt", "gtvn"]:
-                self.__cursor[gtv][i] = origin_cursor.scaled(
+                drawing_mode = "{}.{}".format(gtv, i)
+                self.__cursor[drawing_mode] = origin_cursor.scaled(
                     cursor_size,
                     cursor_size,
                     Qt.KeepAspectRatio,
@@ -1159,8 +1184,8 @@ class UiIDL(UiReplay):
                 )
                 # change color (after cursor pixmap is scaled to 32*32)
                 # as __change_color is not efficiency
-                self.__cursor[gtv][i] = self.__change_color(
-                    pixmap=self.__cursor[gtv][i],
+                self.__cursor[drawing_mode] = self.__change_color(
+                    pixmap=self.__cursor[drawing_mode],
                     old_color=origin_color,
                     new_color=self.color["{}.pred".format(gtv)],
                 )
@@ -1176,99 +1201,22 @@ class UiIDL(UiReplay):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
-            self.gtvt_click_pos_3d = None
-            self.refresh_crosses()
-
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
-            self.gtvn_clicks_pos_3d = List()
-            self.refresh_crosses()
-
-        elif idl_step == IDLStep.DRAW_GTVT:
-            # modality fixed mode: clear annotation on cur plane
-            if self.display_mode() == DisplayMode.MODAL_FIXED:
-                t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
-                t, c, s = int(t), int(c), int(s)
-                # use mask to filter out the annotation on current anatomical plane
-                if self.img_box[Modal.CT].plane == Plane.TRANSVERSE:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][t, :, :])
-                    mask[c, :] = 1
-                    mask[:, s] = 1
-                    self.img_3d["gtvt.annotation"][t, :, :] *= mask
-                elif self.img_box[Modal.CT].plane == Plane.CORONAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, c, :])
-                    mask[t, :] = 1
-                    mask[:, s] = 1
-                    self.img_3d["gtvt.annotation"][:, c, :] *= mask
-                elif self.img_box[Modal.CT].plane == Plane.SAGITTAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, :, s])
-                    mask[t, :] = 1
-                    mask[:, c] = 1
-                    self.img_3d["gtvt.annotation"][:, :, s] *= mask
-                # update gtvt annotated status
-                self.__gtvt_annotated_status[self.img_box[Modal.CT].plane] = False
-                # update todo list
-                self._text_label[
-                    "draw.gtvt.{}".format(self.img_box[Modal.CT].plane)
-                ].set_status_missing()
-
-            # plane fixed mode: clear whole annotation
-            else:
-                self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
-                # update gtvt annotated status
-                for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                    self.__gtvt_annotated_status[i] = False
-                # update todo list
-                for i in [
-                    IDLStep.DRAW_GTVT_TRANSVERSE,
-                    IDLStep.DRAW_GTVT_CORONAL,
-                    IDLStep.DRAW_GTVT_SAGITTAL,
-                ]:
-                    self._text_label[i].set_status_missing()
-
-            self.__combine_pred_annotation_correction()
-            self.refresh_imgs()
-
-        elif idl_step in [
+        # update drawing mode
+        if idl_step in [
+            IDLStep.CLICK_GTVT_CENTER,
+            IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-            IDLStep.CORRECT_BOTH,
         ]:
-            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                gtv = "gtvt"
-            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                gtv = "gtvn"
-
-            # modality fixed mode: clear correction on cur plane
-            if self.display_mode() == DisplayMode.MODAL_FIXED:
-                # use ct img qlabel's plane
-                t = c = s = self.cur_slice_id[self.img_box[Modal.CT].plane]
-                _3d_img = self.img_3d["{}.correction".format(gtv)]
-                _3d_mask = self.img_3d["{}.correction.mask".format(gtv)]
-                if self.img_box[Modal.CT].plane == Plane.TRANSVERSE:
-                    _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
-                    _3d_mask[t, :, :] = np.zeros_like(_3d_mask[t, :, :])
-                elif self.img_box[Modal.CT].plane == Plane.CORONAL:
-                    _3d_img[:, c, :] = np.zeros_like(_3d_img[:, c, :])
-                    _3d_mask[:, c, :] = np.zeros_like(_3d_mask[:, c, :])
-                elif self.img_box[Modal.CT].plane == Plane.SAGITTAL:
-                    _3d_img[:, :, s] = np.zeros_like(_3d_img[:, :, s])
-                    _3d_mask[:, :, s] = np.zeros_like(_3d_mask[:, :, s])
-
-            # plane fixed mode: clear whole correction
-            else:
-                self.img_3d["{}.correction".format(gtv)] = np.zeros_like(
-                    self.img_3d[Modal.CT]
-                )
-                self.img_3d["{}.correction.mask".format(gtv)] = np.zeros_like(
-                    self.img_3d[Modal.CT]
-                )
-
-            self.__save_corrections_and_masks(gtv)
-            self.__combine_pred_annotation_correction()
-            self.refresh_imgs()
+            self.drawing_mode = DrawingMode.GTVT_CLEAR
+        elif idl_step in [IDLStep.CLICK_GTVN_CENTER, IDLStep.CORRECT_GTVN]:
+            self.drawing_mode = DrawingMode.GTVN_CLEAR
+        elif idl_step == IDLStep.CORRECT_BOTH:
+            if self._radio_btn["correct.gtvt"].isChecked():
+                self.drawing_mode = DrawingMode.GTVT_CLEAR
+            elif self._radio_btn["correct.gtvn"].isChecked():
+                self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def __get_gtvt_center_slices_id(self):
         if self.gtvt_click_pos_3d is None:
@@ -1315,7 +1263,7 @@ class UiIDL(UiReplay):
             self.img_box[i].delete_all_crosses()
 
     def refresh_crosses(self, img_name: str = None):
-        if self.get_cur_patient_idl_step() not in [
+        if self.cur_idl_step() not in [
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.CLICK_GTVN_CENTER,
         ]:
@@ -1346,7 +1294,7 @@ class UiIDL(UiReplay):
             cross.cross_id = new_cross_id
 
     def remove_3d_pos_of_selected_cross(self, cross: DraggableCross):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.gtvt_click_pos_3d = None
@@ -1411,6 +1359,18 @@ class UiIDL(UiReplay):
         # pass debug_mode parameter to the parent class
         super().__init__(idl_remark=idl_remark, debug_mode=debug_mode)
 
+    def __enable_annotation_tools(self):
+        for i in ["pen", "eraser", "clear"]:
+            self._btn[i].setEnabled(True)
+        self._text_label["draw.size"].show()
+        self._slider["draw.size"].show()
+
+    def __disable_annotation_tools(self):
+        for i in ["pen", "eraser", "clear"]:
+            self._btn[i].setEnabled(False)
+        self._text_label["draw.size"].hide()
+        self._slider["draw.size"].hide()
+
     def _init_widgets_annotation(self):
         # text label
         for i in ["gtvt.progress", "gtvn.progress", "draw.size"]:
@@ -1433,7 +1393,7 @@ class UiIDL(UiReplay):
         # annotation buttons
         for i in ["pen", "eraser", "clear"]:
             self._btn[i] = QtWidgets.QPushButton()
-            self._btn[i].setFixedWidth(50)
+            # self._btn[i].setFixedWidth(50)
             self._btn[i].setFixedHeight(40)
             # add too tip and set stylesheet
             self._btn[i].setStyleSheet(
@@ -1456,8 +1416,10 @@ class UiIDL(UiReplay):
             elif i == "eraser":
                 self._btn[i].setIconSize(QSize(31, 31))
             elif i == "clear":
-                self._btn[i].setIconSize(QSize(25, 25))
+                self._btn[i].setIconSize(QSize(35, 35))
             self._btn[i].setIcon(icon)
+            # disable btns
+            self._btn[i].setEnabled(False)
 
         # connect btns to functions
         self._btn["pen"].clicked.connect(self.__on_btn_pen_clicked)
@@ -1496,6 +1458,7 @@ class UiIDL(UiReplay):
 
         # add buttons
         h_layout = QtWidgets.QHBoxLayout()
+        h_layout.setSpacing(20)
         for i in ["pen", "eraser", "clear"]:
             h_layout.addWidget(self._btn[i])
         v_layout.addLayout(h_layout)
@@ -1551,6 +1514,7 @@ class UiIDL(UiReplay):
         super()._init_widgets()
 
         for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
+            self._collap[i].collapse()
             self._collap[i].hide()
 
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
@@ -1637,16 +1601,29 @@ class UiIDL(UiReplay):
 
     # this function is connected to widget, dont set input params to this function
     def __switch_drawing_mode_gtv(self):
+        # gtvn to gtvt
         if self._radio_btn["correct.gtvt"].isChecked():
+            # pen
             if self.drawing_mode == DrawingMode.GTVN_PEN:
                 self.drawing_mode = DrawingMode.GTVT_PEN
+            # eraser
             elif self.drawing_mode == DrawingMode.GTVN_ERASER:
                 self.drawing_mode = DrawingMode.GTVT_ERASER
+            # clear
+            elif self.drawing_mode == DrawingMode.GTVN_CLEAR:
+                self.drawing_mode = DrawingMode.GTVT_CLEAR
+
+        # gtvt to gtvn
         elif self._radio_btn["correct.gtvn"].isChecked():
+            # pen
             if self.drawing_mode == DrawingMode.GTVT_PEN:
                 self.drawing_mode = DrawingMode.GTVN_PEN
+            # eraser
             elif self.drawing_mode == DrawingMode.GTVT_ERASER:
                 self.drawing_mode = DrawingMode.GTVN_ERASER
+            # clear
+            elif self.drawing_mode == DrawingMode.GTVT_CLEAR:
+                self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def get_pen_size(self):
         return self._slider["draw.size"].value()
@@ -1677,7 +1654,7 @@ class UiIDL(UiReplay):
             )
             return
 
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             text = "Please click the center of primary Gross Tumor Volumes (GTVt)"
@@ -1748,12 +1725,12 @@ class UiIDL(UiReplay):
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # expand and enable collapse bar
+        # update widgets
+        self._collap["patient"].collapse()
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
-            if not self._collap[i].isEnabled():
-                self._collap[i].setEnabled(True)
-                if i in ["annotation", "display.mode"]:
-                    self._collap[i].expand()
+            self._collap[i].setEnabled(True)
+        for i in ["annotation", "display.mode"]:
+            self._collap[i].expand()
 
         # clear data
         self._clear_img_3d()
@@ -1781,7 +1758,7 @@ class UiIDL(UiReplay):
         self.reset_cur_slice_id()
 
         # jump to specific idl step
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.__goto_idl_step_click_gtvt_center()
 
@@ -1798,7 +1775,7 @@ class UiIDL(UiReplay):
             Debug.error_exit("_load_patient_data(): IDL Step error!")
 
     def reset_cur_slice_id(self):
-        idl_step = self.get_cur_patient_idl_step()
+        idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER or idl_step == IDLStep.DRAW_GTVT:
             if self.gtvt_click_pos_3d is None:
@@ -1831,7 +1808,7 @@ class UiIDL(UiReplay):
                 else:
                     self.cur_slice_id = self.__get_gtvn_center_slices_id()
 
-    def get_cur_patient_idl_step(self):
+    def cur_idl_step(self):
         if self._cur_patient is None:
             return None
         else:
@@ -1839,7 +1816,7 @@ class UiIDL(UiReplay):
                 "patient={}".format(self._cur_patient)
             ]
 
-    def update_cur_patient_idl_step(self, cur_step: str):
+    def update_cur_idl_step(self, cur_step: str):
         # update status
         self.__idl_step_of_all_patients[
             "patient={}".format(self._cur_patient)
