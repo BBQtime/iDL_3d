@@ -27,7 +27,7 @@ class IDLStepLabel(QLabel):
         if self.__idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.setText("STEP 2 - Click GTVt center")
         if self.__idl_step == IDLStep.DRAW_GTVT:
-            self.setText("STEP 3 - Draw GTVt")
+            self.setText("STEP 3 - Delineate GTVt")
         if self.__idl_step == IDLStep.DRAW_GTVT_TRANSVERSE:
             self.setText(str_space + "- in Transverse")
         if self.__idl_step == IDLStep.DRAW_GTVT_CORONAL:
@@ -58,12 +58,12 @@ class IDLStepLabel(QLabel):
             IDLStep.CLICK_GTVN_CENTER,
         ]:
             if self.__status == LabelStatus.DONE:
-                self.setToolTip("Click to jump to this step")
+                self.setToolTip("Click to revert to this step")
             elif self.__status == LabelStatus.NOT_START:
-                self.setToolTip("CAN NOT jump to this step right now")
+                self.setToolTip("")  # "CAN NOT jump to this step right now"
         # current step doesnt support jumping
         else:
-            self.setToolTip("CAN NOT jump to this step")
+            self.setToolTip("")  # "CAN NOT jump to this step"
 
         # set font and text/background/color
         if self.__status == LabelStatus.DONE:
