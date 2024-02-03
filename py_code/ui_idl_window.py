@@ -560,31 +560,18 @@ class IDLWindow(ReplayWindow):
         self._collap["todo.list"].expand()
 
     def __goto_idl_step_click_gtvt_center(self):
-        # stop idl qthreads (if running)
+        # (1) stop idl qthreads
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # update widgets
-        self.restore_mouse_cursor()
-        self.__disable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # (2) update status
+        self.update_cur_idl_step(IDLStep.CLICK_GTVT_CENTER)
 
-        # update todolist
-        self._text_label[IDLStep.SELECT_PATIENT].set_status_done()
-        self._text_label[IDLStep.CLICK_GTVT_CENTER].set_status_ongoing()
-        for i in [
-            IDLStep.DRAW_GTVT,
-            IDLStep.DRAW_GTVT_TRANSVERSE,
-            IDLStep.DRAW_GTVT_CORONAL,
-            IDLStep.DRAW_GTVT_SAGITTAL,
-            IDLStep.CLICK_GTVN_CENTER,
-            IDLStep.WAITING,
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-        ]:
-            self._text_label[i].set_status_notstart()
+        # (3) clear gtvt click pos
+        self.gtvt_click_pos_3d = None
+        # DO NOT clear self.gtvn_clicks_pos_3d
 
-        # clear images
+        # (4) clear images
         img_name_list = ["gtvt.click", "gtvn.clicks", "gtvt.annotation"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
@@ -596,14 +583,15 @@ class IDLWindow(ReplayWindow):
         for i in img_name_list:
             self.img_3d[i] = None
 
-        # clear gtvt click pos
-        self.gtvt_click_pos_3d = None
-
-        # DO NOT clear self.gtvn_clicks_pos_3d
-
-        # refresh images and crosses
+        # (5) refresh images and crosses
         self.refresh_imgs()
         self.refresh_crosses()
+
+        # (6) update widgets
+        self.__refresh_todo_list()
+        self.restore_mouse_cursor()
+        self.__disable_annotation_tools()
+        self._btn["next.step"].setEnabled(True)
 
     def __confirm_gtvt_center(self):
         # (1) check if there is gtvt click
@@ -663,15 +651,18 @@ class IDLWindow(ReplayWindow):
         self.__goto_idl_step_draw_gtvt()
 
     def __goto_idl_step_draw_gtvt(self):
-        # stop idl qthread (if running)
+        # (1) stop idl qthread
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # update widgets
-        self.__enable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # (2) update status
+        self.update_cur_idl_step(IDLStep.DRAW_GTVT)
+        self.drawing_mode = DrawingMode.GTVT_PEN
 
-        # clear images
+        # DO NOT clear self.gtvt_click_pos_3d
+        # DO NOT clear self.gtvn_clicks_pos_3d
+
+        # (3) clear images
         self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
         img_name_list = ["gtvn.clicks"]
         for i in ["gtvt", "gtvn"]:
@@ -684,18 +675,17 @@ class IDLWindow(ReplayWindow):
         for i in img_name_list:
             self.img_3d[i] = None
 
-        # DO NOT clear self.gtvt_click_pos_3d and self.gtvn_clicks_pos_3d
-
-        # update status
-        self.update_cur_idl_step(IDLStep.DRAW_GTVT)
-        self.drawing_mode = DrawingMode.GTVT_PEN
-
-        # remove crosses and refresh images
+        # (4) remove crosses and refresh images
         self.delete_all_crosses()
         self.refresh_imgs()
 
+        # (5) update widgets
+        self.__refresh_todo_list()
+        self.__enable_annotation_tools()
+        self._btn["next.step"].setEnabled(True)
+
     def __confirm_gtvt_annotation(self):
-        # (1) check gtvt annotated statues
+        # (1) check if gtvt are delineated in 3 planes
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if self.__gtvt_annotated_status[plane] is False:
                 QMessageBox.information(
@@ -732,7 +722,7 @@ class IDLWindow(ReplayWindow):
             spacing=self._nii_spacing,
         )
 
-        # (3)start idl gtvt thread
+        # (3) start idl gtvt thread
         self.__idl_gtvt_thread.set_param(
             idl_gtvt_id=self._idl_id["gtvt"],
             patient=self._cur_patient,
@@ -745,15 +735,16 @@ class IDLWindow(ReplayWindow):
         self.__goto_idl_step_click_gtvn_center()
 
     def __goto_idl_step_click_gtvn_center(self):
-        # stop idl gtvn qthread (if running)
+        # (1) stop idl gtvn qthread
         self.__idl_gtvn_thread.stop()
 
-        # update widgets
-        self.restore_mouse_cursor()
-        self.__disable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # (2) update status (before refresh images)
+        self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
 
-        # clear images
+        # (3) clear gtvn clicks
+        self.gtvn_clicks_pos_3d = List()
+
+        # (4) update and combine images
         for i in [
             "gtvn.clicks",
             "gtvn.pred",
@@ -762,71 +753,72 @@ class IDLWindow(ReplayWindow):
             "gtvn.pred.final",
         ]:
             self.img_3d[i] = None
-
-        # clear gtvn clicks
-        self.gtvn_clicks_pos_3d = List()
-
-        # update status (before refresh images)
-        self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
-
-        # refresh images and crosses
         self.__combine_pred_annotation_correction()
+
+        # (5) refresh images and crosses
         self.refresh_imgs()
         self.refresh_crosses()
 
+        # (6) update widgets
+        self.__refresh_todo_list()
+        self.restore_mouse_cursor()
+        self.__disable_annotation_tools()
+        self._btn["next.step"].setEnabled(True)
+
     def __goto_idl_step_correct_both(self):
-        # stop idl qthreads (if running)
+        # (1) stop idl qthreads
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # update widgets
-        self.__enable_annotation_tools()
-        for i in ["gtvt", "gtvn"]:
-            self._radio_btn["correct.{}".format(i)].show()
-        self._btn["next.step"].setEnabled(True)
-
-        # update status
+        # (2) update status
         self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
-        if self._radio_btn["correct.gtvt"].isChecked():
-            self.drawing_mode = DrawingMode.GTVT_PEN
-        elif self._radio_btn["correct.gtvn"].isChecked():
-            self.drawing_mode = DrawingMode.GTVN_PEN
+        # if self._radio_btn["correct.gtvt"].isChecked():
+        #     self.drawing_mode = DrawingMode.GTVT_PEN
+        # elif self._radio_btn["correct.gtvn"].isChecked():
+        #     self.drawing_mode = DrawingMode.GTVN_PEN
 
-        # init correction and mask
+        # (3) init correction and mask
         for gtv in ["gtvt", "gtvn"]:
             for i in ["{}.correction".format(gtv), "{}.correction.mask".format(gtv)]:
                 if self.img_3d[i] is None:
                     self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
-        # combine and refresh imgs
+        # (4) combine and refresh imgs
         self.__combine_pred_annotation_correction()
         self.refresh_imgs()
 
+        # (5) update widgets
+        self.__refresh_todo_list()
+        self.__enable_annotation_tools()
+        for i in ["gtvt", "gtvn"]:
+            self._radio_btn["correct.{}".format(i)].show()
+        self._btn["next.step"].setEnabled(True)
+
     def __goto_idl_step_approved(self):
-        # stop idl qthreads (if running)
+        # (1) stop idl qthreads (if running)
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
-        # update status
-        self.restore_mouse_cursor()
+        # (2) update status
         self.update_cur_idl_step(IDLStep.APPROVED)
 
-        # update widgets
+        # (3) combine and refresh imgs
+        self.__combine_pred_annotation_correction()
+        self.refresh_imgs()
+
+        # (4) update widgets
+        self.__refresh_todo_list()
+        self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._slider["draw.size"].hide()
         for i in ["gtvt", "gtvn"]:
             self._radio_btn["correct.{}".format(i)].hide()
-        # self._collap["annotation"].collapse()
         self._btn["next.step"].setEnabled(False)
-
-        # combine and refresh imgs
-        self.__combine_pred_annotation_correction()
-        self.refresh_imgs()
 
     def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
         cur_idl_step = self.cur_idl_step()
 
-        # (1) jump to SELECT_PATIENT
+        # (1) jump to step SELECT_PATIENT
         if text_box == self._text_label[IDLStep.SELECT_PATIENT]:
             if not self._collap["patient"].isExpanded():
                 self._collap["patient"].expand()
@@ -842,7 +834,7 @@ class IDLWindow(ReplayWindow):
             )
             QtWidgets.QApplication.postEvent(self.combox["patient"], event)
 
-        # (2) jump to CLICK_GTVT_CENTER
+        # (2) jump to step CLICK_GTVT_CENTER
         elif text_box == self._text_label[IDLStep.CLICK_GTVT_CENTER]:
             if cur_idl_step not in [
                 IDLStep.DRAW_GTVT,
@@ -870,10 +862,9 @@ class IDLWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_idl_step(IDLStep.CLICK_GTVT_CENTER)
             self.__goto_idl_step_click_gtvt_center()
 
-        # (3) jump to DRAW_GTVT
+        # (3) jump to step DRAW_GTVT
         elif text_box == self._text_label[IDLStep.DRAW_GTVT]:
             if cur_idl_step not in [
                 IDLStep.CLICK_GTVN_CENTER,
@@ -900,10 +891,9 @@ class IDLWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_idl_step(IDLStep.DRAW_GTVT)
             self.__goto_idl_step_draw_gtvt()
 
-        # (4) jump to CLICK_GTVN_CENTER
+        # (4) jump to step CLICK_GTVN_CENTER
         elif text_box == self._text_label[IDLStep.CLICK_GTVN_CENTER]:
             if cur_idl_step not in [
                 IDLStep.WAITING,
@@ -929,7 +919,6 @@ class IDLWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
             self.__goto_idl_step_click_gtvn_center()
 
     # this function is connected to widget, dont set input params to this function
@@ -962,53 +951,42 @@ class IDLWindow(ReplayWindow):
         self.__progress_bar["gtvt"].setValue(progress_int)
 
     def __on_idl_gtvt_thread_finished(self):
-        # update idl step and widgets first
-
-        # (1) idl.gtvn thread is not running
-        if not self.__idl_gtvn_thread.is_running:
-            # do nothing if user has not submitted gtvn clicks
-            if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
-                pass
-            # gtvn thread is over, correct both gtvt/gtvn
-            else:
-                self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
-                # update widgets
-                for i in ["gtvt", "gtvn"]:
-                    self._radio_btn["correct.{}".format(i)].show()
-                self._btn["next.step"].setEnabled(True)
-                # dont change drawing mode and radio buttons, because user is correcting gtvn
-
-        # (2) idl.gtvn thread is running, only correct gtvt
+        # (1) update status
+        # dont update idl step if user has not submitted gtvn clicks
+        if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+            pass
+        elif self.__idl_gtvn_thread.is_running:
+            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
         else:
-            # do nothing if user has not submitted gtvn clicks
-            if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
-                pass
+            self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
 
-            # if idl step is "waiting", show correction tools for gtvt pred
-            elif self.cur_idl_step() == IDLStep.WAITING:
-                self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
-                self._radio_btn["correct.gtvt"].setChecked(True)
-                self.drawing_mode = DrawingMode.GTVT_PEN
-                self.__enable_annotation_tools()
-                # change mouse cursor after:
-                # (1) idl step updated
-                # (2) drawing mode updated
-                self.change_mouse_cursor(check_mouse_hover=True)
-
-            # idl step can not be other values
-            else:
-                Debug.error_exit("idl step error")
-
-        # update gtvt 3d imgs and img_boxes
+        # (2) load, combine and refresh imgs
         self._load_idl_gtvt_data()
         self.__combine_pred_annotation_correction()
-        self.refresh_imgs()
-
         # init correction and mask
+        # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
         for i in ["gtvt.correction", "gtvt.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
+        self.refresh_imgs()
+
+        # (3) update widgets
+        self.__refresh_todo_list()
+        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
+            for i in ["gtvt", "gtvn"]:
+                self._radio_btn["correct.{}".format(i)].show()
+            self._btn["next.step"].setEnabled(True)
+            # dont change drawing mode, will interrupt user correcting gtvn
+        elif self.cur_idl_step() == IDLStep.CORRECT_GTVT:
+            self._radio_btn["correct.gtvt"].setChecked(True)
+            self.drawing_mode = DrawingMode.GTVT_PEN
+            self.__enable_annotation_tools()
+            # change mouse cursor after:
+            # (1) idl step updated
+            # (2) drawing mode updated
+            self.change_mouse_cursor(check_mouse_hover=True)
 
     def __confirm_gtvn_center(self):
+        # (1) detect gtvn clicks
         if len(self.gtvn_clicks_pos_3d) == 0:
             text = (
                 "No GTVn clicks detected. "
@@ -1025,37 +1003,20 @@ class IDLWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-        # (1)add clicks into 3d img
+        # (2) update status
+        if self.__idl_gtvt_thread.is_running:
+            self.update_cur_idl_step(IDLStep.WAITING)
+        else:
+            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
+
+        # (3) add clicks into 3d img
         if self.img_3d["gtvn.clicks"] is None:
             self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
         for pos in self.gtvn_clicks_pos_3d:
             # pos 0-transverse 1-coronal 2-saggital
             self.img_3d["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
 
-        # (2) update widget before idl.gtvn thread (for better user experience)
-        # gtvn thread is still running, only correct gtvt
-        if not self.__idl_gtvt_thread.is_running:
-            # update idl step before refresh img_boxes
-            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
-            self._radio_btn["correct.gtvt"].setChecked(True)
-            # self.__set_mouse_cursor("pen")
-            self.drawing_mode = DrawingMode.GTVT_PEN
-            self.__enable_annotation_tools()
-
-        # gtvt thread is not completedgoto waiting step
-        else:
-            # update idl step before refresh img_boxes
-            self.update_cur_idl_step(IDLStep.WAITING)
-            self._btn["clear"].setEnabled(False)
-
-        # temporarily disable "next.step" button, until idl_step=CORRECT_BOTH
-        self._btn["next.step"].setEnabled(False)
-
-        #  delete cross and refresh to show gtvn clicks
-        self.delete_all_crosses()
-        self.refresh_imgs()
-
-        # (3) transform gtvn clicks for idl.gtvn thread
+        # (4) transform gtvn clicks ndarray for idl.gtvn thread
         # copy data (dont change origin ndarray)
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
         # no need to flip empty img
@@ -1066,9 +1027,7 @@ class IDLWindow(ReplayWindow):
             # turn upside down
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
-        # (4) start real idl gtvn
-        self._text_label["gtvn.progress"].show()
-        self.__progress_bar["gtvn"].show()
+        # (5) start idl gtvn thread
         self.__idl_gtvn_thread.set_param(
             idl_gtvn_id=self._idl_id["gtvn"],
             patient=self._cur_patient,
@@ -1079,30 +1038,51 @@ class IDLWindow(ReplayWindow):
         )
         self.__idl_gtvn_thread.start()
 
+        # (6) delete cross and refresh to show gtvn clicks
+        self.delete_all_crosses()
+        self.refresh_imgs()
+
+        # (7) update widget
+        self.__refresh_todo_list()
+        # temporarily disable "next.step" button, until idl_step=CORRECT_BOTH
+        self._btn["next.step"].setEnabled(False)
+
+        if self.cur_idl_step() == IDLStep.CORRECT_GTVT:
+            self._radio_btn["correct.gtvt"].setChecked(True)
+            self.drawing_mode = DrawingMode.GTVT_PEN
+            self.__enable_annotation_tools()
+        elif self.cur_idl_step() == IDLStep.WAITING:
+            self.__disable_annotation_tools()
+
     def __update_idl_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
         Value.limit_range(progress_int, (0, 100))
         self.__progress_bar["gtvn"].setValue(progress_int)
 
     def __on_idl_gtvn_thread_finished(self):
-        # update widgets
-        self._text_label["gtvn.progress"].hide()
-        self.__progress_bar["gtvn"].hide()
-
-        # update idl step and widgets
-
-        # (1) gtvt thread is completed
-        if not self.__idl_gtvt_thread.is_running:
+        # (1) update status
+        if self.__idl_gtvt_thread.is_running:
+            self.update_cur_idl_step(IDLStep.CORRECT_GTVN)
+        else:
             self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
-            # update widgets
+
+        # (2) load, combine and refresh imgs
+        self._load_idl_gtvn_data()
+        self.__combine_pred_annotation_correction()
+        # init correction and mask
+        # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
+        for i in ["gtvn.correction", "gtvn.correction.mask"]:
+            self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
+        self.refresh_imgs()
+
+        # (3) update widgets
+        self.__refresh_todo_list()
+        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
             for i in ["gtvt", "gtvn"]:
                 self._radio_btn["correct.{}".format(i)].show()
             self._btn["next.step"].setEnabled(True)
-            # dont change drawing mode, because user is correcting gtvt
-
-        # (2) idl.gtvt thread is still running, only correct gtvn
-        else:
-            self.update_cur_idl_step(IDLStep.CORRECT_GTVN)
+            # dont change drawing mode, will interrupt user correcting gtvt
+        elif self.cur_idl_step() == IDLStep.CORRECT_GTVN:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
             self.__enable_annotation_tools()
@@ -1110,20 +1090,6 @@ class IDLWindow(ReplayWindow):
             # (1) idl step updated
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_hover=True)
-
-        # show gtvt/gtvn switch radio buttons
-        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
-            for i in ["gtvt", "gtvn"]:
-                self._radio_btn["correct.{}".format(i)].show()
-
-        # update 3d imgs and img_boxes
-        self._load_idl_gtvn_data()
-        self.__combine_pred_annotation_correction()
-        self.refresh_imgs()
-
-        # init correction and mask
-        for i in ["gtvn.correction", "gtvn.correction.mask"]:
-            self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_next_step_clicked(self):
@@ -1136,7 +1102,6 @@ class IDLWindow(ReplayWindow):
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.__confirm_gtvn_center()
         elif idl_step == IDLStep.CORRECT_BOTH:
-            self.update_cur_idl_step(IDLStep.APPROVED)
             self.__goto_idl_step_approved()
 
     # check annotation in 3 different planes
@@ -1212,7 +1177,10 @@ class IDLWindow(ReplayWindow):
     def restore_mouse_cursor(self):
         self.setCursor(Qt.ArrowCursor)
 
-    def change_mouse_cursor(self, check_mouse_hover: bool = False):
+    def change_mouse_cursor(
+        self,
+        check_mouse_hover: bool = False,  # if = True, only change cursor when mouse is on a img
+    ):
         if self.cur_idl_step() not in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
@@ -1630,9 +1598,9 @@ class IDLWindow(ReplayWindow):
             # init and save idl step of all patients
             self.__idl_step_of_all_patients = Dict()
             for patient in self._patients.to_list():
-                self.__idl_step_of_all_patients[
-                    "patient={}".format(patient)
-                ] = IDLStep.CLICK_GTVT_CENTER
+                self.__idl_step_of_all_patients["patient={}".format(patient)] = (
+                    IDLStep.CLICK_GTVT_CENTER
+                )
             self.__save_idl_step_of_all_patients()
 
         # (2) existing train id
@@ -1913,19 +1881,20 @@ class IDLWindow(ReplayWindow):
                 "patient={}".format(self._cur_patient)
             ]
 
-    def update_cur_idl_step(self, cur_step: str):
+    def update_cur_idl_step(self, new_idl_step: str):
         # update status
-        self.__idl_step_of_all_patients[
-            "patient={}".format(self._cur_patient)
-        ] = cur_step
+        cur_patient = "patient={}".format(self._cur_patient)
+        self.__idl_step_of_all_patients[cur_patient] = new_idl_step
         # save json
         self.__save_idl_step_of_all_patients()
 
-        # update todo list
-        if cur_step != IDLStep.CORRECT_BOTH and cur_step != IDLStep.APPROVED:
-            self._text_label[cur_step].set_status_ongoing()
+    def __refresh_todo_list(self):
+        idl_step = self.cur_idl_step()
 
-        if cur_step == IDLStep.CLICK_GTVT_CENTER:
+        if idl_step != IDLStep.CORRECT_BOTH and idl_step != IDLStep.APPROVED:
+            self._text_label[idl_step].set_status_ongoing()
+
+        if idl_step == IDLStep.CLICK_GTVT_CENTER:
             done_step_list = [IDLStep.SELECT_PATIENT]
             notstart_step_list = [
                 IDLStep.DRAW_GTVT,
@@ -1937,7 +1906,8 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
             ]
-        elif cur_step == IDLStep.DRAW_GTVT:
+
+        elif idl_step == IDLStep.DRAW_GTVT:
             done_step_list = [IDLStep.SELECT_PATIENT, IDLStep.CLICK_GTVT_CENTER]
             notstart_step_list = [
                 IDLStep.CLICK_GTVN_CENTER,
@@ -1948,7 +1918,7 @@ class IDLWindow(ReplayWindow):
             # sub steps of draw.gtvt
             self.__update_gtvt_annotated_status()
 
-        elif cur_step == IDLStep.CLICK_GTVN_CENTER:
+        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -1963,7 +1933,7 @@ class IDLWindow(ReplayWindow):
             ]
             self._text_label[IDLStep.WAITING].set_status_ongoing()
 
-        elif cur_step == IDLStep.WAITING:
+        elif idl_step == IDLStep.WAITING:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -1977,7 +1947,7 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
             ]
-        elif cur_step == IDLStep.CORRECT_GTVT:
+        elif idl_step == IDLStep.CORRECT_GTVT:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -1990,7 +1960,7 @@ class IDLWindow(ReplayWindow):
             notstart_step_list = [IDLStep.CORRECT_GTVN]
             self._text_label[IDLStep.WAITING].set_status_ongoing()
 
-        elif cur_step == IDLStep.CORRECT_GTVN:
+        elif idl_step == IDLStep.CORRECT_GTVN:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -2003,7 +1973,7 @@ class IDLWindow(ReplayWindow):
             notstart_step_list = [IDLStep.CORRECT_GTVT]
             self._text_label[IDLStep.WAITING].set_status_ongoing()
 
-        elif cur_step == IDLStep.CORRECT_BOTH:
+        elif idl_step == IDLStep.CORRECT_BOTH:
             self._text_label[IDLStep.CORRECT_GTVT].set_status_ongoing()
             self._text_label[IDLStep.CORRECT_GTVN].set_status_ongoing()
             done_step_list = [
@@ -2018,7 +1988,7 @@ class IDLWindow(ReplayWindow):
             ]
             notstart_step_list = []
 
-        elif cur_step == IDLStep.APPROVED:
+        elif idl_step == IDLStep.APPROVED:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
