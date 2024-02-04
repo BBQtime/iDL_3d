@@ -35,17 +35,17 @@ class DraggableCross(QWidget):
         if event.button() == Qt.LeftButton:
             self.window().select_cross(self.cross_id)
             self.window().set_crosses_dragging_state(
-                img_box=self.parent(), dragging=True
+                img_frame=self.parent(), dragging=True
             )
             self.window().set_crosses_dragging_offset(
-                img_box=self.parent(), pos=event.pos()
+                img_frame=self.parent(), pos=event.pos()
             )
             self.window().remove_3d_pos_of_selected_cross(self)
 
     def mouseMoveEvent(self, event: QMouseEvent):
         if self.dragging:
             new_pos = self.mapToParent(event.pos() - self.offset)
-            self.window().move_cross(img_box=self.parent(), pos=new_pos)
+            self.window().move_cross(img_frame=self.parent(), pos=new_pos)
 
     def __get_pos_in_3d(self):
         x = self.pos().x() + round(self.CROSS_SIZE / 2)
@@ -55,7 +55,7 @@ class DraggableCross(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.LeftButton:
             self.window().set_crosses_dragging_state(
-                img_box=self.parent(), dragging=False
+                img_frame=self.parent(), dragging=False
             )
             # update cross_id (3d position)
             pos_3d = self.__get_pos_in_3d()
@@ -74,10 +74,11 @@ class DraggableCross(QWidget):
             # refresh data and img after cross id updated
             self.window().reset_cur_slice_id()
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-                img_name_list.remove(self.parent().plane)
-                for i in img_name_list:
-                    self.window().refresh_imgs(i)
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                # only refresh other img frames
+                frame_name_list.remove(self.parent().plane)
+                for i in frame_name_list:
+                    self.window().refresh_imgs(frame_name=i)
                     self.window().refresh_crosses(i)
                 # select cross
                 self.window().select_cross(self.cross_id)

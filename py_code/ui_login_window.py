@@ -74,8 +74,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         self.__combox["name"].addItems(
             [
                 "~ Administrator",
-                "Hanna Rahbek Mortensen",
-                "Kenneth Jensen",
+                "Hanna Rahbek Mortensen" "Kenneth Jensen",
                 "Jesper Grau Eriksen",
             ]
         )

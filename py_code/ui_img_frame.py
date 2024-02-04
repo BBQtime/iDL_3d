@@ -7,14 +7,14 @@ from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
-class ImgBoxROI:
+class ImgFrameROI:
     x = None
     y = None
     width = None
     height = None
 
 
-class ImgBox(QLabel):
+class ImgFrame(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -23,7 +23,7 @@ class ImgBox(QLabel):
         self.modal = None
 
         # rgb img - region of interest
-        self.roi = ImgBoxROI()
+        self.roi = ImgFrameROI()
 
         # clicks
         self.selected_cross = None
@@ -66,11 +66,11 @@ class ImgBox(QLabel):
                 self.window().gtvt_click_pos_3d = pos_3d
                 self.window().reset_cur_slice_id()
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                    # only refresh other img_boxes
-                    img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-                    img_name_list.remove(self.plane)
-                    for i in img_name_list:
-                        self.window().refresh_imgs(i)
+                    frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                    # only refresh other img_frames
+                    frame_name_list.remove(self.plane)
+                    for i in frame_name_list:
+                        self.window().refresh_imgs(frame_name=i)
                 self.window().refresh_crosses()
 
             # draw/correct
@@ -80,7 +80,7 @@ class ImgBox(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_boxes_press(event=event, img_box=self)
+                self.window().draw_on_img_frame_press(event=event, img_frame=self)
 
             elif idl_step == IDLStep.CLICK_GTVN_CENTER:
                 pos_3d = self.get_pos_in_3d(event.pos())
@@ -88,15 +88,15 @@ class ImgBox(QLabel):
                     self.window().gtvn_clicks_pos_3d.append(pos_3d)
                     self.window().reset_cur_slice_id()
                     if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                        # only refresh other img_boxes
-                        img_name_list = [
+                        frame_name_list = [
                             Plane.TRANSVERSE,
                             Plane.CORONAL,
                             Plane.SAGITTAL,
                         ]
-                        img_name_list.remove(self.plane)
-                        for i in img_name_list:
-                            self.window().refresh_imgs(i)
+                        # only refresh other img_frames
+                        frame_name_list.remove(self.plane)
+                        for i in frame_name_list:
+                            self.window().refresh_imgs(frame_name=i)
                     self.window().refresh_crosses()
 
     def mouseMoveEvent(self, event: QMouseEvent):
@@ -104,8 +104,8 @@ class ImgBox(QLabel):
 
         should_paint_eraser_circle = self.__should_paint_eraser_circle()
 
-        # put this infromt of draw_on_img_boxes_move()
-        # because draw_on_img_boxes_move will trigger repaint
+        # put this before draw_on_img_frame_move()
+        # because draw_on_img_frame_move will trigger repaint
         if should_paint_eraser_circle:
             self.__circle_pos = event.pos()
 
@@ -117,8 +117,8 @@ class ImgBox(QLabel):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            # this function will trigger repaint repaint
-            self.window().draw_on_img_boxes_move(event=event, img_box=self)
+            # this function will trigger repaint
+            self.window().draw_on_img_frame_move(event=event, img_frame=self)
 
         elif should_paint_eraser_circle:
             self.update()  # repaint
@@ -133,7 +133,7 @@ class ImgBox(QLabel):
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
             ]:
-                self.window().draw_on_img_boxes_release(self)
+                self.window().draw_on_img_frame_release(self)
 
     def __should_paint_eraser_circle(self):
         if self.window().cur_idl_step() in [
@@ -393,6 +393,6 @@ class ImgBox(QLabel):
         self.window().cur_slice_id[self.plane] %= slices_count
 
         if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-            self.window().refresh_imgs(img_name=self.plane)
+            self.window().refresh_imgs(frame_name=self.plane)
         else:
             self.window().refresh_imgs()

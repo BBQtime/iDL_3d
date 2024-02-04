@@ -4,125 +4,21 @@ from pathlib import Path
 import cv2
 import numpy as np
 import qimage2ndarray
-from custom import GPU, Debug, Dict, Dir
+from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Timer, Value
-from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
-from PyQt5.QtCore import QEvent, QPoint, QSize, Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QEvent, QPoint, QSize, Qt
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMessageBox
 from scipy import ndimage
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from superqt import QCollapsible
-from training_idl_gtvn import TrainingIDLGTVn
-from training_idl_gtvt import TrainingIDLGTVt
 from ui_draggable_cross import DraggableCross
 from ui_idl_step_label import IDLStepLabel
-from ui_img_box import ImgBox
+from ui_idl_thread import IDLGTVnThread, IDLGTVtThread
+from ui_img_frame import ImgFrame
 from ui_replay_window import ReplayWindow
-
-
-class IDLThread(QThread):
-    progress_signal = pyqtSignal(float)
-    complete_signal = pyqtSignal()
-
-    def __init__(
-        self,
-        progress_bar: QtWidgets.QProgressBar,
-        progress_bar_label: QtWidgets.QLabel,
-    ):
-        super().__init__()
-        self.is_running = False
-        self._progress_bar = progress_bar
-        self._progress_bar_label = progress_bar_label
-
-    def stop(self):
-        if self.is_running:
-            self.terminate()  # force stop
-            GPU.clear_cache()
-            # self.quit()  # signal the thread to exit its event loop
-            # self.wait()  # wait for the thread to be cleaned up properly
-            self.is_running = False
-            self._hide_progress_widgets()
-
-    def _show_progress_widgets(self):
-        self._progress_bar_label.show()
-        self._progress_bar.setValue(0)
-        self._progress_bar.show()
-
-    def _hide_progress_widgets(self):
-        self._progress_bar_label.hide()
-        self._progress_bar.hide()
-        self._progress_bar.setValue(0)
-
-
-class IDLGTVnThread(IDLThread):
-    progress_signal = pyqtSignal(float)
-    complete_signal = pyqtSignal()
-
-    def set_param(
-        self,
-        idl_gtvn_id: str,
-        patient: str,
-        idl_gtvn_clicks: ndarray,
-        dataset_part: str,
-        dataset_ver: str,
-        debug_mode: bool,
-    ):
-        self.__idl_gtvn_id = idl_gtvn_id
-        self.__patient = patient
-        self.__idl_gtvn_clicks = idl_gtvn_clicks
-        self.__dataset_part = dataset_part
-        self.__dataset_ver = dataset_ver
-        self.__debug_mode = debug_mode
-
-    def run(self):
-        self._show_progress_widgets()
-        self.is_running = True
-        training_idl_gtvn = TrainingIDLGTVn(self.progress_signal)
-        training_idl_gtvn.real_idl(
-            idl_gtvn_id=self.__idl_gtvn_id,
-            patient=self.__patient,
-            idl_gtvn_clicks=self.__idl_gtvn_clicks,
-            dataset_part=self.__dataset_part,
-            dataset_ver=self.__dataset_ver,
-            debug_mode=self.__debug_mode,
-        )
-        self._hide_progress_widgets()
-        self.is_running = False
-        self.complete_signal.emit()
-
-
-class IDLGTVtThread(IDLThread):
-    progress_signal = pyqtSignal(float)
-    complete_signal = pyqtSignal()
-
-    def set_param(
-        self,
-        idl_gtvt_id: str,
-        patient: str,
-        dataset_ver: str,
-        debug_mode: bool,
-    ):
-        self.__idl_gtvt_id = idl_gtvt_id
-        self.__patient = patient
-        self.__dataset_ver = dataset_ver
-        self.__debug_mode = debug_mode
-
-    def run(self):
-        self._show_progress_widgets()
-        self.is_running = True
-        training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
-        training_idl_gtvt.real_idl(
-            idl_gtvt_id=self.__idl_gtvt_id,
-            patient=self.__patient,
-            dataset_ver=self.__dataset_ver,
-            debug_mode=self.__debug_mode,
-        )
-        self._hide_progress_widgets()
-        self.is_running = False
-        self.complete_signal.emit()
 
 
 class IDLWindow(ReplayWindow):
@@ -138,7 +34,7 @@ class IDLWindow(ReplayWindow):
         # pass debug_mode parameter to the parent class
         super().__init__()
 
-    def draw_on_img_boxes_press(self, event: QtGui.QMouseEvent, img_box: ImgBox):
+    def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         idl_step = self.cur_idl_step()
 
         if idl_step not in [
@@ -151,9 +47,9 @@ class IDLWindow(ReplayWindow):
 
         # if current slice isn't the gtvt center slice, switch to the gtvt center slice.
         if idl_step == IDLStep.DRAW_GTVT:
-            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_box.plane]
-            if self.cur_slice_id[img_box.plane] != gtvt_center_slice_id:
-                self.cur_slice_id[img_box.plane] = gtvt_center_slice_id
+            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_frame.plane]
+            if self.cur_slice_id[img_frame.plane] != gtvt_center_slice_id:
+                self.cur_slice_id[img_frame.plane] = gtvt_center_slice_id
                 self.refresh_imgs()
                 return
 
@@ -176,27 +72,27 @@ class IDLWindow(ReplayWindow):
 
                 # clear annotation on cur plane
                 # use mask to make sure to filter out the annotation on current anatomical plane only
-                if img_box.plane == Plane.TRANSVERSE:
+                if img_frame.plane == Plane.TRANSVERSE:
                     mask = np.zeros_like(self.img_3d["gtvt.annotation"][t, :, :])
                     mask[c, :] = 1
                     mask[:, s] = 1
                     self.img_3d["gtvt.annotation"][t, :, :] *= mask
-                elif img_box.plane == Plane.CORONAL:
+                elif img_frame.plane == Plane.CORONAL:
                     mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, c, :])
                     mask[t, :] = 1
                     mask[:, s] = 1
                     self.img_3d["gtvt.annotation"][:, c, :] *= mask
-                elif img_box.plane == Plane.SAGITTAL:
+                elif img_frame.plane == Plane.SAGITTAL:
                     mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, :, s])
                     mask[t, :] = 1
                     mask[:, c] = 1
                     self.img_3d["gtvt.annotation"][:, :, s] *= mask
 
                 # update gtvt annotated status
-                self.__gtvt_annotated_status[img_box.plane] = False
+                self.__gtvt_annotated_status[img_frame.plane] = False
                 # update todo list
                 self._text_label[
-                    "draw.gtvt.{}".format(img_box.plane)
+                    "draw.gtvt.{}".format(img_frame.plane)
                 ].set_status_missing()
 
             # correcting gtvt/gtvn
@@ -212,19 +108,19 @@ class IDLWindow(ReplayWindow):
 
                 # clear correction on cur plane
                 # use ct img qlabel's plane
-                t = c = s = self.cur_slice_id[img_box.plane]
-                _3d_img = self.img_3d["{}.correction".format(gtv)]
-                _3d_mask = self.img_3d["{}.correction.mask".format(gtv)]
+                t = c = s = self.cur_slice_id[img_frame.plane]
+                img_3d = self.img_3d["{}.correction".format(gtv)]
+                mask_3d = self.img_3d["{}.correction.mask".format(gtv)]
 
-                if img_box.plane == Plane.TRANSVERSE:
-                    _3d_img[t, :, :] = np.zeros_like(_3d_img[t, :, :])
-                    _3d_mask[t, :, :] = np.zeros_like(_3d_mask[t, :, :])
-                elif img_box.plane == Plane.CORONAL:
-                    _3d_img[:, c, :] = np.zeros_like(_3d_img[:, c, :])
-                    _3d_mask[:, c, :] = np.zeros_like(_3d_mask[:, c, :])
-                elif img_box.plane == Plane.SAGITTAL:
-                    _3d_img[:, :, s] = np.zeros_like(_3d_img[:, :, s])
-                    _3d_mask[:, :, s] = np.zeros_like(_3d_mask[:, :, s])
+                if img_frame.plane == Plane.TRANSVERSE:
+                    img_3d[t, :, :] = np.zeros_like(img_3d[t, :, :])
+                    mask_3d[t, :, :] = np.zeros_like(mask_3d[t, :, :])
+                elif img_frame.plane == Plane.CORONAL:
+                    img_3d[:, c, :] = np.zeros_like(img_3d[:, c, :])
+                    mask_3d[:, c, :] = np.zeros_like(mask_3d[:, c, :])
+                elif img_frame.plane == Plane.SAGITTAL:
+                    img_3d[:, :, s] = np.zeros_like(img_3d[:, :, s])
+                    mask_3d[:, :, s] = np.zeros_like(mask_3d[:, :, s])
 
                 self.__save_corrections_and_masks(gtv)
 
@@ -232,7 +128,7 @@ class IDLWindow(ReplayWindow):
             self.__combine_pred_annotation_correction()
             self.refresh_imgs()
 
-    def draw_on_img_boxes_move(self, event: QtGui.QMouseEvent, img_box: ImgBox):
+    def draw_on_img_frame_move(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         if self.paint_pos is None:
             return
 
@@ -241,11 +137,11 @@ class IDLWindow(ReplayWindow):
         eraser_color = QtGui.QColor(*self.color["eraser"])
 
         if self.display_mode() == DisplayMode.MODAL_FIXED:
-            img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+            frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         else:
-            img_name_list = [img_box.plane]
-        for i in img_name_list:
-            painter = QtGui.QPainter(self.img_box[i].drawing_layer)
+            frame_name_list = [img_frame.plane]
+        for i in frame_name_list:
+            painter = QtGui.QPainter(self.img_frame[i].drawing_layer)
 
             # transparent pen
             # if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
@@ -268,20 +164,20 @@ class IDLWindow(ReplayWindow):
                 painter.setPen(
                     QtGui.QPen(eraser_color, eraser_size, Qt.SolidLine, Qt.RoundCap)
                 )
-                self.img_box[i].pen_mode = False
+                self.img_frame[i].pen_mode = False
             elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
                 painter.setPen(
                     QtGui.QPen(pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
                 )
-                self.img_box[i].pen_mode = True
+                self.img_frame[i].pen_mode = True
 
             painter.drawLine(self.paint_pos, event.pos())
 
-            self.img_box[i].update()  # schedule a repaint
+            self.img_frame[i].update()  # schedule a repaint
 
         self.paint_pos = event.pos()  # update paint pos
 
-    def draw_on_img_boxes_release(self, img_box: ImgBox):
+    def draw_on_img_frame_release(self, img_frame: ImgFrame):
         if self.paint_pos is None:
             return
 
@@ -292,7 +188,7 @@ class IDLWindow(ReplayWindow):
 
         # save drawing layer into 2d ndarray
         # qpixmap to a qimage
-        qimg = img_box.drawing_layer.toImage()
+        qimg = img_frame.drawing_layer.toImage()
         # qimage to ndarray
         annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
         annotation_2d /= 255
@@ -301,18 +197,18 @@ class IDLWindow(ReplayWindow):
         annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
         # crop annotation_2d based on roi
-        x = img_box.roi.x
-        y = img_box.roi.y
-        width = img_box.roi.width
-        height = img_box.roi.height
+        x = img_frame.roi.x
+        y = img_frame.roi.y
+        width = img_frame.roi.width
+        height = img_frame.roi.height
         annotation_2d = annotation_2d[y : y + height, x : x + width]
 
         # resize to actual size
-        if img_box.plane == Plane.SAGITTAL:
+        if img_frame.plane == Plane.SAGITTAL:
             actual_shape = self.img_3d[Modal.CT][:, :, 0].shape
-        elif img_box.plane == Plane.CORONAL:
+        elif img_frame.plane == Plane.CORONAL:
             actual_shape = self.img_3d[Modal.CT][:, 0, :].shape
-        elif img_box.plane == Plane.TRANSVERSE:
+        elif img_frame.plane == Plane.TRANSVERSE:
             actual_shape = self.img_3d[Modal.CT][0, :, :].shape
         annotation_2d = cv2.resize(
             annotation_2d,
@@ -328,11 +224,11 @@ class IDLWindow(ReplayWindow):
         # (1)gtvt annotation
         if idl_step == IDLStep.DRAW_GTVT:
             t, c, s = self.gtvt_click_pos_3d
-            if img_box.plane == Plane.TRANSVERSE:
+            if img_frame.plane == Plane.TRANSVERSE:
                 segment = self.img_3d["gtvt.annotation"][t, :, :]
-            elif img_box.plane == Plane.CORONAL:
+            elif img_frame.plane == Plane.CORONAL:
                 segment = self.img_3d["gtvt.annotation"][:, c, :]
-            elif img_box.plane == Plane.SAGITTAL:
+            elif img_frame.plane == Plane.SAGITTAL:
                 segment = self.img_3d["gtvt.annotation"][:, :, s]
         # (2)correction
         elif idl_step in [
@@ -340,18 +236,18 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            t = c = s = self.cur_slice_id[img_box.plane]
+            t = c = s = self.cur_slice_id[img_frame.plane]
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 gtv = "gtvn"
-            _3d_img = self.img_3d["{}.pred.final".format(gtv)]
-            if img_box.plane == Plane.TRANSVERSE:
-                segment = _3d_img[t, :, :].copy()
-            elif img_box.plane == Plane.CORONAL:
-                segment = _3d_img[:, c, :].copy()
-            elif img_box.plane == Plane.SAGITTAL:
-                segment = _3d_img[:, :, s].copy()
+            img_3d = self.img_3d["{}.pred.final".format(gtv)]
+            if img_frame.plane == Plane.TRANSVERSE:
+                segment = img_3d[t, :, :].copy()
+            elif img_frame.plane == Plane.CORONAL:
+                segment = img_3d[:, c, :].copy()
+            elif img_frame.plane == Plane.SAGITTAL:
+                segment = img_3d[:, :, s].copy()
 
         # invert color if in eraser mode
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
@@ -370,26 +266,26 @@ class IDLWindow(ReplayWindow):
 
         # replace slice in 3d gtvt.annotation or gtvt/gtvn correction
         if idl_step == IDLStep.DRAW_GTVT:
-            _3d_img = self.img_3d["gtvt.annotation"]
+            img_3d = self.img_3d["gtvt.annotation"]
         elif idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                _3d_img = self.img_3d["gtvt.correction"]
-                _3d_mask = self.img_3d["gtvt.correction.mask"]
+                img_3d = self.img_3d["gtvt.correction"]
+                mask_3d = self.img_3d["gtvt.correction.mask"]
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                _3d_img = self.img_3d["gtvn.correction"]
-                _3d_mask = self.img_3d["gtvn.correction.mask"]
+                img_3d = self.img_3d["gtvn.correction"]
+                mask_3d = self.img_3d["gtvn.correction.mask"]
 
         # replace slice
-        if img_box.plane == Plane.TRANSVERSE:
-            _3d_img[t, :, :] = segment
-        elif img_box.plane == Plane.CORONAL:
-            _3d_img[:, c, :] = segment
-        elif img_box.plane == Plane.SAGITTAL:
-            _3d_img[:, :, s] = segment
+        if img_frame.plane == Plane.TRANSVERSE:
+            img_3d[t, :, :] = segment
+        elif img_frame.plane == Plane.CORONAL:
+            img_3d[:, c, :] = segment
+        elif img_frame.plane == Plane.SAGITTAL:
+            img_3d[:, :, s] = segment
 
         # update masks then save corrections and masks
         if idl_step in [
@@ -398,21 +294,21 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_BOTH,
         ]:
             # (1)update correction masks
-            if img_box.plane == Plane.TRANSVERSE:
+            if img_frame.plane == Plane.TRANSVERSE:
                 if segment.max() == 0:
-                    _3d_mask[t, :, :] = np.zeros_like(segment)
+                    mask_3d[t, :, :] = np.zeros_like(segment)
                 else:
-                    _3d_mask[t, :, :] = np.ones_like(segment)
-            elif img_box.plane == Plane.CORONAL:
+                    mask_3d[t, :, :] = np.ones_like(segment)
+            elif img_frame.plane == Plane.CORONAL:
                 if segment.max() == 0:
-                    _3d_mask[:, c, :] = np.zeros_like(segment)
+                    mask_3d[:, c, :] = np.zeros_like(segment)
                 else:
-                    _3d_mask[:, c, :] = np.ones_like(segment)
-            elif img_box.plane == Plane.SAGITTAL:
+                    mask_3d[:, c, :] = np.ones_like(segment)
+            elif img_frame.plane == Plane.SAGITTAL:
                 if segment.max() == 0:
-                    _3d_mask[:, :, s] = np.zeros_like(segment)
+                    mask_3d[:, :, s] = np.zeros_like(segment)
                 else:
-                    _3d_mask[:, :, s] = np.ones_like(segment)
+                    mask_3d[:, :, s] = np.ones_like(segment)
             # (2)save corrections and masks
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
@@ -426,7 +322,7 @@ class IDLWindow(ReplayWindow):
         self.__combine_pred_annotation_correction()
 
         # update UI
-        self.__clear_all_drawing_layers(img_box)
+        self.__clear_all_drawing_layers(img_frame)
         self.refresh_imgs()
 
     def __save_corrections_and_masks(self, gtv: str):
@@ -1201,25 +1097,25 @@ class IDLWindow(ReplayWindow):
                     self.__gtvt_annotated_status[plane] = True
                     self._text_label["draw.gtvt.{}".format(plane)].set_status_done()
 
-    def refresh_imgs(self, img_name=None):
+    def refresh_imgs(self, frame_name=None):
         # no patient loaded
         if self.img_3d[Modal.CT] is None:
             if self.display_mode() == DisplayMode.PLANE_FIXED:
-                img_name = Plane.TRANSVERSE
+                frame_name = Plane.TRANSVERSE
             else:
-                img_name = Modal.CT
+                frame_name = Modal.CT
             # ask user to select a patient
-            w = self.img_box[img_name].width()
-            h = self.img_box[img_name].height()
+            w = self.img_frame[frame_name].width()
+            h = self.img_frame[frame_name].height()
             qimg = QtGui.QImage(w, h, QtGui.QImage.Format_RGB888)
             black = QtGui.QColor(0, 0, 0)
             qimg.fill(black)
             self._add_msg_on_qimg(qimg)
-            self.img_box[img_name].set_background(qimg)
-            self.img_box[img_name].update()
+            self.img_frame[frame_name].set_background(qimg)
+            self.img_frame[frame_name].update()
             return
 
-        super().refresh_imgs(img_name)
+        super().refresh_imgs(frame_name=frame_name)
 
     def __change_color(self, pixmap: QtGui.QPixmap, old_color, new_color):
         image = pixmap.toImage()
@@ -1249,8 +1145,8 @@ class IDLWindow(ReplayWindow):
 
         if check_mouse_hover:
             is_mouse_over_img = False
-            for i in self.img_box.keys():
-                if self.img_box[i].underMouse():
+            for i in self.img_frame.keys():
+                if self.img_frame[i].underMouse():
                     is_mouse_over_img = True
             if not is_mouse_over_img:
                 return
@@ -1364,25 +1260,25 @@ class IDLWindow(ReplayWindow):
             Plane.CORONAL,
             Plane.SAGITTAL,
         ]:
-            self.img_box[i].delete_all_crosses()
+            self.img_frame[i].delete_all_crosses()
 
-    def refresh_crosses(self, img_name: str = None):
+    def refresh_crosses(self, frame_name: str = None):
         if self.cur_idl_step() not in [
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.CLICK_GTVN_CENTER,
         ]:
             return
 
-        if img_name is not None:
-            img_name_list = [img_name]
+        if frame_name is not None:
+            frame_name_list = [frame_name]
         else:
             if self.display_mode() == DisplayMode.PLANE_FIXED:
-                img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
             else:
-                img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+                frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
 
-        for i in img_name_list:
-            self.img_box[i].refresh_crosses()
+        for i in frame_name_list:
+            self.img_frame[i].refresh_crosses()
 
     def update_cross_id(
         self,
@@ -1392,7 +1288,7 @@ class IDLWindow(ReplayWindow):
     ):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                cross = self.img_box[i].get_cross_by_id(old_cross_id)
+                cross = self.img_frame[i].get_cross_by_id(old_cross_id)
                 cross.cross_id = new_cross_id
         else:
             cross.cross_id = new_cross_id
@@ -1408,43 +1304,43 @@ class IDLWindow(ReplayWindow):
             if pos_3d in self.gtvn_clicks_pos_3d:
                 self.gtvn_clicks_pos_3d.remove(pos_3d)
 
-    def set_crosses_dragging_offset(self, img_box: ImgBox, pos: QPoint):
+    def set_crosses_dragging_offset(self, img_frame: ImgFrame, pos: QPoint):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.img_box[i].selected_cross.offset = pos
+                self.img_frame[i].selected_cross.offset = pos
         else:
-            img_box.selected_cross.offset = pos
+            img_frame.selected_cross.offset = pos
 
-    def set_crosses_dragging_state(self, img_box: ImgBox, dragging: bool):
+    def set_crosses_dragging_state(self, img_frame: ImgFrame, dragging: bool):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.img_box[i].selected_cross.dragging = dragging
+                self.img_frame[i].selected_cross.dragging = dragging
         else:
-            img_box.selected_cross.dragging = dragging
+            img_frame.selected_cross.dragging = dragging
 
-    def move_cross(self, img_box: ImgBox, pos: QPoint):
+    def move_cross(self, img_frame: ImgFrame, pos: QPoint):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-                self.img_box[i].selected_cross.move(pos)
+                self.img_frame[i].selected_cross.move(pos)
         else:
-            img_box.selected_cross.move(pos)
+            img_frame.selected_cross.move(pos)
 
     def delete_selected_crosses(self):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
-            img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+            frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         else:
-            img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
 
-        for i in img_name_list:
-            self.img_box[i].delete_selected_cross()
+        for i in frame_name_list:
+            self.img_frame[i].delete_selected_cross()
 
     def select_cross(self, cross_id: tuple):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
-            img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+            frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         else:
-            img_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-        for i in img_name_list:
-            self.img_box[i].select_cross(cross_id)
+            frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+        for i in frame_name_list:
+            self.img_frame[i].select_cross(cross_id)
 
     def get_nii_spacing(self):
         return self._nii_spacing
@@ -1704,15 +1600,15 @@ class IDLWindow(ReplayWindow):
 
         super().keyPressEvent(event)
 
-    def __clear_all_drawing_layers(self, img_box: ImgBox):
+    def __clear_all_drawing_layers(self, img_frame: ImgFrame):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
-            img_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+            frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         else:
-            img_name_list = [img_box.plane]
-        for i in img_name_list:
-            self.img_box[i].drawing_layer = QtGui.QPixmap(self.img_box[i].size())
-            self.img_box[i].drawing_layer.fill(Qt.transparent)
-            self.img_box[i].update()
+            frame_name_list = [img_frame.plane]
+        for i in frame_name_list:
+            self.img_frame[i].drawing_layer = QtGui.QPixmap(self.img_frame[i].size())
+            self.img_frame[i].drawing_layer.fill(Qt.transparent)
+            self.img_frame[i].update()
 
     # this function is connected to widget, dont set input params to this function
     def __switch_drawing_mode_gtv(self):
@@ -1749,7 +1645,7 @@ class IDLWindow(ReplayWindow):
     def _load_baseline_data(self):
         # self._reset_zoomin()
         self._clear_img_3d()
-        self._clear_img_boxes()
+        self._clear_img_frames()
 
         # fill combobox patient after self._baseline_id is confirmed
         self._fill_combox_patient()

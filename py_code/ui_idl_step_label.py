@@ -39,9 +39,9 @@ class IDLStepLabel(QLabel):
         if self.__idl_step == IDLStep.WAITING:
             self.setText("STEP 5 - Generating Segmentation")
         if self.__idl_step == IDLStep.CORRECT_GTVT:
-            self.setText("STEP 6 - Correct GTVt Segmentation")
+            self.setText("STEP 6 - Correct GTVt")
         if self.__idl_step == IDLStep.CORRECT_GTVN:
-            self.setText(str_space + "- Correct GTVn Segmentation")
+            self.setText(str_space + "- Correct GTVn")
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
