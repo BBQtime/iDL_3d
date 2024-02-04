@@ -888,6 +888,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._slider["zoom"].setMinimum(100)
         self._slider["zoom"].setMaximum(200)
         self._slider["zoom"].setValue(100)
+        self._slider["zoom"].valueChanged.connect(self.refresh_imgs)
 
         # add slider into collapsible space
         v_layout = QtWidgets.QVBoxLayout()
@@ -1617,13 +1618,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __on_mix_slider_changed(self):
         self.refresh_imgs()
 
-    # replay_mode=True will show all contours
-    # otherwise correction and annotation will cover pred
-    def refresh_imgs(
-        self,
-        replay_mode: bool = True,
-        img_name: str = None,
-    ):
+    def refresh_imgs(self, img_name: str = None):
         if self.img_3d[Modal.CT] is None:
             return
 
@@ -1771,8 +1766,18 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # blur after _fit_img_box will gain better effect
             rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
 
+            # idl mode, correction > annotation > pred
+            # "delete_all_crosses" is unique a function belonging to IDLWindow
+            # for hasattr() function has to be a public or protected one, not private
+            if hasattr(self, "delete_all_crosses"):
+                seg_name_list = [
+                    "gtvn.pred.final",
+                    "gtvt.pred.final",
+                    "gtvn.clicks",
+                    "gtvt.click",
+                ]
             # replay mode, place the name of img on the top layer at the end of the list
-            if replay_mode:
+            else:
                 seg_name_list = [
                     "gtvn.label",
                     "gtvt.label",
@@ -1781,14 +1786,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     "gtvt.annotation",
                     "gtvn.correction",
                     "gtvt.correction",
-                    "gtvn.clicks",
-                    "gtvt.click",
-                ]
-            # idl mode, correction > annotation > pred
-            else:
-                seg_name_list = [
-                    "gtvn.pred.final",
-                    "gtvt.pred.final",
                     "gtvn.clicks",
                     "gtvt.click",
                 ]

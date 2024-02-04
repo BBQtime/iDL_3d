@@ -1219,7 +1219,7 @@ class IDLWindow(ReplayWindow):
             self.img_box[img_name].update()
             return
 
-        super().refresh_imgs(replay_mode=False, img_name=img_name)
+        super().refresh_imgs(img_name)
 
     def __change_color(self, pixmap: QtGui.QPixmap, old_color, new_color):
         image = pixmap.toImage()
