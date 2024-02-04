@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -458,7 +459,12 @@ class IDLWindow(ReplayWindow):
             Nii.save(
                 img=img,
                 save_path=os.path.join(
-                    cur_round_dir, "{}_{}.nii.gz".format(gtv, i.replace("_", "."))
+                    cur_round_dir,
+                    "{}_{}.nii.gz".format(
+                        gtv,
+                        # "correction.mask" -> "correction_mask"
+                        i.replace(".", "_"),
+                    ),
                 ),
                 spacing=self._nii_spacing,
             )
@@ -559,6 +565,54 @@ class IDLWindow(ReplayWindow):
         self._collap["todo.list"].addWidget(container)
         self._collap["todo.list"].expand()
 
+    def __clear_3d_imgs_and_delete_nii(self, img_name_list: list):
+        # clear 3d imgs
+        for i in img_name_list:
+            self.img_3d[i] = None
+
+        # delete nii files
+        for gtv in ["gtvt", "gtvn"]:
+            imgs_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_id[gtv],
+                "patients",
+                "patient={}".format(self._cur_patient),
+                "round=01",
+            )
+            for i in img_name_list:
+                # delete nii file
+                if i.startswith(gtv):
+                    file_name = i.replace(".", "_") + ".nii.gz"
+                    Dir.delete(os.path.join(imgs_dir, file_name))
+
+                # delete idl.gtvn related files
+                if i == "gtvn.pred":
+                    Dir.delete(os.path.join(imgs_dir, "gtvn_distance_map.nii.gz"))
+                    # fold_dirs = Dir.get_sub_dirs(
+                    #     input_dir=os.path.join(
+                    #         g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvn"]
+                    #     ),
+                    #     key_word="fold=",
+                    #     full_path=True,
+                    # )
+                    # for fold_dir in fold_dirs:
+                    #     Dir.delete(fold_dir)
+
+                # delete idl.gtvt related files
+                if i == "gtvt.pred":
+                    Dir.delete(os.path.join(imgs_dir, "round=01.pt"))
+                    Dir.delete(os.path.join(Path(imgs_dir).parent, "loss.json"))
+                    Dir.delete(
+                        os.path.join(Path(imgs_dir).parent, "selected_slices.json")
+                    )
+                    # Dir.delete(
+                    #     os.path.join(Path(imgs_dir).parent.parent.parent, "hyper.json")
+                    # )
+                    Dir.delete(
+                        os.path.join(Path(imgs_dir).parent.parent.parent, "loss.png")
+                    )
+
     def __goto_idl_step_click_gtvt_center(self):
         # (1) stop idl qthreads
         self.__idl_gtvt_thread.stop()
@@ -571,7 +625,7 @@ class IDLWindow(ReplayWindow):
         self.gtvt_click_pos_3d = None
         # DO NOT clear self.gtvn_clicks_pos_3d
 
-        # (4) clear images
+        # (4) clear 3d imgs and delete nii files
         img_name_list = ["gtvt.click", "gtvn.clicks", "gtvt.annotation"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
@@ -580,15 +634,14 @@ class IDLWindow(ReplayWindow):
                 "{}.correction.mask".format(i),
                 "{}.pred.final".format(i),
             ]
-        for i in img_name_list:
-            self.img_3d[i] = None
+        self.__clear_3d_imgs_and_delete_nii(img_name_list)
 
-        # (5) refresh images and crosses
+        # (5) refresh todolist, imgs and crosses
+        self.__refresh_todo_list()
         self.refresh_imgs()
         self.refresh_crosses()
 
         # (6) update widgets
-        self.__refresh_todo_list()
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
@@ -662,9 +715,8 @@ class IDLWindow(ReplayWindow):
         # DO NOT clear self.gtvt_click_pos_3d
         # DO NOT clear self.gtvn_clicks_pos_3d
 
-        # (3) clear images
-        self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
-        img_name_list = ["gtvn.clicks"]
+        # (3) clear 3d imgs and delete nii files
+        img_name_list = ["gtvt.annotation", "gtvn.clicks"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
                 "{}.pred".format(i),
@@ -672,15 +724,15 @@ class IDLWindow(ReplayWindow):
                 "{}.correction.mask".format(i),
                 "{}.pred.final".format(i),
             ]
-        for i in img_name_list:
-            self.img_3d[i] = None
+        self.__clear_3d_imgs_and_delete_nii(img_name_list)
+        self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
 
-        # (4) remove crosses and refresh images
+        # (4) refresh todolist and imgs, delete crosses
+        self.__refresh_todo_list()
+        self.refresh_imgs()  # after __refresh_todo_list()
         self.delete_all_crosses()
-        self.refresh_imgs()
 
         # (5) update widgets
-        self.__refresh_todo_list()
         self.__enable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
 
@@ -744,23 +796,23 @@ class IDLWindow(ReplayWindow):
         # (3) clear gtvn clicks
         self.gtvn_clicks_pos_3d = List()
 
-        # (4) update and combine images
-        for i in [
+        # (4) clear 3d imgs and delete nii files, then combine images
+        img_name_list = [
             "gtvn.clicks",
             "gtvn.pred",
             "gtvn.correction",
             "gtvn.correction.mask",
             "gtvn.pred.final",
-        ]:
-            self.img_3d[i] = None
+        ]
+        self.__clear_3d_imgs_and_delete_nii(img_name_list)
         self.__combine_pred_annotation_correction()
 
-        # (5) refresh images and crosses
+        # (5) refresh todolist, imgs and crosses
+        self.__refresh_todo_list()
         self.refresh_imgs()
         self.refresh_crosses()
 
         # (6) update widgets
-        self.__refresh_todo_list()
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
@@ -777,18 +829,19 @@ class IDLWindow(ReplayWindow):
         # elif self._radio_btn["correct.gtvn"].isChecked():
         #     self.drawing_mode = DrawingMode.GTVN_PEN
 
-        # (3) init correction and mask
+        # (3) update imgs
+        # init correction and mask
         for gtv in ["gtvt", "gtvn"]:
             for i in ["{}.correction".format(gtv), "{}.correction.mask".format(gtv)]:
                 if self.img_3d[i] is None:
                     self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
-
-        # (4) combine and refresh imgs
         self.__combine_pred_annotation_correction()
+
+        # (4) refresh todolist and imgs
+        self.__refresh_todo_list()
         self.refresh_imgs()
 
         # (5) update widgets
-        self.__refresh_todo_list()
         self.__enable_annotation_tools()
         for i in ["gtvt", "gtvn"]:
             self._radio_btn["correct.{}".format(i)].show()
@@ -802,12 +855,14 @@ class IDLWindow(ReplayWindow):
         # (2) update status
         self.update_cur_idl_step(IDLStep.APPROVED)
 
-        # (3) combine and refresh imgs
+        # (3) update imgs
         self.__combine_pred_annotation_correction()
+
+        # (4) refresh todolist and imgs
+        self.__refresh_todo_list()
         self.refresh_imgs()
 
-        # (4) update widgets
-        self.__refresh_todo_list()
+        # (5) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._slider["draw.size"].hide()
@@ -960,17 +1015,19 @@ class IDLWindow(ReplayWindow):
         else:
             self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
 
-        # (2) load, combine and refresh imgs
+        # (2) load and combine 3d imgs
         self._load_idl_gtvt_data()
         self.__combine_pred_annotation_correction()
         # init correction and mask
         # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
         for i in ["gtvt.correction", "gtvt.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
+
+        # (3) refresh todolist and imgs
+        self.__refresh_todo_list()
         self.refresh_imgs()
 
-        # (3) update widgets
-        self.__refresh_todo_list()
+        # (4) update widgets
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
             for i in ["gtvt", "gtvn"]:
                 self._radio_btn["correct.{}".format(i)].show()
@@ -1038,21 +1095,20 @@ class IDLWindow(ReplayWindow):
         )
         self.__idl_gtvn_thread.start()
 
-        # (6) delete cross and refresh to show gtvn clicks
-        self.delete_all_crosses()
+        # (6) refresh todolist and imgs, delete crosses
+        self.__refresh_todo_list()
         self.refresh_imgs()
+        self.delete_all_crosses()
 
         # (7) update widget
-        self.__refresh_todo_list()
-        # temporarily disable "next.step" button, until idl_step=CORRECT_BOTH
-        self._btn["next.step"].setEnabled(False)
-
         if self.cur_idl_step() == IDLStep.CORRECT_GTVT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__enable_annotation_tools()
         elif self.cur_idl_step() == IDLStep.WAITING:
             self.__disable_annotation_tools()
+        # temporarily disable "next.step" button, until idl_step=CORRECT_BOTH
+        self._btn["next.step"].setEnabled(False)
 
     def __update_idl_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
@@ -1066,17 +1122,19 @@ class IDLWindow(ReplayWindow):
         else:
             self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
 
-        # (2) load, combine and refresh imgs
+        # (2) load and combine 3d imgs
         self._load_idl_gtvn_data()
         self.__combine_pred_annotation_correction()
         # init correction and mask
         # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
         for i in ["gtvn.correction", "gtvn.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
+
+        # (3) refresh todolist and imgs
+        self.__refresh_todo_list()
         self.refresh_imgs()
 
-        # (3) update widgets
-        self.__refresh_todo_list()
+        # (4) update widgets
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
             for i in ["gtvt", "gtvn"]:
                 self._radio_btn["correct.{}".format(i)].show()
@@ -1786,10 +1844,9 @@ class IDLWindow(ReplayWindow):
 
         # update widgets
         self._collap["patient"].collapse()
+        self._collap["annotation"].expand()
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
             self._collap[i].setEnabled(True)
-        for i in ["annotation", "display.mode"]:
-            self._collap[i].expand()
 
         # clear data
         self._clear_img_3d()
@@ -1931,7 +1988,10 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
             ]
-            self._text_label[IDLStep.WAITING].set_status_ongoing()
+            if self.__idl_gtvt_thread.is_running:
+                self._text_label[IDLStep.WAITING].set_status_ongoing()
+            else:
+                self._text_label[IDLStep.WAITING].set_status_notstart()
 
         elif idl_step == IDLStep.WAITING:
             done_step_list = [
@@ -2038,7 +2098,14 @@ class IDLWindow(ReplayWindow):
             nii_name_list.append("clicks")
 
         for i in nii_name_list:
-            nii_path = os.path.join(round_dir, "{}_{}.nii.gz".format(gtv, i))
+            nii_path = os.path.join(
+                round_dir,
+                "{}_{}.nii.gz".format(
+                    gtv,
+                    # "correction.mask" -> "correction_mask"
+                    i.replace(".", "_"),
+                ),
+            )
             if os.path.exists(nii_path):
                 self.img_3d["{}.{}".format(gtv, i)] = self._load_3d_img(
                     path=nii_path, binary=True

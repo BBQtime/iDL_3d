@@ -37,11 +37,11 @@ class IDLStepLabel(QLabel):
         if self.__idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.setText("STEP 4 - Click GTVn center")
         if self.__idl_step == IDLStep.WAITING:
-            self.setText("STEP 5 - Generating Predictions")
+            self.setText("STEP 5 - Generating Segmentation")
         if self.__idl_step == IDLStep.CORRECT_GTVT:
-            self.setText("STEP 6 - Correct GTVt Prediction")
+            self.setText("STEP 6 - Correct GTVt Segmentation")
         if self.__idl_step == IDLStep.CORRECT_GTVN:
-            self.setText(str_space + "- Correct GTVn Prediction")
+            self.setText(str_space + "- Correct GTVn Segmentation")
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)

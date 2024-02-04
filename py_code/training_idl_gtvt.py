@@ -16,8 +16,7 @@ from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
 from scipy.ndimage import measurements
-from str_lib import (DatasetPart, DatasetVer, Metric, Plane, SelectScenario,
-                     Stat)
+from str_lib import DatasetPart, DatasetVer, Metric, Plane, SelectScenario, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -647,9 +646,9 @@ class TrainingIDLGTVt(TrainingCore):
             )
         )
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            idl_gtvt_score["patient={}".format(patient)][metric][
-                "round=00"
-            ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
+            idl_gtvt_score["patient={}".format(patient)][metric]["round=00"] = (
+                baseline_score["patient={}".format(patient)]["gtvt"][metric]
+            )
         Json.save(
             idl_gtvt_score,
             os.path.join(
@@ -719,24 +718,29 @@ class TrainingIDLGTVt(TrainingCore):
         for patient_dir in Dir.get_sub_dirs(
             os.path.join(idl_gtvt_dir, "patients"), full_path=True
         ):
-            cur_patient_loss = Json.load(os.path.join(patient_dir, "loss.json"))
-            if avg_loss == {}:
-                for i in cur_patient_loss:
-                    avg_loss[i] = [cur_patient_loss[i]]
+            loss_path = os.path.join(patient_dir, "loss.json")
+            if os.path.exists(loss_path):
+                cur_patient_loss = Json.load(loss_path)
+                if avg_loss == {}:
+                    for i in cur_patient_loss:
+                        avg_loss[i] = [cur_patient_loss[i]]
+                else:
+                    for i in avg_loss:
+                        avg_loss[i].append(cur_patient_loss[i])
             else:
-                for i in avg_loss:
-                    avg_loss[i].append(cur_patient_loss[i])
+                continue
 
-        for i in avg_loss:
-            avg_loss[i] = Value.avg(avg_loss[i])
+        if len(avg_loss) > 0:
+            for i in avg_loss:
+                avg_loss[i] = Value.avg(avg_loss[i])
 
-        avg_loss = avg_loss.to_list()
+            avg_loss = avg_loss.to_list()
 
-        # draw figure
-        plt.figure().clear()
-        plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
-        plt.legend()
-        plt.savefig(os.path.join(idl_gtvt_dir, "loss.png"))
+            # draw figure
+            plt.figure().clear()
+            plt.plot(range(1, len(avg_loss) + 1), avg_loss, label="loss")
+            plt.legend()
+            plt.savefig(os.path.join(idl_gtvt_dir, "loss.png"))
 
     def __find_best_baseline_fold_cnn(
         self, hyper: Dict, baseline_id: str, dataset_part: str
@@ -1199,9 +1203,9 @@ class TrainingIDLGTVt(TrainingCore):
             idl_gtvt_score = Dict()
         for patient in patients:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                idl_gtvt_score["patient={}".format(patient)][metric][
-                    "round=00"
-                ] = baseline_score["patient={}".format(patient)]["gtvt"][metric]
+                idl_gtvt_score["patient={}".format(patient)][metric]["round=00"] = (
+                    baseline_score["patient={}".format(patient)]["gtvt"][metric]
+                )
         Json.save(idl_gtvt_score, idl_gtvt_score_path)
 
         # loop through each patient
