@@ -3,11 +3,8 @@ import sys
 
 from custom import GPU, Debug, Dict, Dir
 from custom import Global as g
-# from darktheme.widget_template import DarkPalette
-# import qdarkstyle
-# from kivy.lang import Builder
-# from kivymd.app import MDApp
 import qdarktheme
+from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
 from ui_idl_window import IDLWindow
@@ -154,11 +151,8 @@ if 0:
 
 
 # show login window
-qdarktheme.enable_hi_dpi()
 app = QApplication(sys.argv)
-# qdarktheme.setup_theme()
-# app.setPalette(DarkPalette())  
-# app.setStyleSheet(qdarkstyle.load_stylesheet())
+qdarktheme.setup_theme()
 login_window = LoginWindow()
 login_window.show()
 sys.exit(app.exec_())
