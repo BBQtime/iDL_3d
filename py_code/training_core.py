@@ -39,6 +39,7 @@ class RealIDLProgress:
 class TrainingCore:
     def __init__(self):
         self._timer = Timer()
+        self._idl_progress = None
 
     def _load_patients(
         self,

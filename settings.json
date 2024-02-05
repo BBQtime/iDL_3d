@@ -1,5 +1,5 @@
 {
-    "cuda.visible.devices": "0",
+    "cuda.visible.devices": "1",
     "dataset.dir.linux.au.1mm": "/mnt/faststorage/alan/Scans1mm/",
     "dataset.dir.linux.au.3mm": "/mnt/faststorage/alan/Scans3mm/",
     "dataset.dir.linux.mda": "/mnt/faststorage/alan/MDACC/",

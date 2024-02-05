@@ -3,7 +3,11 @@ import sys
 
 from custom import GPU, Debug, Dict, Dir
 from custom import Global as g
-from darktheme.widget_template import DarkPalette
+# from darktheme.widget_template import DarkPalette
+# import qdarkstyle
+# from kivy.lang import Builder
+# from kivymd.app import MDApp
+import qdarktheme
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
 from ui_idl_window import IDLWindow
@@ -13,7 +17,7 @@ from ui_replay_window import ReplayWindow
 class LoginWindow(QtWidgets.QMainWindow):
     def __center(self):
         # Get the application instance
-        app = QtWidgets.QApplication.instance()
+        app = QApplication.instance()
         # Get the primary screen
         primary_screen = app.primaryScreen()
         # Get the geometry of the primary screen
@@ -138,7 +142,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         # install the event filter on the QApplication instance
         # This ensures that key press events will always trigger the main window's event handler,
         # regardless of which widget currently has focus.
-        app = QtWidgets.QApplication.instance()
+        app = QApplication.instance()
         app.installEventFilter(self.__main_window)
 
 
@@ -150,8 +154,11 @@ if 0:
 
 
 # show login window
+qdarktheme.enable_hi_dpi()
 app = QApplication(sys.argv)
-app.setPalette(DarkPalette())  # dark theme
+# qdarktheme.setup_theme()
+# app.setPalette(DarkPalette())  
+# app.setStyleSheet(qdarkstyle.load_stylesheet())
 login_window = LoginWindow()
 login_window.show()
 sys.exit(app.exec_())
