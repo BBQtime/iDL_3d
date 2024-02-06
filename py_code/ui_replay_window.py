@@ -57,19 +57,29 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         self.__scores = Dict()
         self.__clear_scores()
+
+        # img_3d save the ndarray of multi-modalimgs/preds/annotations/corrections
         self.img_3d = Dict()
         self._clear_img_3d()
-        self.zoom_img = Dict()
+
+        # save the original/zoomed 2d rgb imgs (with contours)
+        self.__origin_rgb = Dict()
+        self.__zoomed_rgb = Dict()
+        self.__contoured_rgb = Dict()
+        for i in [
+            Plane.TRANSVERSE,
+            Plane.CORONAL,
+            Plane.SAGITTAL,
+            Modal.CT,
+            Modal.PT,
+            Modal.MR1,
+            Modal.MR2,
+        ]:
+            self.__origin_rgb[i] = None
+            self.__zoomed_rgb[i] = None
+            self.__contoured_rgb[i] = None
 
         self.__clear_gtvt_selected_slices_3d()
-
-        # self.__gtvt_selected_slices_2d = Dict()
-        # self.__gtvt_selected_slices_2d[Orient.HORIZONTAL] = List()
-        # self.__gtvt_selected_slices_2d[Orient.VERTICAL] = List()
-
-        # self.__total_slices_count_2d = Dict()
-        # self.__total_slices_count_2d[Orient.HORIZONTAL] = 0
-        # self.__total_slices_count_2d[Orient.VERTICAL] = 0
 
     def _add_border(self, input_widget: QtWidgets.QWidget):
         random_name = Value.random_str()
@@ -273,101 +283,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
     #     self.__zoomin["start"] = QPoint(start_x, start_y)
     #     self.__zoomin["end"] = QPoint(end_x, end_y)
     #     self.refresh_imgs()
-
-    def _fit_img_frame(self, img, img_frame: ImgFrame):
-        err_msg = "MainWindow._fit_img_frame(), img.shape should == 2 or 3"
-
-        # spacing upscalling
-        if self._nii_spacing[2] != 1.0 and img_frame.plane == Plane.SAGITTAL:
-            spacing_height = round(
-                img.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
-            )
-            img = cv2.resize(
-                img,
-                (
-                    img.shape[1],
-                    spacing_height,
-                ),
-                interpolation=cv2.INTER_CUBIC,
-            )
-        elif self._nii_spacing[2] != 1.0 and img_frame.plane == Plane.CORONAL:
-            spacing_height = round(
-                img.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
-            )
-            img = cv2.resize(
-                img,
-                (
-                    img.shape[1],
-                    spacing_height,
-                ),
-                interpolation=cv2.INTER_CUBIC,
-            )
-
-        # # zoom in
-        # if self.__zoomin["start"] is not None and self.__zoomin["end"] is not None:
-        #     if len(img.shape) == 3:
-        #         img = img[
-        #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-        #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-        #             :,
-        #         ]
-        #     elif len(img.shape) == 2:
-        #         img = img[
-        #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-        #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-        #         ]
-        #     else:
-        #         raise ValueError(err_msg)
-
-        # resize to fit image frame
-        origin_height = img.shape[0]
-        origin_width = img.shape[1]
-        final_width = img_frame.width()
-        final_height = img_frame.height()
-
-        # border on left and right
-        if origin_height * final_width > final_height * origin_width:
-            img_frame.roi.width = int(final_height * origin_width / origin_height)
-            img_frame.roi.height = final_height
-            img_frame.roi.x = int((final_width - img_frame.roi.width) / 2)
-            if img_frame.roi.x < 0:
-                img_frame.roi.x = 0
-            img_frame.roi.y = 0
-            if len(img.shape) == 3:
-                black_border = np.zeros((final_height, img_frame.roi.x, 3), np.uint8)
-            elif len(img.shape) == 2:
-                black_border = np.zeros((final_height, img_frame.roi.x), np.uint8)
-            else:
-                raise ValueError(err_msg)
-            img = cv2.resize(
-                img,
-                (img_frame.roi.width, img_frame.roi.height),
-                interpolation=cv2.INTER_AREA,
-            )
-            img = np.concatenate((black_border, img, black_border), axis=1)
-
-        # border on up and down
-        else:
-            img_frame.roi.width = final_width
-            img_frame.roi.height = int(final_width * origin_height / origin_width)
-            img_frame.roi.y = int((final_height - img_frame.roi.height) / 2)
-            if img_frame.roi.y < 0:
-                img_frame.roi.y = 0
-            img_frame.roi.x = 0
-            if len(img.shape) == 3:
-                black_border = np.zeros((img_frame.roi.y, final_width, 3), np.uint8)
-            elif len(img.shape) == 2:
-                black_border = np.zeros((img_frame.roi.y, final_width), np.uint8)
-            else:
-                raise ValueError(err_msg)
-            img = cv2.resize(
-                img,
-                (img_frame.roi.width, img_frame.roi.height),
-                interpolation=cv2.INTER_AREA,
-            )
-            img = np.concatenate((black_border, img, black_border), axis=0)
-
-        return img
 
     def _init_color(self):
         self.color = Dict()
@@ -610,6 +525,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._text_label["other.modal"].setText("MR-T1")
         elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
             self._text_label["other.modal"].setText("MR-T2")
+
         self.refresh_imgs()
 
     def display_mode(self):
@@ -808,6 +724,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._collap["display.mode"].addWidget(container)
         self._collap["display.mode"].expand()
 
+    # this function is connected to widget, dont set input params to this function
+    def __on_zoom_slider_changed(self):
+        self.refresh_imgs()
+
     def _init_widgets_zoom(self):
         self._slider["zoom"] = QtWidgets.QSlider()
         self._slider["zoom"].setFixedHeight(g.SLIDER_HEIGHT)
@@ -815,7 +735,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._slider["zoom"].setMinimum(100)
         self._slider["zoom"].setMaximum(200)
         self._slider["zoom"].setValue(100)
-        self._slider["zoom"].valueChanged.connect(self.refresh_imgs)
+        self._slider["zoom"].valueChanged.connect(self.__on_zoom_slider_changed)
 
         # add slider into collapsible space
         v_layout = QtWidgets.QVBoxLayout()
@@ -888,8 +808,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __on_modal_fixed_radio_group_clicked(self):
         self._modal_fixed_mode_switch_plane()
 
-    # new_plane = None will read from radio buttons
-    def _modal_fixed_mode_switch_plane(self, new_plane: str = None):
+    def _modal_fixed_mode_switch_plane(
+        self,
+        new_plane: str = None,  # = None will read from radio buttons
+    ):
         # switch plane based on the radio buttons
         if new_plane is None:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -1489,7 +1411,341 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __on_mix_slider_changed(self):
         self.refresh_imgs()
 
-    def refresh_imgs(self, frame_name: str = None, reload_zoomed_img: bool = True):
+    def __refresh_imgs_load_origin_rgb(self, frame_name: str):
+        modal = self.img_frame[frame_name].modal
+        plane = self.img_frame[frame_name].plane
+        cur_slice_id = self.cur_slice_id[plane]
+
+        # (1) plane fixed mode
+        if self.display_mode() == DisplayMode.PLANE_FIXED:
+            if frame_name == Plane.TRANSVERSE:
+                slice_ct = self.img_3d[Modal.CT][cur_slice_id, :, :]
+                slice_2d = self.img_3d[modal][cur_slice_id, :, :]
+            elif frame_name == Plane.CORONAL:
+                slice_ct = self.img_3d[Modal.CT][:, cur_slice_id, :]
+                slice_2d = self.img_3d[modal][:, cur_slice_id, :]
+            elif frame_name == Plane.SAGITTAL:
+                slice_ct = self.img_3d[Modal.CT][:, :, cur_slice_id]
+                slice_2d = self.img_3d[modal][:, :, cur_slice_id]
+
+            slice_ct = Img.gray_to_rgb(slice_ct)
+            if modal == Modal.PT:
+                slice_2d = Img.gray_to_colormap(slice_2d)
+            else:
+                slice_2d = Img.gray_to_rgb(slice_2d)
+
+            # brightness and contrast
+            # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
+            slice_ct = cv2.addWeighted(
+                src1=slice_ct,
+                alpha=self._slider["contrast"][Modal.CT].value() / 100,
+                src2=np.zeros_like(slice_ct),
+                beta=0,
+                gamma=self._slider["bright"][Modal.CT].value(),
+            )
+            slice_2d = cv2.addWeighted(
+                src1=slice_2d,
+                alpha=self._slider["contrast"][modal].value() / 100,
+                src2=np.zeros_like(slice_2d),
+                beta=0,
+                gamma=self._slider["bright"][modal].value(),
+            )
+
+            # mix ct and the other modality
+            alpha = self._slider["mix"].value() / 100
+            origin_rgb = cv2.addWeighted(
+                src1=slice_2d,
+                alpha=alpha,
+                src2=slice_ct,
+                beta=1 - alpha,
+                gamma=0,
+            )
+
+        # (2) modality fixed mode
+        else:
+            if plane == Plane.TRANSVERSE:
+                slice_2d = self.img_3d[frame_name][cur_slice_id, :, :]
+            elif plane == Plane.CORONAL:
+                slice_2d = self.img_3d[frame_name][:, cur_slice_id, :]
+            elif plane == Plane.SAGITTAL:
+                slice_2d = self.img_3d[frame_name][:, :, cur_slice_id]
+            slice_2d = Img.gray_to_rgb(slice_2d)
+
+            # brightness and contrast
+            # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
+            origin_rgb = cv2.addWeighted(
+                src1=slice_2d,
+                alpha=self._slider["contrast"][modal].value() / 100,
+                src2=np.zeros_like(slice_2d),
+                beta=0,
+                gamma=self._slider["bright"][modal].value(),
+            )
+
+        # (3) spacing upscalling
+        if self._nii_spacing[2] != 1.0 and plane == Plane.SAGITTAL:
+            spacing_height = round(
+                origin_rgb.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
+            )
+            origin_rgb = cv2.resize(
+                origin_rgb,
+                (
+                    origin_rgb.shape[1],
+                    spacing_height,
+                ),
+                interpolation=cv2.INTER_CUBIC,
+            )
+        elif self._nii_spacing[2] != 1.0 and plane == Plane.CORONAL:
+            spacing_height = round(
+                origin_rgb.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
+            )
+            origin_rgb = cv2.resize(
+                origin_rgb,
+                (
+                    origin_rgb.shape[1],
+                    spacing_height,
+                ),
+                interpolation=cv2.INTER_CUBIC,
+            )
+
+        self.__origin_rgb[frame_name] = origin_rgb
+
+    def __refresh_imgs_add_contours(self, frame_name: str):
+        plane = self.img_frame[frame_name].plane
+
+        # idl mode
+        # "delete_all_crosses" is unique a function belonging to IDLWindow
+        # for hasattr() function has to be a public or protected one, not private
+        if hasattr(self, "delete_all_crosses"):
+            # place top contour at the end of the list, click > pred.final
+            seg_name_list = [
+                "gtvn.pred.final",
+                "gtvt.pred.final",
+                "gtvn.clicks",
+                "gtvt.click",
+            ]
+        # replay mode
+        else:
+            # place top contour at the end of the list
+            # click > correction > annotation > pred > label
+            seg_name_list = [
+                "gtvn.label",
+                "gtvt.label",
+                "gtvn.pred",
+                "gtvt.pred",
+                "gtvt.annotation",
+                "gtvn.correction",
+                "gtvt.correction",
+                "gtvn.clicks",
+                "gtvt.click",
+            ]
+
+        # loop through segmentation 3d imgs
+        for seg_name in seg_name_list:
+            if self.img_3d[seg_name] is None:
+                continue
+
+            # load data of current slice
+            if plane == Plane.SAGITTAL:
+                segment = self.img_3d[seg_name][:, :, self.cur_slice_id[Plane.SAGITTAL]]
+            elif plane == Plane.CORONAL:
+                segment = self.img_3d[seg_name][:, self.cur_slice_id[Plane.CORONAL], :]
+            elif plane == Plane.TRANSVERSE:
+                segment = self.img_3d[seg_name][
+                    self.cur_slice_id[Plane.TRANSVERSE], :, :
+                ]
+            segment = segment.astype(np.uint8)
+
+            # skip if current segmentation is empty
+            if seg_name in [
+                "gtvn.pred.final",
+                "gtvt.pred.final",
+                "gtvn.correction",
+                "gtvt.correction",
+                "gtvt.annotation",
+            ]:
+                # perfomr erosion to remove overlap of 3 different planes
+                kernel = np.ones((3, 3), np.uint8)
+                eroded_segment = cv2.erode(segment, kernel, iterations=1)
+                if eroded_segment.max() <= 0:
+                    continue
+            else:
+                if segment.max() <= 0:
+                    continue
+
+            # zoom in segmentation
+            zoomed_h = self.__zoomed_rgb[frame_name].shape[0]
+            zoomed_w = self.__zoomed_rgb[frame_name].shape[1]
+            segment = cv2.resize(
+                segment,
+                (zoomed_w, zoomed_h),
+                interpolation=cv2.INTER_AREA,
+            )
+
+            # use higher thickness for click, otherwise cant see the points
+            if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
+                thickness = 7
+            # use lower thickness for contours
+            else:
+                thickness = 2
+                # GaussianBlur after zoomed in
+                segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
+
+            # draw contour on zoomed in rgb
+            contours = cv2.findContours(
+                segment, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+            )[0]
+            self.__contoured_rgb[frame_name] = cv2.drawContours(
+                image=self.__zoomed_rgb[frame_name],
+                contours=contours,
+                contourIdx=-1,
+                color=self.color[seg_name],
+                thickness=thickness,
+            )
+
+    def __refresh_imgs_load_zoomed_rgb(self, frame_name: str):
+        origin_h = self.__origin_rgb[frame_name].shape[0]
+        origin_w = self.__origin_rgb[frame_name].shape[1]
+        frame_w = self.img_frame[frame_name].width()
+        frame_h = self.img_frame[frame_name].height()
+
+        # img is aligned to top and bottom of img_frame
+        if origin_h * frame_w > frame_h * origin_w:
+            zoomed_w = round(frame_h * origin_w / origin_h)
+            zoomed_h = frame_h
+        # img is aligned to left and right of img_frame
+        else:
+            zoomed_w = frame_w
+            zoomed_h = round(frame_w * origin_h / origin_w)
+
+        zoomed_w *= self._slider["zoom"].value() / 100
+        zoomed_w = round(zoomed_w)
+        zoomed_h *= self._slider["zoom"].value() / 100
+        zoomed_h = round(zoomed_h)
+
+        self.__zoomed_rgb[frame_name] = cv2.resize(
+            self.__origin_rgb[frame_name],
+            (zoomed_w, zoomed_h),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        # GaussianBlur after zoomed in looks better
+        self.__zoomed_rgb[frame_name] = cv2.GaussianBlur(
+            self.__zoomed_rgb[frame_name], (3, 3), cv2.BORDER_DEFAULT
+        )
+
+    def __refresh_imgs_fill_img_frame(self, frame_name: str):
+        frame_w = self.img_frame[frame_name].width()
+        frame_h = self.img_frame[frame_name].height()
+        zoomed_h = self.__contoured_rgb[frame_name].shape[0]
+        zoomed_w = self.__contoured_rgb[frame_name].shape[1]
+
+        # Determine padding or cropping for width
+        if zoomed_w < frame_w:
+            pad_width_left = (frame_w - zoomed_w) // 2
+            pad_width_right = frame_w - zoomed_w - pad_width_left
+            final_rgb = np.pad(
+                self.__contoured_rgb[frame_name],
+                [(0, 0), (pad_width_left, pad_width_right), (0, 0)],
+                mode="constant",
+            )
+        else:
+            start_x = (zoomed_w - frame_w) // 2
+            # start_x = zoomed_w // 2 - frame_w // 2
+            final_rgb = self.__contoured_rgb[frame_name][
+                :, start_x : start_x + frame_w, :
+            ]
+
+        # Determine padding or cropping for height after width adjustment
+        zoomed_h = final_rgb.shape[0]
+        zoomed_w = final_rgb.shape[1]
+        if zoomed_h < frame_h:
+            pad_height_top = (frame_h - zoomed_h) // 2
+            pad_height_bottom = frame_h - zoomed_h - pad_height_top
+            final_rgb = np.pad(
+                final_rgb,
+                [(pad_height_top, pad_height_bottom), (0, 0), (0, 0)],
+                mode="constant",
+            )
+        else:
+            start_y = (zoomed_h - frame_h) // 2
+            # start_y = zoomed_h // 2 - frame_h // 2
+            final_rgb = final_rgb[start_y : start_y + frame_h, :, :]
+
+        return final_rgb
+
+        # # # zoom in
+        # # if self.__zoomin["start"] is not None and self.__zoomin["end"] is not None:
+        # #     if len(img.shape) == 3:
+        # #         img = img[
+        # #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
+        # #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
+        # #             :,
+        # #         ]
+        # #     elif len(img.shape) == 2:
+        # #         img = img[
+        # #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
+        # #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
+        # #         ]
+        # #     else:
+        # #         raise ValueError(err_msg)
+
+        # # resize to fit image frame
+        # origin_height = final_rgb.shape[0]
+        # origin_width = final_rgb.shape[1]
+        # final_width = img_frame.width()
+        # final_height = img_frame.height()
+
+        # # border on left and right
+        # if origin_height * final_width > final_height * origin_width:
+        #     img_frame.roi.width = int(final_height * origin_width / origin_height)
+        #     img_frame.roi.height = final_height
+        #     img_frame.roi.x = int((final_width - img_frame.roi.width) / 2)
+        #     if img_frame.roi.x < 0:
+        #         img_frame.roi.x = 0
+        #     img_frame.roi.y = 0
+        #     if len(final_rgb.shape) == 3:
+        #         black_border = np.zeros((final_height, img_frame.roi.x, 3), np.uint8)
+        #     elif len(final_rgb.shape) == 2:
+        #         black_border = np.zeros((final_height, img_frame.roi.x), np.uint8)
+        #     else:
+        #         raise ValueError(err_msg)
+        #     final_rgb = cv2.resize(
+        #         final_rgb,
+        #         (img_frame.roi.width, img_frame.roi.height),
+        #         interpolation=cv2.INTER_AREA,
+        #     )
+        #     final_rgb = np.concatenate((black_border, final_rgb, black_border), axis=1)
+
+        # # border on up and down
+        # else:
+        #     img_frame.roi.width = final_width
+        #     img_frame.roi.height = int(final_width * origin_height / origin_width)
+        #     img_frame.roi.y = int((final_height - img_frame.roi.height) / 2)
+        #     if img_frame.roi.y < 0:
+        #         img_frame.roi.y = 0
+        #     img_frame.roi.x = 0
+        #     if len(final_rgb.shape) == 3:
+        #         black_border = np.zeros((img_frame.roi.y, final_width, 3), np.uint8)
+        #     elif len(final_rgb.shape) == 2:
+        #         black_border = np.zeros((img_frame.roi.y, final_width), np.uint8)
+        #     else:
+        #         raise ValueError(err_msg)
+        #     final_rgb = cv2.resize(
+        #         final_rgb,
+        #         (img_frame.roi.width, img_frame.roi.height),
+        #         interpolation=cv2.INTER_AREA,
+        #     )
+        #     final_rgb = np.concatenate((black_border, final_rgb, black_border), axis=0)
+
+        # return final_rgb
+
+    def refresh_imgs(
+        self,
+        frame_name: str = None,
+        reload_origin_rgb: bool = True,
+        reload_zoomed_rgb: bool = True,
+        reload_contours: bool = True,
+    ):
         if self.img_3d[Modal.CT] is None:
             return
 
@@ -1504,183 +1760,43 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # load rgb imgs
         for frame_name in frame_name_list:
-            modal = self.img_frame[frame_name].modal
-            cur_slice_id = self.cur_slice_id[self.img_frame[frame_name].plane]
+            if reload_origin_rgb or self.__origin_rgb[frame_name] is None:
+                self.__refresh_imgs_load_origin_rgb(frame_name)
 
-            # plane fixed mode
-            if self.display_mode() == DisplayMode.PLANE_FIXED:
-                if frame_name == Plane.TRANSVERSE:
-                    slice_ct = self.img_3d[Modal.CT][cur_slice_id, :, :]
-                    slice_2d = self.img_3d[modal][cur_slice_id, :, :]
-                elif frame_name == Plane.CORONAL:
-                    slice_ct = self.img_3d[Modal.CT][:, cur_slice_id, :]
-                    slice_2d = self.img_3d[modal][:, cur_slice_id, :]
-                elif frame_name == Plane.SAGITTAL:
-                    slice_ct = self.img_3d[Modal.CT][:, :, cur_slice_id]
-                    slice_2d = self.img_3d[modal][:, :, cur_slice_id]
+            if reload_zoomed_rgb or self.__zoomed_rgb[frame_name] is None:
+                self.__refresh_imgs_load_zoomed_rgb(frame_name)
 
-                slice_ct = Img.gray_to_rgb(slice_ct)
-                if modal == Modal.PT:
-                    slice_2d = Img.gray_to_colormap(slice_2d)
-                else:
-                    slice_2d = Img.gray_to_rgb(slice_2d)
-
-                # brightness and contrast
-                # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
-                slice_ct = cv2.addWeighted(
-                    src1=slice_ct,
-                    alpha=self._slider["contrast"][Modal.CT].value() / 100,
-                    src2=np.zeros_like(slice_ct),
-                    beta=0,
-                    gamma=self._slider["bright"][Modal.CT].value(),
-                )
-                slice_2d = cv2.addWeighted(
-                    src1=slice_2d,
-                    alpha=self._slider["contrast"][modal].value() / 100,
-                    src2=np.zeros_like(slice_2d),
-                    beta=0,
-                    gamma=self._slider["bright"][modal].value(),
-                )
-
-                # mix ct and the other modality
-                alpha = self._slider["mix"].value() / 100
-                rgb_img = cv2.addWeighted(
-                    src1=slice_2d,
-                    alpha=alpha,
-                    src2=slice_ct,
-                    beta=1 - alpha,
-                    gamma=0,
-                )
-
-            # modality fixed mode
-            else:
-                if self.img_frame[frame_name].plane == Plane.TRANSVERSE:
-                    slice_2d = self.img_3d[frame_name][cur_slice_id, :, :]
-                elif self.img_frame[frame_name].plane == Plane.CORONAL:
-                    slice_2d = self.img_3d[frame_name][:, cur_slice_id, :]
-                elif self.img_frame[frame_name].plane == Plane.SAGITTAL:
-                    slice_2d = self.img_3d[frame_name][:, :, cur_slice_id]
-                slice_2d = Img.gray_to_rgb(slice_2d)
-
-                # brightness and contrast
-                # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
-                rgb_img = cv2.addWeighted(
-                    src1=slice_2d,
-                    alpha=self._slider["contrast"][modal].value() / 100,
-                    src2=np.zeros_like(slice_2d),
-                    beta=0,
-                    gamma=self._slider["bright"][modal].value(),
-                )
+            if reload_contours or self.__contoured_rgb[frame_name] is None:
+                self.__refresh_imgs_add_contours(frame_name)
 
             # resize and fit img qlabel
-            rgb_img = self._fit_img_frame(rgb_img, self.img_frame[frame_name])
+            final_rgb = self.__refresh_imgs_fill_img_frame(frame_name)
 
-            # blur after _fit_img_frame looks better
-            rgb_img = cv2.GaussianBlur(rgb_img, (3, 3), cv2.BORDER_DEFAULT)
-
-            # idl mode, correction > annotation > pred
-            # "delete_all_crosses" is unique a function belonging to IDLWindow
-            # for hasattr() function has to be a public or protected one, not private
-            if hasattr(self, "delete_all_crosses"):
-                seg_name_list = [
-                    "gtvn.pred.final",
-                    "gtvt.pred.final",
-                    "gtvn.clicks",
-                    "gtvt.click",
-                ]
-            # replay mode, place the name of img on the top layer at the end of the list
-            else:
-                seg_name_list = [
-                    "gtvn.label",
-                    "gtvt.label",
-                    "gtvn.pred",
-                    "gtvt.pred",
-                    "gtvt.annotation",
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvn.clicks",
-                    "gtvt.click",
-                ]
-
-            # draw label and pred contour
-            for seg_name in seg_name_list:
-                if self.img_3d[seg_name] is None:
-                    continue
-
-                # load data of current slice
-                if self.img_frame[frame_name].plane == Plane.SAGITTAL:
-                    segment = self.img_3d[seg_name][
-                        :, :, self.cur_slice_id[Plane.SAGITTAL]
-                    ]
-                elif self.img_frame[frame_name].plane == Plane.CORONAL:
-                    segment = self.img_3d[seg_name][
-                        :, self.cur_slice_id[Plane.CORONAL], :
-                    ]
-                elif self.img_frame[frame_name].plane == Plane.TRANSVERSE:
-                    segment = self.img_3d[seg_name][
-                        self.cur_slice_id[Plane.TRANSVERSE], :, :
-                    ]
-
-                segment = segment.astype(np.uint8)
-
-                # skip if current contour img is empty
-                if seg_name in [
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvt.annotation",
-                ]:
-                    # perfomr erosion to remove overlap of 3 different planes
-                    kernel = np.ones((3, 3), np.uint8)
-                    eroded_segment = cv2.erode(segment, kernel, iterations=1)
-                    if eroded_segment.max() <= 0:
-                        continue
-                else:
-                    if segment.max() <= 0:
-                        continue
-
-                segment = self._fit_img_frame(segment, self.img_frame[frame_name])
-
-                # points, higher thickness (otherwise cant see the points)
-                if seg_name == "gtvt.click" or seg_name == "gtvn.clicks":
-                    thickness = 7
-                # contours, lower thickness
-                else:
-                    thickness = 2
-                    # blur, make the contours looks better on the UI
-                    # blur after _fit_img_frame()
-                    segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
-
-                # find and draw contours
-                contours, _ = cv2.findContours(
-                    segment, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
-                )
-                rgb_img = cv2.drawContours(
-                    image=rgb_img,
-                    contours=contours,
-                    contourIdx=-1,
-                    color=self.color[seg_name],
-                    thickness=thickness,
-                )
-
-            rgb_img_height = rgb_img.shape[0]
-            rgb_img_width = rgb_img.shape[1]
-            rgb_img_chan = rgb_img.shape[2]
+            # avoid Non-Contiguity problem
+            # this happens when img.width/height are all larger than img_frame
+            # and crop image will cause Non-Contiguity problem
+            if not final_rgb.flags["C_CONTIGUOUS"]:
+                # make ndarray C-contiguous
+                final_rgb = np.ascontiguousarray(final_rgb)
 
             # ndarray to qimage
+            rgb_height = final_rgb.shape[0]
+            rgb_width = final_rgb.shape[1]
+            rgb_chan = final_rgb.shape[2]
             qimg = QtGui.QImage(
-                rgb_img,
-                rgb_img_width,
-                rgb_img_height,
-                rgb_img_width * rgb_img_chan,
-                QtGui.QImage.Format_RGB888,
+                final_rgb,  # data:bytes
+                rgb_width,
+                rgb_height,
+                rgb_width * rgb_chan,  # bytesPerLine
+                QtGui.QImage.Format_RGB888,  # format
             )
 
-            # top left text
+            # add text on top left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
                 self._add_score_on_qimg(qimg)
                 self._add_msg_on_qimg(qimg)
 
-            # bottom left text
+            # add text on bottom left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.MR1:
                 self._add_contour_description_on_qimg(qimg)
 
@@ -1922,7 +2038,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                         self._slider["mix"].setValue(new_val)
                 return True  # Event is handled
 
-            # pageup or pagedown pressed
+            # pageup or pagedown pressed, goto prev/next slice
             elif event.key() == Qt.Key_PageUp or event.key() == Qt.Key_PageDown:
                 # image not loaded
                 if self.img_3d[Modal.CT] is None:

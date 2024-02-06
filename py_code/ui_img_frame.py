@@ -392,6 +392,7 @@ class ImgFrame(QLabel):
         # limite slice_id in range (0, slices_count)
         self.window().cur_slice_id[self.plane] %= slices_count
 
+        # refresh new slice
         if self.window().display_mode() == DisplayMode.PLANE_FIXED:
             self.window().refresh_imgs(frame_name=self.plane)
         else:
