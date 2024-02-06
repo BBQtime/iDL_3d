@@ -417,9 +417,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         ]:
             self.img_frame[i] = ImgFrame(self._central_widget)
             self.img_frame[i].setObjectName("")
-            # black background
-            self.img_frame[i].setAutoFillBackground(True)
+            # fill background with black
             self.img_frame[i].setPalette(pal)
+            self.img_frame[i].setAutoFillBackground(True)
 
         # fixed plane
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -656,31 +656,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             else:
                 self._radio_btn[DisplayMode.PLANE_FIXED][i].hide()
 
-        # # color enhancement radio buttons and slider bars
-        # if display_mode == DisplayMode.PLANE_FIXED:
-        #     show_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-        #     hide_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-        # else:
-        #     show_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-        #     hide_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-
-        # # hide radio buttons
-        # for i in hide_list:
-        #     self._radio_btn["color.enhance"][i].hide()
-        #     # # hide slider bars
-        #     # for j in ["bright", "contrast"]:
-        #     #     self._slider[j][i].hide()
-
-        # # show radio buttons
-        # for i in show_list:
-        #     self._radio_btn["color.enhance"][i].show()
-        #     # # show slider bars
-        #     # if self._radio_btn["color.enhance"][i].isChecked():
-        #     #     for j in ["bright", "contrast"]:
-        #     #         self._slider[j][i].show()
-
-        # self.__switch_color_enhance_slider_bars()
-
         # ct/pt mix slider
         if display_mode == DisplayMode.PLANE_FIXED:
             self._slider["mix"].show()
@@ -700,7 +675,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return
 
     def _init_widgets_display_mode(self):
-
         # (1) toggle button
         self._toggle_btn = ToggleButton(is_checked=True)
 

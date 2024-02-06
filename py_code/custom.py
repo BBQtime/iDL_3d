@@ -803,4 +803,4 @@ class Global:
     FONT_STYLE += "font-weight: bold;color: white;"
 
     TEXT_HEIGHT = 20 if is_linux() else 30
-    SLIDER_HEIGHT = 14 if is_linux() else 21
+    SLIDER_HEIGHT = 16 if is_linux() else 21

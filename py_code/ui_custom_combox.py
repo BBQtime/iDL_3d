@@ -8,7 +8,7 @@ class CustomItemDelegate(QStyledItemDelegate):
         # Call the base class method to get the default size hint
         original_size = super().sizeHint(option, index)
         # Increase the height for more space between items
-        gap = 5 if g.is_linux() else 10
+        gap = 8 if g.is_linux() else 10
         return QSize(original_size.width(), original_size.height() + gap)
 
 
