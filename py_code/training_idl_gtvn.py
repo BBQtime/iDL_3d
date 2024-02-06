@@ -312,9 +312,9 @@ class TrainingIDLGTVn(TrainingBaseline):
             # copy baseline gtvn scores of each patient
             for patient in patients[dataset_part]:
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    scores["patient={}".format(patient)][metric][
-                        "round=00"
-                    ] = baseline_scores["patient={}".format(patient)]["gtvn"][metric]
+                    scores["patient={}".format(patient)][metric]["round=00"] = (
+                        baseline_scores["patient={}".format(patient)]["gtvn"][metric]
+                    )
 
             # also copy baseline median and avg gtvn scores
             for stat in [Stat.MEDIAN, Stat.AVG]:

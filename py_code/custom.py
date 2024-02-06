@@ -171,10 +171,10 @@ class Value:
     def is_number(i) -> bool:
         if (
             i is None
-            or math.isnan(i)
             or isinstance(i, list)
             or isinstance(i, dict)
             or isinstance(i, str)
+            or math.isnan(i)
         ):
             return False
         try:
@@ -663,7 +663,7 @@ class Debug:
         Dir.clear(os.path.join(Global.PROJ_DIR, "debug"))
 
     def clear_linux_trash():
-        if platform.system().lower() == "linux":
+        if Global.is_linux():
             Dir.clear("/home/alan/.local/share/Trash/files/")
             Dir.clear("/home/alan/.local/share/Trash/info/")
 
@@ -714,6 +714,9 @@ class Timer:
 
 
 class Global:
+    def is_linux():
+        return platform.system().lower() == "linux"
+
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
     DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
 
@@ -745,21 +748,15 @@ class Global:
 
     DATASET_DIR = Dict()
 
-    # Windows
-    if platform.system().lower() == "windows":
+    if is_linux():
+        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
+            DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
+        NUM_WORKERS = __settings["num.workers"]
+    else:
         for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
             DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
         # window doesn't support pytorch multi-thread
         NUM_WORKERS = 0
-
-    # Linux
-    elif platform.system().lower() == "linux":
-        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
-            DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
-        NUM_WORKERS = __settings["num.workers"]
-
-    else:
-        Debug.error_exit("Platform error, only support linux or windows!")
 
     # IMG_SHAPE (Depth, Height, Width)
     IMG_SHAPE = Dict()
@@ -797,3 +794,13 @@ class Global:
 
     DATASET_FOLDS = __settings["dataset.folds"]
     TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])
+
+    if is_linux():
+        FONT_STYLE = "font-size: {}pt;".format(10)
+    else:
+        FONT_STYLE = "font-size: {}pt;".format(11)
+    FONT_STYLE = "font-family: Arial;" + FONT_STYLE
+    FONT_STYLE += "font-weight: bold;color: white;"
+
+    TEXT_HEIGHT = 20 if is_linux() else 30
+    SLIDER_HEIGHT = 14 if is_linux() else 21

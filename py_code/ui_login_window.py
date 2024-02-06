@@ -1,12 +1,12 @@
 import os
 import sys
 
+import qdarktheme
 from custom import GPU, Debug, Dict, Dir
 from custom import Global as g
-import qdarktheme
-from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
+from ui_custom_combox import CustomComboBox
 from ui_idl_window import IDLWindow
 from ui_replay_window import ReplayWindow
 
@@ -27,34 +27,30 @@ class LoginWindow(QtWidgets.QMainWindow):
         # Move the window to the center of the screen
         self.move(frame_geometry.topLeft())
 
-    def __sort_combox(self, combox: QtWidgets.QComboBox):
-        # Retrieve the items from the QComboBox
-        items = [combox.itemText(i) for i in range(combox.count())]
-        # Sort the items based on the first letter
-        sorted_items = sorted(items, key=lambda item: item[0].lower())
-        combox.clear()
-        combox.addItems(sorted_items)
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Login")
-        self.resize(400, 200)
+        width = 400 if g.is_linux() else 600
+        height = 200 if g.is_linux() else 300
+        self.resize(width, height)
         self.__center()
+        self.setStyleSheet(g.FONT_STYLE)
 
         # Initialize combo boxes and text labels
         text_label = Dict()
         self.__combox = Dict()
-        for i in ["name", "train.id"]:
+        for i in ["user.name", "train.id"]:
             text_label[i] = QtWidgets.QLabel()
-            self.__combox[i] = QtWidgets.QComboBox()
-            self.__combox[i].setFixedHeight(27)
-        text_label["name"].setText("User")
+            self.__combox[i] = CustomComboBox()
+            height = 27 if g.is_linux() else 40
+            self.__combox[i].setFixedHeight(height)
+        text_label["user.name"].setText("User")
         text_label["train.id"].setText("Experiment ID")
 
         # Layout
         sub_layout = Dict()
         layout_container = Dict()
-        for i in ["name", "train.id"]:
+        for i in ["user.name", "train.id"]:
             sub_layout[i] = QtWidgets.QVBoxLayout()
             sub_layout[i].addWidget(text_label[i])
             sub_layout[i].addWidget(self.__combox[i])
@@ -64,7 +60,7 @@ class LoginWindow(QtWidgets.QMainWindow):
 
         # Central widget
         v_layout = QtWidgets.QVBoxLayout()
-        for i in ["name", "train.id"]:
+        for i in ["user.name", "train.id"]:
             v_layout.addWidget(layout_container[i])
         v_layout.setSpacing(30)
         central_widget = QtWidgets.QWidget()
@@ -72,22 +68,23 @@ class LoginWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(central_widget)
 
         # Add items to the combo boxes
-        self.__combox["name"].addItems(
+        self.__combox["user.name"].addItems(
             [
                 "~ Administrator",
-                "Hanna Rahbek Mortensen" "Kenneth Jensen",
+                "Hanna Rahbek Mortensen",
+                "Kenneth Jensen",
                 "Jesper Grau Eriksen",
             ]
         )
-        self.__sort_combox(self.__combox["name"])
-        self.__combox["name"].setCurrentIndex(-1)
+        self.__combox["user.name"].sort()
+        self.__combox["user.name"].setCurrentIndex(-1)
 
         # Connect the combo boxes to the function
-        self.__combox["name"].activated.connect(self.__fill_combox_results)
+        self.__combox["user.name"].activated.connect(self.__fill_combox_results)
         self.__combox["train.id"].activated.connect(self.__open_main_window)
 
     def __simplify_user_name(self):
-        user_name = self.__combox["name"].currentText()
+        user_name = self.__combox["user.name"].currentText()
         for i in ["Admin", "Hanna", "Kenneth", "Jesper"]:
             if i in user_name:
                 user_name = i

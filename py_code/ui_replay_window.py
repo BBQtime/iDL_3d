@@ -4,7 +4,6 @@ from tkinter import Tk, filedialog
 
 import cv2
 import numpy as np
-from adjust_combox import AdjustableComboBox
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Value
@@ -13,11 +12,9 @@ from PyQt5.QtCore import Qt
 from scipy.ndimage import measurements
 from str_lib import DatasetPart, DatasetVer, DisplayMode, Metric, Modal, Plane
 from superqt import QCollapsible
-from ui_idl_step_label import IDLStepLabel
+from ui_custom_combox import CustomComboBox
 from ui_img_frame import ImgFrame
 from ui_toggle_btn import ToggleButton
-
-SIDE_BAR_WIDTH = 310
 
 
 class ReplayWindow(QtWidgets.QMainWindow):
@@ -26,11 +23,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.setupUi(self)
         self._init_data()
         self._init_color()  # before init_widgets()
-        self._init_widgets()  # after _init_data() and init_widgets()
-        self.setMinimumSize(SIDE_BAR_WIDTH + 600, 600)  # after _init_data()
+        self._init_widgets()  # after _init_data()
         # self.__init_zoomin()
-        self.resize(1200, 800)  # set origin size
-        self.showMaximized()
         self._load_baseline_data()  # load first baseline result
 
     def _init_data(self):
@@ -438,21 +432,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.img_frame[Plane.TRANSVERSE].modal = "mix"
 
     def _init_widgets_combox(self):
+        combox_height = 30 if g.is_linux() else 45
+        btn_height = 30 if g.is_linux() else 38
+
         self.combox = Dict()
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
-            # self.combox[i] = QtWidgets.QComboBox(self._central_widget)
-            self.combox[i] = AdjustableComboBox(self._central_widget)
-            self.combox[i].setFixedHeight(30)
-            # set combobox dropdown width: 700px
-            if i != "patient":
-                self.combox[i].setStyleSheet(
-                    """*
-                    QComboBox QAbstractItemView
-                    {
-                        min-width: 500px;
-                    }
-                    """
-                )
+            self.combox[i] = CustomComboBox()
+            self.combox[i].setFixedHeight(combox_height)
             if i in ["patient", "idl.gtvt", "idl.gtvn"]:
                 self.combox[i].setEnabled(False)
 
@@ -473,8 +459,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         for i in ["prev", "next"]:
             for j in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
                 self._arrow_btn["{}.{}".format(i, j)] = QtWidgets.QToolButton()
-                self._arrow_btn["{}.{}".format(i, j)].setFixedWidth(30)
-                self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(30)
+                self._arrow_btn["{}.{}".format(i, j)].setFixedWidth(btn_height)
+                self._arrow_btn["{}.{}".format(i, j)].setFixedHeight(btn_height)
 
         # set arrow buttons initial state
         for i in ["baseline", "patient", "idl.gtvt", "idl.gtvn"]:
@@ -497,7 +483,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             h_layout.addWidget(self._arrow_btn["next.{}".format(i)])
             container = QtWidgets.QWidget()
             container.setLayout(h_layout)
-            container.setFixedHeight(50)
             self._add_border(container)
             self._collap[i].addWidget(container)
             self._collap[i].expand()
@@ -517,31 +502,30 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._arrow_btn["next.idl.gtvn"].clicked.connect(self._load_next_idl_gtvn_data)
 
     def _init_widgets_color_enhance(self):
-        # init radio btns
+        # (1) radio buttons: ct/pt/mr1/mr2
         self._radio_group["color.enhance"] = QtWidgets.QButtonGroup()
-
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             self._radio_btn["color.enhance"][i] = QtWidgets.QRadioButton()
+            self._radio_btn["color.enhance"][i].setFixedHeight(g.TEXT_HEIGHT)
             self._radio_group["color.enhance"].addButton(
                 self._radio_btn["color.enhance"][i]
             )
-
         # set text
         self._radio_btn["color.enhance"][Modal.CT].setText("CT")
         self._radio_btn["color.enhance"][Modal.PT].setText("PT")
         self._radio_btn["color.enhance"][Modal.MR1].setText("MR-T1")
         self._radio_btn["color.enhance"][Modal.MR2].setText("MR-T2")
-
         # set checked
         self._radio_btn["color.enhance"][Modal.CT].setChecked(True)
 
-        # text labels
+        # (2) text labels for slider bars
         for i in ["bright", "contrast"]:
             self._text_label[i] = QtWidgets.QLabel()
+            self._text_label[i].setFixedHeight(g.TEXT_HEIGHT)
         self._text_label["bright"].setText("Brightness (CT)")
         self._text_label["contrast"].setText("Contrast (CT)")
 
-        # slider bars
+        # (3) slider bars
         for i in ["bright", "contrast"]:
             for j in [
                 Modal.CT,
@@ -550,6 +534,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 Modal.MR2,
             ]:
                 self._slider[i][j] = QtWidgets.QSlider()
+                self._slider[i][j].setFixedHeight(g.SLIDER_HEIGHT)
                 slider = self._slider[i][j]
                 slider.setOrientation(Qt.Horizontal)
                 if i == "bright":
@@ -566,8 +551,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
-
-        # text labels and slider bars
+        # add text labels and slider bars
         for i in ["bright", "contrast"]:
             v_layout.addWidget(self._text_label[i])
             for j in [
@@ -577,8 +561,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 Modal.MR2,
             ]:
                 v_layout.addWidget(self._slider[i][j])
-
-        # radio buttons: ct/pt/mr1/mr2
+        # add radio buttons: ct/pt/mr1/mr2
         h_layout = QtWidgets.QHBoxLayout()
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             h_layout.addWidget(self._radio_btn["color.enhance"][i])
@@ -588,7 +571,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
         self._add_border(container)
-        container.setFixedHeight(130)
         # collapse
         self._collap["color.enhance"] = QCollapsible("COLOR ENHANCEMENT")
         self._collap["color.enhance"].addWidget(container)
@@ -718,41 +700,32 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return
 
     def _init_widgets_display_mode(self):
-        widgets_total_height = 105
 
-        # toggle display mode
+        # (1) toggle button
         self._toggle_btn = ToggleButton(is_checked=True)
 
+        # (2) text: "Modality Fixed" and "Plane Fixed"
         for i in [DisplayMode.MODAL_FIXED, DisplayMode.PLANE_FIXED]:
             self._text_label[i] = QtWidgets.QLabel()
             self._text_label[i].setFixedHeight(self._toggle_btn.height())
-
         self._text_label[DisplayMode.MODAL_FIXED].setText("Modality Fixed")
         self._text_label[DisplayMode.MODAL_FIXED].setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter
         )
-        self._text_label[DisplayMode.MODAL_FIXED].setFixedWidth(112)
         self._text_label[DisplayMode.PLANE_FIXED].setText("Plane Fixed")
         self._text_label[DisplayMode.PLANE_FIXED].setAlignment(
             Qt.AlignRight | Qt.AlignVCenter
         )
 
-        #  display mode: modality fixed
+        # (3) modality fixed mode: radio buttons
         self._radio_group[DisplayMode.MODAL_FIXED] = QtWidgets.QButtonGroup()
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self._radio_btn[DisplayMode.MODAL_FIXED][i] = QtWidgets.QRadioButton()
+            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFixedHeight(g.TEXT_HEIGHT)
             self._radio_btn[DisplayMode.MODAL_FIXED][i].setText(i.capitalize())
-            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFixedHeight(
-                widgets_total_height - self._toggle_btn.height()
-            )
-            # self._radio_btn[DisplayMode.MODAL_FIXED][i].setAlignment(
-            #     Qt.AlignLeft | Qt.AlignVCenter
-            # )
             self._radio_group[DisplayMode.MODAL_FIXED].addButton(
                 self._radio_btn[DisplayMode.MODAL_FIXED][i]
             )
-
-        self._radio_btn[DisplayMode.MODAL_FIXED][Plane.TRANSVERSE].setFixedWidth(120)
         # set checked
         self._radio_btn[DisplayMode.MODAL_FIXED][Plane.TRANSVERSE].setChecked(True)
         # connect ui to functions
@@ -760,46 +733,43 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.__on_modal_fixed_radio_group_clicked
         )
 
-        # display mode: plane fixed
-        # radio buttons
+        # (4) plane fixed mode: radio buttons
         self._radio_group[DisplayMode.PLANE_FIXED] = QtWidgets.QButtonGroup()
         for i in [Modal.PT, Modal.MR1, Modal.MR2]:
             self._radio_btn[DisplayMode.PLANE_FIXED][i] = QtWidgets.QRadioButton()
+            self._radio_btn[DisplayMode.PLANE_FIXED][i].setFixedHeight(g.TEXT_HEIGHT)
             self._radio_group[DisplayMode.PLANE_FIXED].addButton(
                 self._radio_btn[DisplayMode.PLANE_FIXED][i]
             )
-        # connect functions
-        self._radio_group[DisplayMode.PLANE_FIXED].buttonClicked.connect(
-            self._plane_fixed_mode_switch_modal
-        )
-
         # set checked
         self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setChecked(True)
         # set text
         self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setText("PT")
         self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].setText("MR-T1")
         self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].setText("MR-T2")
-        # set size
-        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].setFixedWidth(120)
-        self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR1].setFixedWidth(120)
+        # connect functions
+        self._radio_group[DisplayMode.PLANE_FIXED].buttonClicked.connect(
+            self._plane_fixed_mode_switch_modal
+        )
 
-        # reset image plane
+        # (5) reset image plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             if self._radio_btn[DisplayMode.MODAL_FIXED][plane].isChecked():
                 for modal in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
                     self.img_frame[modal].plane = plane
                 break
 
-        # reset img modality
+        # (6) reset img modality
         for modal in [Modal.PT, Modal.MR1, Modal.MR2]:
             if self._radio_btn[DisplayMode.PLANE_FIXED][modal].isChecked():
                 for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                     self.img_frame[plane].modal = modal
                 break
 
-        # text label for plane fixed mode
+        # (7) plane fixed mode text labels: "CT" and "other.modality"
         for i in [Modal.CT, "other.modal"]:
             self._text_label[i] = QtWidgets.QLabel()
+            self._text_label[i].setFixedHeight(g.TEXT_HEIGHT)
         # set text
         self._text_label[Modal.CT].setText("CT")
         if self._radio_btn[DisplayMode.PLANE_FIXED][Modal.PT].isChecked():
@@ -809,12 +779,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
             self._text_label["other.modal"].setText("MR-T2")
         # alignment
-        self._text_label[Modal.CT].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._text_label["other.modal"].setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self._text_label["other.modal"].setFixedWidth(40)
+        self._text_label[Modal.CT].setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        width = 25 if g.is_linux() else 40
+        self._text_label[Modal.CT].setFixedWidth(width)
+        self._text_label["other.modal"].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        width = 55 if g.is_linux() else 65
+        self._text_label["other.modal"].setFixedWidth(width)
 
         # ct/pt weight slider bar
         self._slider["mix"] = QtWidgets.QSlider()
+        # use TEXT_HEIGHT to make slider has same height as the text labels next to it
+        self._slider["mix"].setFixedHeight(g.TEXT_HEIGHT)
         self._slider["mix"].setOrientation(Qt.Horizontal)
         self._slider["mix"].setMinimum(0)
         self._slider["mix"].setMaximum(100)
@@ -855,36 +830,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # put v_layout into collapsible space
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
-        container.setFixedHeight(widgets_total_height)
         self._add_border(container)
         self._collap["display.mode"].addWidget(container)
         self._collap["display.mode"].expand()
 
-    def _init_widgets_set_fonts(self):
-        for i in self._collap.keys():
-            self._collap[i].setStyleSheet("font-weight: bold; color: white;")
-
-        self._font = QtGui.QFont("Arial", 10)
-        self._font.setBold(True)
-
-        for i in self._text_label.keys():
-            if not isinstance(self._text_label[i], IDLStepLabel):
-                self._text_label[i].setFont(self._font)
-
-        for i in self.combox.keys():
-            self.combox[i].setFont(self._font)
-
-        for i in self._radio_btn["color.enhance"].keys():
-            self._radio_btn["color.enhance"][i].setFont(self._font)
-
-        for i in self._radio_btn[DisplayMode.PLANE_FIXED].keys():
-            self._radio_btn[DisplayMode.PLANE_FIXED][i].setFont(self._font)
-
-        for i in self._radio_btn[DisplayMode.MODAL_FIXED].keys():
-            self._radio_btn[DisplayMode.MODAL_FIXED][i].setFont(self._font)
-
     def _init_widgets_zoom(self):
         self._slider["zoom"] = QtWidgets.QSlider()
+        self._slider["zoom"].setFixedHeight(g.SLIDER_HEIGHT)
         self._slider["zoom"].setOrientation(Qt.Horizontal)
         self._slider["zoom"].setMinimum(100)
         self._slider["zoom"].setMaximum(200)
@@ -929,8 +881,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._init_widgets_display_mode()
         self._init_widgets_color_enhance()
         self._init_widgets_zoom()
-        self._init_widgets_set_fonts()
         self.switch_display_mode()  # after all widgets initalized
+
+        # set font style
+        for i in self._collap.keys():
+            self._collap[i].setStyleSheet(g.FONT_STYLE)
 
         # add collapsible bars into sidebar
         v_layout = QtWidgets.QVBoxLayout()
@@ -940,79 +895,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._side_bar = QtWidgets.QWidget(self._central_widget)
         self._side_bar.setLayout(v_layout)
 
+        self.__side_bar_width = 310 if g.is_linux() else 430
+        self.setMinimumSize(self.__side_bar_width + 600, 600)
+        self.resize(1200, 800)  # set origin size
+        self.showMaximized()
+
     def _refresh_side_bar(self):
         left = 0
         top = 0
-        width = SIDE_BAR_WIDTH - left * 2
+        width = self.__side_bar_width - left * 2
         height = self._central_widget.height()
-        left += self.geometry().width() - SIDE_BAR_WIDTH
+        left += self.geometry().width() - self.__side_bar_width
         rect = QtCore.QRect(left, top, width, height)
         self._side_bar.setGeometry(rect)
         return
-
-        # text_height = 25
-        # bar_height = 25
-        # slider_height = 20
-        # arrow_btn_width = 30
-
-        # if platform.system().lower() == "linux":
-        #     gap = 30
-        # else:  # windows
-        #     gap = 40
-
-        # radio_btn_height = 25
-        # radio_btn_width = Dict()
-        # radio_btn_width[Modal.CT] = radio_btn_width[Modal.PT] = 45
-        # radio_btn_width[Modal.MR1] = radio_btn_width[Modal.MR2] = 60
-        # radio_btn_width[Plane.TRANSVERSE] = 90
-        # radio_btn_width[Plane.CORONAL] = 70
-        # radio_btn_width[Plane.SAGITTAL] = 70
-        # radio_btn_gap = Dict()
-        # radio_btn_gap["luminance"] = 10
-        # radio_btn_gap["planes"] = 6
-
-        # # side bar location
-        # side_bar_x = self.geometry().width() - SIDE_BAR_WIDTH
-        # width = SIDE_BAR_WIDTH - left * 2
-        # left += side_bar_x
-
-        # # set position of text label / comboxes / btns
-        # for i in widgets_to_display:
-        #     # text label
-        #     top += gap
-        #     rect = QtCore.QRect(left, top, width, text_height)
-        #     self._text_label[i].setGeometry(rect)
-        #     top += text_height
-
-        #     # btn prev
-        #     tmp_left = left
-        #     rect = QtCore.QRect(tmp_left, top, arrow_btn_width, bar_height)
-        #     self._arrow_btn["prev.{}".format(i)].setGeometry(rect)
-
-        #     # combobox
-        #     tmp_left += arrow_btn_width
-        #     rect = QtCore.QRect(tmp_left + 1, top, width - arrow_btn_width * 2 - 2, bar_height)
-        #     self.combox[i].setGeometry(rect)
-
-        #     # btn next
-        #     tmp_left += width - arrow_btn_width * 2
-        #     rect = QtCore.QRect(tmp_left, top, arrow_btn_width, bar_height)
-        #     self._arrow_btn["next.{}".format(i)].setGeometry(rect)
-
-        #     # next element
-        #     top += bar_height
-
-        # # return the followings for IDLWindow
-        # return (
-        #     left,
-        #     top,
-        #     width,
-        #     gap,
-        #     text_height,
-        #     bar_height,
-        #     slider_height,
-        #     radio_btn_height,
-        # )
 
     # this function is connected to widget, dont set input params to this function
     def __on_modal_fixed_radio_group_clicked(self):
@@ -1146,7 +1042,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             self._arrow_btn["next.{}".format(combox_name)].setEnabled(True)
 
-    def _get_combox_contents(self, combox: QtWidgets.QComboBox):
+    def _get_combox_contents(self, combox: CustomComboBox):
         content_list = List()
         for i in range(combox.count()):
             content_list.append(combox.itemText(i))
@@ -1977,7 +1873,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         gap = 1
         # pos: w0 w1 h0 h1
         pos = Dict()
-        pos["w"] = self.geometry().width() - SIDE_BAR_WIDTH
+        pos["w"] = self.geometry().width() - self.__side_bar_width
         pos["h"] = self.geometry().height()
         for i in ["w", "h"]:
             double_size = pos[i] - gap * 3

@@ -10,7 +10,6 @@ from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from PyQt5.QtCore import pyqtSignal
 from str_lib import DatasetPart, DatasetVer, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader

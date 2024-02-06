@@ -11,7 +11,6 @@ from custom import Global as g
 from custom import Img, Json, List, Timer, Value
 from dataset_baseline import DataSetBaseline
 from numpy import ndarray
-from PyQt5.QtCore import pyqtSignal
 from segment_metric import SegmentationMetric
 from str_lib import DatasetPart, DatasetVer, Metric
 from torch import Tensor, optim

@@ -413,15 +413,8 @@ class IDLWindow(ReplayWindow):
             else:
                 self._text_label[i].set_status_notstart()
 
-        # for i in [
-        #     IDLStep.DRAW_GTVT_TRANSVERSE,
-        #     IDLStep.DRAW_GTVT_CORONAL,
-        #     IDLStep.DRAW_GTVT_SAGITTAL,
-        # ]:
-        #     self._text_label[i].hide()
-
         # button size 562*187
-        btn_h = 27
+        btn_h = 27 if g.is_linux() else 40
         btn_w = round(btn_h * 562 / 187)
         self._btn["next.step"] = QtWidgets.QPushButton()
         self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
@@ -441,11 +434,10 @@ class IDLWindow(ReplayWindow):
 
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
-        v_layout.setSpacing(3)
+        v_layout.setSpacing(2 if g.is_linux() else 2)
         v_layout.addWidget(
             self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
         )
-
         for i in self._text_label.keys():
             if i in idl_step_list:
                 v_layout.addWidget(self._text_label[i])
@@ -453,7 +445,6 @@ class IDLWindow(ReplayWindow):
         # container
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
-        container.setFixedHeight(290)
         self._add_border(container)
 
         # create qcollapsible space
@@ -1367,6 +1358,7 @@ class IDLWindow(ReplayWindow):
         # text label
         for i in ["gtvt.progress", "gtvn.progress", "draw.size"]:
             self._text_label[i] = QtWidgets.QLabel()
+            self._text_label[i].setFixedHeight(g.TEXT_HEIGHT)
 
         # set text
         self._text_label["draw.size"].setText("Pen Size")
@@ -1378,6 +1370,7 @@ class IDLWindow(ReplayWindow):
         # radio button
         for i in ["gtvt", "gtvn"]:
             self._radio_btn["correct.{}".format(i)] = QtWidgets.QRadioButton()
+            self._radio_btn["correct.{}".format(i)].setFixedHeight(g.TEXT_HEIGHT)
         self._radio_btn["correct.gtvt"].setText("Correct GTVt")
         self._radio_btn["correct.gtvn"].setText("Correct GTVn")
         self._radio_btn["correct.gtvt"].setChecked(True)
@@ -1385,8 +1378,8 @@ class IDLWindow(ReplayWindow):
         # annotation buttons
         for i in ["pen", "eraser", "clear"]:
             self._btn[i] = QtWidgets.QPushButton()
-            # self._btn[i].setFixedWidth(50)
-            self._btn[i].setFixedHeight(40)
+            height = 40 if g.is_linux() else 60
+            self._btn[i].setFixedHeight(height)
             # add too tip and set stylesheet
             self._btn[i].setStyleSheet(
                 """
@@ -1404,13 +1397,13 @@ class IDLWindow(ReplayWindow):
                 os.path.join(g.PROJ_DIR, "icons", "{}_btn.png".format(i))
             )
             if i == "pen":
-                self._btn[i].setIconSize(QSize(24, 24))
+                icon_size = 24 if g.is_linux() else 36
             elif i == "eraser":
-                self._btn[i].setIconSize(QSize(31, 31))
+                icon_size = 31 if g.is_linux() else 46
             elif i == "clear":
-                self._btn[i].setIconSize(QSize(35, 35))
+                icon_size = 33 if g.is_linux() else 48
+            self._btn[i].setIconSize(QSize(icon_size, icon_size))
             self._btn[i].setIcon(icon)
-            # disable btns
             self._btn[i].setEnabled(False)
 
         # connect btns to functions
@@ -1422,12 +1415,14 @@ class IDLWindow(ReplayWindow):
         self.__progress_bar = Dict()
         for i in ["gtvt", "gtvn"]:
             self.__progress_bar[i] = QtWidgets.QProgressBar()
+            self.__progress_bar[i].setFixedHeight(g.TEXT_HEIGHT)
             self.__progress_bar[i].setRange(0, 100)
             self.__progress_bar[i].setValue(0)
             self.__progress_bar[i].hide()
 
         # pen size slider
         self._slider["draw.size"] = QtWidgets.QSlider()
+        self._slider["draw.size"].setFixedHeight(g.SLIDER_HEIGHT)
         self._slider["draw.size"].setOrientation(Qt.Horizontal)
         self._slider["draw.size"].setMinimum(1)
         self._slider["draw.size"].setMaximum(7)
@@ -1496,11 +1491,6 @@ class IDLWindow(ReplayWindow):
         container.setLayout(v_layout)
         self._add_border(container)
         self._collap["annotation"].addWidget(container)
-
-    def _init_widgets_set_fonts(self):
-        super()._init_widgets_set_fonts()
-        for i in ["gtvt", "gtvn"]:
-            self._radio_btn["correct.{}".format(i)].setFont(self._font)
 
     def _init_widgets(self):
         super()._init_widgets()

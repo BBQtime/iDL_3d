@@ -1,4 +1,5 @@
 from custom import Debug
+from custom import Global as g
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel, QWidget
 from str_lib import IDLStep
@@ -19,11 +20,12 @@ class IDLStepLabel(QLabel):
         self.__font_weight = "light"
         self.__text_color = "white"
         self.__bg_color = "gray"
+        self.setFixedHeight(g.TEXT_HEIGHT + 3)
 
         # init text
         str_space = "            "
         if self.__idl_step == IDLStep.SELECT_PATIENT:
-            self.setText("STEP 1 - Select a Patient")
+            self.setText("STEP 1 - Select Patient")
         if self.__idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.setText("STEP 2 - Click GTVt center")
         if self.__idl_step == IDLStep.DRAW_GTVT:
@@ -37,7 +39,7 @@ class IDLStepLabel(QLabel):
         if self.__idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.setText("STEP 4 - Click GTVn center")
         if self.__idl_step == IDLStep.WAITING:
-            self.setText("STEP 5 - Generating Segmentation")
+            self.setText("STEP 5 - Generating Results")
         if self.__idl_step == IDLStep.CORRECT_GTVT:
             self.setText("STEP 6 - Correct GTVt")
         if self.__idl_step == IDLStep.CORRECT_GTVN:
