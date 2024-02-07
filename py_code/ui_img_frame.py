@@ -25,6 +25,11 @@ class ImgFrame(QLabel):
         # rgb img - region of interest
         self.roi = ImgFrameROI()
 
+        # right click drag img
+        self.__dragging = False
+        self.__offset = None
+        self.img_center_pct = (0.5, 0.5)
+
         # clicks
         self.selected_cross = None
         self.crosses_list = []
@@ -49,55 +54,61 @@ class ImgFrame(QLabel):
         # Resize the drawing layer pixmap to match the new size of the QLabel
         self.drawing_layer = self.drawing_layer.scaled(self.size())
 
-    def mousePressEvent(self, event: QMouseEvent):
-        super().mousePressEvent(event)
+    def mouse_press_event_left_button(self, event: QMouseEvent):
+        idl_step = self.window().cur_idl_step()
 
-        if event.button() == Qt.LeftButton:
-            idl_step = self.window().cur_idl_step()
+        if idl_step is None:
+            return
 
-            if idl_step is None:
-                return
+        elif idl_step == IDLStep.CLICK_GTVT_CENTER:
+            # remove old crosses
+            self.window().delete_all_crosses()
+            # add new 3d pos
+            pos_3d = self.get_pos_in_3d(event.pos())
+            self.window().gtvt_click_pos_3d = pos_3d
+            self.window().reset_cur_slice_id()
+            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                # only refresh other img_frames
+                frame_name_list.remove(self.plane)
+                for i in frame_name_list:
+                    self.window().refresh_imgs(frame_name=i)
+            self.window().refresh_crosses()
 
-            elif idl_step == IDLStep.CLICK_GTVT_CENTER:
-                # remove old crosses
-                self.window().delete_all_crosses()
-                # add new 3d pos
-                pos_3d = self.get_pos_in_3d(event.pos())
-                self.window().gtvt_click_pos_3d = pos_3d
+        # draw/correct
+        elif idl_step in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            self.window().draw_on_img_frame_press(event=event, img_frame=self)
+
+        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+            pos_3d = self.get_pos_in_3d(event.pos())
+            if pos_3d not in self.window().gtvn_clicks_pos_3d:
+                self.window().gtvn_clicks_pos_3d.append(pos_3d)
                 self.window().reset_cur_slice_id()
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                    frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                    frame_name_list = [
+                        Plane.TRANSVERSE,
+                        Plane.CORONAL,
+                        Plane.SAGITTAL,
+                    ]
                     # only refresh other img_frames
                     frame_name_list.remove(self.plane)
                     for i in frame_name_list:
                         self.window().refresh_imgs(frame_name=i)
                 self.window().refresh_crosses()
 
-            # draw/correct
-            elif idl_step in [
-                IDLStep.DRAW_GTVT,
-                IDLStep.CORRECT_GTVT,
-                IDLStep.CORRECT_GTVN,
-                IDLStep.CORRECT_BOTH,
-            ]:
-                self.window().draw_on_img_frame_press(event=event, img_frame=self)
+    def mousePressEvent(self, event: QMouseEvent):
+        super().mousePressEvent(event)
 
-            elif idl_step == IDLStep.CLICK_GTVN_CENTER:
-                pos_3d = self.get_pos_in_3d(event.pos())
-                if pos_3d not in self.window().gtvn_clicks_pos_3d:
-                    self.window().gtvn_clicks_pos_3d.append(pos_3d)
-                    self.window().reset_cur_slice_id()
-                    if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                        frame_name_list = [
-                            Plane.TRANSVERSE,
-                            Plane.CORONAL,
-                            Plane.SAGITTAL,
-                        ]
-                        # only refresh other img_frames
-                        frame_name_list.remove(self.plane)
-                        for i in frame_name_list:
-                            self.window().refresh_imgs(frame_name=i)
-                    self.window().refresh_crosses()
+        if event.button() == Qt.LeftButton:
+            self.mouse_press_event_left_button(event)
+        elif event.button() == Qt.RightButton:
+            self.__dragging = True
+            self.__offset = event.pos()
 
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
@@ -123,6 +134,31 @@ class ImgFrame(QLabel):
         elif should_paint_eraser_circle:
             self.update()  # repaint
 
+        # right click dragging
+        if self.__dragging:
+            diff_x = event.pos().x() - self.__offset.x()
+            diff_y = event.pos().y() - self.__offset.y()
+            img_pos_diff = (diff_x, diff_y)
+            self.__offset = event.pos()  # update offset
+
+            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                # only refresh current img frame
+                self.window().refresh_imgs(
+                    frame_name=self.plane,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                    img_pos_diff=img_pos_diff,
+                )
+            else:
+                # refresh 4 img frames
+                self.window().refresh_imgs(
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                    img_pos_diff=img_pos_diff,
+                )
+
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
@@ -134,6 +170,10 @@ class ImgFrame(QLabel):
                 IDLStep.CORRECT_BOTH,
             ]:
                 self.window().draw_on_img_frame_release(self)
+
+        elif event.button() == Qt.RightButton:
+            self.__dragging = False
+            self.__drag_pos = None
 
     def __should_paint_eraser_circle(self):
         if self.window().cur_idl_step() in [

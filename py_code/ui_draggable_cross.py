@@ -12,7 +12,7 @@ class DraggableCross(QWidget):
         super().__init__(parent)
         self.cross_id = cross_id
 
-        self.CROSS_SIZE = 20
+        self.CROSS_SIZE = 20 if g.is_linux() else 30
         self.SELECTED_CROSS_ICON_PATH = os.path.join(
             g.PROJ_DIR, "icons", "cross_selected.png"
         )

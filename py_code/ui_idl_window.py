@@ -1088,30 +1088,30 @@ class IDLWindow(ReplayWindow):
                     self.__gtvt_annotated_status[plane] = True
                     self._text_label["draw.gtvt.{}".format(plane)].set_status_done()
 
-    def refresh_imgs(self, frame_name=None):
-        # no patient loaded (no img_3d loaded)
-        if self.img_3d[Modal.CT] is None:
-            if self.display_mode() == DisplayMode.PLANE_FIXED:
-                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-            else:
-                frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-            for frame_name in frame_name_list:
-                w = self.img_frame[frame_name].width()
-                h = self.img_frame[frame_name].height()
-                qimg = QtGui.QImage(w, h, QtGui.QImage.Format_RGB888)
-                black = QtGui.QColor(0, 0, 0)
-                qimg.fill(black)
+    # def refresh_imgs(self, frame_name=None):
+    #     # no patient loaded (no img_3d loaded)
+    #     if self.img_3d[Modal.CT] is None:
+    #         if self.display_mode() == DisplayMode.PLANE_FIXED:
+    #             frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+    #         else:
+    #             frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+    #         for frame_name in frame_name_list:
+    #             w = self.img_frame[frame_name].width()
+    #             h = self.img_frame[frame_name].height()
+    #             qimg = QtGui.QImage(w, h, QtGui.QImage.Format_RGB888)
+    #             black = QtGui.QColor(0, 0, 0)
+    #             qimg.fill(black)
 
-                # add msg on qimg: "please select a patient"
-                if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-                    self._add_msg_on_qimg(qimg)
+    #             # add msg on qimg: "please select a patient"
+    #             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
+    #                 self._add_msg_on_qimg(qimg)
 
-                self.img_frame[frame_name].set_background(qimg)
-                self.img_frame[frame_name].update()
+    #             self.img_frame[frame_name].set_background(qimg)
+    #             self.img_frame[frame_name].update()
 
-        # multi-modal imgs loaded
-        else:
-            super().refresh_imgs(frame_name=frame_name)
+    #     # multi-modal imgs loaded
+    #     else:
+    #         super().refresh_imgs(frame_name=frame_name)
 
     def __change_color(self, pixmap: QtGui.QPixmap, old_color, new_color):
         image = pixmap.toImage()
@@ -1726,7 +1726,7 @@ class IDLWindow(ReplayWindow):
                     pos=(pos_x, pos_y),
                     color=self.color["gtv{}.pred".format(i)],
                 )
-                pos_x += 45
+                pos_x += 45 if g.is_linux() else 55
 
     def _load_patient_data(self):
         # stop idl qthreads (if running)

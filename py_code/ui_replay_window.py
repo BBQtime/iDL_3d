@@ -733,7 +733,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._slider["zoom"].setFixedHeight(g.SLIDER_HEIGHT)
         self._slider["zoom"].setOrientation(Qt.Horizontal)
         self._slider["zoom"].setMinimum(100)
-        self._slider["zoom"].setMaximum(200)
+        self._slider["zoom"].setMaximum(300)
         self._slider["zoom"].setValue(100)
         self._slider["zoom"].valueChanged.connect(self.__on_zoom_slider_changed)
 
@@ -1633,43 +1633,76 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.__zoomed_rgb[frame_name], (3, 3), cv2.BORDER_DEFAULT
         )
 
-    def __refresh_imgs_fill_img_frame(self, frame_name: str):
+    def __refresh_imgs_fill_img_frame(
+        self,
+        frame_name: str,
+        img_pos_diff: tuple = (0, 0),  # Default to (0, 0) if not provided
+    ):
+        print("old: ", self.img_frame[frame_name].img_center_pct)
+        print("diff:", img_pos_diff)
+
+        img_center_pct = self.img_frame[frame_name].img_center_pct
         frame_w = self.img_frame[frame_name].width()
         frame_h = self.img_frame[frame_name].height()
         zoomed_h = self.__contoured_rgb[frame_name].shape[0]
         zoomed_w = self.__contoured_rgb[frame_name].shape[1]
 
-        # Determine padding or cropping for width
-        if zoomed_w < frame_w:
-            pad_width_left = (frame_w - zoomed_w) // 2
-            pad_width_right = frame_w - zoomed_w - pad_width_left
+        # Calculate the absolute center position and adjust with img_pos_diff
+        center_x_abs = round(zoomed_w * img_center_pct[0]) - img_pos_diff[0]
+        center_y_abs = round(zoomed_h * img_center_pct[1]) - img_pos_diff[1]
+
+        # Ensure the center coordinates are within the image bounds after adjustment
+        center_x_abs = max(0, min(zoomed_w, center_x_abs))
+        center_y_abs = max(0, min(zoomed_h, center_y_abs))
+
+        # Determine padding or cropping for width to align the specified position
+        if zoomed_w <= frame_w:
+            total_padding_w = frame_w - zoomed_w
+            # Distribute padding evenly to ensure centering
+            pad_width_left = total_padding_w // 2
+            pad_width_right = total_padding_w - pad_width_left
             final_rgb = np.pad(
                 self.__contoured_rgb[frame_name],
                 [(0, 0), (pad_width_left, pad_width_right), (0, 0)],
                 mode="constant",
             )
+            # update center pct
+            center_x_pct = 0.5
         else:
-            start_x = (zoomed_w - frame_w) // 2
-            # start_x = zoomed_w // 2 - frame_w // 2
+            start_x = max(0, min(zoomed_w - frame_w, center_x_abs - frame_w // 2))
             final_rgb = self.__contoured_rgb[frame_name][
                 :, start_x : start_x + frame_w, :
             ]
+            # update center pct
+            center_x_abs = max(frame_w // 2, center_x_abs)
+            center_x_abs = min(zoomed_w - frame_w // 2, center_x_abs)
+            center_x_pct = center_x_abs / zoomed_w
 
         # Determine padding or cropping for height after width adjustment
-        zoomed_h = final_rgb.shape[0]
-        zoomed_w = final_rgb.shape[1]
-        if zoomed_h < frame_h:
-            pad_height_top = (frame_h - zoomed_h) // 2
-            pad_height_bottom = frame_h - zoomed_h - pad_height_top
+        if zoomed_h <= frame_h:
+            total_padding_h = frame_h - zoomed_h
+            # Distribute padding evenly to ensure centering
+            pad_height_top = total_padding_h // 2
+            pad_height_bottom = total_padding_h - pad_height_top
             final_rgb = np.pad(
                 final_rgb,
                 [(pad_height_top, pad_height_bottom), (0, 0), (0, 0)],
                 mode="constant",
             )
+            # update center pct
+            center_y_pct = 0.5
         else:
-            start_y = (zoomed_h - frame_h) // 2
-            # start_y = zoomed_h // 2 - frame_h // 2
+            start_y = max(0, min(zoomed_h - frame_h, center_y_abs - frame_h // 2))
             final_rgb = final_rgb[start_y : start_y + frame_h, :, :]
+            # update center pct
+            center_y_abs = max(frame_h // 2, center_y_abs)
+            center_y_abs = min(zoomed_h - frame_h // 2, center_y_abs)
+            center_y_pct = center_y_abs / zoomed_h
+
+        # img_center_pct
+        self.img_frame[frame_name].img_center_pct = (center_x_pct, center_y_pct)
+
+        print("new: ", self.img_frame[frame_name].img_center_pct)
 
         return final_rgb
 
@@ -1745,8 +1778,27 @@ class ReplayWindow(QtWidgets.QMainWindow):
         reload_origin_rgb: bool = True,
         reload_zoomed_rgb: bool = True,
         reload_contours: bool = True,
+        img_pos_diff: tuple = (0, 0),  # this is for right click drag and move
     ):
+        # no patient loaded (no img_3d loaded)
         if self.img_3d[Modal.CT] is None:
+            if self.display_mode() == DisplayMode.PLANE_FIXED:
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            else:
+                frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
+            for frame_name in frame_name_list:
+                w = self.img_frame[frame_name].width()
+                h = self.img_frame[frame_name].height()
+                qimg = QtGui.QImage(w, h, QtGui.QImage.Format_RGB888)
+                black = QtGui.QColor(0, 0, 0)
+                qimg.fill(black)
+
+                # add msg on qimg: "please select a patient"
+                if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
+                    self._add_msg_on_qimg(qimg)
+
+                self.img_frame[frame_name].set_background(qimg)
+                self.img_frame[frame_name].update()
             return
 
         # img name
@@ -1770,7 +1822,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self.__refresh_imgs_add_contours(frame_name)
 
             # resize and fit img qlabel
-            final_rgb = self.__refresh_imgs_fill_img_frame(frame_name)
+            final_rgb = self.__refresh_imgs_fill_img_frame(
+                frame_name=frame_name,
+                img_pos_diff=img_pos_diff,
+            )
 
             # avoid Non-Contiguity problem
             # this happens when img.width/height are all larger than img_frame
