@@ -1,7 +1,9 @@
+import math
 import os
 from pathlib import Path
 
 import cv2
+import imageio
 import numpy as np
 import qimage2ndarray
 from custom import Debug, Dict, Dir
@@ -181,6 +183,14 @@ class IDLWindow(ReplayWindow):
         if self.paint_pos is None:
             return
 
+        # get img frame name
+        frame_name = None
+        for i in self.img_frame.keys():
+            if self.img_frame[i] == img_frame:
+                frame_name = i
+        if frame_name is None:
+            Debug.error_exit("img_frame error")
+
         # binarize threshold
         # this is for saving qimage as ndarray
         # binarization is needed before and after resize the ndarray
@@ -192,18 +202,45 @@ class IDLWindow(ReplayWindow):
         # qimage to ndarray
         annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
         annotation_2d /= 255
-
         # binarization (before resize)
         annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 
-        # crop annotation_2d based on roi
-        x = img_frame.roi.x
-        y = img_frame.roi.y
-        width = img_frame.roi.width
-        height = img_frame.roi.height
-        annotation_2d = annotation_2d[y : y + height, x : x + width]
+        # overwrite annotation back to zoomed_img
+        empty_zoomed_img = np.zeros_like(self._zoomed_rgb[frame_name][:, :, 0])
+        center_x_pct, center_y_pct = img_frame.img_center_pct
+        frame_h, frame_w = annotation_2d.shape
+        zoomed_h, zoomed_w = empty_zoomed_img.shape
+        # Calculate original intended center positions
+        center_x_abs = int(round(zoomed_w * center_x_pct))
+        center_y_abs = int(round(zoomed_h * center_y_pct))
+        # Calculate the amount of black border added to each side
+        border_w = max(0, (frame_w - zoomed_w) // 2)
+        border_h = max(0, (frame_h - zoomed_h) // 2)
+        # Calculate start positions for placing annotation_2d
+        start_x = center_x_abs - math.ceil(frame_w / 2)
+        start_x = max(0, start_x)
+        start_y = center_y_abs - math.ceil(frame_h / 2)
+        start_y = max(0, start_y)
+        # Calculate end positions, do not exceed the zoomed image dimensions
+        end_x = start_x + frame_w
+        end_y = start_y + frame_h
+        end_x = min(end_x, zoomed_w)
+        end_y = min(end_y, zoomed_h)
+        # Calculate crop dimensions
+        crop_w = frame_w - border_w * 2
+        crop_h = frame_h - border_h * 2
+        # Ensure annotation_2d cropped area does not exceed zoomed img
+        crop_w = min(crop_w, zoomed_w)
+        crop_h = min(crop_h, zoomed_h)
+        # crop annotation_2d
+        annotation_2d = annotation_2d[
+            border_h : crop_h + border_h, border_w : crop_w + border_w
+        ]
+        # Place the annotation_2d onto the adjusted position within empty_zoomed_img
+        empty_zoomed_img[start_y:end_y, start_x:end_x] = annotation_2d
+        annotation_2d = empty_zoomed_img
 
-        # resize to actual size
+        # resize to origin img size (slice from 3d img)
         if img_frame.plane == Plane.SAGITTAL:
             actual_shape = self.img_3d[Modal.CT][:, :, 0].shape
         elif img_frame.plane == Plane.CORONAL:
@@ -215,7 +252,6 @@ class IDLWindow(ReplayWindow):
             (actual_shape[1], actual_shape[0]),
             interpolation=cv2.INTER_AREA,  # best for scaling down
         )
-
         # binarization (after resize)
         annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
 

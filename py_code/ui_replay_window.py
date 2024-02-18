@@ -63,9 +63,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._clear_img_3d()
 
         # save the original/zoomed 2d rgb imgs (with contours)
-        self.__origin_rgb = Dict()
-        self.__zoomed_rgb = Dict()
-        self.__contoured_rgb = Dict()
+        self._origin_rgb = Dict()
+        self._zoomed_rgb = Dict()
+        self._contoured_rgb = Dict()
         for i in [
             Plane.TRANSVERSE,
             Plane.CORONAL,
@@ -75,9 +75,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             Modal.MR1,
             Modal.MR2,
         ]:
-            self.__origin_rgb[i] = None
-            self.__zoomed_rgb[i] = None
-            self.__contoured_rgb[i] = None
+            self._origin_rgb[i] = None
+            self._zoomed_rgb[i] = None
+            self._contoured_rgb[i] = None
 
         self.__clear_gtvt_selected_slices_3d()
 
@@ -1507,9 +1507,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 interpolation=cv2.INTER_CUBIC,
             )
 
-        self.__origin_rgb[frame_name] = origin_rgb
+        self._origin_rgb[frame_name] = origin_rgb
 
     def __refresh_imgs_add_contours(self, frame_name: str):
+        # make sure contoured_rgb is not None,
+        # because sometime there is not contour to draw
+        self._contoured_rgb[frame_name] = self._zoomed_rgb[frame_name].copy()
+
         plane = self.img_frame[frame_name].plane
 
         # idl mode
@@ -1573,8 +1577,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     continue
 
             # zoom in segmentation
-            zoomed_h = self.__zoomed_rgb[frame_name].shape[0]
-            zoomed_w = self.__zoomed_rgb[frame_name].shape[1]
+            zoomed_h = self._zoomed_rgb[frame_name].shape[0]
+            zoomed_w = self._zoomed_rgb[frame_name].shape[1]
             segment = cv2.resize(
                 segment,
                 (zoomed_w, zoomed_h),
@@ -1588,14 +1592,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
             else:
                 thickness = 2
                 # GaussianBlur after zoomed in
-                segment = cv2.GaussianBlur(segment, (7, 7), cv2.BORDER_DEFAULT)
+                kernel_size = (7, 7)
+                segment = cv2.GaussianBlur(segment, kernel_size, cv2.BORDER_DEFAULT)
 
             # draw contour on zoomed in rgb
             contours = cv2.findContours(
                 segment, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
             )[0]
-            self.__contoured_rgb[frame_name] = cv2.drawContours(
-                image=self.__zoomed_rgb[frame_name],
+            self._contoured_rgb[frame_name] = cv2.drawContours(
+                image=self._contoured_rgb[frame_name],
                 contours=contours,
                 contourIdx=-1,
                 color=self.color[seg_name],
@@ -1603,8 +1608,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
 
     def __refresh_imgs_load_zoomed_rgb(self, frame_name: str):
-        origin_h = self.__origin_rgb[frame_name].shape[0]
-        origin_w = self.__origin_rgb[frame_name].shape[1]
+        origin_h = self._origin_rgb[frame_name].shape[0]
+        origin_w = self._origin_rgb[frame_name].shape[1]
         frame_w = self.img_frame[frame_name].width()
         frame_h = self.img_frame[frame_name].height()
 
@@ -1622,15 +1627,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
         zoomed_h *= self._slider["zoom"].value() / 100
         zoomed_h = round(zoomed_h)
 
-        self.__zoomed_rgb[frame_name] = cv2.resize(
-            self.__origin_rgb[frame_name],
+        self._zoomed_rgb[frame_name] = cv2.resize(
+            self._origin_rgb[frame_name],
             (zoomed_w, zoomed_h),
             interpolation=cv2.INTER_AREA,
         )
 
         # GaussianBlur after zoomed in looks better
-        self.__zoomed_rgb[frame_name] = cv2.GaussianBlur(
-            self.__zoomed_rgb[frame_name], (3, 3), cv2.BORDER_DEFAULT
+        self._zoomed_rgb[frame_name] = cv2.GaussianBlur(
+            self._zoomed_rgb[frame_name], (3, 3), cv2.BORDER_DEFAULT
         )
 
     def __refresh_imgs_fill_img_frame(
@@ -1638,14 +1643,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
         frame_name: str,
         img_pos_diff: tuple = (0, 0),  # Default to (0, 0) if not provided
     ):
-        print("old: ", self.img_frame[frame_name].img_center_pct)
-        print("diff:", img_pos_diff)
 
         img_center_pct = self.img_frame[frame_name].img_center_pct
         frame_w = self.img_frame[frame_name].width()
         frame_h = self.img_frame[frame_name].height()
-        zoomed_h = self.__contoured_rgb[frame_name].shape[0]
-        zoomed_w = self.__contoured_rgb[frame_name].shape[1]
+        zoomed_h = self._contoured_rgb[frame_name].shape[0]
+        zoomed_w = self._contoured_rgb[frame_name].shape[1]
 
         # Calculate the absolute center position and adjust with img_pos_diff
         center_x_abs = round(zoomed_w * img_center_pct[0]) - img_pos_diff[0]
@@ -1662,7 +1665,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             pad_width_left = total_padding_w // 2
             pad_width_right = total_padding_w - pad_width_left
             final_rgb = np.pad(
-                self.__contoured_rgb[frame_name],
+                self._contoured_rgb[frame_name],
                 [(0, 0), (pad_width_left, pad_width_right), (0, 0)],
                 mode="constant",
             )
@@ -1670,7 +1673,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             center_x_pct = 0.5
         else:
             start_x = max(0, min(zoomed_w - frame_w, center_x_abs - frame_w // 2))
-            final_rgb = self.__contoured_rgb[frame_name][
+            final_rgb = self._contoured_rgb[frame_name][
                 :, start_x : start_x + frame_w, :
             ]
             # update center pct
@@ -1701,8 +1704,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # img_center_pct
         self.img_frame[frame_name].img_center_pct = (center_x_pct, center_y_pct)
-
-        print("new: ", self.img_frame[frame_name].img_center_pct)
 
         return final_rgb
 
@@ -1812,13 +1813,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # load rgb imgs
         for frame_name in frame_name_list:
-            if reload_origin_rgb or self.__origin_rgb[frame_name] is None:
+            if reload_origin_rgb or self._origin_rgb[frame_name] is None:
                 self.__refresh_imgs_load_origin_rgb(frame_name)
 
-            if reload_zoomed_rgb or self.__zoomed_rgb[frame_name] is None:
+            if reload_zoomed_rgb or self._zoomed_rgb[frame_name] is None:
                 self.__refresh_imgs_load_zoomed_rgb(frame_name)
 
-            if reload_contours or self.__contoured_rgb[frame_name] is None:
+            if reload_contours or self._contoured_rgb[frame_name] is None:
                 self.__refresh_imgs_add_contours(frame_name)
 
             # resize and fit img qlabel
