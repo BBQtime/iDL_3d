@@ -59,6 +59,8 @@ class DraggableCross(QWidget):
             )
             # update cross_id (3d position)
             pos_3d = self.__get_pos_in_3d()
+            if pos_3d is None:
+                return
             self.window().update_cross_id(
                 cross=self,
                 old_cross_id=self.cross_id,

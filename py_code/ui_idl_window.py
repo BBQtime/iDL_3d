@@ -179,17 +179,18 @@ class IDLWindow(ReplayWindow):
 
         self.paint_pos = event.pos()  # update paint pos
 
+    def get_zoomed_rgb_shape(self, frame_name: str):
+        return self._zoomed_rgb[frame_name][:, :, 0].shape
+
+    def get_origin_rgb_shape(self, frame_name: str):
+        return self._origin_rgb[frame_name][:, :, 0].shape
+
     def draw_on_img_frame_release(self, img_frame: ImgFrame):
         if self.paint_pos is None:
             return
 
         # get img frame name
-        frame_name = None
-        for i in self.img_frame.keys():
-            if self.img_frame[i] == img_frame:
-                frame_name = i
-        if frame_name is None:
-            Debug.error_exit("img_frame error")
+        frame_name = img_frame.get_frame_name()
 
         # binarize threshold
         # this is for saving qimage as ndarray

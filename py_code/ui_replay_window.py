@@ -112,178 +112,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.__scores[i][Metric.MSD] = None
             self.__scores[i][Metric.HD95] = None
 
-    # def __init_zoomin(self):
-    #     self.__zoomin = Dict()
-    #     self.__zoomin["rubber.band"] = QRubberBand(QRubberBand.Rectangle, self)
-    #     self._reset_zoomin()
-
-    # def _reset_zoomin(self):
-    #     self.__zoomin["rubber.band"].hide()
-    #     self.__zoomin["img"] = None
-    #     self.__zoomin["start"] = None
-    #     self.__zoomin["end"] = None
-
-    # def mousePressEvent(self, event):
-    #     super().mousePressEvent(event)
-
-    #     # loop 4 img frames
-    #     for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-    #         left = self.img_frame[i].x()
-    #         top = self.img_frame[i].y()
-    #         width = self.img_frame[i].width()
-    #         height = self.img_frame[i].height()
-    #         # if start pos is in current img frame
-    #         if (
-    #             event.x() >= left
-    #             and event.x() <= left + width
-    #             and event.y() >= top
-    #             and event.y() <= top + height
-    #         ):
-    #             # already zoomed in, clear zoomin (only click in img frame area)
-    #             if self.__zoomin["start"] is not None:
-    #                 self._reset_zoomin()
-    #                 self.refresh_imgs()
-    #                 return
-    #             # zoom in
-    #             else:
-    #                 self.__zoomin["img"] = i
-    #                 self.__zoomin["start"] = event.pos()
-    #                 rect = QRect(event.pos(), event.pos())
-    #                 self.__zoomin["rubber.band"].setGeometry(rect.normalized())
-    #                 self.__zoomin["rubber.band"].show()
-    #                 return
-
-    # def mouseMoveEvent(self, event):
-    #     super().mouseMoveEvent(event)
-    #     if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
-    #         return
-    #     self.__mouse_move_event(event)
-
-    # def __mouse_move_event(self, event):
-    #     # limit zoomin frame in img frame
-    #     img_frame = self.img_frame[self.__zoomin["img"]]
-    #     img_qlabel_right = img_frame.x() + img_frame.width() - 1
-    #     if event.x() < img_frame.x():
-    #         event_x = img_frame.x()
-    #     elif event.x() > img_qlabel_right:
-    #         event_x = img_qlabel_right
-    #     else:
-    #         event_x = event.x()
-    #     img_qlabel_buttom = img_frame.y() + img_frame.height() - 1
-    #     if event.y() < img_frame.y():
-    #         event_y = img_frame.y()
-    #     elif event.y() > img_qlabel_buttom:
-    #         event_y = img_qlabel_buttom
-    #     else:
-    #         event_y = event.y()
-    #     # resize zoomin frame
-    #     self.__zoomin["end"] = QPoint(event_x, event_y)
-    #     rect = QRect(
-    #         self.__zoomin["start"],
-    #         self.__zoomin["end"],
-    #     )
-    #     self.__zoomin["rubber.band"].setGeometry(rect.normalized())
-
-    # def mouseReleaseEvent(self, event):
-    #     super().mouseReleaseEvent(event)
-
-    #     # not zoomed in
-    #     if self.__zoomin["start"] is None:  # or self.__zoomin["rubber.band"] is None:
-    #         return
-    #     self.__mouse_move_event(event)
-    #     self.__zoomin["rubber.band"].hide()
-    #     # self.__zoomin["rubber.band"] = None
-
-    #     # no data loaded
-    #     if self.img_3d[Modal.CT] is None:
-    #         self._reset_zoomin()
-    #         return
-
-    #     # zoomin size == 0
-    #     if (
-    #         abs(self.__zoomin["start"].x() - self.__zoomin["end"].x()) <= 1
-    #         or abs(self.__zoomin["start"].y() - self.__zoomin["end"].y()) <= 1
-    #     ):
-    #         # print("zoomin size 0")
-    #         self._reset_zoomin()
-    #         return
-    #     self.__get_img_roi()
-
-    # def __get_img_roi(self):
-    #     # make sure start point always < end point
-    #     start_x = self.__zoomin["start"].x()
-    #     start_y = self.__zoomin["start"].y()
-    #     end_x = self.__zoomin["end"].x()
-    #     end_y = self.__zoomin["end"].y()
-    #     if start_x > end_x:
-    #         x = start_x
-    #         start_x = end_x
-    #         end_x = x
-    #     if start_y > end_y:
-    #         y = start_y
-    #         start_y = end_y
-    #         end_y = y
-    #     # get img_frame related position
-    #     img_qlabel_left = self.img_frame[self.__zoomin["img"]].x()
-    #     img_qlabel_top = self.img_frame[self.__zoomin["img"]].y()
-    #     start_x -= img_qlabel_left
-    #     end_x -= img_qlabel_left
-    #     start_y -= img_qlabel_top
-    #     end_y -= img_qlabel_top
-
-    #     # get actual_img_area related position
-    #     rgb_img_roi = self._rgb_img_roi
-    #     start_x -= img_frame.roi.x
-    #     start_y -= img_frame.roi.y
-    #     end_x -= img_frame.roi.x
-    #     end_y -= img_frame.roi.y
-    #     # out of range
-    #     if (start_x < 0 and end_x < 0) or (
-    #         start_x > img_frame.roi.width and end_x > img_frame.roi.width
-    #     ):
-    #         self._reset_zoomin()
-    #         return
-    #     if (start_y < 0 and end_y < 0) or (
-    #         start_y > img_frame.roi.height and end_y > img_frame.roi.height
-    #     ):
-    #         self._reset_zoomin()
-    #         return
-    #     # limit zoomin frame in image area
-    #     if start_x < 0:
-    #         start_x = 0
-    #     if start_y < 0:
-    #         start_y = 0
-    #     if end_x > img_frame.roi.width:
-    #         end_x = img_frame.roi.width
-    #     if end_y > img_frame.roi.height:
-    #         end_y = img_frame.roi.height
-
-    #     # get actual zoom position
-    #     if self._plane == Plane.SAGITTAL:
-    #         origin_width = self.img_3d[Modal.CT].shape[1]
-    #         origin_height = self.img_3d[Modal.CT].shape[0]
-    #         origin_height = round(
-    #             origin_height * self._nii_spacing[2] / self._nii_spacing[1]
-    #         )
-    #     elif self._plane == Plane.CORONAL:
-    #         origin_width = self.img_3d[Modal.CT].shape[2]
-    #         origin_height = self.img_3d[Modal.CT].shape[0]
-    #         origin_height = round(
-    #             origin_height * self._nii_spacing[2] / self._nii_spacing[0]
-    #         )
-    #     else:
-    #         origin_width = self.img_3d[Modal.CT].shape[2]
-    #         origin_height = self.img_3d[Modal.CT].shape[1]
-
-    #     start_x = round(start_x * origin_width / img_frame.roi.width)
-    #     end_x = round(end_x * origin_width / img_frame.roi.width)
-    #     start_y = round(start_y * origin_height / img_frame.roi.height)
-    #     end_y = round(end_y * origin_height / img_frame.roi.height)
-
-    #     self.__zoomin["start"] = QPoint(start_x, start_y)
-    #     self.__zoomin["end"] = QPoint(end_x, end_y)
-    #     self.refresh_imgs()
-
     def _init_color(self):
         self.color = Dict()
         self.color["black"] = (0, 0, 0)
@@ -727,6 +555,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
     # this function is connected to widget, dont set input params to this function
     def __on_zoom_slider_changed(self):
         self.refresh_imgs()
+        self.refresh_crosses()
+
+    def get_zoomin_factor(self):
+        return self._slider["zoom"].value() / 100
 
     def _init_widgets_zoom(self):
         self._slider["zoom"] = QtWidgets.QSlider()
@@ -1622,9 +1454,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             zoomed_w = frame_w
             zoomed_h = round(frame_w * origin_h / origin_w)
 
-        zoomed_w *= self._slider["zoom"].value() / 100
+        zoomed_w *= self.get_zoomin_factor()
         zoomed_w = round(zoomed_w)
-        zoomed_h *= self._slider["zoom"].value() / 100
+        zoomed_h *= self.get_zoomin_factor()
         zoomed_h = round(zoomed_h)
 
         self._zoomed_rgb[frame_name] = cv2.resize(
@@ -1706,72 +1538,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.img_frame[frame_name].img_center_pct = (center_x_pct, center_y_pct)
 
         return final_rgb
-
-        # # # zoom in
-        # # if self.__zoomin["start"] is not None and self.__zoomin["end"] is not None:
-        # #     if len(img.shape) == 3:
-        # #         img = img[
-        # #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-        # #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-        # #             :,
-        # #         ]
-        # #     elif len(img.shape) == 2:
-        # #         img = img[
-        # #             self.__zoomin["start"].y() : self.__zoomin["end"].y(),
-        # #             self.__zoomin["start"].x() : self.__zoomin["end"].x(),
-        # #         ]
-        # #     else:
-        # #         raise ValueError(err_msg)
-
-        # # resize to fit image frame
-        # origin_height = final_rgb.shape[0]
-        # origin_width = final_rgb.shape[1]
-        # final_width = img_frame.width()
-        # final_height = img_frame.height()
-
-        # # border on left and right
-        # if origin_height * final_width > final_height * origin_width:
-        #     img_frame.roi.width = int(final_height * origin_width / origin_height)
-        #     img_frame.roi.height = final_height
-        #     img_frame.roi.x = int((final_width - img_frame.roi.width) / 2)
-        #     if img_frame.roi.x < 0:
-        #         img_frame.roi.x = 0
-        #     img_frame.roi.y = 0
-        #     if len(final_rgb.shape) == 3:
-        #         black_border = np.zeros((final_height, img_frame.roi.x, 3), np.uint8)
-        #     elif len(final_rgb.shape) == 2:
-        #         black_border = np.zeros((final_height, img_frame.roi.x), np.uint8)
-        #     else:
-        #         raise ValueError(err_msg)
-        #     final_rgb = cv2.resize(
-        #         final_rgb,
-        #         (img_frame.roi.width, img_frame.roi.height),
-        #         interpolation=cv2.INTER_AREA,
-        #     )
-        #     final_rgb = np.concatenate((black_border, final_rgb, black_border), axis=1)
-
-        # # border on up and down
-        # else:
-        #     img_frame.roi.width = final_width
-        #     img_frame.roi.height = int(final_width * origin_height / origin_width)
-        #     img_frame.roi.y = int((final_height - img_frame.roi.height) / 2)
-        #     if img_frame.roi.y < 0:
-        #         img_frame.roi.y = 0
-        #     img_frame.roi.x = 0
-        #     if len(final_rgb.shape) == 3:
-        #         black_border = np.zeros((img_frame.roi.y, final_width, 3), np.uint8)
-        #     elif len(final_rgb.shape) == 2:
-        #         black_border = np.zeros((img_frame.roi.y, final_width), np.uint8)
-        #     else:
-        #         raise ValueError(err_msg)
-        #     final_rgb = cv2.resize(
-        #         final_rgb,
-        #         (img_frame.roi.width, img_frame.roi.height),
-        #         interpolation=cv2.INTER_AREA,
-        #     )
-        #     final_rgb = np.concatenate((black_border, final_rgb, black_border), axis=0)
-
-        # return final_rgb
 
     def refresh_imgs(
         self,

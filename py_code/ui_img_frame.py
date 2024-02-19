@@ -7,13 +7,6 @@ from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from ui_draggable_cross import DraggableCross
 
 
-class ImgFrameROI:
-    x = None
-    y = None
-    width = None
-    height = None
-
-
 class ImgFrame(QLabel):
     def __init__(self, parent):
         super().__init__(parent)
@@ -21,9 +14,6 @@ class ImgFrame(QLabel):
         # record plane and modality here instead of main window
         self.plane = None
         self.modal = None
-
-        # rgb img - region of interest
-        self.roi = ImgFrameROI()
 
         # right click drag img
         self.__dragging = False
@@ -64,15 +54,16 @@ class ImgFrame(QLabel):
             # remove old crosses
             self.window().delete_all_crosses()
             # add new 3d pos
-            pos_3d = self.get_pos_in_3d(event.pos())
-            self.window().gtvt_click_pos_3d = pos_3d
+            self.window().gtvt_click_pos_3d = self.get_pos_in_3d(event.pos())
             self.window().reset_cur_slice_id()
+            # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-                # only refresh other img_frames
+
                 frame_name_list.remove(self.plane)
                 for i in frame_name_list:
                     self.window().refresh_imgs(frame_name=i)
+            # refresh crosses
             self.window().refresh_crosses()
 
         # draw/correct
@@ -141,6 +132,7 @@ class ImgFrame(QLabel):
             img_pos_diff = (diff_x, diff_y)
             self.__offset = event.pos()  # update offset
 
+            # refresh img/imgs and crosses
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 # only refresh current img frame
                 self.window().refresh_imgs(
@@ -150,6 +142,7 @@ class ImgFrame(QLabel):
                     reload_contours=False,
                     img_pos_diff=img_pos_diff,
                 )
+                self.refresh_crosses()
             else:
                 # refresh 4 img frames
                 self.window().refresh_imgs(
@@ -158,6 +151,7 @@ class ImgFrame(QLabel):
                     reload_contours=False,
                     img_pos_diff=img_pos_diff,
                 )
+                self.window().refresh_crosses()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
@@ -294,47 +288,65 @@ class ImgFrame(QLabel):
             self.selected_cross = None
 
     def get_pos_in_3d(self, pos: QPoint):
-        if self.roi.x is None:
-            return
-
         cur_slice = self.window().cur_slice_id[self.plane]
         img_shape_3d = self.window().get_3d_img_shape()
 
-        x = pos.x() - self.roi.x
-        y = pos.y() - self.roi.y
+        center_x_pct, center_y_pct = self.img_center_pct
+        frame_name = self.get_frame_name()
+        zoomed_h, zoomed_w = self.window().get_zoomed_rgb_shape(frame_name)
+        origin_h, origin_w = self.window().get_origin_rgb_shape(frame_name)
 
-        x = x / self.roi.width
-        y = y / self.roi.height
-
-        d, h, w = img_shape_3d
+        # abs position in zoomed image
+        center_x_zoom = int(round(zoomed_w * center_x_pct))
+        center_y_zoom = int(round(zoomed_h * center_y_pct))
+        # top left corner in zoomed image
+        start_x_zoom = center_x_zoom - self.width() / 2
+        start_y_zoom = center_y_zoom - self.height() / 2
+        # position in zoomed rgb
+        x_pct = (start_x_zoom + pos.x()) / zoomed_w
+        y_pct = (start_y_zoom + pos.y()) / zoomed_h
+        # position in origin rgb
+        x = origin_w * x_pct
+        y = origin_h * y_pct
+        # float -> int
+        x = round(x)
+        y = round(y)
 
         # 2d to 3d
+        d, h, w = img_shape_3d
         if self.plane == Plane.TRANSVERSE:
-            w *= x
-            h *= y
+            w = x
+            h = y
             d = cur_slice
         elif self.plane == Plane.CORONAL:
-            w *= x
+            w = x
             h = cur_slice
-            d *= y
+            d = y
         elif self.plane == Plane.SAGITTAL:
             w = cur_slice
-            h *= x
-            d *= y
+            h = x
+            d = y
 
-        w = round(w)
-        h = round(h)
-        d = round(d)
         w = Value.limit_range(w, (0, img_shape_3d[2] - 1))
         h = Value.limit_range(h, (0, img_shape_3d[1] - 1))
         d = Value.limit_range(d, (0, img_shape_3d[0] - 1))
 
-        # dont neet to turn upside down
-        # flip left/right back for 1mm data
+        # (1) dont neet to turn upside down
+        # (2) flip left/right back for 1mm data
         if self.window().get_nii_spacing() == 1.0:
             w = img_shape_3d[2] - w
 
         return d, h, w
+
+    def get_frame_name(self):
+        frame_name = None
+        for i in self.window().img_frame.keys():
+            if self.window().img_frame[i] == self:
+                frame_name = i
+        if frame_name is None:
+            Debug.error_exit("img_frame error")
+        else:
+            return frame_name
 
     def refresh_crosses(self):
         idl_step = self.window().cur_idl_step()
@@ -358,43 +370,49 @@ class ImgFrame(QLabel):
             else:
                 clicks_pos_3d = self.window().gtvn_clicks_pos_3d
 
-        img_shape = self.window().get_3d_img_shape()
+        # get zoomed in values
+        img_shape_3d = self.window().get_3d_img_shape()
+        center_x_pct, center_y_pct = self.img_center_pct
+        frame_name = self.get_frame_name()
+        zoomed_h, zoomed_w = self.window().get_zoomed_rgb_shape(frame_name)
 
         # loop through all clicks
         for d, h, w in clicks_pos_3d:
-            x = y = None
+            x_pct = y_pct = None
             if (
                 self.plane == Plane.TRANSVERSE
                 and self.window().cur_slice_id[Plane.TRANSVERSE] == d
             ):
-                x = w / img_shape[2]
-                y = h / img_shape[1]
+                x_pct = w / img_shape_3d[2]
+                y_pct = h / img_shape_3d[1]
 
             elif (
                 self.plane == Plane.CORONAL
                 and self.window().cur_slice_id[Plane.CORONAL] == h
             ):
-                x = w / img_shape[2]
-                y = d / img_shape[0]
+                x_pct = w / img_shape_3d[2]
+                y_pct = d / img_shape_3d[0]
 
             elif (
                 self.plane == Plane.SAGITTAL
                 and self.window().cur_slice_id[Plane.SAGITTAL] == w
             ):
-                x = h / img_shape[1]
-                y = d / img_shape[0]
+                x_pct = h / img_shape_3d[1]
+                y_pct = d / img_shape_3d[0]
 
             # find click on current slice
-            if x is not None and y is not None:
-                x *= self.roi.width
-                y *= self.roi.height
-                x = round(x)
-                y = round(y)
-                x += self.roi.x
-                y += self.roi.y
+            if x_pct is not None and y_pct is not None:
+                x_frame = self.width() // 2 - (center_x_pct - x_pct) * zoomed_w
+                x_frame = round(x_frame)
+                y_frame = self.height() // 2 - (center_y_pct - y_pct) * zoomed_h
+                y_frame = round(y_frame)
 
-                # do not record click pos when refreshing
-                self.add_cross(pos=QPoint(x, y), click_pos_3d=(d, h, w))
+                if x_frame >= 0 and y_frame >= 0:
+                    # do not record click pos when refreshing
+                    self.add_cross(
+                        pos=QPoint(x_frame, y_frame),
+                        click_pos_3d=(d, h, w),
+                    )
 
     def add_cross(self, pos: QPoint, click_pos_3d: tuple):
         self.deselect_cross()
