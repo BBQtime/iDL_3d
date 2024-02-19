@@ -4,7 +4,7 @@ from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QLabel
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
-from ui_draggable_cross import DraggableCross
+from ui_drag_cross import DragCross
 
 
 class ImgFrame(QLabel):
@@ -234,19 +234,19 @@ class ImgFrame(QLabel):
             circle_color = QtGui.QColor(*circle_color)
             pen = QtGui.QPen(circle_color)
             # circle size
-            pen_size = 2
-            pen.setWidth(pen_size)
+            circle_border_width = 2
+            pen.setWidth(circle_border_width)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
-            eraser_size = self.window().get_eraser_size() - pen_size
+            radius = self.window().get_eraser_size() / 2.0
             # Draw circle at the mouse position
-            painter.drawEllipse(self.__circle_pos, eraser_size, eraser_size)
+            painter.drawEllipse(self.__circle_pos, radius, radius)
 
     def set_background(self, img: QImage):
         self.background_img = QPixmap.fromImage(img)
         self.update()
 
-    def get_cross_by_id(self, cross_id: int) -> DraggableCross:
+    def get_cross_by_id(self, cross_id: int) -> DragCross:
         for cross in self.crosses_list:
             if cross.cross_id == cross_id:
                 return cross
@@ -417,7 +417,7 @@ class ImgFrame(QLabel):
     def add_cross(self, pos: QPoint, click_pos_3d: tuple):
         self.deselect_cross()
         # create new cross (use click_pos_3d as cross_id)
-        new_cross = DraggableCross(parent=self, cross_id=click_pos_3d)
+        new_cross = DragCross(parent=self, cross_id=click_pos_3d)
         new_cross.setGeometry(
             pos.x() - round(new_cross.CROSS_SIZE / 2),
             pos.y() - round(new_cross.CROSS_SIZE / 2),

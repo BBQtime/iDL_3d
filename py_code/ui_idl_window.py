@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import QMessageBox
 from scipy import ndimage
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from superqt import QCollapsible
-from ui_draggable_cross import DraggableCross
+from ui_drag_cross import DragCross
 from ui_idl_step_label import IDLStepLabel
 from ui_idl_thread import IDLGTVnThread, IDLGTVtThread
 from ui_img_frame import ImgFrame
@@ -1315,7 +1315,7 @@ class IDLWindow(ReplayWindow):
 
     def update_cross_id(
         self,
-        cross: DraggableCross,
+        cross: DragCross,
         old_cross_id: tuple,
         new_cross_id: tuple,
     ):
@@ -1326,7 +1326,7 @@ class IDLWindow(ReplayWindow):
         else:
             cross.cross_id = new_cross_id
 
-    def remove_3d_pos_of_selected_cross(self, cross: DraggableCross):
+    def remove_3d_pos_of_selected_cross(self, cross: DragCross):
         idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
@@ -1466,8 +1466,8 @@ class IDLWindow(ReplayWindow):
         self._slider["draw.size"] = QtWidgets.QSlider()
         self._slider["draw.size"].setFixedHeight(g.SLIDER_HEIGHT)
         self._slider["draw.size"].setOrientation(Qt.Horizontal)
-        self._slider["draw.size"].setMinimum(1)
-        self._slider["draw.size"].setMaximum(7)
+        self._slider["draw.size"].setMinimum(2)
+        self._slider["draw.size"].setMaximum(6)
         self._slider["draw.size"].setValue(4)
 
         self.__radio_group_drawing_mode = QtWidgets.QButtonGroup()
@@ -1669,10 +1669,14 @@ class IDLWindow(ReplayWindow):
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def get_pen_size(self):
-        return self._slider["draw.size"].value()
+        pen_size = self._slider["draw.size"].value()
+        pen_size *= self.get_zoomin_factor()
+        return pen_size
 
     def get_eraser_size(self):
-        return self._slider["draw.size"].value() + 4
+        eraser_size = self._slider["draw.size"].value() + 6
+        eraser_size *= self.get_zoomin_factor()
+        return eraser_size
 
     def _load_baseline_data(self):
         # self._reset_zoomin()

@@ -7,17 +7,18 @@ from PyQt5.QtWidgets import QLabel, QWidget
 from str_lib import DisplayMode, IDLStep, Plane
 
 
-class DraggableCross(QWidget):
+class DragCross(QWidget):
     def __init__(self, parent, cross_id: tuple):
         super().__init__(parent)
         self.cross_id = cross_id
 
-        self.CROSS_SIZE = 20 if g.is_linux() else 30
+        # value of CROSS_SIZE must be the power of 2
+        self.CROSS_SIZE = 24 if g.is_linux() else 36
         self.SELECTED_CROSS_ICON_PATH = os.path.join(
-            g.PROJ_DIR, "icons", "cross_selected.png"
+            g.PROJ_DIR, "icons", "cross_select.png"
         )
         self.UNSELECTED_CROSS_ICON_PATH = os.path.join(
-            g.PROJ_DIR, "icons", "cross_unselected.png"
+            g.PROJ_DIR, "icons", "cross_default.png"
         )
 
         self.setFixedSize(self.CROSS_SIZE, self.CROSS_SIZE)
@@ -29,6 +30,8 @@ class DraggableCross(QWidget):
         self.offset = None
 
         self.png_label = QLabel(self)
+        # remove border
+        self.png_label.setStyleSheet("border: 0;")
         self.png_label.setGeometry(0, 0, self.CROSS_SIZE, self.CROSS_SIZE)
 
     def mousePressEvent(self, event: QMouseEvent):
