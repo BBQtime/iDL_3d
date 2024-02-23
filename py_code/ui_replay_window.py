@@ -1356,6 +1356,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             seg_name_list = [
                 "gtvn.pred.final",
                 "gtvt.pred.final",
+                "gtvt.annotation",
                 "gtvn.clicks",
                 "gtvt.click",
             ]

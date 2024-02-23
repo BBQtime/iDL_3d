@@ -1225,7 +1225,7 @@ class IDLWindow(ReplayWindow):
 
     def _init_color(self):
         super()._init_color()
-        self.color["gtvt.annotation"] = self.color["yellow"]
+        # self.color["gtvt.annotation"] = self.color["yellow"]
         self.color["gtvt.correction"] = self.color["yellow"]
         self.color["gtvn.correction"] = self.color["cyan"]
         self.color["eraser"] = self.color["black"]  # transparent
@@ -1750,24 +1750,35 @@ class IDLWindow(ReplayWindow):
     def _add_score_on_qimg(self, qimg: QtGui.QImage):
         pass
 
-    def _add_contour_description_on_qimg(
-        self,
-        qimg: QtGui.QImage,
-        show_user_input_text: bool = False,
-    ):
+    def _add_contour_description_on_qimg(self, qimg: QtGui.QImage):
         pos_x = 10
-        pos_y = qimg.height() - 13
+        pos_y = [qimg.height() - 57, qimg.height() - 35, qimg.height() - 13]
 
-        for i in ["t", "n"]:
-            if self.img_3d["gtv{}.pred".format(i)] is not None:
-                text = "GTV{}".format(i)
-                self._qimg_draw_text(
-                    qimg=qimg,
-                    text=text,
-                    pos=(pos_x, pos_y),
-                    color=self.color["gtv{}.pred".format(i)],
-                )
-                pos_x += 45 if g.is_linux() else 55
+        if self.img_3d["gtvt.pred"] is not None:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="GTVt - Pred",
+                pos=(pos_x, pos_y[1]),
+                color=self.color["gtvt.pred"],
+            )
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="GTVt - Delineation",
+                pos=(pos_x, pos_y[2]),
+                color=self.color["gtvt.annotation"],
+            )
+
+        if self.img_3d["gtvn.pred"] is not None:
+            if self.img_3d["gtvt.pred"] is None:
+                pos = (pos_x, pos_y[2])
+            else:
+                pos = (pos_x, pos_y[0])
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="GTVn - Pred",
+                pos=pos,
+                color=self.color["gtvn.pred"],
+            )
 
     def _load_patient_data(self):
         # stop idl qthreads (if running)
@@ -2061,15 +2072,15 @@ class IDLWindow(ReplayWindow):
                     "{}.pred".format(i)
                 ].copy()
 
-            # combine gtvt.pred and gtvt.annotation
-            if i == "gtvt":
-                t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
-                self.img_3d["gtvt.pred.final"][t, :, :] = 0
-                self.img_3d["gtvt.pred.final"][:, c, :] = 0
-                self.img_3d["gtvt.pred.final"][:, :, s] = 0
-                self.img_3d["gtvt.pred.final"] = np.maximum(
-                    self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.annotation"]
-                )
+            # # combine gtvt.pred and gtvt.annotation
+            # if i == "gtvt":
+            #     t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
+            #     self.img_3d["gtvt.pred.final"][t, :, :] = 0
+            #     self.img_3d["gtvt.pred.final"][:, c, :] = 0
+            #     self.img_3d["gtvt.pred.final"][:, :, s] = 0
+            #     self.img_3d["gtvt.pred.final"] = np.maximum(
+            #         self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.annotation"]
+            #     )
 
             # combine pred and correction
             if self.img_3d["{}.correction.mask".format(i)] is None:
