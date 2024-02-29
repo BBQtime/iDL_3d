@@ -424,7 +424,10 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            self._text_label["draw.size"].setText("Pen Size")
+            self._text_label["eraser.size"].hide()
+            self._slider["eraser.size"].hide()
+            self._text_label["pen.size"].show()
+            self._slider["pen.size"].show()
 
     def _init_widgets_todo_list(self):
         idl_step_list = [
@@ -673,7 +676,10 @@ class IDLWindow(ReplayWindow):
                 self._modal_fixed_mode_switch_plane(plane)
                 if self.drawing_mode == DrawingMode.GTVT_ERASER:
                     self.drawing_mode = DrawingMode.GTVT_PEN
-                    self._text_label["draw.size"].setText("Pen Size")
+                    self._text_label["eraser.size"].hide()
+                    self._slider["eraser.size"].hide()
+                    self._text_label["pen.size"].show()
+                    self._slider["pen.size"].show()
                 return
 
         # (2) save gtvt annotation
@@ -789,7 +795,6 @@ class IDLWindow(ReplayWindow):
         # (5) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        self._slider["draw.size"].hide()
         for i in ["gtvt", "gtvn"]:
             self._radio_btn["correct.{}".format(i)].hide()
         self._btn["next.step"].setEnabled(False)
@@ -922,7 +927,10 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            self._text_label["draw.size"].setText("Eraser Size")
+            self._text_label["pen.size"].hide()
+            self._slider["pen.size"].hide()
+            self._text_label["eraser.size"].show()
+            self._slider["eraser.size"].show()
 
     def __update_idl_gtvt_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
@@ -952,11 +960,14 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (4) update widgets
+        # (4-1) CORRECT_GTVN -> CORRECT_BOTH
+        # dont change drawing mode, will interrupt user correcting gtvn
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
-            for i in ["gtvt", "gtvn"]:
-                self._radio_btn["correct.{}".format(i)].show()
+            for i in ["correct.gtvt", "correct.gtvn"]:
+                self._radio_btn[i].show()
             self._btn["next.step"].setEnabled(True)
-            # dont change drawing mode, will interrupt user correcting gtvn
+
+        # (4-2) WAITING -> CORRECT_GTVT
         elif self.cur_idl_step() == IDLStep.CORRECT_GTVT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
@@ -1059,11 +1070,14 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (4) update widgets
+        # (4-1) CORRECT_GTVT -> CORRECT_BOTH
+        # dont change drawing mode, will interrupt user correcting gtvt
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
-            for i in ["gtvt", "gtvn"]:
-                self._radio_btn["correct.{}".format(i)].show()
+            for i in ["correct.gtvt", "correct.gtvn"]:
+                self._radio_btn[i].show()
             self._btn["next.step"].setEnabled(True)
-            # dont change drawing mode, will interrupt user correcting gtvt
+
+        # (4-2) WAITING -> CORRECT_GTVN
         elif self.cur_idl_step() == IDLStep.CORRECT_GTVN:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
@@ -1236,7 +1250,7 @@ class IDLWindow(ReplayWindow):
     def __on_btn_clear_clicked(self):
         idl_step = self.cur_idl_step()
 
-        # update drawing mode
+        # (1) update drawing mode
         if idl_step in [
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.DRAW_GTVT,
@@ -1250,6 +1264,12 @@ class IDLWindow(ReplayWindow):
                 self.drawing_mode = DrawingMode.GTVT_CLEAR
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
+
+        # (2) update widgets
+        self._text_label["pen.size"].hide()
+        self._slider["pen.size"].hide()
+        self._text_label["eraser.size"].hide()
+        self._slider["eraser.size"].hide()
 
     def __get_gtvt_center_slices_id(self):
         if self.gtvt_click_pos_3d is None:
@@ -1385,25 +1405,52 @@ class IDLWindow(ReplayWindow):
             return None
 
     def __enable_annotation_tools(self):
+        # annotation buttons
         for i in ["pen", "eraser", "clear"]:
             self._btn[i].setEnabled(True)
-        self._text_label["draw.size"].show()
-        self._slider["draw.size"].show()
+
+        # pen/eraser size slider bars
+        if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+            self._text_label["eraser.size"].hide()
+            self._slider["eraser.size"].hide()
+            self._text_label["pen.size"].show()
+            self._slider["pen.size"].show()
+        elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            self._text_label["pen.size"].hide()
+            self._slider["pen.size"].hide()
+            self._text_label["eraser.size"].show()
+            self._slider["eraser.size"].show()
+        elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
+            self._text_label["pen.size"].hide()
+            self._slider["pen.size"].hide()
+            self._text_label["eraser.size"].hide()
+            self._slider["eraser.size"].hide()
+
+        # correct gtvt/gtvn radio buttons
+        for i in ["correct.gtvt", "correct.gtvn"]:
+            if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
+                self._radio_btn[i].show()
+            else:
+                self._radio_btn[i].hide()
 
     def __disable_annotation_tools(self):
         for i in ["pen", "eraser", "clear"]:
             self._btn[i].setEnabled(False)
-        self._text_label["draw.size"].hide()
-        self._slider["draw.size"].hide()
+        for i in ["pen.size", "eraser.size"]:
+            self._text_label[i].hide()
+            self._slider[i].hide()
+        for i in ["correct.gtvt", "correct.gtvn"]:
+            self._radio_btn[i].hide()
 
     def _init_widgets_annotation(self):
         # text label
-        for i in ["gtvt.progress", "gtvn.progress", "draw.size"]:
+        for i in ["gtvt.progress", "gtvn.progress", "pen.size", "eraser.size"]:
             self._text_label[i] = QtWidgets.QLabel()
             self._text_label[i].setFixedHeight(g.TEXT_HEIGHT)
 
         # set text
-        self._text_label["draw.size"].setText("Pen Size")
+        self._text_label["pen.size"].setText("Pen Size")
+        self._text_label["eraser.size"].setText("Eraser Size")
         self._text_label["gtvt.progress"].setText("Generating GTVt")
         self._text_label["gtvn.progress"].setText("Generating GTVn")
         for i in ["gtvt", "gtvn"]:
@@ -1462,13 +1509,15 @@ class IDLWindow(ReplayWindow):
             self.__progress_bar[i].setValue(0)
             self.__progress_bar[i].hide()
 
-        # pen size slider
-        self._slider["draw.size"] = QtWidgets.QSlider()
-        self._slider["draw.size"].setFixedHeight(g.SLIDER_HEIGHT)
-        self._slider["draw.size"].setOrientation(Qt.Horizontal)
-        self._slider["draw.size"].setMinimum(2)
-        self._slider["draw.size"].setMaximum(6)
-        self._slider["draw.size"].setValue(4)
+        # pen/eraser size slider
+        for i in ["pen.size", "eraser.size"]:
+            self._slider[i] = QtWidgets.QSlider()
+            self._slider[i].setFixedHeight(g.SLIDER_HEIGHT)
+            self._slider[i].setOrientation(Qt.Horizontal)
+            self._slider[i].setMinimum(0)
+            self._slider[i].setMaximum(2)
+        self._slider["pen.size"].setValue(0)
+        self._slider["eraser.size"].setValue(1)
 
         self.__radio_group_drawing_mode = QtWidgets.QButtonGroup()
         for i in ["gtvt", "gtvn"]:
@@ -1485,18 +1534,25 @@ class IDLWindow(ReplayWindow):
         self._collap["annotation"].expand()
         v_layout = QtWidgets.QVBoxLayout()
 
-        # add buttons
+        # (1) add annotation buttons
         h_layout = QtWidgets.QHBoxLayout()
         h_layout.setSpacing(20)
         for i in ["pen", "eraser", "clear"]:
             h_layout.addWidget(self._btn[i])
         v_layout.addLayout(h_layout)
 
-        # add draw size slider
-        v_layout.addWidget(self._text_label["draw.size"])
-        v_layout.addWidget(self._slider["draw.size"])
+        # (2) add radio buttons
+        h_layout = QtWidgets.QHBoxLayout()
+        for i in ["gtvt", "gtvn"]:
+            h_layout.addWidget(self._radio_btn["correct.{}".format(i)])
+        v_layout.addLayout(h_layout)
 
-        # add progress bars and progress bar labels
+        # (3) add pen/eraser size slider
+        for i in ["pen.size", "eraser.size"]:
+            v_layout.addWidget(self._text_label[i])
+            v_layout.addWidget(self._slider[i])
+
+        # (4) add progress bars and labels
         for i in ["gtvt", "gtvn"]:
             v_layout.addWidget(self._text_label["{}.progress".format(i)])
             v_layout.addWidget(self.__progress_bar[i])
@@ -1522,12 +1578,6 @@ class IDLWindow(ReplayWindow):
         self.__idl_gtvn_thread.complete_signal.connect(
             self.__on_idl_gtvn_thread_finished
         )
-
-        # add radio buttons
-        h_layout = QtWidgets.QHBoxLayout()
-        for i in ["gtvt", "gtvn"]:
-            h_layout.addWidget(self._radio_btn["correct.{}".format(i)])
-        v_layout.addLayout(h_layout)
 
         container = QtWidgets.QWidget()
         container.setLayout(v_layout)
@@ -1669,12 +1719,16 @@ class IDLWindow(ReplayWindow):
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def get_pen_size(self):
-        pen_size = self._slider["draw.size"].value()
+        min = 5
+        step = 3
+        pen_size = self._slider["pen.size"].value() * step + min
         pen_size *= self.get_zoomin_factor()
         return pen_size
 
     def get_eraser_size(self):
-        eraser_size = self._slider["draw.size"].value() + 6
+        min = 12
+        step = 8
+        eraser_size = self._slider["eraser.size"].value() * step + min
         eraser_size *= self.get_zoomin_factor()
         return eraser_size
 
@@ -1763,7 +1817,7 @@ class IDLWindow(ReplayWindow):
             )
             self._qimg_draw_text(
                 qimg=qimg,
-                text="GTVt - Delineation",
+                text="User Input",
                 pos=(pos_x, pos_y[2]),
                 color=self.color["gtvt.annotation"],
             )
