@@ -498,7 +498,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # idl progress INIT_DATALOADER
-        self._timer.cal_duration("INIT_DATALOADER")
+        # self._timer.cal_duration("INIT_DATALOADER")
         if self._idl_progress is not None:
             self._idl_progress.cur_step += self._idl_progress.step.INIT_DATALOADER
             self._idl_progress.emit_signal()
@@ -541,14 +541,14 @@ class TrainingIDLGTVt(TrainingCore):
 
                 # idl progress MINI_BATCH
                 if batch_count <= 1:
-                    self._timer.cal_duration("FIRST_BATCH")
+                    # self._timer.cal_duration("FIRST_BATCH")
                     if self._idl_progress is not None:
                         self._idl_progress.cur_step += (
                             self._idl_progress.step.FIRST_BATCH
                         )
                         self._idl_progress.emit_signal()
                 else:
-                    self._timer.cal_duration("OTHER_BATCH")
+                    # self._timer.cal_duration("OTHER_BATCH")
                     if self._idl_progress is not None:
                         self._idl_progress.cur_step += (
                             self._idl_progress.step.OTHER_BATCH
@@ -1044,7 +1044,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # idl progress INIT_CNN
-        self._timer.cal_duration("INIT_CNN")
+        # self._timer.cal_duration("INIT_CNN")
         if self._idl_progress is not None:
             self._idl_progress.cur_step += self._idl_progress.step.INIT_CNN
             self._idl_progress.emit_signal()

@@ -661,9 +661,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 else:
                     self._radio_btn[DisplayMode.MODAL_FIXED][plane].setChecked(False)
 
-        # self.__refresh_gtvt_selected_slices_2d()
-        # self._reset_zoomin()
+        # refresh imgs and crosses
         self.refresh_imgs()
+        self.refresh_crosses()
 
     # def __refresh_gtvt_selected_slices_2d(self):
     #     if self.img_3d[Modal.CT] is None:
@@ -1781,6 +1781,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.__resize_img_frames()
         self._refresh_side_bar()
         self.refresh_imgs()
+        self.refresh_crosses()
 
     def __resize_img_frames(self):
         gap = 1
@@ -1896,5 +1897,62 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     self.refresh_imgs()
                 return True  # Event is handled
 
+            # press "I"
+            elif event.key() == Qt.Key_I:
+                self.__zoom_in(50)
+                return True  # Event is handled
+
+            # press "O"
+            elif event.key() == Qt.Key_O:
+                self.__zoom_out(50)
+                return True  # Event is handled
+
+        # use eventFilter to handle Ctrl+Wheel events for the parent
+        # otherwise only child widget's wheel event is triggered
+        elif (
+            event.type() == QtCore.QEvent.Wheel
+            and source
+            in [
+                self.img_frame[Modal.CT],
+                self.img_frame[Modal.PT],
+                self.img_frame[Modal.MR1],
+                self.img_frame[Modal.MR2],
+                self.img_frame[Plane.TRANSVERSE],
+                self.img_frame[Plane.CORONAL],
+                self.img_frame[Plane.SAGITTAL],
+            ]
+            and QtWidgets.QApplication.keyboardModifiers() == Qt.ControlModifier
+        ):
+            # wheel up, zoom in
+            if event.angleDelta().y() > 0:
+                slice_delta = event.angleDelta().y() // 120
+                self.__zoom_in(step=slice_delta * 20)
+            # wheel down, zoom out
+            else:
+                slice_delta = -event.angleDelta().y() // 120
+                self.__zoom_out(step=slice_delta * 20)
+
         # For other events, call the base class method to ensure standard event processing
         return super().eventFilter(source, event)
+
+    def __zoom_in(self, step: int):
+        cur_value = self._slider["zoom"].value()
+        max_value = self._slider["zoom"].maximum()
+        if cur_value >= max_value:
+            return
+        else:
+            new_value = min(cur_value + step, max_value)
+            self._slider["zoom"].setValue(new_value)
+            self.refresh_imgs()
+            self.refresh_crosses()
+
+    def __zoom_out(self, step: int):
+        cur_value = self._slider["zoom"].value()
+        min_value = self._slider["zoom"].minimum()
+        if cur_value <= min_value:
+            return
+        else:
+            new_value = max(cur_value - step, min_value)
+            self._slider["zoom"].setValue(new_value)
+            self.refresh_imgs()
+            self.refresh_crosses()

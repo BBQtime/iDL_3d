@@ -1291,18 +1291,6 @@ class IDLWindow(ReplayWindow):
             center_slices_id[Plane.SAGITTAL] = self.gtvn_clicks_pos_3d[-1][2]
         return center_slices_id
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.refresh_crosses()
-
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-        self.refresh_crosses()
-
-    def _modal_fixed_mode_switch_plane(self, new_plane: str = None):
-        super()._modal_fixed_mode_switch_plane(new_plane)
-        self.refresh_crosses()
-
     def delete_all_crosses(self):
         for i in [
             Modal.CT,

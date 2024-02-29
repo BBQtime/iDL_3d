@@ -401,7 +401,7 @@ class TrainingCore:
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
 
         # idl progress INFERENCE_LOAD_IMG
-        self._timer.cal_duration("INFERENCE_LOAD_IMG")
+        # self._timer.cal_duration("INFERENCE_LOAD_IMG")
         if self._idl_progress is not None:
             self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_LOAD_IMG
             self._idl_progress.emit_signal()
@@ -414,7 +414,7 @@ class TrainingCore:
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
         # idl progress INFERENCE_FORWARD
-        self._timer.cal_duration("INFERENCE_FORWARD")
+        # self._timer.cal_duration("INFERENCE_FORWARD")
         if self._idl_progress is not None:
             self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_FORWARD
             self._idl_progress.emit_signal()
@@ -449,7 +449,7 @@ class TrainingCore:
                         outputs[gtv]["label"],
                     )
 
-        self._timer.cal_duration("INFERENCE_CAL_SCORES")
+        # self._timer.cal_duration("INFERENCE_CAL_SCORES")
 
         return outputs
 

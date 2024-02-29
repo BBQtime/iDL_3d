@@ -2,7 +2,7 @@ from custom import Debug, Value
 from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
-from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import QApplication, QLabel
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from ui_drag_cross import DragCross
 
@@ -431,27 +431,35 @@ class ImgFrame(QLabel):
     def wheelEvent(self, event):
         super().wheelEvent(event)
 
-        ct_img = self.window().img_3d[Modal.CT]
-        if ct_img is None:
-            return
+        # ctrl is not pressed
+        if QApplication.keyboardModifiers() != Qt.ControlModifier:
 
-        if self.plane == Plane.SAGITTAL:
-            slices_count = ct_img.shape[2]
-        elif self.plane == Plane.CORONAL:
-            slices_count = ct_img.shape[1]
-        elif self.plane == Plane.TRANSVERSE:
-            slices_count = ct_img.shape[0]
+            ct_img = self.window().img_3d[Modal.CT]
+            if ct_img is None:
+                return
 
-        slice_delta = event.angleDelta().y() // 120
-        if self.plane == Plane.CORONAL:
-            slice_delta = -slice_delta
+            if self.plane == Plane.SAGITTAL:
+                slices_count = ct_img.shape[2]
+            elif self.plane == Plane.CORONAL:
+                slices_count = ct_img.shape[1]
+            elif self.plane == Plane.TRANSVERSE:
+                slices_count = ct_img.shape[0]
 
-        self.window().cur_slice_id[self.plane] -= slice_delta
-        # limite slice_id in range (0, slices_count)
-        self.window().cur_slice_id[self.plane] %= slices_count
+            slice_delta = event.angleDelta().y() // 120
+            if self.plane == Plane.CORONAL:
+                slice_delta = -slice_delta
 
-        # refresh new slice
-        if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-            self.window().refresh_imgs(frame_name=self.plane)
-        else:
-            self.window().refresh_imgs()
+            self.window().cur_slice_id[self.plane] -= slice_delta
+            # limite slice_id in range (0, slices_count)
+            self.window().cur_slice_id[self.plane] %= slices_count
+
+            # refresh new slice
+            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                self.window().refresh_imgs(frame_name=self.plane)
+                self.window().refresh_crosses(frame_name=self.plane)
+            else:
+                self.window().refresh_imgs()
+                self.window().refresh_crosses()
+
+        # Mark the event as handled
+        event.accept()

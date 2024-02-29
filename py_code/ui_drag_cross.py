@@ -84,7 +84,7 @@ class DragCross(QWidget):
                 frame_name_list.remove(self.parent().plane)
                 for i in frame_name_list:
                     self.window().refresh_imgs(frame_name=i)
-                    self.window().refresh_crosses(i)
+                    self.window().refresh_crosses(frame_name=i)
                 # select cross
                 self.window().select_cross(self.cross_id)
 

@@ -161,7 +161,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             cnn = self._load_exist_cnn(cnn_path)
 
             # idl progress INFERENCE_INIT
-            self._timer.cal_duration("INFERENCE_INIT")
+            # self._timer.cal_duration("INFERENCE_INIT")
             if self._idl_progress is not None:
                 self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_INIT
                 self._idl_progress.emit_signal()
@@ -188,7 +188,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             )
 
             # idl progress INFERENCE_SAVE_PRED
-            self._timer.cal_duration("INFERENCE_SAVE_PRED")
+            # self._timer.cal_duration("INFERENCE_SAVE_PRED")
             if self._idl_progress is not None:
                 self._idl_progress.cur_step += (
                     self._idl_progress.step.INFERENCE_SAVE_PRED
@@ -257,7 +257,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 )
 
         # idl progress CROSS_VALID
-        self._timer.cal_duration("CROSS_VALID")
+        # self._timer.cal_duration("CROSS_VALID")
         if self._idl_progress is not None:
             self._idl_progress.cur_step += self._idl_progress.step.CROSS_VALID
             self._idl_progress.emit_signal()
