@@ -262,11 +262,11 @@ class TrainingIDLGTVn(TrainingBaseline):
             self._idl_progress.cur_step += self._idl_progress.step.CROSS_VALID
             self._idl_progress.emit_signal()
 
-        if self._idl_progress is not None:
-            print(self._idl_progress.cur_step, self._idl_progress.total_step)
+        # if self._idl_progress is not None:
+        #     print(self._idl_progress.cur_step, self._idl_progress.total_step)
 
-        print("")
-        print("real idl.gtvn done!")
+        # print("")
+        # print("real idl.gtvn done!")
 
     def fold_wise_inference(
         self,

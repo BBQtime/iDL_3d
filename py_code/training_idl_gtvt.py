@@ -1093,11 +1093,11 @@ class TrainingIDLGTVt(TrainingCore):
 
         self._save_hyper(hyper, hyper_save_path)
 
-        if self._idl_progress is not None:
-            print(self._idl_progress.cur_step, self._idl_progress.total_step)
+        # if self._idl_progress is not None:
+        #     print(self._idl_progress.cur_step, self._idl_progress.total_step)
 
-        print("")
-        print("real idl.gtvt done!")
+        # print("")
+        # print("real idl.gtvt done!")
 
     def inference_calculate_save_avg_median(self, idl_gtvt_id: str, dataset_part: str):
         print("")

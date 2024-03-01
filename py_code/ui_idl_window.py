@@ -746,17 +746,14 @@ class IDLWindow(ReplayWindow):
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
 
-    def __goto_idl_step_correct_both(self):
+    def __goto_idl_step_correct_both(self, drawing_mode: str = DrawingMode.GTVT_PEN):
         # (1) stop idl qthreads
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
         # (2) update status
         self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
-        # if self._radio_btn["correct.gtvt"].isChecked():
-        #     self.drawing_mode = DrawingMode.GTVT_PEN
-        # elif self._radio_btn["correct.gtvn"].isChecked():
-        #     self.drawing_mode = DrawingMode.GTVN_PEN
+        self.drawing_mode = drawing_mode
 
         # (3) update imgs
         # init correction and mask
@@ -771,9 +768,19 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (5) update widgets
+        if self.drawing_mode in [
+            DrawingMode.GTVT_PEN,
+            DrawingMode.GTVT_ERASER,
+            DrawingMode.GTVT_CLEAR,
+        ]:
+            self._radio_btn["correct.gtvt"].setChecked(True)
+        elif self.drawing_mode in [
+            DrawingMode.GTVN_PEN,
+            DrawingMode.GTVN_ERASER,
+            DrawingMode.GTVN_CLEAR,
+        ]:
+            self._radio_btn["correct.gtvn"].setChecked(True)
         self.__enable_annotation_tools()
-        for i in ["gtvt", "gtvn"]:
-            self._radio_btn["correct.{}".format(i)].show()
         self._btn["next.step"].setEnabled(True)
 
     def __goto_idl_step_approved(self):
@@ -831,7 +838,7 @@ class IDLWindow(ReplayWindow):
                 return
 
             text = (
-                "Would you like to jump to SETP 2 and re-click the center of GTVt? "
+                "Would you like to revert to SETP 2 and re-click the center of GTVt? "
                 "This will clear all your previous GTVt delineations and corrections "
                 "and the neural network will need to regenerate the segmentation."
             )
@@ -865,7 +872,7 @@ class IDLWindow(ReplayWindow):
                 return
 
             text = (
-                "Would you like to jump to SETP 3 and re-delineate GTVt? "
+                "Would you like to revert to SETP 3 and re-delineate GTVt? "
                 "This will clear all your previous GTVt delineations and corrections "
                 "and the neural network will need to regenerate the segmentation."
             )
@@ -893,7 +900,7 @@ class IDLWindow(ReplayWindow):
                 return
 
             text = (
-                "Would you like to jump to SETP 4 and re-click the centers of GTVn? "
+                "Would you like to revert to SETP 4 and re-click the centers of GTVn? "
                 "This will clear all your previous GTVn clicks and corrections "
                 "and the neural network will need to regenerate the segmentation."
             )
@@ -909,7 +916,7 @@ class IDLWindow(ReplayWindow):
 
             self.__goto_idl_step_click_gtvn_center()
 
-        # (5) jump to step CORRECT_GTVT/GTVN
+        # (5) revert to step CORRECT_GTVT/GTVN
         elif text_box in [
             self._text_label[IDLStep.CORRECT_GTVT],
             self._text_label[IDLStep.CORRECT_GTVN],
@@ -917,7 +924,7 @@ class IDLWindow(ReplayWindow):
             if cur_idl_step != IDLStep.APPROVED:
                 return
 
-            text = "Would you like to jump to SETP 6 and re-correct the predictions?"
+            text = "Would you like to revert to SETP 6 and re-correct the predictions?"
             reply = QMessageBox.question(
                 self,
                 "Message",
@@ -928,7 +935,11 @@ class IDLWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.__goto_idl_step_correct_both()
+            # goto idl step correct both
+            if text_box == self._text_label[IDLStep.CORRECT_GTVT]:
+                self.__goto_idl_step_correct_both(DrawingMode.GTVT_PEN)
+            else:
+                self.__goto_idl_step_correct_both(DrawingMode.GTVN_PEN)
             self._collap["patient"].collapse()
 
     # this function is connected to widget, dont set input params to this function
@@ -986,18 +997,16 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (4) update widgets
+        self.__enable_annotation_tools()
         # (4-1) CORRECT_GTVN -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvn
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
-            for i in ["correct.gtvt", "correct.gtvn"]:
-                self._radio_btn[i].show()
             self._btn["next.step"].setEnabled(True)
 
         # (4-2) WAITING -> CORRECT_GTVT
         elif self.cur_idl_step() == IDLStep.CORRECT_GTVT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
-            self.__enable_annotation_tools()
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
@@ -1019,6 +1028,9 @@ class IDLWindow(ReplayWindow):
                 QMessageBox.No,
             )
             if reply == QMessageBox.No:
+                return
+            else:
+                self.__on_idl_gtvn_thread_finished()
                 return
 
         # (2) update status
@@ -1096,18 +1108,16 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (4) update widgets
+        self.__enable_annotation_tools()
         # (4-1) CORRECT_GTVT -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvt
         if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
-            for i in ["correct.gtvt", "correct.gtvn"]:
-                self._radio_btn[i].show()
             self._btn["next.step"].setEnabled(True)
 
         # (4-2) WAITING -> CORRECT_GTVN
         elif self.cur_idl_step() == IDLStep.CORRECT_GTVN:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
-            self.__enable_annotation_tools()
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
@@ -1440,7 +1450,7 @@ class IDLWindow(ReplayWindow):
             self._text_label["eraser.size"].hide()
             self._slider["eraser.size"].hide()
 
-        # correct gtvt/gtvn radio buttons
+        # radio buttons: correct gtvt/gtvn
         for i in ["correct.gtvt", "correct.gtvn"]:
             if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
                 self._radio_btn[i].show()
