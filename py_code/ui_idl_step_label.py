@@ -57,7 +57,12 @@ class IDLStepLabel(QLabel):
             IDLStep.SELECT_PATIENT,
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.DRAW_GTVT,
+            IDLStep.DRAW_GTVT_TRANSVERSE,
+            IDLStep.DRAW_GTVT_CORONAL,
+            IDLStep.DRAW_GTVT_SAGITTAL,
             IDLStep.CLICK_GTVN_CENTER,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
         ]:
             if self.__status == LabelStatus.DONE:
                 self.setToolTip("Click to revert to this step")

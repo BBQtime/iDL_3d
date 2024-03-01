@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 
 import cv2
-import imageio
 import numpy as np
 import qimage2ndarray
 from custom import Debug, Dict, Dir
@@ -795,9 +794,9 @@ class IDLWindow(ReplayWindow):
         # (5) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        for i in ["gtvt", "gtvn"]:
-            self._radio_btn["correct.{}".format(i)].hide()
         self._btn["next.step"].setEnabled(False)
+        self._collap["annotation"].collapse()
+        self._collap["patient"].expand()
 
     def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
         cur_idl_step = self.cur_idl_step()
@@ -849,7 +848,12 @@ class IDLWindow(ReplayWindow):
             self.__goto_idl_step_click_gtvt_center()
 
         # (3) jump to step DRAW_GTVT
-        elif text_box == self._text_label[IDLStep.DRAW_GTVT]:
+        elif text_box in [
+            self._text_label[IDLStep.DRAW_GTVT],
+            self._text_label[IDLStep.DRAW_GTVT_TRANSVERSE],
+            self._text_label[IDLStep.DRAW_GTVT_CORONAL],
+            self._text_label[IDLStep.DRAW_GTVT_SAGITTAL],
+        ]:
             if cur_idl_step not in [
                 IDLStep.CLICK_GTVN_CENTER,
                 IDLStep.WAITING,
@@ -904,6 +908,28 @@ class IDLWindow(ReplayWindow):
                 return
 
             self.__goto_idl_step_click_gtvn_center()
+
+        # (5) jump to step CORRECT_GTVT/GTVN
+        elif text_box in [
+            self._text_label[IDLStep.CORRECT_GTVT],
+            self._text_label[IDLStep.CORRECT_GTVN],
+        ]:
+            if cur_idl_step != IDLStep.APPROVED:
+                return
+
+            text = "Would you like to jump to SETP 6 and re-correct the predictions?"
+            reply = QMessageBox.question(
+                self,
+                "Message",
+                text,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.No:
+                return
+
+            self.__goto_idl_step_correct_both()
+            self._collap["patient"].collapse()
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
@@ -1420,6 +1446,8 @@ class IDLWindow(ReplayWindow):
                 self._radio_btn[i].show()
             else:
                 self._radio_btn[i].hide()
+
+        self._collap["annotation"].expand()
 
     def __disable_annotation_tools(self):
         for i in ["pen", "eraser", "clear"]:
