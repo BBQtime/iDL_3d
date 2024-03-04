@@ -20,7 +20,7 @@ class DataSetIDLGTVt(DatasetCore):
         patient: str,
         selected_slices: Dict,
         pred_dir: str,
-        annotation_dir: str,  # this is only for realtime idl
+        delineation_dir: str,  # this is only for real idl
         dataset_ver: str,
         no_pt: bool,
         augment: Dict,
@@ -33,9 +33,9 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin = Dict()
 
         # real idl
-        if annotation_dir is not None:
+        if delineation_dir is not None:
             self.__origin["label"] = Nii.load(
-                os.path.join(annotation_dir, "gtvt_annotation.nii.gz"), binary=True
+                os.path.join(delineation_dir, "gtvt_delineation.nii.gz"), binary=True
             )
         # simulation
         else:
@@ -69,37 +69,16 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin[Modal.CT] = Img.ct_windowing(self.__origin[Modal.CT])
 
         # load weight map
-        self.__origin["weight.map"], slice_mask = self.__load_weight_map(
+        self.__origin["weight.map"], selected_slice_mask = self.__load_weight_map(
             selected_slices, weight
         )
-        # Nii.save(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "annotation.nii.gz"),
-        # )
-        # Nii.save(
-        #     slice_mask,
-        #     os.path.join(g.PROJ_DIR, "debug", "slice_mask.nii.gz"),
-        # )
-        # Nii.save(
-        #     self.__origin["weight.map"],
-        #     os.path.join(g.PROJ_DIR, "debug", "weight_map.nii.gz"),
-        # )
 
-        # overwrite pred to label on non-annotated slices
-        self.__origin["label"] *= slice_mask
-        # Nii.save(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "annotation+slice_mask.nii.gz"),
-        # )
-        # self.__origin["label"] += self.__origin["pred"] * (1 - slice_mask)
-        # Nii.save(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "annotation+pred.nii.gz"),
-        # )
+        # combine pred(un-selected slices) and label(selected slices)
+        self.__origin["label"] *= selected_slice_mask
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
-        # annotated slice mask
-        slice_mask = Dict()
+        # selected slice mask
+        selected_slice_mask = Dict()
         max_round = max(
             len(selected_slices[Plane.TRANSVERSE]),
             len(selected_slices[Plane.CORONAL]),
@@ -107,52 +86,58 @@ class DataSetIDLGTVt(DatasetCore):
         )
 
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            # annotated slice mask
-            slice_mask[plane] = np.zeros(
+            # selected slice mask
+            selected_slice_mask[plane] = np.zeros(
                 self.__origin[Modal.CT].shape, dtype=np.float32
             )
 
             for round_num in selected_slices[plane]:
-                # do NOT change weight["annotate.slice"], use another variable
-                slice_weight = weight["weight.slice"]
-                slice_weight *= pow(
+                # do NOT change "weight" dict, use another variable
+                selected_slice_weight = weight["weight.selected.slice"]
+                selected_slice_weight *= pow(
                     weight["weight.prev.round.decay"],
                     (max_round - int(round_num[len("round=") :])),
                 )
-                if slice_weight < weight["weight.background"]:
-                    slice_weight = weight["weight.background"]
+                if selected_slice_weight < weight["weight.background"]:
+                    selected_slice_weight = weight["weight.background"]
 
                 # current step
                 for slice_num in selected_slices[plane][round_num]:
                     if plane == Plane.TRANSVERSE:
-                        slice_mask[plane][slice_num, :, :] = (
-                            np.ones_like(slice_mask[plane][0, :, :]) * slice_weight
+                        selected_slice_mask[plane][slice_num, :, :] = (
+                            np.ones_like(selected_slice_mask[plane][0, :, :])
+                            * selected_slice_weight
                         )
                     elif plane == Plane.CORONAL:
-                        slice_mask[plane][:, slice_num, :] = (
-                            np.ones_like(slice_mask[plane][:, 0, :]) * slice_weight
+                        selected_slice_mask[plane][:, slice_num, :] = (
+                            np.ones_like(selected_slice_mask[plane][:, 0, :])
+                            * selected_slice_weight
                         )
                     elif plane == Plane.SAGITTAL:
-                        slice_mask[plane][:, :, slice_num] = (
-                            np.ones_like(slice_mask[plane][:, :, 0]) * slice_weight
+                        selected_slice_mask[plane][:, :, slice_num] = (
+                            np.ones_like(selected_slice_mask[plane][:, :, 0])
+                            * selected_slice_weight
                         )
 
-        # combine slice_mask on 3 planes
-        slice_mask = np.maximum(
-            np.maximum(slice_mask[Plane.TRANSVERSE], slice_mask[Plane.CORONAL]),
-            slice_mask[Plane.SAGITTAL],
+        # combine selected_slice_mask on 3 anatomical planes
+        selected_slice_mask = np.maximum(
+            np.maximum(
+                selected_slice_mask[Plane.TRANSVERSE],
+                selected_slice_mask[Plane.CORONAL],
+            ),
+            selected_slice_mask[Plane.SAGITTAL],
         )
 
         # get fp&fn (keep weight=1 before creating distance map)
         fp = self.__origin["pred"] * (1 - self.__origin["label"])
         fn = (1 - self.__origin["pred"]) * self.__origin["label"]
         fp_plus_fn = fp + fn
-        fp_plus_fn = fp_plus_fn * np.where(slice_mask > 0, 1, 0)
+        fp_plus_fn = fp_plus_fn * np.where(selected_slice_mask > 0, 1, 0)
         fp_plus_fn = fp_plus_fn.astype(np.float32)
 
         # pred union label
         pred_union_label = np.maximum(self.__origin["pred"], self.__origin["label"])
-        pred_union_label = pred_union_label * np.where(slice_mask > 0, 1, 0)
+        pred_union_label = pred_union_label * np.where(selected_slice_mask > 0, 1, 0)
         pred_union_label = pred_union_label.astype(np.float32)
 
         # distance map
@@ -176,16 +161,20 @@ class DataSetIDLGTVt(DatasetCore):
 
         # weighted fp&fn (after weight map)
         fp_plus_fn = (
-            fp_plus_fn * slice_mask * (weight["weight.fp.fn"] / weight["weight.slice"])
+            fp_plus_fn
+            * selected_slice_mask
+            * (weight["weight.fp.fn"] / weight["weight.selected.slice"])
         )
 
         # final_weight_map
-        weight_map = np.maximum(np.maximum(distance_map, slice_mask), fp_plus_fn)
+        weight_map = np.maximum(
+            np.maximum(distance_map, selected_slice_mask), fp_plus_fn
+        )
 
-        # return slice_mask to overwrite pred to label on non-annotated slices
-        slice_mask = np.where(slice_mask > 0, 1, 0)
+        # return selected_slice_mask to combine pred(un-selected slices) and label(selected slices)
+        selected_slice_mask = np.where(selected_slice_mask > 0, 1, 0)
 
-        return weight_map, slice_mask
+        return weight_map, selected_slice_mask
 
     # must be overrided
     def __len__(self):

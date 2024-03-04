@@ -720,7 +720,7 @@ class Global:
     PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
     DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
 
-    __settings = Json.load(os.path.join(PROJ_DIR, "settings.json"))
+    __settings = Json.load(os.path.join(PROJ_DIR, "settings_global.json"))
 
     # use CPU
     if __settings["cuda.visible.devices"] == "":

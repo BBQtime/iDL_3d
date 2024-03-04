@@ -21,8 +21,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        # load setting
+        ui_setting = Json.load(os.path.join(g.PROJ_DIR, "settings_ui.json"))
         self._init_data()
-        self._init_color()  # before init_widgets()
+        self._init_color(ui_setting)  # before init_widgets()
         self._init_widgets()  # after _init_data()
         # self.__init_zoomin()
         self._load_baseline_data()  # load first baseline result
@@ -58,7 +60,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.__scores = Dict()
         self.__clear_scores()
 
-        # img_3d save the ndarray of multi-modalimgs/preds/annotations/corrections
+        # img_3d save the ndarray of imgs/preds/delineation/corrections
         self.img_3d = Dict()
         self._clear_img_3d()
 
@@ -98,7 +100,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             "gtvn.pred",
             "gtvt.click",
             "gtvn.clicks",
-            "gtvt.annotation",
+            "gtvt.delineation",
             "gtvt.correction",
             "gtvn.correction",
             "gtvt.pred.final",
@@ -112,25 +114,36 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.__scores[i][Metric.MSD] = None
             self.__scores[i][Metric.HD95] = None
 
-    def _init_color(self):
+    def _init_color(self, ui_setting: Dict):
         self.color = Dict()
-        self.color["black"] = (0, 0, 0)
-        self.color["red"] = (255, 50, 0)
-        self.color["green"] = (0, 255, 64)
-        self.color["magenta"] = (255, 70, 200)
-        self.color["cyan"] = (0, 255, 255)
-        self.color["blue"] = (0, 160, 255)
-        self.color["yellow"] = (255, 255, 0)
-        self.color["orange"] = (255, 120, 0)
-        self.color["gtvt.pred"] = self.color["yellow"]
-        self.color["gtvt.label"] = self.color["orange"]
-        self.color["gtvn.pred"] = self.color["cyan"]
-        self.color["gtvn.label"] = self.color["blue"]
-        self.color["gtvt.annotation"] = self.color["magenta"]
-        self.color["gtvt.correction"] = self.color["red"]
-        self.color["gtvn.correction"] = self.color["red"]
-        self.color["gtvt.click"] = self.color["magenta"]
-        self.color["gtvn.clicks"] = self.color["magenta"]
+        for i in [
+            "black",
+            "red",
+            "green",
+            "magenta",
+            "cyan",
+            "blue",
+            "yellow",
+            "orange",
+        ]:
+            self.color[i] = List(ui_setting[i])
+            self.color[i] = tuple(int(k) for k in self.color[i])
+
+        for i in [
+            "gtvt.pred",
+            "gtvt.label",
+            "gtvn.pred",
+            "gtvn.label",
+            "gtvt.correction",
+            "gtvn.correction",
+        ]:
+            self.color[i] = self.color[ui_setting[i]]
+
+        self.color["gtvt.click"] = self.color[ui_setting["gtvt.click.replay"]]
+        self.color["gtvn.clicks"] = self.color[ui_setting["gtvn.clicks.replay"]]
+        self.color["gtvt.delineation"] = self.color[
+            ui_setting["gtvt.delineation.replay"]
+        ]
 
     def setupUi(self, Core):
         Core.setObjectName("Core")
@@ -1053,7 +1066,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
             # clear idl.gtvt data
             if gtv == "gtvt":
-                for i in ["click", "annotation", "correction"]:
+                for i in ["click", "delineation", "correction"]:
                     self.img_3d["gtvt.{}".format(i)] = None
                 self.__clear_gtvt_selected_slices_3d()
                 # self.__refresh_gtvt_selected_slices_2d()
@@ -1080,7 +1093,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # load gtvt data
             if gtv == "gtvt":
                 # load gtvt nii
-                for i in ["click", "annotation", "correction"]:
+                for i in ["click", "delineation", "correction"]:
                     nii_path = os.path.join(cur_round_dir, "gtvt_{}.nii.gz".format(i))
                     if os.path.exists(nii_path):
                         self.img_3d["gtvt.{}".format(i)] = self._load_3d_img(
@@ -1356,20 +1369,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
             seg_name_list = [
                 "gtvn.pred.final",
                 "gtvt.pred.final",
-                "gtvt.annotation",
+                "gtvt.delineation",
                 "gtvn.clicks",
                 "gtvt.click",
             ]
         # replay mode
         else:
             # place top contour at the end of the list
-            # click > correction > annotation > pred > label
+            # click > correction > delineation > pred > label
             seg_name_list = [
                 "gtvn.label",
                 "gtvt.label",
                 "gtvn.pred",
                 "gtvt.pred",
-                "gtvt.annotation",
+                "gtvt.delineation",
                 "gtvn.correction",
                 "gtvt.correction",
                 "gtvn.clicks",
@@ -1398,7 +1411,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "gtvt.pred.final",
                 "gtvn.correction",
                 "gtvt.correction",
-                "gtvt.annotation",
+                "gtvt.delineation",
             ]:
                 # perfomr erosion to remove overlap of 3 different planes
                 kernel = np.ones((3, 3), np.uint8)
@@ -1563,7 +1576,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
                 # add msg on qimg: "please select a patient"
                 if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-                    self._add_msg_on_qimg(qimg)
+                    self._add_instruction_on_top_left(qimg)
 
                 self.img_frame[frame_name].set_background(qimg)
                 self.img_frame[frame_name].update()
@@ -1616,19 +1629,29 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
             # add text on top left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-                self._add_score_on_qimg(qimg)
-                self._add_msg_on_qimg(qimg)
+                self._add_score_on_top_left(qimg)
+                self._add_instruction_on_top_left(qimg)
 
             # add text on bottom left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.MR1:
-                self._add_contour_description_on_qimg(qimg)
+                self._add_contour_description_on_bottom_left(qimg)
 
             self.img_frame[frame_name].set_background(qimg)
             self.img_frame[frame_name].update()
 
-    def _add_contour_description_on_qimg(self, qimg: QtGui.QImage):
+    def _get_contour_description_pos(self, qimg: QtGui.QImage):
         pos_x = [10, 65, 110]
-        pos_y = [qimg.height() - 57, qimg.height() - 35, qimg.height() - 13]
+        y_buttom = qimg.height() - 13
+        step = 22 if g.is_linux() else 25
+        pos_y = [
+            y_buttom - step * 2,
+            y_buttom - step,
+            y_buttom,
+        ]
+        return pos_x, pos_y
+
+    def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+        pos_x, pos_y = self._get_contour_description_pos(qimg)
 
         # label
         self._qimg_draw_text(
@@ -1681,7 +1704,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             qimg=qimg,
             text="Init",
             pos=(pos_x[1], pos_y[2]),
-            color=self.color["gtvt.annotation"],
+            color=self.color["gtvt.delineation"],
         )
         self._qimg_draw_text(
             qimg=qimg,
@@ -1690,10 +1713,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
             color=self.color["gtvt.correction"],
         )
 
-    def _add_msg_on_qimg(self, qimg: QtGui.QImage):
+    def _add_instruction_on_top_left(self, qimg: QtGui.QImage):
         pass
 
-    def _add_score_on_qimg(self, qimg: QtGui.QImage):
+    def _add_score_on_top_left(self, qimg: QtGui.QImage):
         pos_y = 25
 
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:

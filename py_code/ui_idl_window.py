@@ -71,26 +71,26 @@ class IDLWindow(ReplayWindow):
                 t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
                 t, c, s = int(t), int(c), int(s)
 
-                # clear annotation on cur plane
-                # use mask to make sure to filter out the annotation on current anatomical plane only
+                # clear delineation on cur plane
+                # use mask to make sure to filter out the delineation on current anatomical plane only
                 if img_frame.plane == Plane.TRANSVERSE:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][t, :, :])
+                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][t, :, :])
                     mask[c, :] = 1
                     mask[:, s] = 1
-                    self.img_3d["gtvt.annotation"][t, :, :] *= mask
+                    self.img_3d["gtvt.delineation"][t, :, :] *= mask
                 elif img_frame.plane == Plane.CORONAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, c, :])
+                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, c, :])
                     mask[t, :] = 1
                     mask[:, s] = 1
-                    self.img_3d["gtvt.annotation"][:, c, :] *= mask
+                    self.img_3d["gtvt.delineation"][:, c, :] *= mask
                 elif img_frame.plane == Plane.SAGITTAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.annotation"][:, :, s])
+                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, :, s])
                     mask[t, :] = 1
                     mask[:, c] = 1
-                    self.img_3d["gtvt.annotation"][:, :, s] *= mask
+                    self.img_3d["gtvt.delineation"][:, :, s] *= mask
 
-                # update gtvt annotated status
-                self.__gtvt_annotated_status[img_frame.plane] = False
+                # update gtvt delineated state
+                self.__gtvt_delineated_state[img_frame.plane] = False
                 # update todo list
                 self._text_label[
                     "draw.gtvt.{}".format(img_frame.plane)
@@ -123,10 +123,8 @@ class IDLWindow(ReplayWindow):
                     img_3d[:, :, s] = np.zeros_like(img_3d[:, :, s])
                     mask_3d[:, :, s] = np.zeros_like(mask_3d[:, :, s])
 
-                self.__save_corrections_and_masks(gtv)
-
             # update 3d np arrays and refresh imgs
-            self.__combine_pred_annotation_correction()
+            self.__combine_pred_delineation_correction()
             self.refresh_imgs()
 
     def draw_on_img_frame_move(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
@@ -200,15 +198,15 @@ class IDLWindow(ReplayWindow):
         # qpixmap to a qimage
         qimg = img_frame.drawing_layer.toImage()
         # qimage to ndarray
-        annotation_2d = qimage2ndarray.alpha_view(qimg).astype(np.float32)
-        annotation_2d /= 255
+        new_drawing = qimage2ndarray.alpha_view(qimg).astype(np.float32)
+        new_drawing /= 255
         # binarization (before resize)
-        annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+        new_drawing = Img.binarize(img=new_drawing, threshold=binary_threshold)
 
-        # overwrite annotation back to zoomed_img
+        # overwrite delineation back to zoomed_img
         empty_zoomed_img = np.zeros_like(self._zoomed_rgb[frame_name][:, :, 0])
         center_x_pct, center_y_pct = img_frame.img_center_pct
-        frame_h, frame_w = annotation_2d.shape
+        frame_h, frame_w = new_drawing.shape
         zoomed_h, zoomed_w = empty_zoomed_img.shape
         # Calculate original intended center positions
         center_x_abs = int(round(zoomed_w * center_x_pct))
@@ -216,7 +214,7 @@ class IDLWindow(ReplayWindow):
         # Calculate the amount of black border added to each side
         border_w = max(0, (frame_w - zoomed_w) // 2)
         border_h = max(0, (frame_h - zoomed_h) // 2)
-        # Calculate start positions for placing annotation_2d
+        # Calculate start positions for placing new_drawing
         start_x = center_x_abs - math.ceil(frame_w / 2)
         start_x = max(0, start_x)
         start_y = center_y_abs - math.ceil(frame_h / 2)
@@ -229,16 +227,16 @@ class IDLWindow(ReplayWindow):
         # Calculate crop dimensions
         crop_w = frame_w - border_w * 2
         crop_h = frame_h - border_h * 2
-        # Ensure annotation_2d cropped area does not exceed zoomed img
+        # Ensure new_drawing cropped area does not exceed zoomed img
         crop_w = min(crop_w, zoomed_w)
         crop_h = min(crop_h, zoomed_h)
-        # crop annotation_2d
-        annotation_2d = annotation_2d[
+        # crop new_drawing
+        new_drawing = new_drawing[
             border_h : crop_h + border_h, border_w : crop_w + border_w
         ]
-        # Place the annotation_2d onto the adjusted position within empty_zoomed_img
-        empty_zoomed_img[start_y:end_y, start_x:end_x] = annotation_2d
-        annotation_2d = empty_zoomed_img
+        # Place the new_drawing onto the adjusted position within empty_zoomed_img
+        empty_zoomed_img[start_y:end_y, start_x:end_x] = new_drawing
+        new_drawing = empty_zoomed_img
 
         # resize to origin img size (slice from 3d img)
         if img_frame.plane == Plane.SAGITTAL:
@@ -247,26 +245,26 @@ class IDLWindow(ReplayWindow):
             actual_shape = self.img_3d[Modal.CT][:, 0, :].shape
         elif img_frame.plane == Plane.TRANSVERSE:
             actual_shape = self.img_3d[Modal.CT][0, :, :].shape
-        annotation_2d = cv2.resize(
-            annotation_2d,
+        new_drawing = cv2.resize(
+            new_drawing,
             (actual_shape[1], actual_shape[0]),
             interpolation=cv2.INTER_AREA,  # best for scaling down
         )
         # binarization (after resize)
-        annotation_2d = Img.binarize(img=annotation_2d, threshold=binary_threshold)
+        new_drawing = Img.binarize(img=new_drawing, threshold=binary_threshold)
 
-        # add 2d annotation on 3d annotation ndarray
+        # add 2d delineation/correction on 3d ndarray
         idl_step = self.cur_idl_step()
-        # (1)gtvt annotation
+        # (1) gtvt delineation
         if idl_step == IDLStep.DRAW_GTVT:
             t, c, s = self.gtvt_click_pos_3d
             if img_frame.plane == Plane.TRANSVERSE:
-                segment = self.img_3d["gtvt.annotation"][t, :, :]
+                exist_drawing = self.img_3d["gtvt.delineation"][t, :, :]
             elif img_frame.plane == Plane.CORONAL:
-                segment = self.img_3d["gtvt.annotation"][:, c, :]
+                exist_drawing = self.img_3d["gtvt.delineation"][:, c, :]
             elif img_frame.plane == Plane.SAGITTAL:
-                segment = self.img_3d["gtvt.annotation"][:, :, s]
-        # (2)correction
+                exist_drawing = self.img_3d["gtvt.delineation"][:, :, s]
+        # (2) gtvt/gtvn correction
         elif idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -279,30 +277,30 @@ class IDLWindow(ReplayWindow):
                 gtv = "gtvn"
             img_3d = self.img_3d["{}.pred.final".format(gtv)]
             if img_frame.plane == Plane.TRANSVERSE:
-                segment = img_3d[t, :, :].copy()
+                exist_drawing = img_3d[t, :, :].copy()
             elif img_frame.plane == Plane.CORONAL:
-                segment = img_3d[:, c, :].copy()
+                exist_drawing = img_3d[:, c, :].copy()
             elif img_frame.plane == Plane.SAGITTAL:
-                segment = img_3d[:, :, s].copy()
+                exist_drawing = img_3d[:, :, s].copy()
 
         # invert color if in eraser mode
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
-            segment = 1 - segment
+            exist_drawing = 1 - exist_drawing
 
-        # combine annotation_2d and segment
-        segment = np.maximum(segment, annotation_2d)
+        # combine new_drawing and new_drawing
+        new_drawing = np.maximum(exist_drawing, new_drawing)
 
         # fill holes if in pen mode
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
-            segment = ndimage.binary_fill_holes(segment).astype(np.float32)
+            new_drawing = ndimage.binary_fill_holes(new_drawing).astype(np.float32)
 
         # invert color back, if in eraser mode
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
-            segment = 1 - segment
+            new_drawing = 1 - new_drawing
 
-        # replace slice in 3d gtvt.annotation or gtvt/gtvn correction
+        # replace slice in 3d gtvt.delineation or gtvt/gtvn correction
         if idl_step == IDLStep.DRAW_GTVT:
-            img_3d = self.img_3d["gtvt.annotation"]
+            img_3d = self.img_3d["gtvt.delineation"]
         elif idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -317,89 +315,81 @@ class IDLWindow(ReplayWindow):
 
         # replace slice
         if img_frame.plane == Plane.TRANSVERSE:
-            img_3d[t, :, :] = segment
+            img_3d[t, :, :] = new_drawing
         elif img_frame.plane == Plane.CORONAL:
-            img_3d[:, c, :] = segment
+            img_3d[:, c, :] = new_drawing
         elif img_frame.plane == Plane.SAGITTAL:
-            img_3d[:, :, s] = segment
+            img_3d[:, :, s] = new_drawing
 
-        # update masks then save corrections and masks
+        # update correction masks
         if idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            # (1)update correction masks
             if img_frame.plane == Plane.TRANSVERSE:
-                if segment.max() == 0:
-                    mask_3d[t, :, :] = np.zeros_like(segment)
+                if new_drawing.max() == 0:
+                    mask_3d[t, :, :] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[t, :, :] = np.ones_like(segment)
+                    mask_3d[t, :, :] = np.ones_like(new_drawing)
             elif img_frame.plane == Plane.CORONAL:
-                if segment.max() == 0:
-                    mask_3d[:, c, :] = np.zeros_like(segment)
+                if new_drawing.max() == 0:
+                    mask_3d[:, c, :] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[:, c, :] = np.ones_like(segment)
+                    mask_3d[:, c, :] = np.ones_like(new_drawing)
             elif img_frame.plane == Plane.SAGITTAL:
-                if segment.max() == 0:
-                    mask_3d[:, :, s] = np.zeros_like(segment)
+                if new_drawing.max() == 0:
+                    mask_3d[:, :, s] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[:, :, s] = np.ones_like(segment)
-            # (2)save corrections and masks
-            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                gtv = "gtvt"
-            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                gtv = "gtvn"
-            self.__save_corrections_and_masks(gtv)
+                    mask_3d[:, :, s] = np.ones_like(new_drawing)
 
         # update values
         self.paint_pos = None
-        self.__update_gtvt_annotated_status()
-        self.__combine_pred_annotation_correction()
+        self.__update_gtvt_delineated_status()
+        self.__combine_pred_delineation_correction()
 
         # update UI
         self.__clear_all_drawing_layers(img_frame)
         self.refresh_imgs()
 
-    def __save_corrections_and_masks(self, gtv: str):
-        if gtv not in ["gtvt", "gtvn"]:
-            Debug.error_exit("Value of 'gtv' must be one of 'gtvt' or 'gtvn'!")
+    def __save_corrections_and_masks(self):
+        for gtv in ["gtvt", "gtvn"]:
 
-        if self.img_3d["{}.correction".format(gtv)] is None:
-            return
+            if self.img_3d["{}.correction".format(gtv)] is None:
+                continue
 
-        cur_patient_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            self._baseline_id,
-            self._idl_id[gtv],
-            "patients",
-            "patient={}".format(self._cur_patient),
-        )
-        cur_round_dir = os.path.join(
-            cur_patient_dir,
-            "round=01",
-        )
-
-        for i in ["correction", "correction.mask"]:
-            img = self.img_3d["{}.{}".format(gtv, i)].copy()
-            # flip left/right for 1mm data
-            if self._nii_spacing[2] == 1.0:
-                img = np.flip(img, axis=2)
-            # turn upside down
-            img = np.flip(img, axis=0)
-            # save
-            Nii.save(
-                img=img,
-                save_path=os.path.join(
-                    cur_round_dir,
-                    "{}_{}.nii.gz".format(
-                        gtv,
-                        # "correction.mask" -> "correction_mask"
-                        i.replace(".", "_"),
-                    ),
-                ),
-                spacing=self._nii_spacing,
+            cur_patient_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_id[gtv],
+                "patients",
+                "patient={}".format(self._cur_patient),
             )
+            cur_round_dir = os.path.join(
+                cur_patient_dir,
+                "round=01",
+            )
+
+            for i in ["correction", "correction.mask"]:
+                img = self.img_3d["{}.{}".format(gtv, i)].copy()
+                # flip left/right for 1mm data
+                if self._nii_spacing[2] == 1.0:
+                    img = np.flip(img, axis=2)
+                # turn upside down
+                img = np.flip(img, axis=0)
+                # save
+                Nii.save(
+                    img=img,
+                    save_path=os.path.join(
+                        cur_round_dir,
+                        "{}_{}.nii.gz".format(
+                            gtv,
+                            # "correction.mask" -> "correction_mask"
+                            i.replace(".", "_"),
+                        ),
+                    ),
+                    spacing=self._nii_spacing,
+                )
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_pen_clicked(self):
@@ -552,7 +542,7 @@ class IDLWindow(ReplayWindow):
         # DO NOT clear self.gtvn_clicks_pos_3d
 
         # (4) clear 3d imgs and delete nii files
-        img_name_list = ["gtvt.click", "gtvn.clicks", "gtvt.annotation"]
+        img_name_list = ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
                 "{}.pred".format(i),
@@ -642,7 +632,7 @@ class IDLWindow(ReplayWindow):
         # DO NOT clear self.gtvn_clicks_pos_3d
 
         # (3) clear 3d imgs and delete nii files
-        img_name_list = ["gtvt.annotation", "gtvn.clicks"]
+        img_name_list = ["gtvt.delineation", "gtvn.clicks"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
                 "{}.pred".format(i),
@@ -651,7 +641,7 @@ class IDLWindow(ReplayWindow):
                 "{}.pred.final".format(i),
             ]
         self.__clear_3d_imgs_and_delete_nii(img_name_list)
-        self.img_3d["gtvt.annotation"] = np.zeros_like(self.img_3d[Modal.CT])
+        self.img_3d["gtvt.delineation"] = np.zeros_like(self.img_3d[Modal.CT])
 
         # (4) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
@@ -662,10 +652,10 @@ class IDLWindow(ReplayWindow):
         self.__enable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
 
-    def __confirm_gtvt_annotation(self):
+    def __confirm_gtvt_delineation(self):
         # (1) check if gtvt are delineated in 3 planes
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            if self.__gtvt_annotated_status[plane] is False:
+            if self.__gtvt_delineated_state[plane] is False:
                 QMessageBox.information(
                     self,
                     "Information",
@@ -681,7 +671,7 @@ class IDLWindow(ReplayWindow):
                     self._slider["pen.size"].show()
                 return
 
-        # (2) save gtvt annotation
+        # (2) save gtvt delineation
         cur_round_dir = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
@@ -691,15 +681,15 @@ class IDLWindow(ReplayWindow):
             "round=01",
         )
         Dir.create(cur_round_dir)
-        gtvt_annotation_to_save = self.img_3d["gtvt.annotation"].copy()
+        gtvt_delineation_to_save = self.img_3d["gtvt.delineation"].copy()
         # flip left/right for 1mm data
         if self._nii_spacing[2] == 1.0:
-            gtvt_annotation_to_save = np.flip(gtvt_annotation_to_save, axis=2)
+            gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
         # turn upside down
-        gtvt_annotation_to_save = np.flip(gtvt_annotation_to_save, axis=0)
+        gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=0)
         Nii.save(
-            img=gtvt_annotation_to_save,
-            save_path=os.path.join(cur_round_dir, "gtvt_annotation.nii.gz"),
+            img=gtvt_delineation_to_save,
+            save_path=os.path.join(cur_round_dir, "gtvt_delineation.nii.gz"),
             spacing=self._nii_spacing,
         )
 
@@ -734,7 +724,7 @@ class IDLWindow(ReplayWindow):
             "gtvn.pred.final",
         ]
         self.__clear_3d_imgs_and_delete_nii(img_name_list)
-        self.__combine_pred_annotation_correction()
+        self.__combine_pred_delineation_correction()
 
         # (5) refresh todolist, imgs and crosses
         self.__refresh_todo_list()
@@ -761,7 +751,7 @@ class IDLWindow(ReplayWindow):
             for i in ["{}.correction".format(gtv), "{}.correction.mask".format(gtv)]:
                 if self.img_3d[i] is None:
                     self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
-        self.__combine_pred_annotation_correction()
+        self.__combine_pred_delineation_correction()
 
         # (4) refresh todolist and imgs
         self.__refresh_todo_list()
@@ -792,7 +782,7 @@ class IDLWindow(ReplayWindow):
         self.update_cur_idl_step(IDLStep.APPROVED)
 
         # (3) update imgs
-        self.__combine_pred_annotation_correction()
+        self.__combine_pred_delineation_correction()
 
         # (4) refresh todolist and imgs
         self.__refresh_todo_list()
@@ -986,9 +976,9 @@ class IDLWindow(ReplayWindow):
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvt_data()
-        self.__combine_pred_annotation_correction()
+        self.__combine_pred_delineation_correction()
         # init correction and mask
-        # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
+        # (they are empty anyway, its efficient to init them after __combine_pred_delineation_correction)
         for i in ["gtvt.correction", "gtvt.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
@@ -1097,9 +1087,9 @@ class IDLWindow(ReplayWindow):
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvn_data()
-        self.__combine_pred_annotation_correction()
+        self.__combine_pred_delineation_correction()
         # init correction and mask
-        # (they are empty anyway, its efficient to init them after __combine_pred_annotation_correction)
+        # (they are empty anyway, its efficient to init them after __combine_pred_delineation_correction)
         for i in ["gtvn.correction", "gtvn.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
@@ -1130,17 +1120,18 @@ class IDLWindow(ReplayWindow):
         if idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.__confirm_gtvt_center()
         elif idl_step == IDLStep.DRAW_GTVT:
-            self.__confirm_gtvt_annotation()
+            self.__confirm_gtvt_delineation()
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.__confirm_gtvn_center()
         elif idl_step == IDLStep.CORRECT_BOTH:
+            self.__save_corrections_and_masks()
             self.__goto_idl_step_approved()
 
-    # check annotation in 3 different planes
-    def __update_gtvt_annotated_status(self) -> Dict:
-        if self.img_3d["gtvt.annotation"] is None:
+    # check delineation in 3 different planes
+    def __update_gtvt_delineated_status(self) -> Dict:
+        if self.img_3d["gtvt.delineation"] is None:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                self.__gtvt_annotated_status[plane] = False
+                self.__gtvt_delineated_state[plane] = False
                 self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
 
         else:
@@ -1148,57 +1139,32 @@ class IDLWindow(ReplayWindow):
             t, c, s = int(t), int(c), int(s)
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if plane == Plane.TRANSVERSE:
-                    cur_plane_annotation = self.img_3d["gtvt.annotation"][
+                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
                         t, :, :
                     ].copy()
-                    cur_plane_annotation[c, :] = 0
-                    cur_plane_annotation[:, s] = 0
+                    cur_plane_delineation[c, :] = 0
+                    cur_plane_delineation[:, s] = 0
 
                 elif plane == Plane.CORONAL:
-                    cur_plane_annotation = self.img_3d["gtvt.annotation"][
+                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
                         :, c, :
                     ].copy()
-                    cur_plane_annotation[t, :] = 0
-                    cur_plane_annotation[:, s] = 0
+                    cur_plane_delineation[t, :] = 0
+                    cur_plane_delineation[:, s] = 0
 
                 elif plane == Plane.SAGITTAL:
-                    cur_plane_annotation = self.img_3d["gtvt.annotation"][
+                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
                         :, :, s
                     ].copy()
-                    cur_plane_annotation[t, :] = 0
-                    cur_plane_annotation[:, c] = 0
+                    cur_plane_delineation[t, :] = 0
+                    cur_plane_delineation[:, c] = 0
 
-                if cur_plane_annotation.max() == 0:
-                    self.__gtvt_annotated_status[plane] = False
+                if cur_plane_delineation.max() == 0:
+                    self.__gtvt_delineated_state[plane] = False
                     self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
                 else:
-                    self.__gtvt_annotated_status[plane] = True
+                    self.__gtvt_delineated_state[plane] = True
                     self._text_label["draw.gtvt.{}".format(plane)].set_status_done()
-
-    # def refresh_imgs(self, frame_name=None):
-    #     # no patient loaded (no img_3d loaded)
-    #     if self.img_3d[Modal.CT] is None:
-    #         if self.display_mode() == DisplayMode.PLANE_FIXED:
-    #             frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-    #         else:
-    #             frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-    #         for frame_name in frame_name_list:
-    #             w = self.img_frame[frame_name].width()
-    #             h = self.img_frame[frame_name].height()
-    #             qimg = QtGui.QImage(w, h, QtGui.QImage.Format_RGB888)
-    #             black = QtGui.QColor(0, 0, 0)
-    #             qimg.fill(black)
-
-    #             # add msg on qimg: "please select a patient"
-    #             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-    #                 self._add_msg_on_qimg(qimg)
-
-    #             self.img_frame[frame_name].set_background(qimg)
-    #             self.img_frame[frame_name].update()
-
-    #     # multi-modal imgs loaded
-    #     else:
-    #         super().refresh_imgs(frame_name=frame_name)
 
     def __change_color(self, pixmap: QtGui.QPixmap, old_color, new_color):
         image = pixmap.toImage()
@@ -1273,14 +1239,16 @@ class IDLWindow(ReplayWindow):
                     new_color=self.color["{}.pred".format(gtv)],
                 )
 
-    def _init_color(self):
-        super()._init_color()
-        # self.color["gtvt.annotation"] = self.color["yellow"]
-        self.color["gtvt.correction"] = self.color["yellow"]
-        self.color["gtvn.correction"] = self.color["cyan"]
+    def _init_color(self, ui_setting: Dict):
+        super()._init_color(ui_setting)
         self.color["eraser"] = self.color["black"]  # transparent
+        self.color["gtvt.correction"] = self.color["gtvt.pred"]
+        self.color["gtvn.correction"] = self.color["gtvn.pred"]
         self.color["gtvt.pred.final"] = self.color["gtvt.pred"]
         self.color["gtvn.pred.final"] = self.color["gtvn.pred"]
+        self.color["gtvt.click"] = self.color[ui_setting["gtvt.click.idl"]]
+        self.color["gtvn.clicks"] = self.color[ui_setting["gtvn.clicks.idl"]]
+        self.color["gtvt.delineation"] = self.color[ui_setting["gtvt.delineation.idl"]]
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
@@ -1687,9 +1655,9 @@ class IDLWindow(ReplayWindow):
         # drawing
         self.drawing_mode = DrawingMode.GTVT_PEN
         self.paint_pos = None  # Store the last painted point
-        self.__gtvt_annotated_status = Dict()
+        self.__gtvt_delineated_state = Dict()
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self.__gtvt_annotated_status[plane] = False
+            self.__gtvt_delineated_state[plane] = False
 
     def __save_idl_step_of_all_patients(self):
         for i in ["gtvt", "gtvn"]:
@@ -1767,7 +1735,7 @@ class IDLWindow(ReplayWindow):
         self._fill_combox_patient()
         self.combox["patient"].setCurrentIndex(-1)  # show nothing
 
-    def _add_msg_on_qimg(self, qimg: QtGui.QImage):
+    def _add_instruction_on_top_left(self, qimg: QtGui.QImage):
         pos_x = 10
         pos_y = 25
 
@@ -1807,13 +1775,13 @@ class IDLWindow(ReplayWindow):
             color=self.color["green"],
         )
 
-        # add info of annotated status for drawing gtvt
+        # show delineated state on qimage
         if idl_step == IDLStep.DRAW_GTVT:
             pos_y += 5
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 pos_y += 20
                 text = plane.capitalize()
-                if self.__gtvt_annotated_status[plane] is True:
+                if self.__gtvt_delineated_state[plane] is True:
                     text += " ✓"
                     color = self.color["green"]
                 else:
@@ -1827,12 +1795,11 @@ class IDLWindow(ReplayWindow):
                 )
 
     # rewrite this function (do nothing)
-    def _add_score_on_qimg(self, qimg: QtGui.QImage):
+    def _add_score_on_top_left(self, qimg: QtGui.QImage):
         pass
 
-    def _add_contour_description_on_qimg(self, qimg: QtGui.QImage):
-        pos_x = 10
-        pos_y = [qimg.height() - 57, qimg.height() - 35, qimg.height() - 13]
+    def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+        pos_x, pos_y = self._get_contour_description_pos(qimg)
 
         if self.img_3d["gtvt.pred"] is not None:
             self._qimg_draw_text(
@@ -1845,7 +1812,7 @@ class IDLWindow(ReplayWindow):
                 qimg=qimg,
                 text="User Input",
                 pos=(pos_x, pos_y[2]),
-                color=self.color["gtvt.annotation"],
+                color=self.color["gtvt.delineation"],
             )
 
         if self.img_3d["gtvn.pred"] is not None:
@@ -1962,10 +1929,8 @@ class IDLWindow(ReplayWindow):
             ]
 
     def update_cur_idl_step(self, new_idl_step: str):
-        # update status
         cur_patient = "patient={}".format(self._cur_patient)
         self.__idl_step_of_all_patients[cur_patient] = new_idl_step
-        # save json
         self.__save_idl_step_of_all_patients()
 
     def __refresh_todo_list(self):
@@ -1996,7 +1961,7 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVN,
             ]
             # sub steps of draw.gtvt
-            self.__update_gtvt_annotated_status()
+            self.__update_gtvt_delineated_status()
 
         elif idl_step == IDLStep.CLICK_GTVN_CENTER:
             done_step_list = [
@@ -2116,7 +2081,7 @@ class IDLWindow(ReplayWindow):
 
         nii_name_list = ["pred", "correction", "correction.mask"]
         if gtv == "gtvt":
-            nii_name_list += ["click", "annotation"]
+            nii_name_list += ["click", "delineation"]
         elif gtv == "gtvn":
             nii_name_list.append("clicks")
 
@@ -2136,7 +2101,7 @@ class IDLWindow(ReplayWindow):
             else:
                 self.img_3d["{}.{}".format(gtv, i)] = None
 
-    def __combine_pred_annotation_correction(self):
+    def __combine_pred_delineation_correction(self):
         if self.img_3d[Modal.CT] is None:
             return
 
@@ -2152,14 +2117,14 @@ class IDLWindow(ReplayWindow):
                     "{}.pred".format(i)
                 ].copy()
 
-            # # combine gtvt.pred and gtvt.annotation
+            # # combine gtvt.pred and gtvt.delineation
             # if i == "gtvt":
             #     t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
             #     self.img_3d["gtvt.pred.final"][t, :, :] = 0
             #     self.img_3d["gtvt.pred.final"][:, c, :] = 0
             #     self.img_3d["gtvt.pred.final"][:, :, s] = 0
             #     self.img_3d["gtvt.pred.final"] = np.maximum(
-            #         self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.annotation"]
+            #         self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.delineation"]
             #     )
 
             # combine pred and correction

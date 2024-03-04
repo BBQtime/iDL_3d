@@ -25,5 +25,5 @@
     "weight.distance.step": 3,
     "weight.fp.fn": 4.0,
     "weight.prev.round.decay": 0.5,
-    "weight.slice": 1.0
+    "weight.selected.slice": 1.0
 }

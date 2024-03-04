@@ -448,6 +448,8 @@ class ImgFrame(QLabel):
             slice_delta = event.angleDelta().y() // 120
             if self.plane == Plane.CORONAL:
                 slice_delta = -slice_delta
+            if self.plane == Plane.TRANSVERSE:
+                slice_delta *= 3
 
             self.window().cur_slice_id[self.plane] -= slice_delta
             # limite slice_id in range (0, slices_count)

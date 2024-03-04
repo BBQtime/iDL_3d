@@ -136,11 +136,11 @@ class TrainingIDLGTVt(TrainingCore):
         hyper["weight.background"] = Value.limit_range(
             hyper["weight.background"], (0.0, 1.0)
         )
-        hyper["weight.slice"] = Value.limit_range(
-            hyper["weight.slice"], (hyper["weight.background"], None)
+        hyper["weight.selected.slice"] = Value.limit_range(
+            hyper["weight.selected.slice"], (hyper["weight.background"], None)
         )
         hyper["weight.fp.fn"] = Value.limit_range(
-            hyper["weight.fp.fn"], (hyper["weight.slice"], None)
+            hyper["weight.fp.fn"], (hyper["weight.selected.slice"], None)
         )
         hyper["weight.distance.step"] = Value.limit_range(
             hyper["weight.distance.step"], (1, None)
@@ -248,7 +248,7 @@ class TrainingIDLGTVt(TrainingCore):
                 total_slices = label.shape[2]
 
             for slice_num in range(total_slices):
-                # skip slice that already been annotated
+                # skip slice that already been selected in earlier rounds
                 if slice_num in ignored_slices:
                     continue
                 else:
@@ -335,11 +335,11 @@ class TrainingIDLGTVt(TrainingCore):
         selected_slices = Json.load(os.path.join(patient_dir, "selected_slices.json"))
 
         # selected slices mask
-        slice_mask = Dict()
+        selected_slice_mask = Dict()
 
         # loop through each plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
+            selected_slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
 
             # loop through each round
             for cur_round in selected_slices[plane]:
@@ -352,24 +352,27 @@ class TrainingIDLGTVt(TrainingCore):
                     # change slice id from str into int
                     slice_num = int(slice_num)
                     if plane == Plane.TRANSVERSE:
-                        slice_mask[plane][slice_num, :, :] = np.ones_like(
-                            slice_mask[plane][0, :, :]
+                        selected_slice_mask[plane][slice_num, :, :] = np.ones_like(
+                            selected_slice_mask[plane][0, :, :]
                         )
                     elif plane == Plane.CORONAL:
-                        slice_mask[plane][:, slice_num, :] = np.ones_like(
-                            slice_mask[plane][:, 0, :]
+                        selected_slice_mask[plane][:, slice_num, :] = np.ones_like(
+                            selected_slice_mask[plane][:, 0, :]
                         )
                     elif plane == Plane.SAGITTAL:
-                        slice_mask[plane][:, :, slice_num] = np.ones_like(
-                            slice_mask[plane][:, :, 0]
+                        selected_slice_mask[plane][:, :, slice_num] = np.ones_like(
+                            selected_slice_mask[plane][:, :, 0]
                         )
 
-        # combine slice_mask on 3 planes
-        slice_mask = np.maximum(
-            np.maximum(slice_mask[Plane.TRANSVERSE], slice_mask[Plane.CORONAL]),
-            slice_mask[Plane.SAGITTAL],
+        # combine selected_slice_mask on 3 anatomical planes
+        selected_slice_mask = np.maximum(
+            np.maximum(
+                selected_slice_mask[Plane.TRANSVERSE],
+                selected_slice_mask[Plane.CORONAL],
+            ),
+            selected_slice_mask[Plane.SAGITTAL],
         )
-        label *= slice_mask
+        label *= selected_slice_mask
         return label
 
     def __inference_cur_round(
@@ -385,7 +388,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         patient = Path(round_dir).parent.name
 
-        # get annotation for post processing
+        # get "selected sliced masked label" for post processing
         idl_gtvt_masked_label = self.__get_masked_label(
             round_dir=round_dir, dataset_ver=dataset_ver
         )
@@ -451,11 +454,11 @@ class TrainingIDLGTVt(TrainingCore):
         else:
             pred_dir = os.path.join(patient_dir, "round={:02d}".format(cur_round - 1))
 
-        # annotation dir
+        # delineation dir
         if hyper["select.scenario"] == SelectScenario.USER_CLICK:
-            annotation_dir = os.path.join(patient_dir, "round=01")
+            delineation_dir = os.path.join(patient_dir, "round=01")
         else:
-            annotation_dir = None
+            delineation_dir = None
 
         # record current round time spent
         time_spent = datetime.now()
@@ -473,13 +476,13 @@ class TrainingIDLGTVt(TrainingCore):
         weight["weight.distance.step"] = hyper["weight.distance.step"]
         weight["weight.fp.fn"] = hyper["weight.fp.fn"]
         weight["weight.prev.round.decay"] = hyper["weight.prev.round.decay"]
-        weight["weight.slice"] = hyper["weight.slice"]
+        weight["weight.selected.slice"] = hyper["weight.selected.slice"]
 
         dataset_idl_gtvt = DataSetIDLGTVt(
             patient=patient,
             selected_slices=selected_slices,
             pred_dir=pred_dir,
-            annotation_dir=annotation_dir,  # annotation_dir=None for simulation
+            delineation_dir=delineation_dir,  # delineation_dir=None for simulation
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
             augment=augment,
@@ -671,7 +674,7 @@ class TrainingIDLGTVt(TrainingCore):
                 hyper=hyper,
                 patient_dir=patient_dir,
             )
-            # no slice needs to be annotated in cur round
+            # no slice needs to be selected in cur round
             if (
                 len(new_round_slices[Plane.TRANSVERSE]) == 0
                 and len(new_round_slices[Plane.CORONAL]) == 0
