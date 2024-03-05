@@ -1246,9 +1246,10 @@ class IDLWindow(ReplayWindow):
         self.color["gtvn.correction"] = self.color["gtvn.pred"]
         self.color["gtvt.pred.final"] = self.color["gtvt.pred"]
         self.color["gtvn.pred.final"] = self.color["gtvn.pred"]
-        self.color["gtvt.click"] = self.color[ui_setting["gtvt.click.idl"]]
-        self.color["gtvn.clicks"] = self.color[ui_setting["gtvn.clicks.idl"]]
-        self.color["gtvt.delineation"] = self.color[ui_setting["gtvt.delineation.idl"]]
+
+        # colors for idl mode only
+        for i in ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]:
+            self.color[i] = self.color[ui_setting["color.contour"]["{}.idl".format(i)]]
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
@@ -1436,7 +1437,13 @@ class IDLWindow(ReplayWindow):
         for i in ["correct.gtvt", "correct.gtvn"]:
             self._radio_btn[i].hide()
 
-    def _init_widgets_annotation(self):
+    def _init_widgets_annotation(self, ui_setting: Dict):
+        # load pen/eraser size
+        self.__pen_size_min = ui_setting["pen.size.min"]
+        self.__pen_size_step = ui_setting["pen.size.step"]
+        self.__eraser_size_min = ui_setting["eraser.size.min"]
+        self.__eraser_size_step = ui_setting["eraser.size.step"]
+
         # text label
         for i in ["gtvt.progress", "gtvn.progress", "pen.size", "eraser.size"]:
             self._text_label[i] = QtWidgets.QLabel()
@@ -1578,15 +1585,14 @@ class IDLWindow(ReplayWindow):
         self._add_border(container)
         self._collap["annotation"].addWidget(container)
 
-    def _init_widgets(self):
-        super()._init_widgets()
+    def _init_widgets(self, ui_setting: Dict):
+        super()._init_widgets(ui_setting)
 
         for i in ["baseline", "idl.gtvt", "idl.gtvn"]:
             self._collap[i].collapse()
             self._collap[i].hide()
 
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
-            # self._collap[i].setEnabled(False)
             self._collap[i].collapse()
 
     def _clear_img_3d(self):
@@ -1713,16 +1719,18 @@ class IDLWindow(ReplayWindow):
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def get_pen_size(self):
-        min = 5
-        step = 3
-        pen_size = self._slider["pen.size"].value() * step + min
+        pen_size = (
+            self._slider["pen.size"].value() * self.__pen_size_step
+            + self.__pen_size_min
+        )
         pen_size *= self.get_zoomin_factor()
         return pen_size
 
     def get_eraser_size(self):
-        min = 12
-        step = 8
-        eraser_size = self._slider["eraser.size"].value() * step + min
+        eraser_size = (
+            self._slider["eraser.size"].value() * self.__eraser_size_step
+            + self.__eraser_size_min
+        )
         eraser_size *= self.get_zoomin_factor()
         return eraser_size
 
@@ -1805,21 +1813,21 @@ class IDLWindow(ReplayWindow):
             self._qimg_draw_text(
                 qimg=qimg,
                 text="GTVt - Pred",
-                pos=(pos_x, pos_y[1]),
+                pos=(pos_x[0], pos_y[1]),
                 color=self.color["gtvt.pred"],
             )
             self._qimg_draw_text(
                 qimg=qimg,
                 text="User Input",
-                pos=(pos_x, pos_y[2]),
+                pos=(pos_x[0], pos_y[2]),
                 color=self.color["gtvt.delineation"],
             )
 
         if self.img_3d["gtvn.pred"] is not None:
             if self.img_3d["gtvt.pred"] is None:
-                pos = (pos_x, pos_y[2])
+                pos = (pos_x[0], pos_y[2])
             else:
-                pos = (pos_x, pos_y[0])
+                pos = (pos_x[0], pos_y[0])
             self._qimg_draw_text(
                 qimg=qimg,
                 text="GTVn - Pred",

@@ -372,7 +372,7 @@ class TrainingCore:
         segment_metrics: Dict = None,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
         idl_gtvn_clicks: ndarray = None,  # only for idl.gtvn
-        idl_gtvt_masked_label: ndarray = None,  # only for idl.gtvt post processing
+        idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
     ) -> Dict:
         # load dataset
         dataset = self._inference_single_patient_load_dataset(
@@ -436,7 +436,8 @@ class TrainingCore:
 
         # post processing (after pad and crop, before calculate scores)
         self._inference_single_patient_gtvt_post_process(
-            outputs=outputs, idl_gtvt_masked_label=idl_gtvt_masked_label
+            outputs=outputs,
+            idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
         self._inference_single_patient_gtvn_post_process(outputs)
 
@@ -483,7 +484,7 @@ class TrainingCore:
         pass
 
     def _inference_single_patient_gtvt_post_process(
-        self, outputs: Dict, idl_gtvt_masked_label: ndarray
+        self, outputs: Dict, idl_gtvt_label_masked_by_selected_slices: ndarray
     ):
         pass
 

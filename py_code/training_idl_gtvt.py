@@ -318,7 +318,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         return new_round_slices
 
-    def __get_masked_label(self, round_dir: str, dataset_ver: str):
+    def __get_label_masked_by_selected_slices(self, round_dir: str, dataset_ver: str):
         cur_round = Path(round_dir).name
         patient_dir = Path(round_dir).parent
         patient = patient_dir.name
@@ -335,11 +335,11 @@ class TrainingIDLGTVt(TrainingCore):
         selected_slices = Json.load(os.path.join(patient_dir, "selected_slices.json"))
 
         # selected slices mask
-        selected_slice_mask = Dict()
+        selected_slices_mask = Dict()
 
         # loop through each plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            selected_slice_mask[plane] = np.zeros(label.shape, dtype=np.float32)
+            selected_slices_mask[plane] = np.zeros(label.shape, dtype=np.float32)
 
             # loop through each round
             for cur_round in selected_slices[plane]:
@@ -352,28 +352,28 @@ class TrainingIDLGTVt(TrainingCore):
                     # change slice id from str into int
                     slice_num = int(slice_num)
                     if plane == Plane.TRANSVERSE:
-                        selected_slice_mask[plane][slice_num, :, :] = np.ones_like(
-                            selected_slice_mask[plane][0, :, :]
+                        selected_slices_mask[plane][slice_num, :, :] = np.ones_like(
+                            selected_slices_mask[plane][0, :, :]
                         )
                     elif plane == Plane.CORONAL:
-                        selected_slice_mask[plane][:, slice_num, :] = np.ones_like(
-                            selected_slice_mask[plane][:, 0, :]
+                        selected_slices_mask[plane][:, slice_num, :] = np.ones_like(
+                            selected_slices_mask[plane][:, 0, :]
                         )
                     elif plane == Plane.SAGITTAL:
-                        selected_slice_mask[plane][:, :, slice_num] = np.ones_like(
-                            selected_slice_mask[plane][:, :, 0]
+                        selected_slices_mask[plane][:, :, slice_num] = np.ones_like(
+                            selected_slices_mask[plane][:, :, 0]
                         )
 
-        # combine selected_slice_mask on 3 anatomical planes
-        selected_slice_mask = np.maximum(
+        # combine selected_slices_mask on 3 anatomical planes
+        selected_slices_mask = np.maximum(
             np.maximum(
-                selected_slice_mask[Plane.TRANSVERSE],
-                selected_slice_mask[Plane.CORONAL],
+                selected_slices_mask[Plane.TRANSVERSE],
+                selected_slices_mask[Plane.CORONAL],
             ),
-            selected_slice_mask[Plane.SAGITTAL],
+            selected_slices_mask[Plane.SAGITTAL],
         )
-        label *= selected_slice_mask
-        return label
+
+        return label * selected_slices_mask
 
     def __inference_cur_round(
         self,
@@ -389,8 +389,10 @@ class TrainingIDLGTVt(TrainingCore):
         patient = Path(round_dir).parent.name
 
         # get "selected sliced masked label" for post processing
-        idl_gtvt_masked_label = self.__get_masked_label(
-            round_dir=round_dir, dataset_ver=dataset_ver
+        idl_gtvt_label_masked_by_selected_slices = (
+            self.__get_label_masked_by_selected_slices(
+                round_dir=round_dir, dataset_ver=dataset_ver
+            )
         )
 
         # result structure: gtvt: {pred, dsc, msd, hd95}
@@ -401,7 +403,7 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_part=dataset_part,
             no_pt=no_pt,
             segment_metrics=segment_metrics,
-            idl_gtvt_masked_label=idl_gtvt_masked_label,
+            idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
 
         # save score of cur patient
@@ -1253,13 +1255,13 @@ class TrainingIDLGTVt(TrainingCore):
         outputs["gtvt"]["pred"] = preds[1]
 
     def _inference_single_patient_gtvt_post_process(
-        self, outputs: Dict, idl_gtvt_masked_label: ndarray
+        self, outputs: Dict, idl_gtvt_label_masked_by_selected_slices: ndarray
     ):
-        if idl_gtvt_masked_label is not None:
+        if idl_gtvt_label_masked_by_selected_slices is not None:
             cc_list = Img.connected_components(outputs["gtvt"]["pred"])
             outputs["gtvt"]["pred"] = np.zeros_like(outputs["gtvt"]["pred"])
             for cur_cc in cc_list:
-                if (cur_cc * idl_gtvt_masked_label).sum() > 0:
+                if (cur_cc * idl_gtvt_label_masked_by_selected_slices).sum() > 0:
                     outputs["gtvt"]["pred"] = np.maximum(
                         outputs["gtvt"]["pred"], cur_cc
                     )

@@ -69,16 +69,16 @@ class DataSetIDLGTVt(DatasetCore):
         self.__origin[Modal.CT] = Img.ct_windowing(self.__origin[Modal.CT])
 
         # load weight map
-        self.__origin["weight.map"], selected_slice_mask = self.__load_weight_map(
+        self.__origin["weight.map"], selected_slices_mask = self.__load_weight_map(
             selected_slices, weight
         )
 
         # combine pred(un-selected slices) and label(selected slices)
-        self.__origin["label"] *= selected_slice_mask
+        self.__origin["label"] *= selected_slices_mask
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # selected slice mask
-        selected_slice_mask = Dict()
+        selected_slices_mask = Dict()
         max_round = max(
             len(selected_slices[Plane.TRANSVERSE]),
             len(selected_slices[Plane.CORONAL]),
@@ -87,7 +87,7 @@ class DataSetIDLGTVt(DatasetCore):
 
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             # selected slice mask
-            selected_slice_mask[plane] = np.zeros(
+            selected_slices_mask[plane] = np.zeros(
                 self.__origin[Modal.CT].shape, dtype=np.float32
             )
 
@@ -104,40 +104,40 @@ class DataSetIDLGTVt(DatasetCore):
                 # current step
                 for slice_num in selected_slices[plane][round_num]:
                     if plane == Plane.TRANSVERSE:
-                        selected_slice_mask[plane][slice_num, :, :] = (
-                            np.ones_like(selected_slice_mask[plane][0, :, :])
+                        selected_slices_mask[plane][slice_num, :, :] = (
+                            np.ones_like(selected_slices_mask[plane][0, :, :])
                             * selected_slice_weight
                         )
                     elif plane == Plane.CORONAL:
-                        selected_slice_mask[plane][:, slice_num, :] = (
-                            np.ones_like(selected_slice_mask[plane][:, 0, :])
+                        selected_slices_mask[plane][:, slice_num, :] = (
+                            np.ones_like(selected_slices_mask[plane][:, 0, :])
                             * selected_slice_weight
                         )
                     elif plane == Plane.SAGITTAL:
-                        selected_slice_mask[plane][:, :, slice_num] = (
-                            np.ones_like(selected_slice_mask[plane][:, :, 0])
+                        selected_slices_mask[plane][:, :, slice_num] = (
+                            np.ones_like(selected_slices_mask[plane][:, :, 0])
                             * selected_slice_weight
                         )
 
-        # combine selected_slice_mask on 3 anatomical planes
-        selected_slice_mask = np.maximum(
+        # combine selected_slices_mask on 3 anatomical planes
+        selected_slices_mask = np.maximum(
             np.maximum(
-                selected_slice_mask[Plane.TRANSVERSE],
-                selected_slice_mask[Plane.CORONAL],
+                selected_slices_mask[Plane.TRANSVERSE],
+                selected_slices_mask[Plane.CORONAL],
             ),
-            selected_slice_mask[Plane.SAGITTAL],
+            selected_slices_mask[Plane.SAGITTAL],
         )
 
         # get fp&fn (keep weight=1 before creating distance map)
         fp = self.__origin["pred"] * (1 - self.__origin["label"])
         fn = (1 - self.__origin["pred"]) * self.__origin["label"]
         fp_plus_fn = fp + fn
-        fp_plus_fn = fp_plus_fn * np.where(selected_slice_mask > 0, 1, 0)
+        fp_plus_fn = fp_plus_fn * np.where(selected_slices_mask > 0, 1, 0)
         fp_plus_fn = fp_plus_fn.astype(np.float32)
 
         # pred union label
         pred_union_label = np.maximum(self.__origin["pred"], self.__origin["label"])
-        pred_union_label = pred_union_label * np.where(selected_slice_mask > 0, 1, 0)
+        pred_union_label = pred_union_label * np.where(selected_slices_mask > 0, 1, 0)
         pred_union_label = pred_union_label.astype(np.float32)
 
         # distance map
@@ -162,19 +162,19 @@ class DataSetIDLGTVt(DatasetCore):
         # weighted fp&fn (after weight map)
         fp_plus_fn = (
             fp_plus_fn
-            * selected_slice_mask
+            * selected_slices_mask
             * (weight["weight.fp.fn"] / weight["weight.selected.slice"])
         )
 
         # final_weight_map
         weight_map = np.maximum(
-            np.maximum(distance_map, selected_slice_mask), fp_plus_fn
+            np.maximum(distance_map, selected_slices_mask), fp_plus_fn
         )
 
-        # return selected_slice_mask to combine pred(un-selected slices) and label(selected slices)
-        selected_slice_mask = np.where(selected_slice_mask > 0, 1, 0)
+        # return selected_slices_mask to combine pred(un-selected slices) and label(selected slices)
+        selected_slices_mask = np.where(selected_slices_mask > 0, 1, 0)
 
-        return weight_map, selected_slice_mask
+        return weight_map, selected_slices_mask
 
     # must be overrided
     def __len__(self):

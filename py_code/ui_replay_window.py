@@ -25,7 +25,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         ui_setting = Json.load(os.path.join(g.PROJ_DIR, "settings_ui.json"))
         self._init_data()
         self._init_color(ui_setting)  # before init_widgets()
-        self._init_widgets()  # after _init_data()
+        self._init_widgets(ui_setting)  # after _init_data()
         # self.__init_zoomin()
         self._load_baseline_data()  # load first baseline result
 
@@ -126,7 +126,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             "yellow",
             "orange",
         ]:
-            self.color[i] = List(ui_setting[i])
+            self.color[i] = List(ui_setting["color.def"][i])
             self.color[i] = tuple(int(k) for k in self.color[i])
 
         for i in [
@@ -137,13 +137,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
             "gtvt.correction",
             "gtvn.correction",
         ]:
-            self.color[i] = self.color[ui_setting[i]]
+            self.color[i] = self.color[ui_setting["color.contour"][i]]
 
-        self.color["gtvt.click"] = self.color[ui_setting["gtvt.click.replay"]]
-        self.color["gtvn.clicks"] = self.color[ui_setting["gtvn.clicks.replay"]]
-        self.color["gtvt.delineation"] = self.color[
-            ui_setting["gtvt.delineation.replay"]
-        ]
+        # colors for replay mode only
+        for i in ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]:
+            self.color[i] = self.color[
+                ui_setting["color.contour"]["{}.replay".format(i)]
+            ]
 
     def setupUi(self, Core):
         Core.setObjectName("Core")
@@ -597,14 +597,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return
 
     # virtual function (for ui_idl)
-    def _init_widgets_annotation(self):
+    def _init_widgets_annotation(self, ui_setting: Dict):
         return
 
     # virtual function (for ui_idl)
     def _init_widgets_cursor(self):
         return
 
-    def _init_widgets(self):
+    def _init_widgets(self, ui_setting: Dict):
         self._collap = Dict()
         self._radio_btn = Dict()
         self._radio_group = Dict()
@@ -616,7 +616,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._init_widgets_todo_list()
         self._init_widgets_combox()
         self._init_widgets_img_frames()
-        self._init_widgets_annotation()
+        self._init_widgets_annotation(ui_setting)
         self._init_widgets_display_mode()
         self._init_widgets_color_enhance()
         self._init_widgets_zoom()
@@ -1640,7 +1640,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.img_frame[frame_name].update()
 
     def _get_contour_description_pos(self, qimg: QtGui.QImage):
+        # pos x
         pos_x = [10, 65, 110]
+        # pos y
         y_buttom = qimg.height() - 13
         step = 22 if g.is_linux() else 25
         pos_y = [
