@@ -97,6 +97,7 @@ class ImgFrame(QLabel):
 
         if event.button() == Qt.LeftButton:
             self.mouse_press_event_left_button(event)
+
         elif event.button() == Qt.RightButton:
             self.__dragging = True
             self.__offset = event.pos()
@@ -332,9 +333,13 @@ class ImgFrame(QLabel):
         d = Value.limit_range(d, (0, img_shape_3d[0] - 1))
 
         # (1) dont neet to turn upside down
+
         # (2) flip left/right back for 1mm data
         if self.window().get_nii_spacing() == 1.0:
             w = img_shape_3d[2] - w
+
+        # (3) make sure transverse slice id is a multiple of interpolation step
+        d = self.window().ensure_slice_id_multiple(d)
 
         return d, h, w
 
@@ -449,11 +454,19 @@ class ImgFrame(QLabel):
             if self.plane == Plane.CORONAL:
                 slice_delta = -slice_delta
             if self.plane == Plane.TRANSVERSE:
-                slice_delta *= 3
+                slice_delta *= self.window().interpolation_step
 
-            self.window().cur_slice_id[self.plane] -= slice_delta
-            # limite slice_id in range (0, slices_count)
-            self.window().cur_slice_id[self.plane] %= slices_count
+            # update slice id
+            new_slice_id = self.window().cur_slice_id[self.plane] - slice_delta
+            # limite slice_id in (0, slices_count)
+            if new_slice_id > slices_count:
+                new_slice_id = 0
+            elif new_slice_id < 0:
+                new_slice_id = slices_count
+            # make sure transverse slice id is a multiple of interpolation step
+            if self.plane == Plane.TRANSVERSE:
+                new_slice_id = self.window().ensure_slice_id_multiple(new_slice_id)
+            self.window().cur_slice_id[self.plane] = new_slice_id
 
             # refresh new slice
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:

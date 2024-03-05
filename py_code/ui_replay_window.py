@@ -23,15 +23,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.setupUi(self)
         # load setting
         ui_setting = Json.load(os.path.join(g.PROJ_DIR, "settings_ui.json"))
-        self._init_data()
+        self._init_data(ui_setting)
         self._init_color(ui_setting)  # before init_widgets()
         self._init_widgets(ui_setting)  # after _init_data()
         # self.__init_zoomin()
         self._load_baseline_data()  # load first baseline result
 
-    def _init_data(self):
+    def _init_data(
+        self,
+        ui_setting: Dict,  # this is for idl_window
+    ):
         # load test set patients of au and mda datasets
-        # DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] and [AU_3MM] are the same
         dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM])
         dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
         self._patients = Dict()
@@ -678,58 +680,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.refresh_imgs()
         self.refresh_crosses()
 
-    # def __refresh_gtvt_selected_slices_2d(self):
-    #     if self.img_3d[Modal.CT] is None:
-    #         return
-
-    #     if self._plane == Plane.TRANSVERSE:
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.HORIZONTAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.VERTICAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
-    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
-    #             Modal.CT
-    #         ].shape[1]
-    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
-    #             2
-    #         ]
-
-    #     elif self._plane == Plane.CORONAL:
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.HORIZONTAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
-    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
-    #             Modal.CT
-    #         ].shape[0]
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.VERTICAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.SAGITTAL]
-    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
-    #             2
-    #         ]
-
-    #     elif self._plane == Plane.SAGITTAL:
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.HORIZONTAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.TRANSVERSE]
-    #         self.__total_slices_count_2d[Orient.HORIZONTAL] = self.img_3d[
-    #             Modal.CT
-    #         ].shape[0]
-    #         self.__gtvt_selected_slices_2d[
-    #             Orient.VERTICAL
-    #         ] = self.__gtvt_selected_slices_3d[Plane.CORONAL]
-    #         self.__total_slices_count_2d[Orient.VERTICAL] = self.img_3d[Modal.CT].shape[
-    #             1
-    #         ]
-
-    def __reset_cur_slice_id(self):
-        if self._gtvs_center is not None:
-            self.cur_slice_id[Plane.TRANSVERSE] = self._gtvs_center[0]
-            self.cur_slice_id[Plane.CORONAL] = self._gtvs_center[1]
-            self.cur_slice_id[Plane.SAGITTAL] = self._gtvs_center[2]
-
     # this function is connected to widget, dont set input params to this function
     def __switch_color_enhance_slider_bars(self):
         # hide and show sliders
@@ -966,7 +916,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.__load_labels()
 
         # reset slice id (after multi-modal imgs are loaded)
-        self.__reset_cur_slice_id()
+        if self._gtvs_center is not None:
+            self.cur_slice_id[Plane.TRANSVERSE] = self._gtvs_center[0]
+            self.cur_slice_id[Plane.CORONAL] = self._gtvs_center[1]
+            self.cur_slice_id[Plane.SAGITTAL] = self._gtvs_center[2]
 
         # choose idl automatically
         # try not to reset idl id/round when patient is changed
@@ -1632,46 +1585,77 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self._add_score_on_top_left(qimg)
                 self._add_instruction_on_top_left(qimg)
 
-            # add text on bottom left
+            # add contour description on bottom left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.MR1:
                 self._add_contour_description_on_bottom_left(qimg)
+
+            # add slice number on bottom right
+            self.__add_slice_id_on_bottom_right(frame_name=frame_name, qimg=qimg)
 
             self.img_frame[frame_name].set_background(qimg)
             self.img_frame[frame_name].update()
 
-    def _get_contour_description_pos(self, qimg: QtGui.QImage):
-        # pos x
-        pos_x = [10, 65, 110]
-        # pos y
-        y_buttom = qimg.height() - 13
+    def __add_slice_id_on_bottom_right(self, frame_name: str, qimg: QtGui.QImage):
+        if self.img_3d[Modal.CT] is None:
+            return
+
+        plane = self.img_frame[frame_name].plane
+
+        cur_slice_id = self.cur_slice_id[plane] + 1
+        if plane == Plane.SAGITTAL:
+            slices_count = self.img_3d[Modal.CT].shape[2]
+        elif plane == Plane.CORONAL:
+            slices_count = self.img_3d[Modal.CT].shape[1]
+        elif plane == Plane.TRANSVERSE:
+            slices_count = self.img_3d[Modal.CT].shape[0]
+        text = "{:03d}/{:03d}".format(cur_slice_id, slices_count)
+
+        left = qimg.width() - 83
+        bottom = self._get_text_pos_bottom(qimg)[0]
+        self._qimg_draw_text(
+            qimg=qimg,
+            text=text,
+            pos=(left, bottom),
+            color=self.color["green"],
+        )
+
+    def _get_text_pos_top(self):
+        return 25 if g.is_linux() else 28
+
+    def _get_text_pos_left(self):
+        return [10, 65, 110]
+
+    # from buttom to top
+    def _get_text_pos_bottom(self, qimg: QtGui.QImage):
+        buttom = qimg.height() - 13
         step = 22 if g.is_linux() else 25
-        pos_y = [
-            y_buttom - step * 2,
-            y_buttom - step,
-            y_buttom,
+        return [
+            buttom,
+            buttom - step,
+            buttom - step * 2,
         ]
-        return pos_x, pos_y
 
     def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
-        pos_x, pos_y = self._get_contour_description_pos(qimg)
+        left = self._get_text_pos_left()
+        bottom = self._get_text_pos_bottom(qimg)
 
         # label
         self._qimg_draw_text(
             qimg=qimg,
             text="Label:",
-            pos=(pos_x[0], pos_y[0]),
+            pos=(left[0], bottom[2]),
             color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVt",
-            pos=(pos_x[1], pos_y[0]),
+            pos=(left[1], bottom[2]),
             color=self.color["gtvt.label"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
-            pos=(pos_x[2], pos_y[0]),
+            pos=(left[2], bottom[2]),
             color=self.color["gtvn.label"],
         )
 
@@ -1679,19 +1663,19 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._qimg_draw_text(
             qimg=qimg,
             text="Pred:",
-            pos=(pos_x[0], pos_y[1]),
+            pos=(left[0], bottom[1]),
             color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVt",
-            pos=(pos_x[1], pos_y[1]),
+            pos=(left[1], bottom[1]),
             color=self.color["gtvt.pred"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="GTVn",
-            pos=(pos_x[2], pos_y[1]),
+            pos=(left[2], bottom[1]),
             color=self.color["gtvn.pred"],
         )
 
@@ -1699,19 +1683,19 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._qimg_draw_text(
             qimg=qimg,
             text="User:",
-            pos=(pos_x[0], pos_y[2]),
+            pos=(left[0], bottom[0]),
             color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="Init",
-            pos=(pos_x[1], pos_y[2]),
+            pos=(left[1], bottom[0]),
             color=self.color["gtvt.delineation"],
         )
         self._qimg_draw_text(
             qimg=qimg,
             text="Correction",
-            pos=(pos_x[2], pos_y[2]),
+            pos=(left[2], bottom[0]),
             color=self.color["gtvt.correction"],
         )
 
@@ -1719,17 +1703,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
         pass
 
     def _add_score_on_top_left(self, qimg: QtGui.QImage):
-        pos_y = 25
+        top = self._get_text_pos_top()
 
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            pos_x = 10
+            left = self._get_text_pos_left()[0]
 
             # "Metric.DSC/Metric.MSD/Metric.HD95: "
             text = metric.upper() + ": "
             self._qimg_draw_text(
                 qimg=qimg,
                 text=text,
-                pos=(pos_x, pos_y),
+                pos=(left, top),
                 color=self.color["green"],
             )
             # load scores
@@ -1744,18 +1728,18 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     text = "NaN"
                 # mod x pos
                 if i == "gtvt":
-                    pos_x += 55
+                    left += 55
                 else:
-                    pos_x += 50
+                    left += 50
                 # draw text
                 self._qimg_draw_text(
                     qimg=qimg,
                     text=text,
-                    pos=(pos_x, pos_y),
+                    pos=(left, top),
                     color=self.color["{}.pred".format(i)],
                 )
             # mod y pos
-            pos_y += 20
+            top += 20
 
     def cur_idl_step(self):
         return None

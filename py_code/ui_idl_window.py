@@ -1204,16 +1204,16 @@ class IDLWindow(ReplayWindow):
         cursor_size = 32
 
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
-            pos_x = 0
-            pos_y = cursor_size * 0.95
+            left = 0
+            top = cursor_size * 0.95
         elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
-            pos_x = cursor_size * 0.2
-            pos_y = cursor_size * 0.8
+            left = cursor_size * 0.2
+            top = cursor_size * 0.8
         elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
-            pos_x = cursor_size * 0.5
-            pos_y = cursor_size * 0.5
+            left = cursor_size * 0.5
+            top = cursor_size * 0.5
 
-        self.setCursor(QtGui.QCursor(cursor_pixmap, pos_x, pos_y))
+        self.setCursor(QtGui.QCursor(cursor_pixmap, left, top))
 
     def _init_widgets_cursor(self):
         self.__cursor = Dict()
@@ -1600,8 +1600,8 @@ class IDLWindow(ReplayWindow):
         for i in ["gtvt.correction.mask", "gtvn.correction.mask"]:
             self.img_3d[i] = None
 
-    def _init_data(self):
-        super()._init_data()
+    def _init_data(self, ui_setting: Dict):
+        super()._init_data(ui_setting)
 
         # init baseline id and idl.gtvt/gtvn id, keep them unchanged
         self._baseline_id = "baseline_real.idl"
@@ -1665,12 +1665,30 @@ class IDLWindow(ReplayWindow):
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self.__gtvt_delineated_state[plane] = False
 
+        # load/save interpolation step
+        interpolation_setting_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id["gtvt"],
+            "interpolation.json",
+        )
+        if os.path.exists(interpolation_setting_path):
+            self.interpolation_step = Json.load(interpolation_setting_path)["step"]
+            self.interpolation_step = max(1, int(self.interpolation_step))
+        else:
+            self.interpolation_step = ui_setting["interpolation.step"]
+            self.interpolation_step = max(1, int(self.interpolation_step))
+            Json.save({"step": self.interpolation_step}, interpolation_setting_path)
+
     def __save_idl_step_of_all_patients(self):
-        for i in ["gtvt", "gtvn"]:
-            idl_step_json_path = os.path.join(
-                g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i], "idl_step.json"
-            )
-            Json.save(self.__idl_step_of_all_patients, idl_step_json_path)
+        # only save it in gtvt folder
+        idl_step_json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id["gtvt"],
+            "idl_step.json",
+        )
+        Json.save(self.__idl_step_of_all_patients, idl_step_json_path)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent):
         if event.key() == Qt.Key_F12:
@@ -1744,15 +1762,15 @@ class IDLWindow(ReplayWindow):
         self.combox["patient"].setCurrentIndex(-1)  # show nothing
 
     def _add_instruction_on_top_left(self, qimg: QtGui.QImage):
-        pos_x = 10
-        pos_y = 25
+        left = self._get_text_pos_left()[0]
+        top = self._get_text_pos_top()
 
         if self._cur_patient is None:
             text = "Please select a patient"
             self._qimg_draw_text(
                 qimg=qimg,
                 text=text,
-                pos=(pos_x, pos_y),
+                pos=(left, top),
                 color=self.color["green"],
             )
             return
@@ -1779,15 +1797,15 @@ class IDLWindow(ReplayWindow):
         self._qimg_draw_text(
             qimg=qimg,
             text=text,
-            pos=(pos_x, pos_y),
+            pos=(left, top),
             color=self.color["green"],
         )
 
         # show delineated state on qimage
         if idl_step == IDLStep.DRAW_GTVT:
-            pos_y += 5
+            top += 5
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                pos_y += 20
+                top += 20
                 text = plane.capitalize()
                 if self.__gtvt_delineated_state[plane] is True:
                     text += " ✓"
@@ -1798,7 +1816,7 @@ class IDLWindow(ReplayWindow):
                 self._qimg_draw_text(
                     qimg=qimg,
                     text=text,
-                    pos=(pos_x, pos_y),
+                    pos=(left, top),
                     color=color,
                 )
 
@@ -1807,27 +1825,37 @@ class IDLWindow(ReplayWindow):
         pass
 
     def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
-        pos_x, pos_y = self._get_contour_description_pos(qimg)
+        left = self._get_text_pos_left()
+        bottom = self._get_text_pos_bottom(qimg)
 
+        # user input text
+        if (
+            self.img_3d["gtvt.click"] is not None
+            or self.img_3d["gtvt.delineation"] is not None
+            or self.img_3d["gtvn.clicks"] is not None
+        ):
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="User Input",
+                pos=(left[0], bottom[0]),
+                color=self.color["gtvt.delineation"],
+            )
+
+        # gtvt pred text
         if self.img_3d["gtvt.pred"] is not None:
             self._qimg_draw_text(
                 qimg=qimg,
                 text="GTVt - Pred",
-                pos=(pos_x[0], pos_y[1]),
+                pos=(left[0], bottom[1]),
                 color=self.color["gtvt.pred"],
             )
-            self._qimg_draw_text(
-                qimg=qimg,
-                text="User Input",
-                pos=(pos_x[0], pos_y[2]),
-                color=self.color["gtvt.delineation"],
-            )
 
+        # gtvn pred text
         if self.img_3d["gtvn.pred"] is not None:
             if self.img_3d["gtvt.pred"] is None:
-                pos = (pos_x[0], pos_y[2])
+                pos = (left[0], bottom[1])
             else:
-                pos = (pos_x[0], pos_y[0])
+                pos = (left[0], bottom[2])
             self._qimg_draw_text(
                 qimg=qimg,
                 text="GTVn - Pred",
@@ -1891,16 +1919,28 @@ class IDLWindow(ReplayWindow):
         elif idl_step in [IDLStep.WAITING, IDLStep.CORRECT_GTVT, IDLStep.CORRECT_GTVN]:
             Debug.error_exit("_load_patient_data(): IDL Step error!")
 
+    def ensure_slice_id_multiple(self, slice_id: int):
+        remainder = slice_id % self.interpolation_step
+        slice_id -= remainder
+        if remainder > self.interpolation_step / 2:
+            slice_id += self.interpolation_step
+        return slice_id
+
     def reset_cur_slice_id(self):
         idl_step = self.cur_idl_step()
 
         if idl_step == IDLStep.CLICK_GTVT_CENTER or idl_step == IDLStep.DRAW_GTVT:
             if self.gtvt_click_pos_3d is None:
+                self.cur_slice_id[Plane.CORONAL] = self.img_3d[Modal.CT].shape[1] // 2
+                self.cur_slice_id[Plane.SAGITTAL] = self.img_3d[Modal.CT].shape[2] // 2
                 self.cur_slice_id[Plane.TRANSVERSE] = (
                     self.img_3d[Modal.CT].shape[0] // 2
                 )
-                self.cur_slice_id[Plane.CORONAL] = self.img_3d[Modal.CT].shape[1] // 2
-                self.cur_slice_id[Plane.SAGITTAL] = self.img_3d[Modal.CT].shape[2] // 2
+                # make sure transverse slice id is a multiple of interpolation step
+                self.cur_slice_id[Plane.TRANSVERSE] = self.ensure_slice_id_multiple(
+                    self.cur_slice_id[Plane.TRANSVERSE]
+                )
+
             else:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
