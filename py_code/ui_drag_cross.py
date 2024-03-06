@@ -70,10 +70,9 @@ class DragCross(QWidget):
                 new_cross_id=pos_3d,
             )
             # add cross id (3d position) into main window
-            idl_step = self.window().cur_idl_step()
-            if idl_step == IDLStep.CLICK_GTVT_CENTER:
+            if self.window().cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
                 self.window().gtvt_click_pos_3d = self.cross_id
-            elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+            elif self.window().cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
                 self.window().gtvn_clicks_pos_3d.append(self.cross_id)
 
             # refresh data and img after cross id updated

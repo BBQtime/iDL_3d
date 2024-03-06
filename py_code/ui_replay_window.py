@@ -1741,9 +1741,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # mod y pos
             top += 20
 
-    def cur_idl_step(self):
-        return None
-
     # this is for ImgFrame.enterEvent()
     def change_mouse_cursor(self):
         # do nothing

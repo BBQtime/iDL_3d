@@ -26,23 +26,23 @@ class IDLStepLabel(QLabel):
         str_space = "            "
         if self.__idl_step == IDLStep.SELECT_PATIENT:
             self.setText("STEP 1 - Select Patient")
-        if self.__idl_step == IDLStep.CLICK_GTVT_CENTER:
+        elif self.__idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.setText("STEP 2 - Click GTVt center")
-        if self.__idl_step == IDLStep.DRAW_GTVT:
+        elif self.__idl_step == IDLStep.DRAW_GTVT:
             self.setText("STEP 3 - Delineate GTVt")
-        if self.__idl_step == IDLStep.DRAW_GTVT_TRANSVERSE:
+        elif self.__idl_step == IDLStep.DRAW_GTVT_TRANSVERSE:
             self.setText(str_space + "- in Transverse")
-        if self.__idl_step == IDLStep.DRAW_GTVT_CORONAL:
+        elif self.__idl_step == IDLStep.DRAW_GTVT_CORONAL:
             self.setText(str_space + "- in Coronal")
-        if self.__idl_step == IDLStep.DRAW_GTVT_SAGITTAL:
+        elif self.__idl_step == IDLStep.DRAW_GTVT_SAGITTAL:
             self.setText(str_space + "- in Sagittal")
-        if self.__idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.__idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.setText("STEP 4 - Click GTVn center")
-        if self.__idl_step == IDLStep.WAITING:
+        elif self.__idl_step == IDLStep.WAITING:
             self.setText("STEP 5 - Generating Results")
-        if self.__idl_step == IDLStep.CORRECT_GTVT:
+        elif self.__idl_step == IDLStep.CORRECT_GTVT:
             self.setText("STEP 6 - Correct GTVt")
-        if self.__idl_step == IDLStep.CORRECT_GTVN:
+        elif self.__idl_step == IDLStep.CORRECT_GTVN:
             self.setText(str_space + "- Correct GTVn")
 
     def mousePressEvent(self, event):

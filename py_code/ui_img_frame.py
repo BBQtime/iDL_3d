@@ -45,12 +45,10 @@ class ImgFrame(QLabel):
         self.drawing_layer = self.drawing_layer.scaled(self.size())
 
     def mouse_press_event_left_button(self, event: QMouseEvent):
-        idl_step = self.window().cur_idl_step()
-
-        if idl_step is None:
+        if self.window().cur_idl_step is None:
             return
 
-        elif idl_step == IDLStep.CLICK_GTVT_CENTER:
+        elif self.window().cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             # remove old crosses
             self.window().delete_all_crosses()
             # add new 3d pos
@@ -67,7 +65,7 @@ class ImgFrame(QLabel):
             self.window().refresh_crosses()
 
         # draw/correct
-        elif idl_step in [
+        elif self.window().cur_idl_step in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -75,7 +73,7 @@ class ImgFrame(QLabel):
         ]:
             self.window().draw_on_img_frame_press(event=event, img_frame=self)
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.window().cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             pos_3d = self.get_pos_in_3d(event.pos())
             if pos_3d not in self.window().gtvn_clicks_pos_3d:
                 self.window().gtvn_clicks_pos_3d.append(pos_3d)
@@ -114,7 +112,7 @@ class ImgFrame(QLabel):
 
         # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
-        if event.buttons() == Qt.LeftButton and self.window().cur_idl_step() in [
+        if event.buttons() == Qt.LeftButton and self.window().cur_idl_step in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -158,7 +156,7 @@ class ImgFrame(QLabel):
         super().mouseReleaseEvent(event)
 
         if event.button() == Qt.LeftButton:
-            if self.window().cur_idl_step() in [
+            if self.window().cur_idl_step in [
                 IDLStep.DRAW_GTVT,
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
@@ -170,7 +168,7 @@ class ImgFrame(QLabel):
             self.__dragging = False
 
     def __should_paint_eraser_circle(self):
-        if self.window().cur_idl_step() in [
+        if self.window().cur_idl_step in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -226,7 +224,7 @@ class ImgFrame(QLabel):
         if self.__circle_pos:
             # circle color
             # delineate gtvt
-            if self.window().cur_idl_step() == IDLStep.DRAW_GTVT:
+            if self.window().cur_idl_step == IDLStep.DRAW_GTVT:
                 circle_color = self.window().color["gtvt.delineation"]
             # correct gtvt/gtvn
             else:
@@ -357,22 +355,23 @@ class ImgFrame(QLabel):
             return frame_name
 
     def refresh_crosses(self):
-        idl_step = self.window().cur_idl_step()
-
-        if idl_step not in [IDLStep.CLICK_GTVT_CENTER, IDLStep.CLICK_GTVN_CENTER]:
+        if self.window().cur_idl_step not in [
+            IDLStep.CLICK_GTVT_CENTER,
+            IDLStep.CLICK_GTVN_CENTER,
+        ]:
             return
 
         # remove old crosses
         self.delete_all_crosses()
 
         # load crosses position from gtvt/gtvn_clicks_pos_3d
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        if self.window().cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             if self.window().gtvt_click_pos_3d is None:
                 return
             else:
                 clicks_pos_3d = [self.window().gtvt_click_pos_3d]
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.window().cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             if len(self.window().gtvn_clicks_pos_3d) <= 0:
                 return
             else:

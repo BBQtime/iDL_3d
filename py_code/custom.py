@@ -12,7 +12,7 @@ import string
 import sys
 import unicodedata
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Union
 
 import cc3d
@@ -678,39 +678,6 @@ class Timer:
         cur_time = cur_time.replace("-", ".")
         cur_time = cur_time.replace(" ", ".")
         return cur_time
-
-    def __init__(self, log_path: str = None):
-        self._time_point = datetime.now()
-        self.set_log_path(log_path)
-
-    def set_log_path(self, log_path: str = None):
-        self._log_path = log_path
-        if self._log_path is not None:
-            Json.save(dict(), self._log_path)
-
-    def cal_duration(self, description: str = None, hide_microsecond=True):
-        time_now = datetime.now()
-        duration = time_now - self._time_point
-        self._time_point = time_now
-
-        if hide_microsecond:
-            total_seconds = int(duration.total_seconds())
-            # Create a new timedelta object without microseconds
-            duration = timedelta(seconds=total_seconds)
-
-        duration = str(duration)
-
-        if description is not None:
-            print(description, duration)
-            # save log
-            if self._log_path is not None:
-                time_log = Json.load(self._log_path)
-                time_log[description] = duration
-                Json.save(time_log, self._log_path)
-        else:
-            print(duration)
-
-        return duration
 
 
 class Global:

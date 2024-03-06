@@ -24,6 +24,8 @@ class IDLStep:
     DRAW_GTVT_SAGITTAL = "draw.gtvt.sagittal"
     CLICK_GTVN_CENTER = "click.gtvn.center"
     WAITING = "waiting"
+    WAITING_GTVT = "waiting.gtvt"
+    WAITING_GTVN = "waiting.gtvn"
     CORRECT_GTVT = "correct.gtvt"
     CORRECT_GTVN = "correct.gtvn"
     CORRECT_BOTH = "correct.both"

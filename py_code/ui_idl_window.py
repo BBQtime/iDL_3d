@@ -1,5 +1,6 @@
 import math
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2
@@ -24,6 +25,47 @@ from ui_img_frame import ImgFrame
 from ui_replay_window import ReplayWindow
 
 
+class IDLTimer:
+    def __init__(
+        self,
+        baseline_id: str,
+        idl_gtvt_id: str,
+        patient: str,
+        idl_step: str,
+    ):
+        self.__start_time = None
+        self.__patient = patient
+        self.__idl_step = idl_step
+        # json path
+        self.__json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            baseline_id,
+            idl_gtvt_id,
+            "time_used.json",
+        )
+        # create an empty json file
+        if not os.path.exists(self.__json_path):
+            Json.save({}, self.__json_path)
+
+    def start(self):
+        self.__start_time = datetime.now()
+
+    def end(self):
+        if self.__start_time is None:
+            return
+
+        duration = datetime.now() - self.__start_time
+        self.__start_time = None
+        total_seconds = int(duration.total_seconds())
+        # create a new timedelta without microseconds
+        duration = timedelta(seconds=total_seconds)
+        duration = str(duration)
+        # save json
+        time_log = Json.load(self.__json_path)
+        time_log["patient={}".format(self.__patient)][self.__idl_step] = duration
+        Json.save(time_log, self.__json_path)
+
+
 class IDLWindow(ReplayWindow):
     def __init__(
         self,
@@ -38,9 +80,7 @@ class IDLWindow(ReplayWindow):
         super().__init__()
 
     def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
-        idl_step = self.cur_idl_step()
-
-        if idl_step not in [
+        if self.cur_idl_step not in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -49,7 +89,7 @@ class IDLWindow(ReplayWindow):
             return
 
         # if current slice isn't the gtvt center slice, switch to the gtvt center slice.
-        if idl_step == IDLStep.DRAW_GTVT:
+        if self.cur_idl_step == IDLStep.DRAW_GTVT:
             gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_frame.plane]
             if self.cur_slice_id[img_frame.plane] != gtvt_center_slice_id:
                 self.cur_slice_id[img_frame.plane] = gtvt_center_slice_id
@@ -68,7 +108,7 @@ class IDLWindow(ReplayWindow):
         # (2) for clear mode, wipe out delineation
         elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
             # drawing gtvt
-            if idl_step == IDLStep.DRAW_GTVT:
+            if self.cur_idl_step == IDLStep.DRAW_GTVT:
                 # get the position of gtvt center
                 d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
                 d, h, w = int(d), int(h), int(w)
@@ -104,7 +144,7 @@ class IDLWindow(ReplayWindow):
                 ].set_status_missing()
 
             # correcting gtvt/gtvn
-            elif idl_step in [
+            elif self.cur_idl_step in [
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
                 IDLStep.CORRECT_BOTH,
@@ -172,7 +212,7 @@ class IDLWindow(ReplayWindow):
             painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
 
             # delineate gtvt
-            if self.cur_idl_step() == IDLStep.DRAW_GTVT:
+            if self.cur_idl_step == IDLStep.DRAW_GTVT:
                 pen_color = QtGui.QColor(*self.color["gtvt.delineation"])
             # correct gtvt/gtvn
             else:
@@ -279,9 +319,9 @@ class IDLWindow(ReplayWindow):
         new_drawing = Img.binarize(img=new_drawing, threshold=binary_threshold)
 
         # add 2d delineation/correction on 3d ndarray
-        idl_step = self.cur_idl_step()
+
         # (1) gtvt delineation
-        if idl_step == IDLStep.DRAW_GTVT:
+        if self.cur_idl_step == IDLStep.DRAW_GTVT:
             d, h, w = self.gtvt_click_pos_3d
             if img_frame.plane == Plane.TRANSVERSE:
                 exist_drawing = self.img_3d["gtvt.delineation"][d, :, :]
@@ -290,7 +330,7 @@ class IDLWindow(ReplayWindow):
             elif img_frame.plane == Plane.SAGITTAL:
                 exist_drawing = self.img_3d["gtvt.delineation"][:, :, w]
         # (2) gtvt/gtvn correction
-        elif idl_step in [
+        elif self.cur_idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
@@ -325,9 +365,9 @@ class IDLWindow(ReplayWindow):
             new_drawing = 1 - new_drawing
 
         # get 3d img and correction mask
-        if idl_step == IDLStep.DRAW_GTVT:
+        if self.cur_idl_step == IDLStep.DRAW_GTVT:
             img_3d = self.img_3d["gtvt.delineation"]
-        elif idl_step in [
+        elif self.cur_idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
@@ -348,7 +388,7 @@ class IDLWindow(ReplayWindow):
             img_3d[:, :, w] = new_drawing
 
         # update correction masks
-        if idl_step in [
+        if self.cur_idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
@@ -492,21 +532,20 @@ class IDLWindow(ReplayWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_pen_clicked(self):
-        idl_step = self.cur_idl_step()
 
         # (1) update drawing mode
-        if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
+        if self.cur_idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
             self.drawing_mode = DrawingMode.GTVT_PEN
-        elif idl_step == IDLStep.CORRECT_GTVN:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             self.drawing_mode = DrawingMode.GTVN_PEN
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_PEN
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_PEN
 
         # (2) update widgets
-        if idl_step in [
+        if self.cur_idl_step in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -634,7 +673,7 @@ class IDLWindow(ReplayWindow):
         self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.update_cur_idl_step(IDLStep.CLICK_GTVT_CENTER)
+        self.__update_cur_idl_step(IDLStep.CLICK_GTVT_CENTER)
 
         # (3) clear gtvt click pos
         self.gtvt_click_pos_3d = None
@@ -660,6 +699,9 @@ class IDLWindow(ReplayWindow):
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
+
+        # (7) start recording time
+        self.__timer[IDLStep.CLICK_GTVT_CENTER].start()
 
     def __confirm_gtvt_center(self):
         # (1) check if there is gtvt click
@@ -715,7 +757,10 @@ class IDLWindow(ReplayWindow):
             path=os.path.join(cur_patient_dir, "selected_slices.json"),
         )
 
-        # (5) goto next step
+        # (5) end timing
+        self.__timer[IDLStep.CLICK_GTVT_CENTER].end()
+
+        # (6) goto next step
         self.__goto_idl_step_draw_gtvt()
 
     def __goto_idl_step_draw_gtvt(self):
@@ -724,7 +769,7 @@ class IDLWindow(ReplayWindow):
         self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.update_cur_idl_step(IDLStep.DRAW_GTVT)
+        self.__update_cur_idl_step(IDLStep.DRAW_GTVT)
         self.drawing_mode = DrawingMode.GTVT_PEN
 
         # DO NOT clear self.gtvt_click_pos_3d
@@ -750,6 +795,9 @@ class IDLWindow(ReplayWindow):
         # (5) update widgets
         self.__enable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
+
+        # (6) start recording time
+        self.__timer[IDLStep.DRAW_GTVT].start()
 
     def __confirm_gtvt_delineation(self):
         # (1) check if gtvt are delineated in 3 planes
@@ -801,7 +849,11 @@ class IDLWindow(ReplayWindow):
         )
         self.__idl_gtvt_thread.start()
 
-        # (4) goto next step
+        # (4) end and start timer
+        self.__timer[IDLStep.DRAW_GTVT].end()
+        self.__timer[IDLStep.WAITING_GTVT].start()
+
+        # (5) goto next step
         self.__goto_idl_step_click_gtvn_center()
 
     def __goto_idl_step_click_gtvn_center(self):
@@ -809,7 +861,7 @@ class IDLWindow(ReplayWindow):
         self.__idl_gtvn_thread.stop()
 
         # (2) update status (before refresh images)
-        self.update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
+        self.__update_cur_idl_step(IDLStep.CLICK_GTVN_CENTER)
 
         # (3) clear gtvn clicks
         self.gtvn_clicks_pos_3d = List()
@@ -835,13 +887,16 @@ class IDLWindow(ReplayWindow):
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
 
+        # (7) start recording time
+        self.__timer[IDLStep.CLICK_GTVN_CENTER].start()
+
     def __goto_idl_step_correct_both(self, drawing_mode: str = DrawingMode.GTVT_PEN):
         # (1) stop idl qthreads
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
+        self.__update_cur_idl_step(IDLStep.CORRECT_BOTH)
         self.drawing_mode = drawing_mode
 
         # (3) update imgs
@@ -872,13 +927,17 @@ class IDLWindow(ReplayWindow):
         self.__enable_annotation_tools()
         self._btn["next.step"].setEnabled(True)
 
+        # (6) start timer
+        self.__timer[IDLStep.CORRECT_GTVT].start()
+        self.__timer[IDLStep.CORRECT_GTVN].start()
+
     def __goto_idl_step_approved(self):
         # (1) stop idl qthreads (if running)
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.update_cur_idl_step(IDLStep.APPROVED)
+        self.__update_cur_idl_step(IDLStep.APPROVED)
 
         # (3) update imgs
         self.__combine_pred_delineation_correction()
@@ -894,9 +953,11 @@ class IDLWindow(ReplayWindow):
         self._collap["annotation"].collapse()
         self._collap["patient"].expand()
 
-    def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
-        cur_idl_step = self.cur_idl_step()
+        # (6) end timers
+        self.__timer[IDLStep.CORRECT_GTVT].end()
+        self.__timer[IDLStep.CORRECT_GTVN].end()
 
+    def on_idl_step_text_box_clicked(self, text_box: IDLStepLabel):
         # (1) jump to step SELECT_PATIENT
         if text_box == self._text_label[IDLStep.SELECT_PATIENT]:
             if not self._collap["patient"].isExpanded():
@@ -915,7 +976,7 @@ class IDLWindow(ReplayWindow):
 
         # (2) jump to step CLICK_GTVT_CENTER
         elif text_box == self._text_label[IDLStep.CLICK_GTVT_CENTER]:
-            if cur_idl_step not in [
+            if self.cur_idl_step not in [
                 IDLStep.DRAW_GTVT,
                 IDLStep.CLICK_GTVN_CENTER,
                 IDLStep.WAITING,
@@ -950,7 +1011,7 @@ class IDLWindow(ReplayWindow):
             self._text_label[IDLStep.DRAW_GTVT_CORONAL],
             self._text_label[IDLStep.DRAW_GTVT_SAGITTAL],
         ]:
-            if cur_idl_step not in [
+            if self.cur_idl_step not in [
                 IDLStep.CLICK_GTVN_CENTER,
                 IDLStep.WAITING,
                 IDLStep.CORRECT_GTVT,
@@ -979,7 +1040,7 @@ class IDLWindow(ReplayWindow):
 
         # (4) jump to step CLICK_GTVN_CENTER
         elif text_box == self._text_label[IDLStep.CLICK_GTVN_CENTER]:
-            if cur_idl_step not in [
+            if self.cur_idl_step not in [
                 IDLStep.WAITING,
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
@@ -1010,7 +1071,7 @@ class IDLWindow(ReplayWindow):
             self._text_label[IDLStep.CORRECT_GTVT],
             self._text_label[IDLStep.CORRECT_GTVN],
         ]:
-            if cur_idl_step != IDLStep.APPROVED:
+            if self.cur_idl_step != IDLStep.APPROVED:
                 return
 
             text = "Would you like to revert to SETP 6 and re-correct the predictions?"
@@ -1033,21 +1094,19 @@ class IDLWindow(ReplayWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
-        idl_step = self.cur_idl_step()
-
         # (1) update drawing mode
-        if idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
+        if self.cur_idl_step in [IDLStep.DRAW_GTVT, IDLStep.CORRECT_GTVT]:
             self.drawing_mode = DrawingMode.GTVT_ERASER
-        elif idl_step == IDLStep.CORRECT_GTVN:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             self.drawing_mode = DrawingMode.GTVN_ERASER
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_ERASER
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_ERASER
 
         # (2) update widgets
-        if idl_step in [
+        if self.cur_idl_step in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -1066,12 +1125,12 @@ class IDLWindow(ReplayWindow):
     def __on_idl_gtvt_thread_finished(self):
         # (1) update status
         # dont update idl step if user has not submitted gtvn clicks
-        if self.cur_idl_step() == IDLStep.CLICK_GTVN_CENTER:
+        if self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             pass
         elif self.__idl_gtvn_thread.is_running:
-            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
+            self.__update_cur_idl_step(IDLStep.CORRECT_GTVT)
         else:
-            self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
+            self.__update_cur_idl_step(IDLStep.CORRECT_BOTH)
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvt_data()
@@ -1089,17 +1148,21 @@ class IDLWindow(ReplayWindow):
         self.__enable_annotation_tools()
         # (4-1) CORRECT_GTVN -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvn
-        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
+        if self.cur_idl_step == IDLStep.CORRECT_BOTH:
             self._btn["next.step"].setEnabled(True)
 
         # (4-2) WAITING -> CORRECT_GTVT
-        elif self.cur_idl_step() == IDLStep.CORRECT_GTVT:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_hover=True)
+
+        # (5) end and start timer
+        self.__timer[IDLStep.WAITING_GTVT].end()
+        self.__timer[IDLStep.CORRECT_GTVT].start()
 
     def __confirm_gtvn_center(self):
         # (1) detect gtvn clicks
@@ -1118,15 +1181,18 @@ class IDLWindow(ReplayWindow):
             )
             if reply == QMessageBox.No:
                 return
+            # no gtvn click
             else:
+                self.__timer[IDLStep.CLICK_GTVN_CENTER].end()
+                self.__timer[IDLStep.WAITING_GTVN].start()
                 self.__on_idl_gtvn_thread_finished()
                 return
 
         # (2) update status
         if self.__idl_gtvt_thread.is_running:
-            self.update_cur_idl_step(IDLStep.WAITING)
+            self.__update_cur_idl_step(IDLStep.WAITING)
         else:
-            self.update_cur_idl_step(IDLStep.CORRECT_GTVT)
+            self.__update_cur_idl_step(IDLStep.CORRECT_GTVT)
 
         # (3) add clicks into 3d img
         if self.img_3d["gtvn.clicks"] is None:
@@ -1162,15 +1228,19 @@ class IDLWindow(ReplayWindow):
         self.refresh_imgs()
         self.delete_all_crosses()
 
-        # (7) update widget
-        if self.cur_idl_step() == IDLStep.CORRECT_GTVT:
+        # (7) update widgets
+        if self.cur_idl_step == IDLStep.CORRECT_GTVT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__enable_annotation_tools()
-        elif self.cur_idl_step() == IDLStep.WAITING:
+        elif self.cur_idl_step == IDLStep.WAITING:
             self.__disable_annotation_tools()
         # temporarily disable "next.step" button, until idl_step=CORRECT_BOTH
         self._btn["next.step"].setEnabled(False)
+
+        # (8) start and end timer
+        self.__timer[IDLStep.CLICK_GTVN_CENTER].end()
+        self.__timer[IDLStep.WAITING_GTVN].start()
 
     def __update_idl_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
@@ -1180,9 +1250,9 @@ class IDLWindow(ReplayWindow):
     def __on_idl_gtvn_thread_finished(self):
         # (1) update status
         if self.__idl_gtvt_thread.is_running:
-            self.update_cur_idl_step(IDLStep.CORRECT_GTVN)
+            self.__update_cur_idl_step(IDLStep.CORRECT_GTVN)
         else:
-            self.update_cur_idl_step(IDLStep.CORRECT_BOTH)
+            self.__update_cur_idl_step(IDLStep.CORRECT_BOTH)
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvn_data()
@@ -1200,11 +1270,11 @@ class IDLWindow(ReplayWindow):
         self.__enable_annotation_tools()
         # (4-1) CORRECT_GTVT -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvt
-        if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
+        if self.cur_idl_step == IDLStep.CORRECT_BOTH:
             self._btn["next.step"].setEnabled(True)
 
         # (4-2) WAITING -> CORRECT_GTVN
-        elif self.cur_idl_step() == IDLStep.CORRECT_GTVN:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
             # change mouse cursor after:
@@ -1212,17 +1282,19 @@ class IDLWindow(ReplayWindow):
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_hover=True)
 
+        # (5) end and start timer
+        self.__timer[IDLStep.WAITING_GTVN].end()
+        self.__timer[IDLStep.CORRECT_GTVN].start()
+
     # this function is connected to widget, dont set input params to this function
     def __on_btn_next_step_clicked(self):
-        idl_step = self.cur_idl_step()
-
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        if self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.__confirm_gtvt_center()
-        elif idl_step == IDLStep.DRAW_GTVT:
+        elif self.cur_idl_step == IDLStep.DRAW_GTVT:
             self.__confirm_gtvt_delineation()
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.__confirm_gtvn_center()
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             self.__save_corrections_and_masks()
             self.__goto_idl_step_approved()
 
@@ -1283,7 +1355,7 @@ class IDLWindow(ReplayWindow):
         self,
         check_mouse_hover: bool = False,  # if = True, only change cursor when mouse is on a img
     ):
-        if self.cur_idl_step() not in [
+        if self.cur_idl_step not in [
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
@@ -1299,6 +1371,7 @@ class IDLWindow(ReplayWindow):
             if not is_mouse_over_img:
                 return
 
+        # set cursor center based on cursor size
         cursor_size = 32
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
             tool = "pen"
@@ -1313,8 +1386,9 @@ class IDLWindow(ReplayWindow):
             left = cursor_size * 0.5
             top = cursor_size * 0.5
 
-        idl_step = self.cur_idl_step()
-        if idl_step == IDLStep.CORRECT_BOTH:
+        # CORRECT_BOTH is not a key of self.__cursor
+        # change into CORRECT_GTVT or CORRECT_GTVN based on drawing mode
+        if self.cur_idl_step == IDLStep.CORRECT_BOTH:
             if self.drawing_mode in [
                 DrawingMode.GTVT_PEN,
                 DrawingMode.GTVT_ERASER,
@@ -1327,6 +1401,9 @@ class IDLWindow(ReplayWindow):
                 DrawingMode.GTVN_CLEAR,
             ]:
                 idl_step = IDLStep.CORRECT_GTVN
+
+        else:  # DRAW_GTVT / CORRECT_GTVT / CORRECT_GTVN
+            idl_step = self.cur_idl_step
 
         cursor_pixmap = self.__cursor[idl_step][tool]
         self.setCursor(QtGui.QCursor(cursor_pixmap, left, top))
@@ -1378,18 +1455,17 @@ class IDLWindow(ReplayWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
-        idl_step = self.cur_idl_step()
 
         # (1) update drawing mode
-        if idl_step in [
+        if self.cur_idl_step in [
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
         ]:
             self.drawing_mode = DrawingMode.GTVT_CLEAR
-        elif idl_step in [IDLStep.CLICK_GTVN_CENTER, IDLStep.CORRECT_GTVN]:
+        elif self.cur_idl_step in [IDLStep.CLICK_GTVN_CENTER, IDLStep.CORRECT_GTVN]:
             self.drawing_mode = DrawingMode.GTVN_CLEAR
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_CLEAR
             elif self._radio_btn["correct.gtvn"].isChecked():
@@ -1434,7 +1510,7 @@ class IDLWindow(ReplayWindow):
             self.img_frame[i].delete_all_crosses()
 
     def refresh_crosses(self, frame_name: str = None):
-        if self.cur_idl_step() not in [
+        if self.cur_idl_step not in [
             IDLStep.CLICK_GTVT_CENTER,
             IDLStep.CLICK_GTVN_CENTER,
         ]:
@@ -1465,12 +1541,11 @@ class IDLWindow(ReplayWindow):
             cross.cross_id = new_cross_id
 
     def remove_3d_pos_of_selected_cross(self, cross: DragCross):
-        idl_step = self.cur_idl_step()
 
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        if self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.gtvt_click_pos_3d = None
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             pos_3d = cross.cross_id
             if pos_3d in self.gtvn_clicks_pos_3d:
                 self.gtvn_clicks_pos_3d.remove(pos_3d)
@@ -1546,7 +1621,7 @@ class IDLWindow(ReplayWindow):
 
         # radio buttons: correct gtvt/gtvn
         for i in ["correct.gtvt", "correct.gtvn"]:
-            if self.cur_idl_step() == IDLStep.CORRECT_BOTH:
+            if self.cur_idl_step == IDLStep.CORRECT_BOTH:
                 self._radio_btn[i].show()
             else:
                 self._radio_btn[i].hide()
@@ -1756,28 +1831,10 @@ class IDLWindow(ReplayWindow):
                     )
                 )
 
-            # init and save idl step of all patients
-            self.__idl_step_of_all_patients = Dict()
-            for patient in self._patients.to_list():
-                self.__idl_step_of_all_patients["patient={}".format(patient)] = (
-                    IDLStep.CLICK_GTVT_CENTER
-                )
-            self.__save_idl_step_of_all_patients()
-
         # (2) existing train id
         else:
             for i in ["gtvt", "gtvn"]:
                 self._idl_id[i] = "idl.{}_{}".format(i, self.__train_id)
-
-            # load idl step of all patients
-            self.__idl_step_of_all_patients = Json.load(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    self._baseline_id,
-                    self._idl_id["gtvt"],
-                    "idl_step.json",
-                )
-            )
 
         # initialize the position of gtvt click / gtvn clicks
         self.gtvt_click_pos_3d = None
@@ -1789,6 +1846,17 @@ class IDLWindow(ReplayWindow):
         self.__gtvt_delineated_state = Dict()
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self.__gtvt_delineated_state[plane] = False
+
+        # init idl_step and json file
+        self.cur_idl_step = None
+        self.__idl_step_json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id["gtvt"],  # only save it in gtvt folder
+            "idl_step.json",
+        )
+        if not os.path.exists(self.__idl_step_json_path):
+            Json.save({}, self.__idl_step_json_path)
 
         # load/save interpolation step
         interpolation_setting_path = os.path.join(
@@ -1805,15 +1873,12 @@ class IDLWindow(ReplayWindow):
             self.interpolation_step = max(1, int(self.interpolation_step))
             Json.save({"step": self.interpolation_step}, interpolation_setting_path)
 
-    def __save_idl_step_of_all_patients(self):
-        # only save it in gtvt folder
-        idl_step_json_path = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            self._baseline_id,
-            self._idl_id["gtvt"],
-            "idl_step.json",
+    def __save_idl_step(self):
+        idl_step_of_all_patients = Json.load(self.__idl_step_json_path)
+        idl_step_of_all_patients["patient={}".format(self._cur_patient)] = (
+            self.cur_idl_step
         )
-        Json.save(self.__idl_step_of_all_patients, idl_step_json_path)
+        Json.save(idl_step_of_all_patients, self.__idl_step_json_path)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent):
         if event.key() == Qt.Key_F12:
@@ -1900,23 +1965,21 @@ class IDLWindow(ReplayWindow):
             )
             return
 
-        idl_step = self.cur_idl_step()
-
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        if self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             text = "Please click the center of primary Gross Tumor Volumes (GTVt)"
-        elif idl_step == IDLStep.DRAW_GTVT:
+        elif self.cur_idl_step == IDLStep.DRAW_GTVT:
             text = "Please delineate GTVt in 3 anatomical planes"
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             text = "Please click the center of malignant lymph nodes (GTVn)"
-        elif idl_step == IDLStep.WAITING:
+        elif self.cur_idl_step == IDLStep.WAITING:
             text = "Neural Network is generating auto-segmentation, please wait..."
-        elif idl_step == IDLStep.CORRECT_GTVT:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVT:
             text = "Please correct the GTVt auto-segmentation"
-        elif idl_step == IDLStep.CORRECT_GTVN:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             text = "Please correct the GTVn auto-segmentation"
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             text = "Please correct the GTVt and GTVn auto-segmentations"
-        elif idl_step == IDLStep.APPROVED:
+        elif self.cur_idl_step == IDLStep.APPROVED:
             text = "Auto-segmentations of current patient are finalized"
 
         self._qimg_draw_text(
@@ -1927,7 +1990,7 @@ class IDLWindow(ReplayWindow):
         )
 
         # show delineated state on qimage
-        if idl_step == IDLStep.DRAW_GTVT:
+        if self.cur_idl_step == IDLStep.DRAW_GTVT:
             top += 5
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 top += 20
@@ -2004,12 +2067,12 @@ class IDLWindow(ReplayWindow):
         self.gtvt_click_pos_3d = None
         self.gtvn_clicks_pos_3d = List()
 
+        # update current patient
         self._cur_patient = self.combox["patient"].currentText()
+
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
         self._load_dataset_dir_and_nii_spacing()
-
-        # self._reset_zoomin()
 
         # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()
@@ -2018,31 +2081,75 @@ class IDLWindow(ReplayWindow):
         self._load_idl_gtvt_data()
         self._load_idl_gtvn_data()
 
-        # (1) call reset_cur_slice_id() after _load_multi_modal_imgs
-        # (2) call reset_cur_slice_id() after after _load_idl_gtvt_data() and _load_idl_gtvn_data()
-        # because reset_cur_slice_id() will need gtvt_click_pos_3d and gtvn_clicks_pos_3d
-        # and these are loaded by _load_idl_gtvt_data() and _load_idl_gtvn_data()
+        # reset timers after cur_patient is updated
+        self.__timer = Dict()
+        for i in [
+            IDLStep.CLICK_GTVT_CENTER,
+            IDLStep.DRAW_GTVT,
+            IDLStep.CLICK_GTVN_CENTER,
+            IDLStep.WAITING_GTVT,
+            IDLStep.WAITING_GTVN,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+        ]:
+            self.__timer[i] = IDLTimer(
+                baseline_id=self._baseline_id,
+                idl_gtvt_id=self._idl_id["gtvt"],
+                patient=self._cur_patient,
+                idl_step=i,
+            )
+
+        # load current idl step from json(after cur_patient is updated)
+        # init and save idl step of all patients
+        idl_step_of_all_patients = Json.load(self.__idl_step_json_path)
+        self.cur_idl_step = idl_step_of_all_patients[
+            "patient={}".format(self._cur_patient)
+        ]
+
+        # adjust cur_idl_step
+        # (1) new patient
+        if self.cur_idl_step == {}:
+            self.cur_idl_step = IDLStep.CLICK_GTVT_CENTER
+
+        # (2) cur_idl_step == WAITING or CORRECT_GTVN means gtvt thread was interupted
+        elif self.cur_idl_step in [IDLStep.WAITING, IDLStep.CORRECT_GTVN]:
+            # goto the nearest recoverable step
+            self.cur_idl_step = IDLStep.DRAW_GTVT
+
+        # (3) cur_idl_step == CORRECT_GTVT means gtvn thread was interupted
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVT:
+            # goto the nearest recoverable step
+            self.cur_idl_step = IDLStep.CLICK_GTVN_CENTER
+
+        # (4) cur_idl_step == CLICK_GTVN_CENTER means gtvt thread might be interupted
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
+            # no gtvt pred menas gtvt thread was interupted
+            if self.img_3d["gtvt.pred"] is None:
+                # goto the nearest recoverable step
+                self.cur_idl_step = IDLStep.DRAW_GTVT
+
+        # call reset_cur_slice_id() after:
+        # (1) _load_multi_modal_imgs
+        # (2) _load_idl_gtvt_data(), will load gtvt_click_pos_3d
+        # (3) _load_idl_gtvn_data(), will load gtvn_clicks_pos_3d
+        # (4) self.cur_idl_step is loaded
         self.reset_cur_slice_id()
 
-        # jump to specific idl step
-        idl_step = self.cur_idl_step()
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        # last step: goto current idl step
+        if self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             self.__goto_idl_step_click_gtvt_center()
 
-        elif idl_step == IDLStep.DRAW_GTVT:
+        elif self.cur_idl_step == IDLStep.DRAW_GTVT:
             self.__goto_idl_step_draw_gtvt()
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             self.__goto_idl_step_click_gtvn_center()
 
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             self.__goto_idl_step_correct_both()
 
-        elif idl_step == IDLStep.APPROVED:
+        elif self.cur_idl_step == IDLStep.APPROVED:
             self.__goto_idl_step_approved()
-
-        elif idl_step in [IDLStep.WAITING, IDLStep.CORRECT_GTVT, IDLStep.CORRECT_GTVN]:
-            Debug.error_exit("_load_patient_data(): IDL Step error!")
 
     def ensure_slice_id_multiple(self, slice_id: int):
         remainder = slice_id % self.interpolation_step
@@ -2052,9 +2159,10 @@ class IDLWindow(ReplayWindow):
         return slice_id
 
     def reset_cur_slice_id(self):
-        idl_step = self.cur_idl_step()
-
-        if idl_step == IDLStep.CLICK_GTVT_CENTER or idl_step == IDLStep.DRAW_GTVT:
+        if (
+            self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER
+            or self.cur_idl_step == IDLStep.DRAW_GTVT
+        ):
             if self.gtvt_click_pos_3d is None:
                 self.cur_slice_id[Plane.CORONAL] = self.img_3d[Modal.CT].shape[1] // 2
                 self.cur_slice_id[Plane.SAGITTAL] = self.img_3d[Modal.CT].shape[2] // 2
@@ -2069,13 +2177,13 @@ class IDLWindow(ReplayWindow):
             else:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             if len(self.gtvn_clicks_pos_3d) == 0:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
             else:
                 self.cur_slice_id = self.__get_gtvn_center_slices_id()
 
-        elif idl_step in [
+        elif self.cur_idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
@@ -2090,29 +2198,21 @@ class IDLWindow(ReplayWindow):
                 else:
                     self.cur_slice_id = self.__get_gtvn_center_slices_id()
 
-        elif idl_step == IDLStep.APPROVED:
+        elif self.cur_idl_step == IDLStep.APPROVED:
             self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
-    def cur_idl_step(self):
-        if self._cur_patient is None:
-            return None
-        else:
-            return self.__idl_step_of_all_patients[
-                "patient={}".format(self._cur_patient)
-            ]
-
-    def update_cur_idl_step(self, new_idl_step: str):
-        cur_patient = "patient={}".format(self._cur_patient)
-        self.__idl_step_of_all_patients[cur_patient] = new_idl_step
-        self.__save_idl_step_of_all_patients()
+    def __update_cur_idl_step(self, new_idl_step: str):
+        self.cur_idl_step = new_idl_step
+        self.__save_idl_step()
 
     def __refresh_todo_list(self):
-        idl_step = self.cur_idl_step()
+        if (
+            self.cur_idl_step != IDLStep.CORRECT_BOTH
+            and self.cur_idl_step != IDLStep.APPROVED
+        ):
+            self._text_label[self.cur_idl_step].set_status_ongoing()
 
-        if idl_step != IDLStep.CORRECT_BOTH and idl_step != IDLStep.APPROVED:
-            self._text_label[idl_step].set_status_ongoing()
-
-        if idl_step == IDLStep.CLICK_GTVT_CENTER:
+        if self.cur_idl_step == IDLStep.CLICK_GTVT_CENTER:
             done_step_list = [IDLStep.SELECT_PATIENT]
             notstart_step_list = [
                 IDLStep.DRAW_GTVT,
@@ -2125,7 +2225,7 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVN,
             ]
 
-        elif idl_step == IDLStep.DRAW_GTVT:
+        elif self.cur_idl_step == IDLStep.DRAW_GTVT:
             done_step_list = [IDLStep.SELECT_PATIENT, IDLStep.CLICK_GTVT_CENTER]
             notstart_step_list = [
                 IDLStep.CLICK_GTVN_CENTER,
@@ -2136,7 +2236,7 @@ class IDLWindow(ReplayWindow):
             # sub steps of draw.gtvt
             self.__update_gtvt_delineated_status()
 
-        elif idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.cur_idl_step == IDLStep.CLICK_GTVN_CENTER:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -2154,7 +2254,7 @@ class IDLWindow(ReplayWindow):
             else:
                 self._text_label[IDLStep.WAITING].set_status_notstart()
 
-        elif idl_step == IDLStep.WAITING:
+        elif self.cur_idl_step == IDLStep.WAITING:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -2168,7 +2268,7 @@ class IDLWindow(ReplayWindow):
                 IDLStep.CORRECT_GTVT,
                 IDLStep.CORRECT_GTVN,
             ]
-        elif idl_step == IDLStep.CORRECT_GTVT:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVT:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -2181,7 +2281,7 @@ class IDLWindow(ReplayWindow):
             notstart_step_list = [IDLStep.CORRECT_GTVN]
             self._text_label[IDLStep.WAITING].set_status_ongoing()
 
-        elif idl_step == IDLStep.CORRECT_GTVN:
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
@@ -2194,7 +2294,7 @@ class IDLWindow(ReplayWindow):
             notstart_step_list = [IDLStep.CORRECT_GTVT]
             self._text_label[IDLStep.WAITING].set_status_ongoing()
 
-        elif idl_step == IDLStep.CORRECT_BOTH:
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             self._text_label[IDLStep.CORRECT_GTVT].set_status_ongoing()
             self._text_label[IDLStep.CORRECT_GTVN].set_status_ongoing()
             done_step_list = [
@@ -2209,7 +2309,7 @@ class IDLWindow(ReplayWindow):
             ]
             notstart_step_list = []
 
-        elif idl_step == IDLStep.APPROVED:
+        elif self.cur_idl_step == IDLStep.APPROVED:
             done_step_list = [
                 IDLStep.SELECT_PATIENT,
                 IDLStep.CLICK_GTVT_CENTER,
