@@ -225,16 +225,20 @@ class ImgFrame(QLabel):
         # draw eraser circle
         if self.__circle_pos:
             # circle color
-            if self.window().drawing_mode == DrawingMode.GTVT_ERASER:
-                circle_color = self.window().color["gtvt.pred"]
-            elif self.window().drawing_mode == DrawingMode.GTVN_ERASER:
-                circle_color = self.window().color["gtvn.pred"]
+            # delineate gtvt
+            if self.window().cur_idl_step() == IDLStep.DRAW_GTVT:
+                circle_color = self.window().color["gtvt.delineation"]
+            # correct gtvt/gtvn
             else:
-                Debug.error_exit("Invalid drawing_mode value!")
+                if self.window().drawing_mode == DrawingMode.GTVT_ERASER:
+                    circle_color = self.window().color["gtvt.pred"]
+                elif self.window().drawing_mode == DrawingMode.GTVN_ERASER:
+                    circle_color = self.window().color["gtvn.pred"]
+
             circle_color = QtGui.QColor(*circle_color)
             pen = QtGui.QPen(circle_color)
             # circle size
-            circle_border_width = 2
+            circle_border_width = 3
             pen.setWidth(circle_border_width)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)

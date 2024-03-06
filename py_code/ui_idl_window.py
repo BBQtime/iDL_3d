@@ -171,10 +171,18 @@ class IDLWindow(ReplayWindow):
             # Set the composition mode to control alpha blending
             painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
 
-            if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                pen_color = QtGui.QColor(*self.color["gtvt.pred"])
-            elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                pen_color = QtGui.QColor(*self.color["gtvn.pred"])
+            # delineate gtvt
+            if self.cur_idl_step() == IDLStep.DRAW_GTVT:
+                pen_color = QtGui.QColor(*self.color["gtvt.delineation"])
+            # correct gtvt/gtvn
+            else:
+                if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
+                    pen_color = QtGui.QColor(*self.color["gtvt.pred"])
+                elif self.drawing_mode in [
+                    DrawingMode.GTVN_PEN,
+                    DrawingMode.GTVN_ERASER,
+                ]:
+                    pen_color = QtGui.QColor(*self.color["gtvn.pred"])
 
             if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
                 painter.setPen(
@@ -1291,32 +1299,52 @@ class IDLWindow(ReplayWindow):
             if not is_mouse_over_img:
                 return
 
-        cursor_pixmap = self.__cursor[self.drawing_mode]
         cursor_size = 32
-
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+            tool = "pen"
             left = 0
             top = cursor_size * 0.95
         elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            tool = "eraser"
             left = cursor_size * 0.2
             top = cursor_size * 0.8
         elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
+            tool = "clear"
             left = cursor_size * 0.5
             top = cursor_size * 0.5
 
+        idl_step = self.cur_idl_step()
+        if idl_step == IDLStep.CORRECT_BOTH:
+            if self.drawing_mode in [
+                DrawingMode.GTVT_PEN,
+                DrawingMode.GTVT_ERASER,
+                DrawingMode.GTVT_CLEAR,
+            ]:
+                idl_step = IDLStep.CORRECT_GTVT
+            elif self.drawing_mode in [
+                DrawingMode.GTVN_PEN,
+                DrawingMode.GTVN_ERASER,
+                DrawingMode.GTVN_CLEAR,
+            ]:
+                idl_step = IDLStep.CORRECT_GTVN
+
+        cursor_pixmap = self.__cursor[idl_step][tool]
         self.setCursor(QtGui.QCursor(cursor_pixmap, left, top))
 
     def _init_widgets_cursor(self):
         self.__cursor = Dict()
         cursor_size = 32  # cursor size is no larger than 32
         origin_color = (0, 0, 0)
-        for i in ["pen", "eraser", "clear"]:
+        for tool in ["pen", "eraser", "clear"]:
             origin_cursor = QtGui.QPixmap(
-                (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(i)))
+                (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(tool)))
             )
-            for gtv in ["gtvt", "gtvn"]:
-                drawing_mode = "{}.{}".format(gtv, i)
-                self.__cursor[drawing_mode] = origin_cursor.scaled(
+            for idl_step in [
+                IDLStep.DRAW_GTVT,
+                IDLStep.CORRECT_GTVT,
+                IDLStep.CORRECT_GTVN,
+            ]:
+                self.__cursor[idl_step][tool] = origin_cursor.scaled(
                     cursor_size,
                     cursor_size,
                     Qt.KeepAspectRatio,
@@ -1324,10 +1352,16 @@ class IDLWindow(ReplayWindow):
                 )
                 # change color (after cursor pixmap is scaled to 32*32)
                 # as __change_color is not efficiency
-                self.__cursor[drawing_mode] = self.__change_color(
-                    pixmap=self.__cursor[drawing_mode],
+                if idl_step == IDLStep.DRAW_GTVT:
+                    new_color = self.color["gtvt.delineation"]
+                elif idl_step == IDLStep.CORRECT_GTVT:
+                    new_color = self.color["gtvt.pred"]
+                elif idl_step == IDLStep.CORRECT_GTVN:
+                    new_color = self.color["gtvn.pred"]
+                self.__cursor[idl_step][tool] = self.__change_color(
+                    pixmap=self.__cursor[idl_step][tool],
                     old_color=origin_color,
-                    new_color=self.color["{}.pred".format(gtv)],
+                    new_color=new_color,
                 )
 
     def _init_color(self, ui_setting: Dict):
