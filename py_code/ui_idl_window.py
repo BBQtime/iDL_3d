@@ -8,11 +8,13 @@ import qimage2ndarray
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Timer, Value
+from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QEvent, QPoint, QSize, Qt
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMessageBox
 from scipy import ndimage
+from scipy.interpolate import interp1d
 from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from superqt import QCollapsible
 from ui_drag_cross import DragCross
@@ -68,26 +70,31 @@ class IDLWindow(ReplayWindow):
             # drawing gtvt
             if idl_step == IDLStep.DRAW_GTVT:
                 # get the position of gtvt center
-                t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
-                t, c, s = int(t), int(c), int(s)
+                d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+                d, h, w = int(d), int(h), int(w)
+
+                img_3d = self.img_3d["gtvt.delineation"]
 
                 # clear delineation on cur plane
-                # use mask to make sure to filter out the delineation on current anatomical plane only
+                # (abandoned) use mask to make sure to filter out the delineation on current plane only
                 if img_frame.plane == Plane.TRANSVERSE:
-                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][t, :, :])
-                    mask[c, :] = 1
-                    mask[:, s] = 1
-                    self.img_3d["gtvt.delineation"][t, :, :] *= mask
+                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][d, :, :])
+                    # mask[h, :] = 1
+                    # mask[:, w] = 1
+                    # self.img_3d["gtvt.delineation"][d, :, :] *= mask
+                    img_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
                 elif img_frame.plane == Plane.CORONAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, c, :])
-                    mask[t, :] = 1
-                    mask[:, s] = 1
-                    self.img_3d["gtvt.delineation"][:, c, :] *= mask
+                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, h, :])
+                    # mask[d, :] = 1
+                    # mask[:, w] = 1
+                    # self.img_3d["gtvt.delineation"][:, h, :] *= mask
+                    img_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
                 elif img_frame.plane == Plane.SAGITTAL:
-                    mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, :, s])
-                    mask[t, :] = 1
-                    mask[:, c] = 1
-                    self.img_3d["gtvt.delineation"][:, :, s] *= mask
+                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, :, w])
+                    # mask[d, :] = 1
+                    # mask[:, h] = 1
+                    # self.img_3d["gtvt.delineation"][:, :, w] *= mask
+                    img_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
 
                 # update gtvt delineated state
                 self.__gtvt_delineated_state[img_frame.plane] = False
@@ -109,19 +116,29 @@ class IDLWindow(ReplayWindow):
 
                 # clear correction on cur plane
                 # use ct img qlabel's plane
-                t = c = s = self.cur_slice_id[img_frame.plane]
+                d = h = w = self.cur_slice_id[img_frame.plane]
                 img_3d = self.img_3d["{}.correction".format(gtv)]
                 mask_3d = self.img_3d["{}.correction.mask".format(gtv)]
+                pred_final = self.img_3d["{}.pred.final".format(gtv)]
+                pred_origin = self.img_3d["{}.pred".format(gtv)]
 
+                # clear slice in 3d img
                 if img_frame.plane == Plane.TRANSVERSE:
-                    img_3d[t, :, :] = np.zeros_like(img_3d[t, :, :])
-                    mask_3d[t, :, :] = np.zeros_like(mask_3d[t, :, :])
+                    img_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
+                    mask_3d[d, :, :] = np.zeros_like(mask_3d[d, :, :])
+                    self.__interpolation(
+                        cur_slice_id=d,
+                        correction=img_3d,
+                        correction_mask=mask_3d,
+                        pred_final=pred_final,
+                        pred_origin=pred_origin,
+                    )
                 elif img_frame.plane == Plane.CORONAL:
-                    img_3d[:, c, :] = np.zeros_like(img_3d[:, c, :])
-                    mask_3d[:, c, :] = np.zeros_like(mask_3d[:, c, :])
+                    img_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
+                    mask_3d[:, h, :] = np.zeros_like(mask_3d[:, h, :])
                 elif img_frame.plane == Plane.SAGITTAL:
-                    img_3d[:, :, s] = np.zeros_like(img_3d[:, :, s])
-                    mask_3d[:, :, s] = np.zeros_like(mask_3d[:, :, s])
+                    img_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
+                    mask_3d[:, :, w] = np.zeros_like(mask_3d[:, :, w])
 
             # update 3d np arrays and refresh imgs
             self.__combine_pred_delineation_correction()
@@ -257,31 +274,32 @@ class IDLWindow(ReplayWindow):
         idl_step = self.cur_idl_step()
         # (1) gtvt delineation
         if idl_step == IDLStep.DRAW_GTVT:
-            t, c, s = self.gtvt_click_pos_3d
+            d, h, w = self.gtvt_click_pos_3d
             if img_frame.plane == Plane.TRANSVERSE:
-                exist_drawing = self.img_3d["gtvt.delineation"][t, :, :]
+                exist_drawing = self.img_3d["gtvt.delineation"][d, :, :]
             elif img_frame.plane == Plane.CORONAL:
-                exist_drawing = self.img_3d["gtvt.delineation"][:, c, :]
+                exist_drawing = self.img_3d["gtvt.delineation"][:, h, :]
             elif img_frame.plane == Plane.SAGITTAL:
-                exist_drawing = self.img_3d["gtvt.delineation"][:, :, s]
+                exist_drawing = self.img_3d["gtvt.delineation"][:, :, w]
         # (2) gtvt/gtvn correction
         elif idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
-            t = c = s = self.cur_slice_id[img_frame.plane]
+            d = h = w = self.cur_slice_id[img_frame.plane]
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 gtv = "gtvn"
-            img_3d = self.img_3d["{}.pred.final".format(gtv)]
+            pred_final = self.img_3d["{}.pred.final".format(gtv)]
+            # copy from gtvt/gtvn.pred.final, dont change original data
             if img_frame.plane == Plane.TRANSVERSE:
-                exist_drawing = img_3d[t, :, :].copy()
+                exist_drawing = pred_final[d, :, :].copy()
             elif img_frame.plane == Plane.CORONAL:
-                exist_drawing = img_3d[:, c, :].copy()
+                exist_drawing = pred_final[:, h, :].copy()
             elif img_frame.plane == Plane.SAGITTAL:
-                exist_drawing = img_3d[:, :, s].copy()
+                exist_drawing = pred_final[:, :, w].copy()
 
         # invert color if in eraser mode
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
@@ -298,7 +316,7 @@ class IDLWindow(ReplayWindow):
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
             new_drawing = 1 - new_drawing
 
-        # replace slice in 3d gtvt.delineation or gtvt/gtvn correction
+        # get 3d img and correction mask
         if idl_step == IDLStep.DRAW_GTVT:
             img_3d = self.img_3d["gtvt.delineation"]
         elif idl_step in [
@@ -313,13 +331,13 @@ class IDLWindow(ReplayWindow):
                 img_3d = self.img_3d["gtvn.correction"]
                 mask_3d = self.img_3d["gtvn.correction.mask"]
 
-        # replace slice
+        # replace slice in 3d img
         if img_frame.plane == Plane.TRANSVERSE:
-            img_3d[t, :, :] = new_drawing
+            img_3d[d, :, :] = new_drawing
         elif img_frame.plane == Plane.CORONAL:
-            img_3d[:, c, :] = new_drawing
+            img_3d[:, h, :] = new_drawing
         elif img_frame.plane == Plane.SAGITTAL:
-            img_3d[:, :, s] = new_drawing
+            img_3d[:, :, w] = new_drawing
 
         # update correction masks
         if idl_step in [
@@ -328,20 +346,28 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_BOTH,
         ]:
             if img_frame.plane == Plane.TRANSVERSE:
-                if new_drawing.max() == 0:
-                    mask_3d[t, :, :] = np.zeros_like(new_drawing)
+                if img_3d[d, :, :].max() == 0:
+                    mask_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
                 else:
-                    mask_3d[t, :, :] = np.ones_like(new_drawing)
+                    mask_3d[d, :, :] = np.ones_like(img_3d[d, :, :])
+                self.__interpolation(
+                    cur_slice_id=d,
+                    correction=img_3d,
+                    correction_mask=mask_3d,
+                    pred_final=pred_final,
+                )
+
             elif img_frame.plane == Plane.CORONAL:
-                if new_drawing.max() == 0:
-                    mask_3d[:, c, :] = np.zeros_like(new_drawing)
+                if img_3d[:, h, :].max() == 0:
+                    mask_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
                 else:
-                    mask_3d[:, c, :] = np.ones_like(new_drawing)
+                    mask_3d[:, h, :] = np.ones_like(img_3d[:, h, :])
+
             elif img_frame.plane == Plane.SAGITTAL:
-                if new_drawing.max() == 0:
-                    mask_3d[:, :, s] = np.zeros_like(new_drawing)
+                if img_3d[:, :, w].max() == 0:
+                    mask_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
                 else:
-                    mask_3d[:, :, s] = np.ones_like(new_drawing)
+                    mask_3d[:, :, w] = np.ones_like(img_3d[:, :, w])
 
         # update values
         self.paint_pos = None
@@ -351,6 +377,71 @@ class IDLWindow(ReplayWindow):
         # update UI
         self.__clear_all_drawing_layers(img_frame)
         self.refresh_imgs()
+
+    def __interpolation(
+        self,
+        cur_slice_id: int,
+        correction: ndarray,
+        correction_mask: ndarray,
+        pred_final: ndarray,
+        pred_origin: ndarray = None,
+    ):
+        start_end_slices_pairs = []
+
+        # prev slice id
+        prev_slice_id = cur_slice_id - self.interpolation_step
+        prev_slice_id = max(prev_slice_id, 0)
+        if cur_slice_id > prev_slice_id:
+            start_end_slices_pairs.append((prev_slice_id, cur_slice_id))
+
+        # next slice id
+        next_slice_id = cur_slice_id + self.interpolation_step
+        next_slice_id = min(next_slice_id, correction.shape[0])
+        if cur_slice_id < next_slice_id:
+            start_end_slices_pairs.append((cur_slice_id, next_slice_id))
+
+        for start_slice_id, end_slice_id in start_end_slices_pairs:
+            # if correction mask on current slice == 0,
+            # means "restore" button is clicked, use "pred.final" istead of "correction"
+            if correction_mask[cur_slice_id, :, :].max() == 0:
+                if start_slice_id == cur_slice_id:
+                    start_slice_data = pred_origin[start_slice_id, :, :]
+                    end_slice_data = pred_final[end_slice_id, :, :]
+                else:
+                    start_slice_data = pred_final[start_slice_id, :, :]
+                    end_slice_data = pred_origin[end_slice_id, :, :]
+
+            # correction mask on current slice > 0,
+            # means there are corrections on current slice
+            else:
+                if start_slice_id == cur_slice_id:
+                    start_slice_data = correction[start_slice_id, :, :]
+                    end_slice_data = pred_final[end_slice_id, :, :]
+                else:
+                    start_slice_data = pred_final[start_slice_id, :, :]
+                    end_slice_data = correction[end_slice_id, :, :]
+
+            # generate interpolated slices
+            interpolation_func = interp1d(
+                [start_slice_id, end_slice_id],
+                np.array([start_slice_data, end_slice_data]),
+                axis=0,
+                kind="slinear",
+            )
+            interpolated_slices = interpolation_func(
+                np.arange(start_slice_id + 1, end_slice_id)
+            )
+            interpolated_slices = Img.binarize(interpolated_slices)
+
+            # add interpolated slices
+            correction[start_slice_id + 1 : end_slice_id, :, :] = interpolated_slices
+
+            # update correction mask for interpolated slices
+            for i in range(start_slice_id + 1, end_slice_id):
+                if correction[i, :, :].max() == 0:
+                    correction_mask[i, :, :] = np.zeros_like(correction[i, :, :])
+                else:
+                    correction_mask[i, :, :] = np.ones_like(correction[i, :, :])
 
     def __save_corrections_and_masks(self):
         for gtv in ["gtvt", "gtvn"]:
@@ -1135,29 +1226,29 @@ class IDLWindow(ReplayWindow):
                 self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
 
         else:
-            t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
-            t, c, s = int(t), int(c), int(s)
+            d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+            d, h, w = int(d), int(h), int(w)
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if plane == Plane.TRANSVERSE:
                     cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        t, :, :
+                        d, :, :
                     ].copy()
-                    cur_plane_delineation[c, :] = 0
-                    cur_plane_delineation[:, s] = 0
+                    cur_plane_delineation[h, :] = 0
+                    cur_plane_delineation[:, w] = 0
 
                 elif plane == Plane.CORONAL:
                     cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        :, c, :
+                        :, h, :
                     ].copy()
-                    cur_plane_delineation[t, :] = 0
-                    cur_plane_delineation[:, s] = 0
+                    cur_plane_delineation[d, :] = 0
+                    cur_plane_delineation[:, w] = 0
 
                 elif plane == Plane.SAGITTAL:
                     cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        :, :, s
+                        :, :, w
                     ].copy()
-                    cur_plane_delineation[t, :] = 0
-                    cur_plane_delineation[:, c] = 0
+                    cur_plane_delineation[d, :] = 0
+                    cur_plane_delineation[:, h] = 0
 
                 if cur_plane_delineation.max() == 0:
                     self.__gtvt_delineated_state[plane] = False
@@ -2167,10 +2258,10 @@ class IDLWindow(ReplayWindow):
 
             # # combine gtvt.pred and gtvt.delineation
             # if i == "gtvt":
-            #     t, c, s = np.where(self.img_3d["gtvt.click"] == 1)
-            #     self.img_3d["gtvt.pred.final"][t, :, :] = 0
-            #     self.img_3d["gtvt.pred.final"][:, c, :] = 0
-            #     self.img_3d["gtvt.pred.final"][:, :, s] = 0
+            #     d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+            #     self.img_3d["gtvt.pred.final"][d, :, :] = 0
+            #     self.img_3d["gtvt.pred.final"][:, h, :] = 0
+            #     self.img_3d["gtvt.pred.final"][:, :, w] = 0
             #     self.img_3d["gtvt.pred.final"] = np.maximum(
             #         self.img_3d["gtvt.pred.final"], self.img_3d["gtvt.delineation"]
             #     )

@@ -17,7 +17,7 @@ class ImgFrame(QLabel):
 
         # right click drag img
         self.__dragging = False
-        self.__offset = None
+        self.__drag_pos = None
         self.img_center_pct = (0.5, 0.5)
 
         # clicks
@@ -100,7 +100,7 @@ class ImgFrame(QLabel):
 
         elif event.button() == Qt.RightButton:
             self.__dragging = True
-            self.__offset = event.pos()
+            self.__drag_pos = event.pos()
 
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
@@ -128,10 +128,10 @@ class ImgFrame(QLabel):
 
         # right click dragging
         if self.__dragging:
-            diff_x = event.pos().x() - self.__offset.x()
-            diff_y = event.pos().y() - self.__offset.y()
+            diff_x = event.pos().x() - self.__drag_pos.x()
+            diff_y = event.pos().y() - self.__drag_pos.y()
             img_pos_diff = (diff_x, diff_y)
-            self.__offset = event.pos()  # update offset
+            self.__drag_pos = event.pos()  # update offset
 
             # refresh img/imgs and crosses
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
@@ -168,7 +168,6 @@ class ImgFrame(QLabel):
 
         elif event.button() == Qt.RightButton:
             self.__dragging = False
-            self.__drag_pos = None
 
     def __should_paint_eraser_circle(self):
         if self.window().cur_idl_step() in [
