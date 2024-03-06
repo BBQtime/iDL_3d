@@ -57,7 +57,7 @@ class ImgFrame(QLabel):
             # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-
+                # only refresh other img_frames
                 frame_name_list.remove(self.plane)
                 for i in frame_name_list:
                     self.window().refresh_imgs(frame_name=i)
@@ -78,6 +78,7 @@ class ImgFrame(QLabel):
             if pos_3d not in self.window().gtvn_clicks_pos_3d:
                 self.window().gtvn_clicks_pos_3d.append(pos_3d)
                 self.window().reset_cur_slice_id()
+                # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                     frame_name_list = [
                         Plane.TRANSVERSE,
@@ -88,6 +89,7 @@ class ImgFrame(QLabel):
                     frame_name_list.remove(self.plane)
                     for i in frame_name_list:
                         self.window().refresh_imgs(frame_name=i)
+                # refresh crosses on all img frames
                 self.window().refresh_crosses()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -134,6 +136,7 @@ class ImgFrame(QLabel):
             # refresh img/imgs and crosses
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 # only refresh current img frame
+                # no need to reload origin_rgb, zoomed_rgb, contours
                 self.window().refresh_imgs(
                     frame_name=self.plane,
                     reload_origin_rgb=False,
@@ -141,15 +144,20 @@ class ImgFrame(QLabel):
                     reload_contours=False,
                     img_pos_diff=img_pos_diff,
                 )
+                # refresh crosses on self (current img frame)
                 self.refresh_crosses()
+
+            # MODAL_FIXED mode
             else:
-                # refresh 4 img frames
+                # refresh all 4 img frames
+                # no need to reload origin_rgb, zoomed_rgb, contours
                 self.window().refresh_imgs(
                     reload_origin_rgb=False,
                     reload_zoomed_rgb=False,
                     reload_contours=False,
                     img_pos_diff=img_pos_diff,
                 )
+                # refresh crosses on all img frames
                 self.window().refresh_crosses()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
@@ -471,9 +479,11 @@ class ImgFrame(QLabel):
             self.window().cur_slice_id[self.plane] = new_slice_id
 
             # refresh new slice
+            # (1) PLANE_FIXED mode, only refresh current img frame
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
                 self.window().refresh_imgs(frame_name=self.plane)
                 self.window().refresh_crosses(frame_name=self.plane)
+            # (2) MODAL_FIXED mode, refresh all 4 img frames
             else:
                 self.window().refresh_imgs()
                 self.window().refresh_crosses()

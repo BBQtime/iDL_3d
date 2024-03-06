@@ -41,24 +41,33 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._patients["au.test.exter"] = List(dataset_split_au[DatasetPart.TEST_EXTER])
         self._patients["mda.test"] = List(dataset_split_mda[DatasetPart.TEST])
 
+        # init baseline id and cur patient
         self._baseline_id = None
         self._cur_patient = None
+
+        # init cur_slice_id dict and gtvs center
         self.cur_slice_id = Dict()
         for i in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self.cur_slice_id[i] = 0  # starts from 0
         self._gtvs_center = None
 
+        # show contour or not, switch this by key "X"
+        self.__show_contour = True
+
+        # init idl_id and idl_round
         self._idl_id = Dict()
         self._idl_round = Dict()
         for i in ["gtvt", "gtvn"]:
             self._idl_id[i] = "baseline"
             self._idl_round[i] = "round=00"
 
+        # dataset and nii spacing
         self._dataset_ver = None
         self._dataset_part = None
         self._nii_spacing = None  # (1,1,1) or (1,1,3)
         self._dataset_dir = None  # au.1mm / au.1mm / mda
 
+        # init score_dict
         self.__scores = Dict()
         self.__clear_scores()
 
@@ -351,6 +360,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __color_enhance_slider_value_update(self):
+        # refresh origin_rgb as bright/contrast changed
         self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
@@ -369,6 +379,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
             self._text_label["other.modal"].setText("MR-T2")
 
+        # refresh from origin_rgb as modality changed
         self.refresh_imgs()
 
     def display_mode(self):
@@ -422,6 +433,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._slider["mix"].hide()
 
         self.reset_cur_slice_id()
+        # refresh everything as brightness/contrast might changed
         self.refresh_imgs()
         self.refresh_crosses()
 
@@ -569,7 +581,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_zoom_slider_changed(self):
-        self.refresh_imgs()
+        # no need to reload origin_rgb, only start reloading from zoomed_rgb
+        self.refresh_imgs(reload_origin_rgb=False)
         self.refresh_crosses()
 
     def get_zoomin_factor(self):
@@ -676,7 +689,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 else:
                     self._radio_btn[DisplayMode.MODAL_FIXED][plane].setChecked(False)
 
-        # refresh imgs and crosses
+        # refresh from origin_rgb as anatomical plane changed
         self.refresh_imgs()
         self.refresh_crosses()
 
@@ -936,6 +949,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # refresh imgs after idl.gtvn is chosen
             self._load_idl_gtv_data(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
+        # refresh everything as 3d images are updated
         self.refresh_imgs()
 
     # load labels and gtvs gravity center
@@ -1131,6 +1145,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
+            # refresh everything as 3d images are updated
             self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
@@ -1207,6 +1222,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_mix_slider_changed(self):
+        # refresh from origin_rgb as weight of different planes is changed
         self.refresh_imgs()
 
     def __refresh_imgs_load_origin_rgb(self, frame_name: str):
@@ -1311,6 +1327,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # make sure contoured_rgb is not None,
         # because sometime there is not contour to draw
         self._contoured_rgb[frame_name] = self._zoomed_rgb[frame_name].copy()
+
+        if not self.__show_contour:
+            return
 
         plane = self.img_frame[frame_name].plane
 
@@ -1786,7 +1805,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         super().resizeEvent(event)
         self.__resize_img_frames()
         self._refresh_side_bar()
-        self.refresh_imgs()
+        # no need to refresh origin_rgb
+        # refresh from zoomed_rgb as img frame size is changed
+        self.refresh_imgs(reload_origin_rgb=False)
         self.refresh_crosses()
 
     def __resize_img_frames(self):
@@ -1872,7 +1893,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             elif event.key() == Qt.Key_PageUp or event.key() == Qt.Key_PageDown:
                 # image not loaded
                 if self.img_3d[Modal.CT] is None:
-                    return True
+                    return True  # Event is handled
 
                 # check which img is under mouse
                 focus_img = None
@@ -1880,7 +1901,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     if self.img_frame[i].underMouse():
                         focus_img = i
                 if focus_img is None:
-                    return True
+                    return True  # Event is handled
 
                 focus_plane = self.img_frame[focus_img].plane
                 if focus_plane == Plane.SAGITTAL:
@@ -1897,10 +1918,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 # limite slice_id in range (0, slices_count)
                 self.cur_slice_id[focus_plane] %= slices_count
 
+                # refresh imgs: refresh everything for a new slice
+                # (1) PLANE_FIXED mode, only refresh current img frame
                 if self.display_mode() == DisplayMode.PLANE_FIXED:
                     self.refresh_imgs(frame_name=focus_img)
+                # (2) MODAL_FIXED mode, refresh all 4 img frames
                 else:
                     self.refresh_imgs()
+
                 return True  # Event is handled
 
             # press "I"
@@ -1911,6 +1936,19 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # press "O"
             elif event.key() == Qt.Key_O:
                 self.__zoom_out(50)
+                return True  # Event is handled
+
+            # press "X"
+            elif event.key() == Qt.Key_X:
+                if self.__show_contour:
+                    self.__show_contour = False
+                else:
+                    self.__show_contour = True
+                # only refresh contour
+                self.refresh_imgs(
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                )
                 return True  # Event is handled
 
         # use eventFilter to handle Ctrl+Wheel events for the parent
@@ -1949,7 +1987,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             new_value = min(cur_value + step, max_value)
             self._slider["zoom"].setValue(new_value)
-            self.refresh_imgs()
+            # reload from zoomed_rgb, no need to reload origin_rgb
+            self.refresh_imgs(reload_origin_rgb=False)
             self.refresh_crosses()
 
     def __zoom_out(self, step: int):
@@ -1960,5 +1999,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             new_value = max(cur_value - step, min_value)
             self._slider["zoom"].setValue(new_value)
-            self.refresh_imgs()
+            # reload from zoomed_rgb, no need to reload origin_rgb
+            self.refresh_imgs(reload_origin_rgb=False)
             self.refresh_crosses()

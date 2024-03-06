@@ -88,12 +88,18 @@ class IDLWindow(ReplayWindow):
         ]:
             return
 
-        # if current slice isn't the gtvt center slice, switch to the gtvt center slice.
+        # switch to the gtvt center slice if current slice is not.
         if self.cur_idl_step == IDLStep.DRAW_GTVT:
             gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_frame.plane]
             if self.cur_slice_id[img_frame.plane] != gtvt_center_slice_id:
                 self.cur_slice_id[img_frame.plane] = gtvt_center_slice_id
-                self.refresh_imgs()
+                # (1) PLANE_FIXED mode, only refresh current img frame
+                if self.display_mode() == DisplayMode.PLANE_FIXED:
+                    frame_name = img_frame.get_frame_name()
+                    self.refresh_imgs(frame_name=frame_name)
+                # (2) MODAL_FIXED mode, refresh all 4 img frames
+                else:
+                    self.refresh_imgs()
                 return
 
         # (1) for pen/eraser mode, record paint position
@@ -180,9 +186,13 @@ class IDLWindow(ReplayWindow):
                     img_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
                     mask_3d[:, :, w] = np.zeros_like(mask_3d[:, :, w])
 
-            # update 3d np arrays and refresh imgs
+            # update 3d np arrays
             self.__combine_pred_delineation_correction()
-            self.refresh_imgs()
+            # refresh contours only (on all img frames) after using "clear" tool
+            self.refresh_imgs(
+                reload_origin_rgb=False,
+                reload_zoomed_rgb=False,
+            )
 
     def draw_on_img_frame_move(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         if self.paint_pos is None:
@@ -424,7 +434,11 @@ class IDLWindow(ReplayWindow):
 
         # update UI
         self.__clear_all_drawing_layers(img_frame)
-        self.refresh_imgs()
+        # refresh contours only (on all img frames) after drawing
+        self.refresh_imgs(
+            reload_origin_rgb=False,
+            reload_zoomed_rgb=False,
+        )
 
     def __interpolation(
         self,
@@ -1142,7 +1156,11 @@ class IDLWindow(ReplayWindow):
 
         # (3) refresh todolist and imgs
         self.__refresh_todo_list()
-        self.refresh_imgs()
+        # refresh contours only (on all img frames)
+        self.refresh_imgs(
+            reload_origin_rgb=False,
+            reload_zoomed_rgb=False,
+        )
 
         # (4) update widgets
         self.__enable_annotation_tools()
@@ -1225,7 +1243,11 @@ class IDLWindow(ReplayWindow):
 
         # (6) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
-        self.refresh_imgs()
+        # refresh contours only (on all img frames)
+        self.refresh_imgs(
+            reload_origin_rgb=False,
+            reload_zoomed_rgb=False,
+        )
         self.delete_all_crosses()
 
         # (7) update widgets
@@ -1264,7 +1286,11 @@ class IDLWindow(ReplayWindow):
 
         # (3) refresh todolist and imgs
         self.__refresh_todo_list()
-        self.refresh_imgs()
+        # refresh contours only (on all img frames)
+        self.refresh_imgs(
+            reload_origin_rgb=False,
+            reload_zoomed_rgb=False,
+        )
 
         # (4) update widgets
         self.__enable_annotation_tools()
