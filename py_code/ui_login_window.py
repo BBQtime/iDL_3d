@@ -130,7 +130,6 @@ class LoginWindow(QtWidgets.QMainWindow):
             self.__main_window = IDLWindow(
                 user_name=self.__simplify_user_name(),
                 train_id=train_id,
-                debug_mode=1,
             )
 
         # install the event filter on the QApplication instance

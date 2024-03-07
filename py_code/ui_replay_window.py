@@ -9,6 +9,7 @@ from custom import Global as g
 from custom import Img, Json, List, Nii, Value
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QMessageBox
 from scipy.ndimage import measurements
 from str_lib import DatasetPart, DatasetVer, DisplayMode, Metric, Modal, Plane
 from superqt import QCollapsible
@@ -33,6 +34,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self,
         ui_setting: Dict,  # this is for idl_window
     ):
+        self._debug_mode = ui_setting["debug.mode"]
+
         # load test set patients of au and mda datasets
         dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM])
         dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
@@ -1948,6 +1951,39 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     reload_zoomed_rgb=False,
                 )
                 return True  # Event is handled
+
+            # press "F1"
+            elif event.key() == Qt.Key_F1:
+                text = (
+                    "Software Name: Interactive Deep-learning Tool\n"
+                    "\n"
+                    "Control\n"
+                    "1 - Navigation through Slices: Use the mouse wheel to cycle through image slices\n"
+                    "2 - Annotation and Targeting: Left-click to paint or set the center of the target volume.\n"
+                    "3 - Zoom: Ctrl + mouse wheel up/down for zooming in/out. "
+                    "Alternatively, press i for zoom-in and o for zoom-out\n"
+                    "4 - Image Dragging: Press and hold the right click to drag the image when zoomed in\n"
+                    "\n"
+                    "Tool Bar\n"
+                    "1 - TODO LIST: Features a 6-step process indicator. "
+                    "Yellow highlights the current step; gray indicates a step not started, and green marks a completed step. "
+                    "Click a green step to revert.\n"
+                    "2 - ANNOTATION TOOLS: Contains buttons for drawing tools. Select a tool and then apply it on the image. "
+                    "Adjust the pen/eraser size using the slider bar.\n"
+                    "3 - DISPLAY MODE:\n"
+                    "   (1) Plane Fixed Mode displays Transverse, Coronal, and Sagittal planes simultaneously, "
+                    "allowing users to switch between modalities.\n"
+                    "   (2) Modality Fixed Mode shows CT, PT, MRt1, MRt2 simultaneously, "
+                    "facilitating the switch between anatomical planes.\n"
+                    "4 - COLOR ENHANCEMENT: Adjust the brightness and contrast of images for improved visualization.\n"
+                )
+                QMessageBox.information(
+                    self,
+                    "Help",
+                    text,
+                    QMessageBox.Ok,
+                )
+                return True
 
         # use eventFilter to handle Ctrl+Wheel events for the parent
         # otherwise only child widget's wheel event is triggered

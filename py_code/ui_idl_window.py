@@ -75,7 +75,6 @@ class IDLWindow(ReplayWindow):
     ):
         self.__user_name = user_name
         self.__train_id = train_id
-        self.__debug_mode = debug_mode
         # pass debug_mode parameter to the parent class
         super().__init__()
 
@@ -890,7 +889,7 @@ class IDLWindow(ReplayWindow):
             idl_gtvt_id=self._idl_id["gtvt"],
             patient=self._cur_patient,
             dataset_ver=self._dataset_ver,
-            debug_mode=self.__debug_mode,
+            debug_mode=self._debug_mode,
         )
         self.__idl_gtvt_thread.start()
 
@@ -1268,7 +1267,7 @@ class IDLWindow(ReplayWindow):
             idl_gtvn_clicks=idl_gtvn_clicks,
             dataset_part=self._dataset_part,
             dataset_ver=self._dataset_ver,
-            debug_mode=self.__debug_mode,
+            debug_mode=self._debug_mode,
         )
         self.__idl_gtvn_thread.start()
 
@@ -1694,9 +1693,9 @@ class IDLWindow(ReplayWindow):
             IDLStep.CORRECT_BOTH,
         ]:
             self._btn["restore"].setEnabled(True)
-            self._btn["restore"].show()
+            # self._btn["restore"].show()
         else:
-            self._btn["restore"].hide()
+            # self._btn["restore"].hide()
             self._btn["restore"].setEnabled(False)
 
         # pen/eraser size slider bars
@@ -1915,7 +1914,7 @@ class IDLWindow(ReplayWindow):
                         self.__user_name = self.__user_name[:-1]
                     self._idl_id[i] += "_" + self.__user_name
 
-                if self.__debug_mode:
+                if self._debug_mode:
                     self._idl_id[i] += "_" + Debug.DELETE_FLAG
 
             # create idl.gtvt/gtvn folders
