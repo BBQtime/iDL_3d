@@ -110,81 +110,127 @@ class IDLWindow(ReplayWindow):
             DrawingMode.GTVN_ERASER,
         ]:
             self.paint_pos = event.pos()
+            return
 
-        # (2) for clear mode, wipe out delineation
-        elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
-            # drawing gtvt
-            if self.cur_idl_step == IDLStep.DRAW_GTVT:
-                # get the position of gtvt center
-                d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
-                d, h, w = int(d), int(h), int(w)
+        # (2) clear gtvt delineation in current plane
+        elif self.cur_idl_step == IDLStep.DRAW_GTVT and self.drawing_mode in [
+            DrawingMode.GTVT_CLEAR,
+            DrawingMode.GTVN_CLEAR,
+        ]:
+            # get the position of gtvt center
+            d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+            d, h, w = int(d), int(h), int(w)
 
-                img_3d = self.img_3d["gtvt.delineation"]
+            delineation = self.img_3d["gtvt.delineation"]
 
-                # clear delineation on cur plane
-                # (abandoned) use mask to make sure to filter out the delineation on current plane only
-                if img_frame.plane == Plane.TRANSVERSE:
-                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][d, :, :])
-                    # mask[h, :] = 1
-                    # mask[:, w] = 1
-                    # self.img_3d["gtvt.delineation"][d, :, :] *= mask
-                    img_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
-                elif img_frame.plane == Plane.CORONAL:
-                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, h, :])
-                    # mask[d, :] = 1
-                    # mask[:, w] = 1
-                    # self.img_3d["gtvt.delineation"][:, h, :] *= mask
-                    img_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
-                elif img_frame.plane == Plane.SAGITTAL:
-                    # mask = np.zeros_like(self.img_3d["gtvt.delineation"][:, :, w])
-                    # mask[d, :] = 1
-                    # mask[:, h] = 1
-                    # self.img_3d["gtvt.delineation"][:, :, w] *= mask
-                    img_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
+            # clear delineation on cur plane
+            if img_frame.plane == Plane.TRANSVERSE:
+                delineation[d, :, :] = np.zeros_like(delineation[d, :, :])
+            elif img_frame.plane == Plane.CORONAL:
+                delineation[:, h, :] = np.zeros_like(delineation[:, h, :])
+            elif img_frame.plane == Plane.SAGITTAL:
+                delineation[:, :, w] = np.zeros_like(delineation[:, :, w])
 
-                # update gtvt delineated state
-                self.__gtvt_delineated_state[img_frame.plane] = False
-                # update todo list
-                self._text_label[
-                    "draw.gtvt.{}".format(img_frame.plane)
-                ].set_status_missing()
+            # update gtvt delineated state
+            self.__gtvt_delineated_state[img_frame.plane] = False
+            # update todo list
+            self._text_label[
+                "draw.gtvt.{}".format(img_frame.plane)
+            ].set_status_missing()
 
-            # correcting gtvt/gtvn
-            elif self.cur_idl_step in [
-                IDLStep.CORRECT_GTVT,
-                IDLStep.CORRECT_GTVN,
-                IDLStep.CORRECT_BOTH,
+            # refresh contours only (on all img frames) after using "clear" tool
+            self.refresh_imgs(
+                reload_origin_rgb=False,
+                reload_zoomed_rgb=False,
+            )
+
+        # (3) "clear" / "restore" in correction step
+        elif self.cur_idl_step in [
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            if self.drawing_mode in [
+                DrawingMode.GTVT_CLEAR,
+                DrawingMode.GTVT_RESTORE,
             ]:
-                if self.drawing_mode == DrawingMode.GTVT_CLEAR:
-                    gtv = "gtvt"
-                elif self.drawing_mode == DrawingMode.GTVN_CLEAR:
-                    gtv = "gtvn"
+                gtv = "gtvt"
+            elif self.drawing_mode in [
+                DrawingMode.GTVN_CLEAR,
+                DrawingMode.GTVN_RESTORE,
+            ]:
+                gtv = "gtvn"
 
-                # clear correction on cur plane
-                # use ct img qlabel's plane
-                d = h = w = self.cur_slice_id[img_frame.plane]
-                img_3d = self.img_3d["{}.correction".format(gtv)]
-                mask_3d = self.img_3d["{}.correction.mask".format(gtv)]
-                pred_final = self.img_3d["{}.pred.final".format(gtv)]
-                pred_origin = self.img_3d["{}.pred".format(gtv)]
+            d = h = w = self.cur_slice_id[img_frame.plane]
+            correction = self.img_3d["{}.correction".format(gtv)]
+            correction_mask = self.img_3d["{}.correction.mask".format(gtv)]
 
-                # clear slice in 3d img
-                if img_frame.plane == Plane.TRANSVERSE:
-                    img_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
-                    mask_3d[d, :, :] = np.zeros_like(mask_3d[d, :, :])
+            if img_frame.plane == Plane.TRANSVERSE:
+                if self.drawing_mode in [
+                    DrawingMode.GTVT_CLEAR,
+                    DrawingMode.GTVN_CLEAR,
+                ]:
+                    # clear correction and enable correction mask
+                    correction[d, :, :] = np.zeros_like(correction[d, :, :])
+                    correction_mask[d, :, :] = np.ones_like(correction[d, :, :])
                     self.__interpolation(
                         cur_slice_id=d,
-                        correction=img_3d,
-                        correction_mask=mask_3d,
-                        pred_final=pred_final,
-                        pred_origin=pred_origin,
+                        correction=correction,
+                        correction_mask=correction_mask,
+                        pred_final=self.img_3d["{}.pred.final".format(gtv)],
                     )
-                elif img_frame.plane == Plane.CORONAL:
-                    img_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
-                    mask_3d[:, h, :] = np.zeros_like(mask_3d[:, h, :])
-                elif img_frame.plane == Plane.SAGITTAL:
-                    img_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
-                    mask_3d[:, :, w] = np.zeros_like(mask_3d[:, :, w])
+
+                if self.drawing_mode in [
+                    DrawingMode.GTVT_RESTORE,
+                    DrawingMode.GTVN_RESTORE,
+                ]:
+                    # clear slices within interpolation_step
+                    slice_id_list = [d]
+                    if self.interpolation_step > 1:
+                        for i in range(1, self.interpolation_step - 1):
+                            slice_id_list.append(d + i)
+                            slice_id_list.append(d - i)
+                    for i in slice_id_list:
+                        if i < 0 or i > correction.shape[0]:
+                            continue
+                        else:
+                            # clear both correction and mask
+                            correction[i, :, :] = np.zeros_like(correction[i, :, :])
+                            correction_mask[i, :, :] = np.zeros_like(
+                                correction_mask[i, :, :]
+                            )
+
+            elif img_frame.plane == Plane.CORONAL:
+                # clear correction
+                correction[:, h, :] = np.zeros_like(correction[:, h, :])
+                # "clear" mode, enable correction mask
+                if self.drawing_mode in [
+                    DrawingMode.GTVT_CLEAR,
+                    DrawingMode.GTVN_CLEAR,
+                ]:
+                    correction_mask[:, h, :] = np.ones_like(correction_mask[:, h, :])
+                # "restore" mode, disable correction mask
+                elif self.drawing_mode in [
+                    DrawingMode.GTVT_RESTORE,
+                    DrawingMode.GTVN_RESTORE,
+                ]:
+                    correction_mask[:, h, :] = np.zeros_like(correction_mask[:, h, :])
+
+            elif img_frame.plane == Plane.SAGITTAL:
+                # clear correction
+                correction[:, :, w] = np.zeros_like(correction[:, :, w])
+                # "clear" mode, enable correction mask
+                if self.drawing_mode in [
+                    DrawingMode.GTVT_CLEAR,
+                    DrawingMode.GTVN_CLEAR,
+                ]:
+                    correction_mask[:, :, w] = np.ones_like(correction_mask[:, :, w])
+                # "restore" mode, disable correction mask
+                elif self.drawing_mode in [
+                    DrawingMode.GTVT_RESTORE,
+                    DrawingMode.GTVN_RESTORE,
+                ]:
+                    correction_mask[:, :, w] = np.zeros_like(correction_mask[:, :, w])
 
             # update 3d np arrays
             self.__combine_pred_delineation_correction()
@@ -374,58 +420,60 @@ class IDLWindow(ReplayWindow):
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
             new_drawing = 1 - new_drawing
 
-        # get 3d img and correction mask
+        # DRAW_GTVT mode
         if self.cur_idl_step == IDLStep.DRAW_GTVT:
-            img_3d = self.img_3d["gtvt.delineation"]
+            delineation = self.img_3d["gtvt.delineation"]
+            # replace slice in 3d delineation
+            if img_frame.plane == Plane.TRANSVERSE:
+                delineation[d, :, :] = new_drawing
+            elif img_frame.plane == Plane.CORONAL:
+                delineation[:, h, :] = new_drawing
+            elif img_frame.plane == Plane.SAGITTAL:
+                delineation[:, :, w] = new_drawing
+
         elif self.cur_idl_step in [
             IDLStep.CORRECT_GTVT,
             IDLStep.CORRECT_GTVN,
             IDLStep.CORRECT_BOTH,
         ]:
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                img_3d = self.img_3d["gtvt.correction"]
-                mask_3d = self.img_3d["gtvt.correction.mask"]
+                correction = self.img_3d["gtvt.correction"]
+                correction_mask = self.img_3d["gtvt.correction.mask"]
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
-                img_3d = self.img_3d["gtvn.correction"]
-                mask_3d = self.img_3d["gtvn.correction.mask"]
+                correction = self.img_3d["gtvn.correction"]
+                correction_mask = self.img_3d["gtvn.correction.mask"]
 
-        # replace slice in 3d img
-        if img_frame.plane == Plane.TRANSVERSE:
-            img_3d[d, :, :] = new_drawing
-        elif img_frame.plane == Plane.CORONAL:
-            img_3d[:, h, :] = new_drawing
-        elif img_frame.plane == Plane.SAGITTAL:
-            img_3d[:, :, w] = new_drawing
-
-        # update correction masks
-        if self.cur_idl_step in [
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-            IDLStep.CORRECT_BOTH,
-        ]:
+            # replace slice in 3d correction
             if img_frame.plane == Plane.TRANSVERSE:
-                if img_3d[d, :, :].max() == 0:
-                    mask_3d[d, :, :] = np.zeros_like(img_3d[d, :, :])
+                correction[d, :, :] = new_drawing
+            elif img_frame.plane == Plane.CORONAL:
+                correction[:, h, :] = new_drawing
+            elif img_frame.plane == Plane.SAGITTAL:
+                correction[:, :, w] = new_drawing
+
+            if img_frame.plane == Plane.TRANSVERSE:
+                if new_drawing.max() == 0:
+                    correction_mask[d, :, :] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[d, :, :] = np.ones_like(img_3d[d, :, :])
+                    correction_mask[d, :, :] = np.ones_like(new_drawing)
                 self.__interpolation(
                     cur_slice_id=d,
-                    correction=img_3d,
-                    correction_mask=mask_3d,
+                    correction=correction,
+                    correction_mask=correction_mask,
                     pred_final=pred_final,
                 )
 
             elif img_frame.plane == Plane.CORONAL:
-                if img_3d[:, h, :].max() == 0:
-                    mask_3d[:, h, :] = np.zeros_like(img_3d[:, h, :])
+                if new_drawing.max() == 0:
+                    correction_mask[:, h, :] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[:, h, :] = np.ones_like(img_3d[:, h, :])
+                    correction_mask[:, h, :] = np.ones_like(new_drawing)
 
             elif img_frame.plane == Plane.SAGITTAL:
-                if img_3d[:, :, w].max() == 0:
-                    mask_3d[:, :, w] = np.zeros_like(img_3d[:, :, w])
+                if new_drawing.max() == 0:
+                    correction_mask[:, :, w] = np.zeros_like(new_drawing)
                 else:
-                    mask_3d[:, :, w] = np.ones_like(img_3d[:, :, w])
+                    correction_mask[:, :, w] = np.ones_like(new_drawing)
 
         # update values
         self.paint_pos = None
@@ -446,7 +494,6 @@ class IDLWindow(ReplayWindow):
         correction: ndarray,
         correction_mask: ndarray,
         pred_final: ndarray,
-        pred_origin: ndarray = None,
     ):
         start_end_slices_pairs = []
 
@@ -463,25 +510,12 @@ class IDLWindow(ReplayWindow):
             start_end_slices_pairs.append((cur_slice_id, next_slice_id))
 
         for start_slice_id, end_slice_id in start_end_slices_pairs:
-            # if correction mask on current slice == 0,
-            # means "restore" button is clicked, use "pred.final" istead of "correction"
-            if correction_mask[cur_slice_id, :, :].max() == 0:
-                if start_slice_id == cur_slice_id:
-                    start_slice_data = pred_origin[start_slice_id, :, :]
-                    end_slice_data = pred_final[end_slice_id, :, :]
-                else:
-                    start_slice_data = pred_final[start_slice_id, :, :]
-                    end_slice_data = pred_origin[end_slice_id, :, :]
-
-            # correction mask on current slice > 0,
-            # means there are corrections on current slice
+            if start_slice_id == cur_slice_id:
+                start_slice_data = correction[start_slice_id, :, :]
+                end_slice_data = pred_final[end_slice_id, :, :]
             else:
-                if start_slice_id == cur_slice_id:
-                    start_slice_data = correction[start_slice_id, :, :]
-                    end_slice_data = pred_final[end_slice_id, :, :]
-                else:
-                    start_slice_data = pred_final[start_slice_id, :, :]
-                    end_slice_data = correction[end_slice_id, :, :]
+                start_slice_data = pred_final[start_slice_id, :, :]
+                end_slice_data = correction[end_slice_id, :, :]
 
             # generate interpolated slices
             interpolation_func = interp1d(
@@ -500,10 +534,7 @@ class IDLWindow(ReplayWindow):
 
             # update correction mask for interpolated slices
             for i in range(start_slice_id + 1, end_slice_id):
-                if correction[i, :, :].max() == 0:
-                    correction_mask[i, :, :] = np.zeros_like(correction[i, :, :])
-                else:
-                    correction_mask[i, :, :] = np.ones_like(correction[i, :, :])
+                correction_mask[i, :, :] = np.ones_like(correction[i, :, :])
 
     def __save_corrections_and_masks(self):
         for gtv in ["gtvt", "gtvn"]:
@@ -1411,6 +1442,10 @@ class IDLWindow(ReplayWindow):
             tool = "clear"
             left = cursor_size * 0.5
             top = cursor_size * 0.5
+        elif self.drawing_mode in [DrawingMode.GTVT_RESTORE, DrawingMode.GTVN_RESTORE]:
+            tool = "restore"
+            left = cursor_size * 0.5
+            top = cursor_size * 0.5
 
         # CORRECT_BOTH is not a key of self.__cursor
         # change into CORRECT_GTVT or CORRECT_GTVN based on drawing mode
@@ -1419,12 +1454,14 @@ class IDLWindow(ReplayWindow):
                 DrawingMode.GTVT_PEN,
                 DrawingMode.GTVT_ERASER,
                 DrawingMode.GTVT_CLEAR,
+                DrawingMode.GTVT_RESTORE,
             ]:
                 idl_step = IDLStep.CORRECT_GTVT
             elif self.drawing_mode in [
                 DrawingMode.GTVN_PEN,
                 DrawingMode.GTVN_ERASER,
                 DrawingMode.GTVN_CLEAR,
+                DrawingMode.GTVN_RESTORE,
             ]:
                 idl_step = IDLStep.CORRECT_GTVN
 
@@ -1438,7 +1475,7 @@ class IDLWindow(ReplayWindow):
         self.__cursor = Dict()
         cursor_size = 32  # cursor size is no larger than 32
         origin_color = (0, 0, 0)
-        for tool in ["pen", "eraser", "clear"]:
+        for tool in ["pen", "eraser", "clear", "restore"]:
             origin_cursor = QtGui.QPixmap(
                 (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(tool)))
             )
@@ -1480,28 +1517,52 @@ class IDLWindow(ReplayWindow):
             self.color[i] = self.color[ui_setting["color.contour"]["{}.idl".format(i)]]
 
     # this function is connected to widget, dont set input params to this function
-    def __on_btn_clear_clicked(self):
+    def __on_btn_restore_clicked(self):
+        if self.cur_idl_step not in [
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            return
 
-        # (1) update drawing mode
+        # update drawing mode
+        if self.cur_idl_step == IDLStep.CORRECT_GTVT:
+            self.drawing_mode = DrawingMode.GTVT_RESTORE
+
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
+            self.drawing_mode = DrawingMode.GTVN_RESTORE
+
+        elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
+            if self._radio_btn["correct.gtvt"].isChecked():
+                self.drawing_mode = DrawingMode.GTVT_RESTORE
+            elif self._radio_btn["correct.gtvn"].isChecked():
+                self.drawing_mode = DrawingMode.GTVN_RESTORE
+
+    # this function is connected to widget, dont set input params to this function
+    def __on_btn_clear_clicked(self):
+        if self.cur_idl_step not in [
+            IDLStep.DRAW_GTVT,
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            return
+
+        # update drawing mode
         if self.cur_idl_step in [
-            IDLStep.CLICK_GTVT_CENTER,
             IDLStep.DRAW_GTVT,
             IDLStep.CORRECT_GTVT,
         ]:
             self.drawing_mode = DrawingMode.GTVT_CLEAR
-        elif self.cur_idl_step in [IDLStep.CLICK_GTVN_CENTER, IDLStep.CORRECT_GTVN]:
+
+        elif self.cur_idl_step == IDLStep.CORRECT_GTVN:
             self.drawing_mode = DrawingMode.GTVN_CLEAR
+
         elif self.cur_idl_step == IDLStep.CORRECT_BOTH:
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_CLEAR
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
-
-        # (2) update widgets
-        self._text_label["pen.size"].hide()
-        self._slider["pen.size"].hide()
-        self._text_label["eraser.size"].hide()
-        self._slider["eraser.size"].hide()
 
     def __get_gtvt_center_slices_id(self):
         if self.gtvt_click_pos_3d is None:
@@ -1627,6 +1688,16 @@ class IDLWindow(ReplayWindow):
         # annotation buttons
         for i in ["pen", "eraser", "clear"]:
             self._btn[i].setEnabled(True)
+        if self.cur_idl_step in [
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
+            self._btn["restore"].setEnabled(True)
+            self._btn["restore"].show()
+        else:
+            self._btn["restore"].hide()
+            self._btn["restore"].setEnabled(False)
 
         # pen/eraser size slider bars
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
@@ -1639,11 +1710,6 @@ class IDLWindow(ReplayWindow):
             self._slider["pen.size"].hide()
             self._text_label["eraser.size"].show()
             self._slider["eraser.size"].show()
-        elif self.drawing_mode in [DrawingMode.GTVT_CLEAR, DrawingMode.GTVN_CLEAR]:
-            self._text_label["pen.size"].hide()
-            self._slider["pen.size"].hide()
-            self._text_label["eraser.size"].hide()
-            self._slider["eraser.size"].hide()
 
         # radio buttons: correct gtvt/gtvn
         for i in ["correct.gtvt", "correct.gtvn"]:
@@ -1655,7 +1721,7 @@ class IDLWindow(ReplayWindow):
         self._collap["annotation"].expand()
 
     def __disable_annotation_tools(self):
-        for i in ["pen", "eraser", "clear"]:
+        for i in ["pen", "eraser", "clear", "restore"]:
             self._btn[i].setEnabled(False)
         for i in ["pen.size", "eraser.size"]:
             self._text_label[i].hide()
@@ -1674,14 +1740,13 @@ class IDLWindow(ReplayWindow):
         for i in ["gtvt.progress", "gtvn.progress", "pen.size", "eraser.size"]:
             self._text_label[i] = QtWidgets.QLabel()
             self._text_label[i].setFixedHeight(g.TEXT_HEIGHT)
+            self._text_label[i].hide()
 
         # set text
         self._text_label["pen.size"].setText("Pen Size")
         self._text_label["eraser.size"].setText("Eraser Size")
         self._text_label["gtvt.progress"].setText("Generating GTVt")
         self._text_label["gtvn.progress"].setText("Generating GTVn")
-        for i in ["gtvt", "gtvn"]:
-            self._text_label["{}.progress".format(i)].hide()
 
         # radio button
         for i in ["gtvt", "gtvn"]:
@@ -1692,19 +1757,19 @@ class IDLWindow(ReplayWindow):
         self._radio_btn["correct.gtvt"].setChecked(True)
 
         # annotation buttons
-        for i in ["pen", "eraser", "clear"]:
+        for i in ["pen", "eraser", "clear", "restore"]:
             self._btn[i] = QtWidgets.QPushButton()
             height = 40 if g.is_linux() else 60
             self._btn[i].setFixedHeight(height)
             # add too tip and set stylesheet
             self._btn[i].setStyleSheet(
                 """
-            QToolTip {
-                font-weight: light;
-                color: dark-gray;
-                background-color: #fff;
-                border: 1px solid black;
-            }
+                QToolTip {
+                    font-weight: light;
+                    color: dark-gray;
+                    background-color: #fff;
+                    border: 1px solid black;
+                }
             """
             )
             self._btn[i].setToolTip(i.capitalize())
@@ -1718,6 +1783,8 @@ class IDLWindow(ReplayWindow):
                 icon_size = 31 if g.is_linux() else 46
             elif i == "clear":
                 icon_size = 33 if g.is_linux() else 48
+            elif i == "restore":
+                icon_size = 28 if g.is_linux() else 42
             self._btn[i].setIconSize(QSize(icon_size, icon_size))
             self._btn[i].setIcon(icon)
             self._btn[i].setEnabled(False)
@@ -1726,6 +1793,7 @@ class IDLWindow(ReplayWindow):
         self._btn["pen"].clicked.connect(self.__on_btn_pen_clicked)
         self._btn["eraser"].clicked.connect(self.__on_btn_eraser_clicked)
         self._btn["clear"].clicked.connect(self.__on_btn_clear_clicked)
+        self._btn["restore"].clicked.connect(self.__on_btn_restore_clicked)
 
         # gtvt/gtvn progress bars
         self.__progress_bar = Dict()
@@ -1741,6 +1809,7 @@ class IDLWindow(ReplayWindow):
             self._slider[i] = QtWidgets.QSlider()
             self._slider[i].setFixedHeight(g.SLIDER_HEIGHT)
             self._slider[i].setOrientation(Qt.Horizontal)
+            self._slider[i].hide()
             self._slider[i].setMinimum(0)
             self._slider[i].setMaximum(2)
         self._slider["pen.size"].setValue(0)
@@ -1764,7 +1833,7 @@ class IDLWindow(ReplayWindow):
         # (1) add annotation buttons
         h_layout = QtWidgets.QHBoxLayout()
         h_layout.setSpacing(20)
-        for i in ["pen", "eraser", "clear"]:
+        for i in ["pen", "eraser", "clear", "restore"]:
             h_layout.addWidget(self._btn[i])
         v_layout.addLayout(h_layout)
 
@@ -2177,11 +2246,15 @@ class IDLWindow(ReplayWindow):
         elif self.cur_idl_step == IDLStep.APPROVED:
             self.__goto_idl_step_approved()
 
-    def ensure_slice_id_multiple(self, slice_id: int):
+    def ensure_slice_id_multiple(self, slice_id: int, slice_count: int):
         remainder = slice_id % self.interpolation_step
         slice_id -= remainder
-        if remainder > self.interpolation_step / 2:
+        if (
+            remainder > self.interpolation_step / 2
+            and slice_id + self.interpolation_step <= slice_count - 1
+        ):
             slice_id += self.interpolation_step
+        slice_id = Value.limit_range(slice_id, (0, slice_count - 1))
         return slice_id
 
     def reset_cur_slice_id(self):
@@ -2197,7 +2270,8 @@ class IDLWindow(ReplayWindow):
                 )
                 # make sure transverse slice id is a multiple of interpolation step
                 self.cur_slice_id[Plane.TRANSVERSE] = self.ensure_slice_id_multiple(
-                    self.cur_slice_id[Plane.TRANSVERSE]
+                    slice_id=self.cur_slice_id[Plane.TRANSVERSE],
+                    slice_count=self.img_3d[Modal.CT].shape[0],
                 )
 
             else:
@@ -2402,6 +2476,13 @@ class IDLWindow(ReplayWindow):
 
     def __combine_pred_delineation_correction(self):
         if self.img_3d[Modal.CT] is None:
+            return
+
+        if self.cur_idl_step not in [
+            IDLStep.CORRECT_GTVT,
+            IDLStep.CORRECT_GTVN,
+            IDLStep.CORRECT_BOTH,
+        ]:
             return
 
         for i in ["gtvt", "gtvn"]:

@@ -13,6 +13,8 @@ class DrawingMode:
     GTVN_ERASER = "gtvn.eraser"
     GTVT_CLEAR = "gtvt.clear"
     GTVN_CLEAR = "gtvn.clear"
+    GTVT_RESTORE = "gtvt.restore"
+    GTVN_RESTORE = "gtvn.restore"
 
 
 class IDLStep:

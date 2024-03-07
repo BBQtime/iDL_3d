@@ -1622,12 +1622,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         cur_slice_id = self.cur_slice_id[plane] + 1
         if plane == Plane.SAGITTAL:
-            slices_count = self.img_3d[Modal.CT].shape[2]
+            slice_count = self.img_3d[Modal.CT].shape[2]
         elif plane == Plane.CORONAL:
-            slices_count = self.img_3d[Modal.CT].shape[1]
+            slice_count = self.img_3d[Modal.CT].shape[1]
         elif plane == Plane.TRANSVERSE:
-            slices_count = self.img_3d[Modal.CT].shape[0]
-        text = "{:03d}/{:03d}".format(cur_slice_id, slices_count)
+            slice_count = self.img_3d[Modal.CT].shape[0]
+        text = "{:03d}/{:03d}".format(cur_slice_id, slice_count)
 
         left = qimg.width() - 83
         bottom = self._get_text_pos_bottom(qimg)[0]
@@ -1760,14 +1760,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # mod y pos
             top += 20
 
-    # this is for ImgFrame.enterEvent()
+    # abstract function for IDLWindow, triggerd by ImgFrame.enterEvent()
     def change_mouse_cursor(self):
-        # do nothing
         return
 
-    # this is for ImgFrame.leaveEvent()
+    # abstract function for IDLWindow, triggerd by ImgFrame.enterEvent()
     def restore_mouse_cursor(self):
-        # do nothing
         return
 
     def _qimg_draw_text(
@@ -1905,18 +1903,18 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
                 focus_plane = self.img_frame[focus_img].plane
                 if focus_plane == Plane.SAGITTAL:
-                    slices_count = self.img_3d[Modal.CT].shape[2]
+                    slice_count = self.img_3d[Modal.CT].shape[2]
                 elif focus_plane == Plane.CORONAL:
-                    slices_count = self.img_3d[Modal.CT].shape[1]
+                    slice_count = self.img_3d[Modal.CT].shape[1]
                 elif focus_plane == Plane.TRANSVERSE:
-                    slices_count = self.img_3d[Modal.CT].shape[0]
+                    slice_count = self.img_3d[Modal.CT].shape[0]
 
                 if event.key() == Qt.Key_PageUp:
                     self.cur_slice_id[focus_plane] -= 1
                 elif event.key() == Qt.Key_PageDown:
                     self.cur_slice_id[focus_plane] += 1
-                # limite slice_id in range (0, slices_count)
-                self.cur_slice_id[focus_plane] %= slices_count
+                # limite slice_id in range (0, slice_count)
+                self.cur_slice_id[focus_plane] %= slice_count
 
                 # refresh imgs: refresh everything for a new slice
                 # (1) PLANE_FIXED mode, only refresh current img frame

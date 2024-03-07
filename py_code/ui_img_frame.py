@@ -348,7 +348,10 @@ class ImgFrame(QLabel):
             w = img_shape_3d[2] - w
 
         # (3) make sure transverse slice id is a multiple of interpolation step
-        d = self.window().ensure_slice_id_multiple(d)
+        d = self.window().ensure_slice_id_multiple(
+            slice_id=d,
+            slice_count=img_shape_3d[0],
+        )
 
         return d, h, w
 
@@ -454,11 +457,11 @@ class ImgFrame(QLabel):
                 return
 
             if self.plane == Plane.SAGITTAL:
-                slices_count = ct_img.shape[2]
+                slice_count = ct_img.shape[2]
             elif self.plane == Plane.CORONAL:
-                slices_count = ct_img.shape[1]
+                slice_count = ct_img.shape[1]
             elif self.plane == Plane.TRANSVERSE:
-                slices_count = ct_img.shape[0]
+                slice_count = ct_img.shape[0]
 
             slice_delta = event.angleDelta().y() // 120
             if self.plane == Plane.CORONAL:
@@ -468,14 +471,17 @@ class ImgFrame(QLabel):
 
             # update slice id
             new_slice_id = self.window().cur_slice_id[self.plane] - slice_delta
-            # limite slice_id in (0, slices_count)
-            if new_slice_id > slices_count:
+            # make slice_id cycle in [0, slice_count-1]
+            if new_slice_id > slice_count - 1:
                 new_slice_id = 0
             elif new_slice_id < 0:
-                new_slice_id = slices_count
+                new_slice_id = slice_count - 1
             # make sure transverse slice id is a multiple of interpolation step
             if self.plane == Plane.TRANSVERSE:
-                new_slice_id = self.window().ensure_slice_id_multiple(new_slice_id)
+                new_slice_id = self.window().ensure_slice_id_multiple(
+                    slice_id=new_slice_id,
+                    slice_count=slice_count,
+                )
             self.window().cur_slice_id[self.plane] = new_slice_id
 
             # refresh new slice

@@ -25,7 +25,7 @@
     },
     "eraser.size.min": 12,
     "eraser.size.step": 8,
-    "interpolation.step": 3,
+    "interpolation.step": 2,
     "pen.size.min": 5,
     "pen.size.step": 3
 }
