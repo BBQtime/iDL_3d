@@ -960,12 +960,14 @@ class IDLWindow(ReplayWindow):
             DrawingMode.GTVT_PEN,
             DrawingMode.GTVT_ERASER,
             DrawingMode.GTVT_CLEAR,
+            DrawingMode.GTVT_RESTORE,
         ]:
             self._radio_btn["correct.gtvt"].setChecked(True)
         elif self.drawing_mode in [
             DrawingMode.GTVN_PEN,
             DrawingMode.GTVN_ERASER,
             DrawingMode.GTVN_CLEAR,
+            DrawingMode.GTVN_RESTORE,
         ]:
             self._radio_btn["correct.gtvn"].setChecked(True)
         self.__enable_annotation_tools()
@@ -2007,6 +2009,9 @@ class IDLWindow(ReplayWindow):
             # clear
             elif self.drawing_mode == DrawingMode.GTVN_CLEAR:
                 self.drawing_mode = DrawingMode.GTVT_CLEAR
+            # restore
+            elif self.drawing_mode == DrawingMode.GTVN_RESTORE:
+                self.drawing_mode = DrawingMode.GTVT_RESTORE
 
         # gtvt to gtvn
         elif self._radio_btn["correct.gtvn"].isChecked():
@@ -2019,6 +2024,9 @@ class IDLWindow(ReplayWindow):
             # clear
             elif self.drawing_mode == DrawingMode.GTVT_CLEAR:
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
+            # restore
+            elif self.drawing_mode == DrawingMode.GTVT_RESTORE:
+                self.drawing_mode = DrawingMode.GTVN_RESTORE
 
     def get_pen_size(self):
         pen_size = (
