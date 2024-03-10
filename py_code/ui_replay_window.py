@@ -30,19 +30,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # self.__init_zoomin()
         self._load_baseline_data()  # load first baseline result
 
+    def _init_patients(self):
+        # load test set patients of all datasets
+        self._patients = Dict()
+        for i in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.MDA]:
+            dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
+            self._patients[i] = List(dataset_split[DatasetPart.TEST])
+
     def _init_data(
         self,
         ui_setting: Dict,  # this is for idl_window
     ):
         self._debug_mode = ui_setting["debug.mode"]
 
-        # load test set patients of au and mda datasets
-        dataset_split_au = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM])
-        dataset_split_mda = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
-        self._patients = Dict()
-        self._patients["au.test.inter"] = List(dataset_split_au[DatasetPart.TEST_INTER])
-        self._patients["au.test.exter"] = List(dataset_split_au[DatasetPart.TEST_EXTER])
-        self._patients["mda.test"] = List(dataset_split_mda[DatasetPart.TEST])
+        self._init_patients()
 
         # init baseline id and cur patient
         self._baseline_id = None
@@ -65,10 +66,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._idl_round[i] = "round=00"
 
         # dataset and nii spacing
-        self._dataset_ver = None
-        self._dataset_part = None
-        self._nii_spacing = None  # (1,1,1) or (1,1,3)
-        self._dataset_dir = None  # au.1mm / au.1mm / mda
+        self.dataset_ver = None
+        self._dataset_dir = None  # au / obs.study / mda
 
         # init score_dict
         self.__scores = Dict()
@@ -169,7 +168,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     def retranslateUi(self, Core):
         _translate = QtCore.QCoreApplication.translate
-        Core.setWindowTitle(_translate("Core", "Interactive Learning Tool"))
+        Core.setWindowTitle(_translate("Core", "Interactive Deep-learning Tool"))
 
     def _init_widgets_img_frames(self):
         self.img_frame = Dict()
@@ -218,11 +217,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
         )
         self.combox["baseline"].addItems(baseline_id_list)
 
-        # set real idl baseline id as default
+        # set observer study baseline id as default
         for baseline_id in baseline_id_list:
-            if "real.idl" in baseline_id:
-                real_idl_baseline_id = baseline_id
-        self.combox["baseline"].setCurrentText(real_idl_baseline_id)
+            if "obs.study" in baseline_id:
+                obs_study_baseline_id = baseline_id
+        self.combox["baseline"].setCurrentText(obs_study_baseline_id)
 
         # arrow buttons
         self._arrow_btn = Dict()
@@ -755,7 +754,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             content_list.append(combox.itemText(i))
         return content_list
 
-    def _load_dataset_dir_and_nii_spacing(self):
+    def _load_dataset_dir(self):
         # load slice thickness from baseline hyper
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
         fold_dir = Dir.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
@@ -764,33 +763,28 @@ class ReplayWindow(QtWidgets.QMainWindow):
         ]
 
         # set dataset dir based on current patient
-        if self._cur_patient in self._patients["au.test.inter"]:
-            self._dataset_ver = baseline_dataset_ver
-            self._dataset_part = DatasetPart.TEST_INTER
-
-        elif self._cur_patient in self._patients["au.test.exter"]:
-            self._dataset_ver = baseline_dataset_ver
-            self._dataset_part = DatasetPart.TEST_EXTER
-
-        elif self._cur_patient in self._patients["mda.test"]:
-            self._dataset_ver = DatasetVer.MDA
-            self._dataset_part = DatasetPart.TEST
+        if self._cur_patient in self._patients[DatasetVer.AU]:
+            self.dataset_ver = baseline_dataset_ver
+        elif self._cur_patient in self._patients[DatasetVer.OBS_STUDY]:
+            self.dataset_ver = DatasetVer.OBS_STUDY
+        elif self._cur_patient in self._patients[DatasetVer.MDA]:
+            self.dataset_ver = DatasetVer.MDA
         else:
             Debug.error_exit("Can't find current patient in testset patients!")
 
         # set dataset dir and nii spacing
-        self._dataset_dir = g.DATASET_DIR[self._dataset_ver]
-        self._nii_spacing = g.NII_SPACING[self._dataset_ver]
+        self._dataset_dir = g.DATASET_DIR[self.dataset_ver]
 
     def _fill_combox_patient(self):
-        combox_patients = Dir.get_sub_dirs(
-            os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
-        )
-        # from "patient=123" to "123"
-        for i in range(len(combox_patients)):
-            combox_patients[i] = combox_patients[i][len("patient=") :]
+        # combox_patients = Dir.get_sub_dirs(
+        #     os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
+        # )
+        # # from "patient=123" to "123"
+        # for i in range(len(combox_patients)):
+        #     combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        combox_patients.find_identical_items(self._patients.to_list())
+        # combox_patients.find_identical_items(self._patients.to_list())
+        combox_patients = self._patients.to_list()
         combox_patients.sort()
         self.combox["patient"].addItems(combox_patients)
         self.combox["patient"].setEnabled(True)
@@ -843,8 +837,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # turn upside down
         img = np.flip(img, axis=0)
 
-        # flip left/right for 1mm data
-        if self._nii_spacing[2] == 1.0:
+        # flip left/right
+        if self.dataset_ver in [DatasetVer.AU]:
             img = np.flip(img, axis=2)
 
         return img
@@ -879,7 +873,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
-        self._load_dataset_dir_and_nii_spacing()
+        self._load_dataset_dir()
 
         # reset comboboxes
         for i in ["idl.gtvt", "idl.gtvn"]:
@@ -897,7 +891,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 key_word=i,
                 full_path=True,
             ):
-                if Path(idl_result_dir).name == "idl.gtvn_real.idl":
+                if Path(idl_result_dir).name == "idl.gtvn_obs.study":
                     continue
                 patient_dir = os.path.join(
                     idl_result_dir,
@@ -1123,7 +1117,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 "baseline",
-                "inference_{}_{}.json".format(self._dataset_ver, self._dataset_part),
+                "inference_{}.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1138,7 +1132,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id[gtv],
-                "inference_{}_{}.json".format(self._dataset_ver, self._dataset_part),
+                "inference_{}.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = Json.load(gtvn_score_path)
@@ -1296,32 +1290,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 src2=np.zeros_like(slice_2d),
                 beta=0,
                 gamma=self._slider["bright"][modal].value(),
-            )
-
-        # (3) spacing upscalling
-        if self._nii_spacing[2] != 1.0 and plane == Plane.SAGITTAL:
-            spacing_height = round(
-                origin_rgb.shape[0] * self._nii_spacing[2] / self._nii_spacing[1]
-            )
-            origin_rgb = cv2.resize(
-                origin_rgb,
-                (
-                    origin_rgb.shape[1],
-                    spacing_height,
-                ),
-                interpolation=cv2.INTER_CUBIC,
-            )
-        elif self._nii_spacing[2] != 1.0 and plane == Plane.CORONAL:
-            spacing_height = round(
-                origin_rgb.shape[0] * self._nii_spacing[2] / self._nii_spacing[0]
-            )
-            origin_rgb = cv2.resize(
-                origin_rgb,
-                (
-                    origin_rgb.shape[1],
-                    spacing_height,
-                ),
-                interpolation=cv2.INTER_CUBIC,
             )
 
         self._origin_rgb[frame_name] = origin_rgb
@@ -1957,29 +1925,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 text = (
                     "Software Name: Interactive Deep-learning Tool\n"
                     "\n"
-                    "Control\n"
-                    "1 - Navigation through Slices: Use the mouse wheel to cycle through image slices.\n"
-                    "2 - Annotation and Targeting: Left-click to paint or set the center of the target volume.\n"
-                    "3 - Zoom: Ctrl + mouse wheel up/down for zooming in/out. "
-                    "Alternatively, press i for zoom-in and o for zoom-out.\n"
-                    "4 - Image Dragging: Press and hold the right click to drag the image when zoomed in.\n"
-                    "5 - Show/Hide Contours: Press X to toggle the visibility of contours on the image.\n"
-                    "\n"
-                    "Tool Bar\n"
-                    "1 - TODO LIST: Features a 6-step process indicator. "
-                    "Yellow highlights the current step; gray indicates a step not started, and green marks a completed step. "
-                    "Click a green step to revert.\n"
-                    "\n"
-                    "2 - ANNOTATION TOOLS: Contains buttons for drawing tools. Select a tool and then apply it on the image. "
-                    "Adjust the pen/eraser size using the slider bar.\n"
-                    "\n"
-                    "3 - DISPLAY MODE:\n"
-                    "   (1) Plane Fixed Mode displays Transverse, Coronal, and Sagittal planes simultaneously, "
-                    "allowing users to switch between modalities.\n"
-                    "   (2) Modality Fixed Mode shows CT, PT, MRt1, MRt2 simultaneously, "
-                    "facilitating the switch between anatomical planes.\n"
-                    "\n"
-                    "4 - COLOR ENHANCEMENT: Adjust the brightness and contrast of images for improved visualization.\n"
+                    "Mouse wheel up - Previous slice\n"
+                    "Mouse wheel down - Next slice.\n"
+                    "Ctrl + mouse wheel up - Zoom in.\n"
+                    "Ctrl + mouse wheel down - Zoom out.\n"
+                    "I - Zoom in.\n"
+                    "O - Zoom out.\n"
+                    "X - Show/Hide contours.\n"
+                    "Left click - Paint.\n"
+                    "Right click - Drag and move image (when zoomed in).\n"
                 )
                 QMessageBox.information(
                     self,

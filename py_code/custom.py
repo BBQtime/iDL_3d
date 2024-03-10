@@ -715,43 +715,35 @@ class Global:
 
     DATASET_DIR = Dict()
 
-    if is_linux():
-        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
-            DATASET_DIR[i] = __settings["dataset.dir.linux.{}".format(i)]
-        NUM_WORKERS = __settings["num.workers"]
-    else:
-        for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
-            DATASET_DIR[i] = __settings["dataset.dir.windows.{}".format(i)]
-        # window doesn't support pytorch multi-thread
-        NUM_WORKERS = 0
+    for i in [
+        DatasetVer.AU,
+        DatasetVer.OBS_STUDY,
+        DatasetVer.MDA,
+    ]:
+        platform_name = "linux" if is_linux() else "windows"
+        DATASET_DIR[i] = __settings["dataset.dir.{}.{}".format(platform_name, i)]
+
+    # window doesn't support pytorch multi-thread
+    NUM_WORKERS = __settings["num.workers"] if is_linux() else 0
 
     # IMG_SHAPE (Depth, Height, Width)
-    IMG_SHAPE = Dict()
-    IMG_SHAPE[DatasetVer.AU_3MM] = List(__settings["img.shape.3mm"])
-    IMG_SHAPE[DatasetVer.AU_1MM] = List(__settings["img.shape.1mm"])
-    IMG_SHAPE[DatasetVer.MDA] = List(__settings["img.shape.1mm"])
+    IMG_SHAPE = List(__settings["img.shape"])
+    IMG_SHAPE = tuple(int(k) for k in IMG_SHAPE)
 
     # NII_SPACING (Width, Height, Depth)
-    NII_SPACING = Dict()
-    NII_SPACING[DatasetVer.AU_3MM] = List(__settings["nii.spacing.3mm"])
-    NII_SPACING[DatasetVer.AU_1MM] = List(__settings["nii.spacing.1mm"])
-    NII_SPACING[DatasetVer.MDA] = List(__settings["nii.spacing.1mm"])
-
-    for i in [DatasetVer.AU_3MM, DatasetVer.AU_1MM, DatasetVer.MDA]:
-        IMG_SHAPE[i] = tuple(int(k) for k in IMG_SHAPE[i])
-        NII_SPACING[i] = tuple(float(k) for k in NII_SPACING[i])
+    NII_SPACING = List(__settings["nii.spacing"])
+    NII_SPACING = tuple(float(k) for k in NII_SPACING)
 
     # dataset splitting
     DATASET_SPLIT_JSON_PATH = Dict()
-    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_1MM] = os.path.join(
-        PROJ_DIR, __settings["dataset.split.json.au"]
-    )
-    DATASET_SPLIT_JSON_PATH[DatasetVer.AU_3MM] = os.path.join(
-        PROJ_DIR, __settings["dataset.split.json.au"]
-    )
-    DATASET_SPLIT_JSON_PATH[DatasetVer.MDA] = os.path.join(
-        PROJ_DIR, __settings["dataset.split.json.mda"]
-    )
+    for i in [
+        DatasetVer.AU,
+        DatasetVer.OBS_STUDY,
+        DatasetVer.MDA,
+    ]:
+        DATASET_SPLIT_JSON_PATH[i] = os.path.join(
+            PROJ_DIR, __settings["dataset.split.json.{}".format(i)]
+        )
 
     HYPER_JSON_PATH = Dict()
     for i in ["baseline", "idl.gtvt", "idl.gtvn"]:

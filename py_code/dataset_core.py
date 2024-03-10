@@ -15,7 +15,7 @@ class DatasetCore(torch.utils.data.Dataset):
         augment: Dict = None,
     ):
         self._dataset_dir = g.DATASET_DIR[dataset_ver]
-        self._img_shape = g.IMG_SHAPE[dataset_ver]
+        self._img_shape = g.IMG_SHAPE
         self._no_pt = no_pt
         self._augment = DataAugmentation(param=augment)
 

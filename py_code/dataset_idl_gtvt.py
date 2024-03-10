@@ -20,7 +20,7 @@ class DataSetIDLGTVt(DatasetCore):
         patient: str,
         selected_slices: Dict,
         pred_dir: str,
-        delineation_dir: str,  # this is only for real idl
+        delineation_dir: str,  # this is only for observer study
         dataset_ver: str,
         no_pt: bool,
         augment: Dict,
@@ -32,7 +32,7 @@ class DataSetIDLGTVt(DatasetCore):
         # origin images
         self.__origin = Dict()
 
-        # real idl
+        # observer study
         if delineation_dir is not None:
             self.__origin["label"] = Nii.load(
                 os.path.join(delineation_dir, "gtvt_delineation.nii.gz"), binary=True

@@ -34,23 +34,21 @@ class IDLStep:
     APPROVED = "approved"
 
 
+class DatasetVer:
+    AU = "au"
+    OBS_STUDY = "obs.study"
+    MDA = "mda"
+
+
 class DatasetPart:
     TRAIN = "train"
     VALID = "valid"
     TEST = "test"
-    TEST_INTER = "test.inter"
-    TEST_EXTER = "test.exter"
 
 
 class DisplayMode:
     MODAL_FIXED = "modal.fixed"
     PLANE_FIXED = "plane.fixed"
-
-
-class DatasetVer:
-    AU_3MM = "au.3mm"
-    AU_1MM = "au.1mm"
-    MDA = "mda"
 
 
 class Modal:

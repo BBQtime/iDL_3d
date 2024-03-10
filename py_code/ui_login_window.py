@@ -98,7 +98,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         user_name = self.__simplify_user_name()
 
         # get all train results
-        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_real.idl")
+        baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
         if user_name == "Admin":
             key_word = ""
         else:

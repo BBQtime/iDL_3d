@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from custom import GPU
 from custom import Global as g
-from str_lib import DatasetVer
 from torch import Tensor
 
 
@@ -81,10 +80,7 @@ class UNetSlim(nn.Module):
             # nn.ModuleDict module name must be "str"
             self.up[str(i)] = nn.ModuleDict()
 
-        if dataset_ver == DatasetVer.AU_3MM:
-            kernel = (1, 2, 2)
-        else:
-            kernel = 2
+        kernel = 2
 
         self.up["4"]["0"] = nn.ConvTranspose3d(edge_chan * 16, edge_chan * 16, 2, 2)
         self.up["3"]["1"] = nn.ConvTranspose3d(edge_chan * 8, edge_chan * 8, 2, 2)

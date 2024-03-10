@@ -20,7 +20,7 @@ from unet_pp_slim import UNetPPSlim
 from unet_slim import UNetSlim
 
 
-class RealIDLProgress:
+class ObsStudyProgress:
     def __init__(self):
         self.cur_step = None
         self.total_step = None
@@ -38,7 +38,7 @@ class RealIDLProgress:
 class TrainingCore:
     def __init__(self):
         self._timer = Timer()
-        self._idl_progress = None
+        self._obs_study_progress = None
 
     def _load_patients(
         self,
@@ -46,40 +46,40 @@ class TrainingCore:
         fold: int = None,  # fold=None means no validation set, but use all folds as training set
         debug_mode: bool = False,
     ):
+        patients = Dict()
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
 
-        # calculate fold count
-        fold_count = 0
-        for key_name in dataset_split.keys():
-            if "fold." in key_name:
-                fold_count += 1
+        if dataset_ver == DatasetVer.OBS_STUDY:
+            patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
+            return patients
 
-        if fold_count != g.DATASET_FOLDS:
-            dataset_split = self.__split_dataset()
+        else:
+            # calculate fold count
+            fold_count = 0
+            for key_name in dataset_split.keys():
+                if "fold." in key_name:
+                    fold_count += 1
 
-        patients = Dict()
-        # test set
-        for key_name in [
-            DatasetPart.TEST_INTER,
-            DatasetPart.TEST_EXTER,
-            DatasetPart.TEST,
-        ]:
-            patients[key_name] = List(dataset_split[key_name])
-        # valid set
-        patients[DatasetPart.VALID] = List(dataset_split["fold.{}".format(fold)])
-        # train set
-        patients[DatasetPart.TRAIN] = List()
-        for key_name in dataset_split.keys():
-            if "fold." in key_name and key_name != "fold.{}".format(fold):
-                patients[DatasetPart.TRAIN] += List(dataset_split[key_name])
+            if fold_count != g.DATASET_FOLDS:
+                dataset_split = self.__split_dataset()
 
-        if debug_mode:
-            for key_name in patients.keys():
-                # keep 2 patients to test median score calculation
-                # keep 1 patient for faster debugging
-                patients[key_name] = patients[key_name][:2]
+            # test set
+            patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
+            # valid set
+            patients[DatasetPart.VALID] = List(dataset_split["fold.{}".format(fold)])
+            # train set
+            patients[DatasetPart.TRAIN] = List()
+            for key_name in dataset_split.keys():
+                if "fold." in key_name and key_name != "fold.{}".format(fold):
+                    patients[DatasetPart.TRAIN] += List(dataset_split[key_name])
 
-        return patients
+            if debug_mode:
+                for key_name in patients.keys():
+                    # keep 2 patients to test median score calculation
+                    # keep 1 patient for faster debugging
+                    patients[key_name] = patients[key_name][:2]
+
+            return patients
 
     # if float64 needed, use: "cnn.to(torch.double)"
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
@@ -109,12 +109,10 @@ class TrainingCore:
         cnn = cnn.to(g.DEVICE)
         return cnn
 
-    def _load_segment_metrics(self, dataset_ver: str) -> Dict:
+    def _load_segment_metrics(self) -> Dict:
         segment_metrics = Dict()
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            segment_metrics[metric] = SegmentationMetric(
-                metric=metric, dataset_ver=dataset_ver
-            )
+            segment_metrics[metric] = SegmentationMetric(metric)
             # following line will cause bug, cant figure out why:
             # if GPU.used_count() > 1:
             #     segment_metrics[metric] = DataParallel(segment_metrics[metric])
@@ -402,9 +400,11 @@ class TrainingCore:
 
         # idl progress INFERENCE_LOAD_IMG
         # self._timer.cal_duration("INFERENCE_LOAD_IMG")
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_LOAD_IMG
-            self._idl_progress.emit_signal()
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.INFERENCE_LOAD_IMG
+            )
+            self._obs_study_progress.emit_signal()
 
         # get predictions from cnn
         cnn.eval()  # disable dropout / batch nomalize
@@ -415,9 +415,11 @@ class TrainingCore:
 
         # idl progress INFERENCE_FORWARD
         # self._timer.cal_duration("INFERENCE_FORWARD")
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_FORWARD
-            self._idl_progress.emit_signal()
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.INFERENCE_FORWARD
+            )
+            self._obs_study_progress.emit_signal()
 
         # record img into outputs
         self._inference_single_patient_record_outputs(
@@ -442,7 +444,7 @@ class TrainingCore:
         self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate scores of current patient
-        if dataset_part != DatasetPart.TRAIN and self._idl_progress is None:
+        if dataset_part != DatasetPart.TRAIN and self._obs_study_progress is None:
             for gtv in outputs.keys():
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     outputs[gtv][metric] = segment_metrics[metric](
@@ -506,64 +508,34 @@ class TrainingCore:
             if dataset_ver is None:
                 dataset_ver = origin_dataset_ver
 
-            if origin_dataset_ver == DatasetVer.MDA:
-                if dataset_ver != DatasetVer.MDA:
-                    Debug.error_exit(
-                        "Due to existing train info, 'dataset_ver' is restricted to 'MDA' only!"
-                    )
-
-            elif origin_dataset_ver == DatasetVer.AU_1MM:
-                if dataset_ver == DatasetVer.AU_3MM:
-                    Debug.error_exit(
-                        "Due to existing train info, 'dataset_ver' can not be 'AU.3mm'!"
-                    )
-
-            elif origin_dataset_ver == DatasetVer.AU_3MM:
-                if dataset_ver != DatasetVer.AU_3MM:
-                    Debug.error_exit(
-                        "Due to existing train info, 'dataset_ver' is restricted to 'AU.3mm' only!"
-                    )
-            else:
+            if origin_dataset_ver not in [
+                DatasetVer.AU,
+                DatasetVer.MDA,
+                DatasetVer.OBS_STUDY,
+            ]:
                 Debug.error_exit(
-                    "'origin_dataset_ver' must be one of 'AU.1mm/AU.3mm/MDA'!"
+                    "Invalid 'origin_dataset_ver' value: {}!".format(origin_dataset_ver)
                 )
 
-        elif dataset_ver not in [DatasetVer.AU_1MM, DatasetVer.AU_3MM, DatasetVer.MDA]:
-            Debug.error_exit("'dataset_ver' must be one of 'AU.1mm/AU.3mm/MDA'!")
+            elif origin_dataset_ver == DatasetVer.MDA and dataset_ver != DatasetVer.MDA:
+                Debug.error_exit(
+                    "'dataset_ver' is restricted to 'MDA' only, "
+                    "as 'origin_dataset_ver' is 'MDA'!"
+                )
+
+        elif dataset_ver not in [
+            DatasetVer.AU,
+            DatasetVer.MDA,
+            DatasetVer.OBS_STUDY,
+        ]:
+            Debug.error_exit("Invalid 'dataset_ver' value: {}!".format(dataset_ver))
 
         return dataset_ver
 
-    def _is_valid_dataset_part(
-        self,
-        dataset_part: str,
-        dataset_ver: str = None,
-    ):
+    def _is_valid_dataset_part(self, dataset_part: str):
         if dataset_part not in [
             DatasetPart.TRAIN,
             DatasetPart.VALID,
             DatasetPart.TEST,
-            DatasetPart.TEST_INTER,
-            DatasetPart.TEST_EXTER,
         ]:
-            Debug.error_exit(
-                "'dataset_part' must be one of 'train/valid/test/test.inter/test.exter'!"
-            )
-
-        # check dataset section based on dataset version
-        if dataset_ver is not None:
-            dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
-
-            if dataset_ver == DatasetVer.MDA:
-                if (
-                    dataset_part == DatasetPart.TEST_INTER
-                    or dataset_part == DatasetPart.TEST_EXTER
-                ):
-                    Debug.error_exit(
-                        "Use 'test' instead of 'test.inter/test.exter' for MDA dataset!"
-                    )
-
-            elif dataset_ver == DatasetVer.AU_3MM or dataset_ver == DatasetVer.AU_1MM:
-                if dataset_part == DatasetPart.TEST:
-                    Debug.error_exit(
-                        "Use 'test.inter/test.exter' instead of 'test' for AU dataset!"
-                    )
+            Debug.error_exit("'dataset_part' must be one of 'TRAIN/VALID/TEST'!")

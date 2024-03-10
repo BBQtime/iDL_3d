@@ -16,7 +16,15 @@ from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMessageBox
 from scipy import ndimage
 from scipy.interpolate import interp1d
-from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
+from str_lib import (
+    DatasetPart,
+    DatasetVer,
+    DisplayMode,
+    DrawingMode,
+    IDLStep,
+    Modal,
+    Plane,
+)
 from superqt import QCollapsible
 from ui_drag_cross import DragCross
 from ui_idl_step_label import IDLStepLabel
@@ -517,6 +525,14 @@ class IDLWindow(ReplayWindow):
                 end_slice_data = correction[end_slice_id, :, :]
 
             # generate interpolated slices
+            # origin_rgb = cv2.resize(
+            #     origin_rgb,
+            #     (
+            #         origin_rgb.shape[1],
+            #         spacing_height,
+            #     ),
+            #     interpolation=cv2.INTER_CUBIC,
+            # )
             interpolation_func = interp1d(
                 [start_slice_id, end_slice_id],
                 np.array([start_slice_data, end_slice_data]),
@@ -555,8 +571,8 @@ class IDLWindow(ReplayWindow):
 
             for i in ["correction", "correction.mask"]:
                 img = self.img_3d["{}.{}".format(gtv, i)].copy()
-                # flip left/right for 1mm data
-                if self._nii_spacing[2] == 1.0:
+                # flip left/right
+                if self.dataset_ver in [DatasetVer.AU]:
                     img = np.flip(img, axis=2)
                 # turn upside down
                 img = np.flip(img, axis=0)
@@ -571,7 +587,7 @@ class IDLWindow(ReplayWindow):
                             i.replace(".", "_"),
                         ),
                     ),
-                    spacing=self._nii_spacing,
+                    spacing=g.NII_SPACING,
                 )
 
     # this function is connected to widget, dont set input params to this function
@@ -779,15 +795,15 @@ class IDLWindow(ReplayWindow):
         )
         Dir.create(cur_round_dir)
         idl_gtvt_click = self.img_3d["gtvt.click"].copy()
-        # flip left/right for 1mm data
-        if self._nii_spacing[2] == 1.0:
+        # flip left/right
+        if self.dataset_ver in [DatasetVer.AU]:
             idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
         # turn upside down
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
         Nii.save(
             img=idl_gtvt_click,
             save_path=os.path.join(cur_round_dir, "gtvt_click.nii.gz"),
-            spacing=self._nii_spacing,
+            spacing=g.NII_SPACING,
         )
 
         # (4) save gtvt selected_slices.json
@@ -873,22 +889,21 @@ class IDLWindow(ReplayWindow):
         )
         Dir.create(cur_round_dir)
         gtvt_delineation_to_save = self.img_3d["gtvt.delineation"].copy()
-        # flip left/right for 1mm data
-        if self._nii_spacing[2] == 1.0:
+        # flip left/right
+        if self.dataset_ver in [DatasetVer.AU]:
             gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
         # turn upside down
         gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=0)
         Nii.save(
             img=gtvt_delineation_to_save,
             save_path=os.path.join(cur_round_dir, "gtvt_delineation.nii.gz"),
-            spacing=self._nii_spacing,
+            spacing=g.NII_SPACING,
         )
 
         # (3) start idl gtvt thread
         self.__idl_gtvt_thread.set_param(
             idl_gtvt_id=self._idl_id["gtvt"],
             patient=self._cur_patient,
-            dataset_ver=self._dataset_ver,
             debug_mode=self._debug_mode,
         )
         self.__idl_gtvt_thread.start()
@@ -1182,7 +1197,8 @@ class IDLWindow(ReplayWindow):
         self._load_idl_gtvt_data()
         self.__combine_pred_delineation_correction()
         # init correction and mask
-        # (they are empty anyway, its efficient to init them after __combine_pred_delineation_correction)
+        # correction and mask are empty anyway,
+        # its efficient to init them after __combine_pred_delineation_correction
         for i in ["gtvt.correction", "gtvt.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
@@ -1256,8 +1272,8 @@ class IDLWindow(ReplayWindow):
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
         # no need to flip empty img
         if idl_gtvn_clicks.max() > 0:
-            # flip left/right for 1mm data
-            if self._nii_spacing[2] == 1.0:
+            # flip left/right
+            if self.dataset_ver in [DatasetVer.AU]:
                 idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
             # turn upside down
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
@@ -1267,8 +1283,6 @@ class IDLWindow(ReplayWindow):
             idl_gtvn_id=self._idl_id["gtvn"],
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
-            dataset_part=self._dataset_part,
-            dataset_ver=self._dataset_ver,
             debug_mode=self._debug_mode,
         )
         self.__idl_gtvn_thread.start()
@@ -1312,7 +1326,8 @@ class IDLWindow(ReplayWindow):
         self._load_idl_gtvn_data()
         self.__combine_pred_delineation_correction()
         # init correction and mask
-        # (they are empty anyway, its efficient to init them after __combine_pred_delineation_correction)
+        # correction and mask are empty anyway,
+        # its efficient to init them after __combine_pred_delineation_correction
         for i in ["gtvn.correction", "gtvn.correction.mask"]:
             self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
 
@@ -1676,9 +1691,6 @@ class IDLWindow(ReplayWindow):
         for i in frame_name_list:
             self.img_frame[i].select_cross(cross_id)
 
-    def get_nii_spacing(self):
-        return self._nii_spacing
-
     def get_3d_img_shape(self):
         if self.img_3d[Modal.CT] is not None:
             return self.img_3d[Modal.CT].shape
@@ -1896,11 +1908,17 @@ class IDLWindow(ReplayWindow):
         for i in ["gtvt.correction.mask", "gtvn.correction.mask"]:
             self.img_3d[i] = None
 
+    def _init_patients(self):
+        # load test set patients of all datasets
+        self._patients = Dict()
+        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.OBS_STUDY])
+        self._patients[DatasetVer.OBS_STUDY] = List(dataset_split[DatasetPart.TEST])
+
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)
 
         # init baseline id and idl.gtvt/gtvn id, keep them unchanged
-        self._baseline_id = "baseline_real.idl"
+        self._baseline_id = "baseline_obs.study"
 
         # (1) new training
         # initlize idl.gtvt/gtvn id
@@ -2174,7 +2192,7 @@ class IDLWindow(ReplayWindow):
 
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
-        self._load_dataset_dir_and_nii_spacing()
+        self._load_dataset_dir()
 
         # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()
@@ -2483,13 +2501,6 @@ class IDLWindow(ReplayWindow):
 
     def __combine_pred_delineation_correction(self):
         if self.img_3d[Modal.CT] is None:
-            return
-
-        if self.cur_idl_step not in [
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
-            IDLStep.CORRECT_BOTH,
-        ]:
             return
 
         for i in ["gtvt", "gtvn"]:

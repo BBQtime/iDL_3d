@@ -10,13 +10,13 @@ from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
-from str_lib import DatasetPart, Metric, Stat
+from str_lib import DatasetPart, DatasetVer, Metric, Stat
 from torch import Tensor
 from training_baseline import TrainingBaseline
-from training_core import RealIDLProgress
+from training_core import ObsStudyProgress
 
 
-class RealIDLGTVnProgress(RealIDLProgress):
+class ObsStudyGTVnProgress(ObsStudyProgress):
     class ProgressStep:
         INFERENCE_INIT = 1
         INFERENCE_LOAD_IMG = 3
@@ -33,10 +33,10 @@ class TrainingIDLGTVn(TrainingBaseline):
     def __init__(self, idl_progress_signal: pyqtSignal = None):
         super().__init__()
         if idl_progress_signal is not None:
-            self._idl_progress = RealIDLGTVnProgress()
-            self._idl_progress.progress_signal = idl_progress_signal
+            self._obs_study_progress = ObsStudyGTVnProgress()
+            self._obs_study_progress.progress_signal = idl_progress_signal
         else:
-            self._idl_progress = None
+            self._obs_study_progress = None
 
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 5, out_chan: int = 2):
         # no need to reduce cnn input channel here if no_pt=true
@@ -82,70 +82,60 @@ class TrainingIDLGTVn(TrainingBaseline):
             debug_mode=debug_mode,
         )
 
-    def real_idl(
+    def obs_study(
         self,
         idl_gtvn_id: str,
         patient: str,
-        dataset_part: str,  # train/valid/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
         idl_gtvn_clicks: ndarray = None,  # None means no gtvn click
         debug_mode=False,
     ):
         print("")
-        print("real idl: {}".format(idl_gtvn_id))
+        print("observer study: {}".format(idl_gtvn_id))
 
-        baseline_id = "baseline_real.idl"
+        baseline_id = "baseline_obs.study"
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)
 
-        real_idl_cnns_base_dir = os.path.join(baseline_dir, "idl.gtvn_real.idl")
-        if not os.path.exists(real_idl_cnns_base_dir):
-            Debug.error_exit("'idl.gtvn_real.idl' folder not found!")
+        obs_study_cnns_base_dir = os.path.join(baseline_dir, "idl.gtvn_obs.study")
+        if not os.path.exists(obs_study_cnns_base_dir):
+            Debug.error_exit("'idl.gtvn_obs.study' folder not found!")
 
-        real_idl_output_dir = os.path.join(baseline_dir, idl_gtvn_id)
-        if not os.path.exists(real_idl_output_dir):
-            Dir.create(real_idl_output_dir)
+        obs_study_output_dir = os.path.join(baseline_dir, idl_gtvn_id)
+        if not os.path.exists(obs_study_output_dir):
+            Dir.create(obs_study_output_dir)
 
         cnn_fold_dirs = Dir.get_sub_dirs(
-            real_idl_cnns_base_dir, key_word="fold=", full_path=True
+            obs_study_cnns_base_dir, key_word="fold=", full_path=True
         )
         hyper = Json.load(os.path.join(cnn_fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
-        training_dataset_ver = hyper["dataset.ver"]
-
-        dataset_ver = self._is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            origin_dataset_ver=training_dataset_ver,
-        )
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # idl progress init
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step = 0
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step = 0
             if debug_mode:
-                self._idl_progress.total_step = (
-                    self._idl_progress.step.INFERENCE_INIT
-                    + self._idl_progress.step.INFERENCE_LOAD_IMG
-                    + self._idl_progress.step.INFERENCE_FORWARD
-                    + self._idl_progress.step.INFERENCE_SAVE_PRED
-                    + self._idl_progress.step.CROSS_VALID
+                self._obs_study_progress.total_step = (
+                    self._obs_study_progress.step.INFERENCE_INIT
+                    + self._obs_study_progress.step.INFERENCE_LOAD_IMG
+                    + self._obs_study_progress.step.INFERENCE_FORWARD
+                    + self._obs_study_progress.step.INFERENCE_SAVE_PRED
+                    + self._obs_study_progress.step.CROSS_VALID
                 )
             else:
-                self._idl_progress.total_step = (
-                    self._idl_progress.step.INFERENCE_INIT
-                    + self._idl_progress.step.INFERENCE_LOAD_IMG
-                    + self._idl_progress.step.INFERENCE_FORWARD
-                    + self._idl_progress.step.INFERENCE_SAVE_PRED
-                ) * len(cnn_fold_dirs) + self._idl_progress.step.CROSS_VALID
+                self._obs_study_progress.total_step = (
+                    self._obs_study_progress.step.INFERENCE_INIT
+                    + self._obs_study_progress.step.INFERENCE_LOAD_IMG
+                    + self._obs_study_progress.step.INFERENCE_FORWARD
+                    + self._obs_study_progress.step.INFERENCE_SAVE_PRED
+                ) * len(cnn_fold_dirs) + self._obs_study_progress.step.CROSS_VALID
 
         # loop through fold dirs
         for cnn_fold_dir in cnn_fold_dirs:
-            output_fold_dir = os.path.join(real_idl_output_dir, Path(cnn_fold_dir).name)
+            output_fold_dir = os.path.join(
+                obs_study_output_dir, Path(cnn_fold_dir).name
+            )
             Dir.create(output_fold_dir)
 
             cnn_epoch_dir = Dir.get_sub_dirs(
@@ -162,16 +152,18 @@ class TrainingIDLGTVn(TrainingBaseline):
 
             # idl progress INFERENCE_INIT
             # self._timer.cal_duration("INFERENCE_INIT")
-            if self._idl_progress is not None:
-                self._idl_progress.cur_step += self._idl_progress.step.INFERENCE_INIT
-                self._idl_progress.emit_signal()
+            if self._obs_study_progress is not None:
+                self._obs_study_progress.cur_step += (
+                    self._obs_study_progress.step.INFERENCE_INIT
+                )
+                self._obs_study_progress.emit_signal()
 
             # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
             patient_outputs = self._inference_single_patient(
                 patient=patient,
                 cnn=cnn,
-                dataset_ver=dataset_ver,
-                dataset_part=dataset_part,
+                dataset_ver=DatasetVer.OBS_STUDY,
+                dataset_part=DatasetPart.TEST,
                 no_pt=no_pt,
                 segment_metrics=segment_metrics,
                 idl_gtvn_baseline_id=baseline_id,
@@ -179,21 +171,21 @@ class TrainingIDLGTVn(TrainingBaseline):
             )
 
             # create folder and save preds of current patient
-            self._fold_wise_inference_save_patient_preds(
+            self._inference_on_folds_save_patient_preds(
                 patient=patient,
                 epoch_dir=output_epoch_dir,
                 patient_outputs=patient_outputs,
-                dataset_ver=dataset_ver,
-                dataset_part=dataset_part,
+                dataset_ver=DatasetVer.OBS_STUDY,
+                dataset_part=DatasetPart.TEST,
             )
 
             # idl progress INFERENCE_SAVE_PRED
             # self._timer.cal_duration("INFERENCE_SAVE_PRED")
-            if self._idl_progress is not None:
-                self._idl_progress.cur_step += (
-                    self._idl_progress.step.INFERENCE_SAVE_PRED
+            if self._obs_study_progress is not None:
+                self._obs_study_progress.cur_step += (
+                    self._obs_study_progress.step.INFERENCE_SAVE_PRED
                 )
-                self._idl_progress.emit_signal()
+                self._obs_study_progress.emit_signal()
 
             # only run 1 fold in debugging mode
             if debug_mode:
@@ -206,7 +198,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             preds[gtv] = None
 
         output_fold_dirs = Dir.get_sub_dirs(
-            real_idl_output_dir, key_word="fold=", full_path=True
+            obs_study_output_dir, key_word="fold=", full_path=True
         )
         for output_fold_dir in output_fold_dirs:
             # find epoch dir
@@ -242,7 +234,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         # create cross_valid dir
         pred_dir = os.path.join(
-            real_idl_output_dir, "patients", "patient={}".format(patient)
+            obs_study_output_dir, "patients", "patient={}".format(patient)
         )
         pred_dir = os.path.join(pred_dir, "round=01")
         Dir.create(pred_dir)
@@ -253,30 +245,29 @@ class TrainingIDLGTVn(TrainingBaseline):
                 Nii.save(
                     img=preds[gtv],
                     save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
-                    spacing=g.NII_SPACING[dataset_ver],
+                    spacing=g.NII_SPACING,
                 )
 
         # idl progress CROSS_VALID
         # self._timer.cal_duration("CROSS_VALID")
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step += self._idl_progress.step.CROSS_VALID
-            self._idl_progress.emit_signal()
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.CROSS_VALID
+            )
+            self._obs_study_progress.emit_signal()
 
-        # if self._idl_progress is not None:
-        #     print(self._idl_progress.cur_step, self._idl_progress.total_step)
+        # if self._obs_study_progress is not None:
+        #     print(self._obs_study_progress.cur_step, self._obs_study_progress.total_step)
 
-        # print("")
-        # print("real idl.gtvn done!")
-
-    def fold_wise_inference(
+    def inference_on_folds(
         self,
         idl_gtvn_id: str,
-        dataset_part: str,  # train/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_part: str,  # train/test
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._fold_wise_inference(
+        self._inference_on_folds(
             train_id=idl_gtvn_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
@@ -305,7 +296,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     g.TRAIN_RESULTS_DIR,
                     baseline_id,
                     "baseline",
-                    "inference_{}_{}.json".format(dataset_ver, dataset_part),
+                    "inference_{}.json".format(dataset_ver),
                 )
             )
 
@@ -325,7 +316,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         return scores
 
-    def _fold_wise_inference_save_patient_preds(
+    def _inference_on_folds_save_patient_preds(
         self,
         patient: str,
         epoch_dir: str,
@@ -356,7 +347,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         Nii.save(
             img=patient_outputs["gtvn"]["pred"],
             save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii.gz"),
-            spacing=g.NII_SPACING[dataset_ver],
+            spacing=g.NII_SPACING,
         )
         # save distance map and clicks
         for i in ["distance.map", "clicks"]:
@@ -368,10 +359,10 @@ class TrainingIDLGTVn(TrainingBaseline):
                 Nii.save(
                     img=patient_outputs["gtvn"][i],
                     save_path=save_path,
-                    spacing=g.NII_SPACING[dataset_ver],
+                    spacing=g.NII_SPACING,
                 )
 
-    def _fold_wise_inference_record_patient_score(
+    def _inference_on_folds_record_patient_score(
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -384,7 +375,10 @@ class TrainingIDLGTVn(TrainingBaseline):
                 scores[stat][metric]["round=01"].append(patient_outputs["gtvn"][metric])
 
     def _inference_calculate_save_avg_median(
-        self, scores: Dict, save_dir: str, dataset_ver: str, dataset_part: str
+        self,
+        scores: Dict,
+        save_dir: str,
+        dataset_ver: str,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             scores[Stat.MEDIAN][metric]["round=01"] = Value.median(
@@ -397,9 +391,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         # save scores in json
         Json.save(
             data=scores,
-            path=os.path.join(
-                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
-            ),
+            path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):
@@ -426,41 +418,21 @@ class TrainingIDLGTVn(TrainingBaseline):
             scores=scores, gtv_list=gtv_list
         )
 
-    def cross_valid_inference(
+    def inference_cross_valid(
         self,
         idl_gtvn_id: str,
-        dataset_part: str,  # test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._cross_valid_inference(
+        self._inference_cross_valid(
             train_id=idl_gtvn_id,
-            dataset_part=dataset_part,
+            dataset_part=DatasetPart.TEST,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _cross_valid_inference_is_valid_dataset_part(
-        self,
-        dataset_part: str,
-        dataset_ver: str,
-    ):
-        if dataset_part not in [
-            DatasetPart.TEST,
-            DatasetPart.TEST_INTER,
-            DatasetPart.TEST_EXTER,
-        ]:
-            Debug.error_exit(
-                "'dataset_part' must be one of 'test/test.inter/test.exter'!"
-            )
-
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
-
-    def _cross_valid_inference_record_patient_score(
+    def _inference_cross_valid_record_patient_score(
         self,
         patient: str,
         preds: Dict,

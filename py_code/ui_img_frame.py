@@ -3,7 +3,7 @@ from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
 from PyQt5.QtWidgets import QApplication, QLabel
-from str_lib import DisplayMode, DrawingMode, IDLStep, Modal, Plane
+from str_lib import DatasetVer, DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from ui_drag_cross import DragCross
 
 
@@ -343,8 +343,8 @@ class ImgFrame(QLabel):
 
         # (1) dont neet to turn upside down
 
-        # (2) flip left/right back for 1mm data
-        if self.window().get_nii_spacing() == 1.0:
+        # (2) flip left/right back
+        if self.window().dataset_ver in [DatasetVer.AU]:
             w = img_shape_3d[2] - w
 
         # (3) make sure transverse slice id is a multiple of interpolation step

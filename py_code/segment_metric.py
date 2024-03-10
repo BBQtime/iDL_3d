@@ -534,13 +534,11 @@ class SegmentationMetric(nn.Module):
     def __init__(
         self,
         metric: str,  # dsc/msd/hd95
-        dataset_ver: str,
     ):
         super().__init__()
         self.__metric = metric
         if self.__metric not in [Metric.DSC, Metric.MSD, Metric.HD95]:
             Debug.error_exit("Value of metric must be one of dsc/msd/hd95!")
-        self.__nii_spacing = g.NII_SPACING[dataset_ver]
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
         if len(preds.shape) == 4:
@@ -578,7 +576,7 @@ class SegmentationMetric(nn.Module):
                 test=preds,
                 reference=labels,
                 none_for_nonexisting=True,
-                voxel_spacing=self.__nii_spacing,
+                voxel_spacing=g.NII_SPACING,
             )
 
         elif self.__metric == Metric.HD95:
@@ -586,5 +584,5 @@ class SegmentationMetric(nn.Module):
                 test=preds,
                 reference=labels,
                 none_for_nonexisting=True,
-                voxel_spacing=self.__nii_spacing,
+                voxel_spacing=g.NII_SPACING,
             )

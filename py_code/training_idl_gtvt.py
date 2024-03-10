@@ -20,10 +20,10 @@ from str_lib import DatasetPart, DatasetVer, Metric, Plane, SelectScenario, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from training_core import RealIDLProgress, TrainingCore
+from training_core import ObsStudyProgress, TrainingCore
 
 
-class RealIDLGTVtProgress(RealIDLProgress):
+class ObsStudyGTVtProgress(ObsStudyProgress):
     class ProgressStep:
         INIT_CNN = 1
         INIT_DATALOADER = 2
@@ -41,10 +41,10 @@ class TrainingIDLGTVt(TrainingCore):
     def __init__(self, idl_progress_signal: pyqtSignal = None):
         super().__init__()
         if idl_progress_signal is not None:
-            self._idl_progress = RealIDLGTVtProgress()
-            self._idl_progress.progress_signal = idl_progress_signal
+            self._obs_study_progress = ObsStudyGTVtProgress()
+            self._obs_study_progress.progress_signal = idl_progress_signal
         else:
-            self._idl_progress = None
+            self._obs_study_progress = None
 
     def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"] is a list of lr of each round
@@ -380,7 +380,6 @@ class TrainingIDLGTVt(TrainingCore):
         round_dir: str,
         cnn,
         dataset_ver: str,
-        dataset_part: str,
         no_pt: str,
         segment_metrics: Dict = None,
     ):
@@ -400,17 +399,17 @@ class TrainingIDLGTVt(TrainingCore):
             patient=patient[len("patient=") :],
             cnn=cnn,
             dataset_ver=dataset_ver,
-            dataset_part=dataset_part,
+            dataset_part=DatasetPart.TEST,
             no_pt=no_pt,
             segment_metrics=segment_metrics,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
 
         # save score of cur patient
-        if self._idl_progress is None:
+        if self._obs_study_progress is None:
             idl_gtvt_dir = Path(round_dir).parent.parent.parent
             score_json_path = os.path.join(
-                idl_gtvt_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
+                idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
             )
             if os.path.exists(score_json_path):
                 score = Json.load(score_json_path)
@@ -422,7 +421,7 @@ class TrainingIDLGTVt(TrainingCore):
         Nii.save(
             img=patient_outputs["gtvt"]["pred"],
             save_path=os.path.join(round_dir, "gtvt_pred.nii.gz"),
-            spacing=g.NII_SPACING[dataset_ver],
+            spacing=g.NII_SPACING,
         )
 
     def __training_single_round(
@@ -430,7 +429,6 @@ class TrainingIDLGTVt(TrainingCore):
         round_dir: str,
         hyper: Dict,
         selected_slices: Dict,
-        dataset_part: str,
         segment_metrics: Dict = None,
     ):
         Dir.create(round_dir)
@@ -504,12 +502,14 @@ class TrainingIDLGTVt(TrainingCore):
 
         # idl progress INIT_DATALOADER
         # self._timer.cal_duration("INIT_DATALOADER")
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step += self._idl_progress.step.INIT_DATALOADER
-            self._idl_progress.emit_signal()
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.INIT_DATALOADER
+            )
+            self._obs_study_progress.emit_signal()
 
         # function is runing in QThread, run in background and hide tqdm bar
-        if self._idl_progress is not None:
+        if self._obs_study_progress is not None:
             iter_range = range(hyper["iter"])
 
         # not in QThread, show tqdm bar
@@ -547,18 +547,18 @@ class TrainingIDLGTVt(TrainingCore):
                 # idl progress MINI_BATCH
                 if batch_count <= 1:
                     # self._timer.cal_duration("FIRST_BATCH")
-                    if self._idl_progress is not None:
-                        self._idl_progress.cur_step += (
-                            self._idl_progress.step.FIRST_BATCH
+                    if self._obs_study_progress is not None:
+                        self._obs_study_progress.cur_step += (
+                            self._obs_study_progress.step.FIRST_BATCH
                         )
-                        self._idl_progress.emit_signal()
+                        self._obs_study_progress.emit_signal()
                 else:
                     # self._timer.cal_duration("OTHER_BATCH")
-                    if self._idl_progress is not None:
-                        self._idl_progress.cur_step += (
-                            self._idl_progress.step.OTHER_BATCH
+                    if self._obs_study_progress is not None:
+                        self._obs_study_progress.cur_step += (
+                            self._obs_study_progress.step.OTHER_BATCH
                         )
-                        self._idl_progress.emit_signal()
+                        self._obs_study_progress.emit_signal()
 
             # cur iter finished
             # update scheduler
@@ -582,7 +582,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         # save selected_slices dict before inference, because masked_label needs it
         # copy a new dict to avoid changing origin selected_slices dict
-        # dont need to save it for real idl
+        # dont need to save it for observer study
         if hyper["select.scenario"] != SelectScenario.USER_CLICK:
             selected_slices_to_save = selected_slices.copy()
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -600,7 +600,6 @@ class TrainingIDLGTVt(TrainingCore):
             round_dir=round_dir,
             cnn=hyper["cnn"],
             dataset_ver=hyper["dataset.ver"],
-            dataset_part=dataset_part,
             no_pt=hyper["no.pt"],
             segment_metrics=segment_metrics,
         )
@@ -622,7 +621,6 @@ class TrainingIDLGTVt(TrainingCore):
         patient: str,
         idl_gtvt_dir: str,
         hyper: Dict,
-        dataset_part: str,
         segment_metrics: Dict = None,
     ):
         print("")
@@ -641,13 +639,13 @@ class TrainingIDLGTVt(TrainingCore):
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
-                "inference_{}_{}.json".format(hyper["dataset.ver"], dataset_part),
+                "inference_{}.json".format(hyper["dataset.ver"]),
             )
         )
         idl_gtvt_score = Json.load(
             os.path.join(
                 idl_gtvt_dir,
-                "inference_{}_{}.json".format(hyper["dataset.ver"], dataset_part),
+                "inference_{}.json".format(hyper["dataset.ver"]),
             )
         )
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -658,7 +656,7 @@ class TrainingIDLGTVt(TrainingCore):
             idl_gtvt_score,
             os.path.join(
                 idl_gtvt_dir,
-                "inference_{}_{}.json".format(hyper["dataset.ver"], dataset_part),
+                "inference_{}.json".format(hyper["dataset.ver"]),
             ),
         )
 
@@ -693,7 +691,6 @@ class TrainingIDLGTVt(TrainingCore):
                 round_dir=round_dir,
                 hyper=hyper,
                 selected_slices=selected_slices,
-                dataset_part=dataset_part,
                 segment_metrics=segment_metrics,
             )
 
@@ -747,9 +744,7 @@ class TrainingIDLGTVt(TrainingCore):
             plt.legend()
             plt.savefig(os.path.join(idl_gtvt_dir, "loss.png"))
 
-    def __find_best_baseline_fold_cnn(
-        self, hyper: Dict, baseline_id: str, dataset_part: str
-    ) -> str:
+    def __find_best_baseline_fold_cnn(self, baseline_id: str) -> str:
         scores = Dict()
 
         fold_dirs = Dir.get_sub_dirs(
@@ -758,12 +753,16 @@ class TrainingIDLGTVt(TrainingCore):
             full_path=True,
         )
         for fold_dir in fold_dirs:
+            baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
+                "dataset.ver"
+            ]
+
             fold = Path(fold_dir).name
             epoch_dir = Dir.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
             epoch_scores = Json.load(
                 os.path.join(
                     epoch_dir,
-                    "inference_{}_{}.json".format(hyper["dataset.ver"], dataset_part),
+                    "inference_{}.json".format(baseline_dataset_ver),
                 )
             )
             for stat in [Stat.MEDIAN, Stat.AVG]:
@@ -834,13 +833,9 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_ver=dataset_ver,
             origin_dataset_ver=baseline_dataset_ver,
         )
-        if dataset_ver == DatasetVer.AU_3MM or dataset_ver == DatasetVer.AU_1MM:
-            dataset_part_list = [DatasetPart.TEST_INTER]
-        elif dataset_ver == DatasetVer.MDA:
-            dataset_part_list = [DatasetPart.TEST]
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # load hyper
         hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
@@ -881,53 +876,39 @@ class TrainingIDLGTVt(TrainingCore):
             # training start time
             hyper["time.spent.total"] = datetime.now()
 
-            for dataset_part in dataset_part_list:
-                self._is_valid_dataset_part(
-                    dataset_part=dataset_part,
-                    dataset_ver=dataset_ver,
-                )
+            # create an empty score json files
+            Json.save(
+                Dict(),
+                os.path.join(
+                    idl_gtvt_dir,
+                    "inference_{}.json".format(hyper["dataset.ver"]),
+                ),
+            )
 
-                # create an empty score json files
-                Json.save(
-                    Dict(),
-                    os.path.join(
-                        idl_gtvt_dir,
-                        "inference_{}_{}.json".format(
-                            hyper["dataset.ver"], dataset_part
-                        ),
-                    ),
-                )
+            # best baseline cnn is decided by dataset_part
+            baseline_cnn_path = self.__find_best_baseline_fold_cnn(baseline_id)
 
-                # best baseline cnn is decided by dataset_part
-                baseline_cnn_path = self.__find_best_baseline_fold_cnn(
+            patient_list = hyper["patients"][DatasetPart.TEST]
+
+            # loop through each patient
+            for patient in patient_list:
+                self.__reset_cnn(
                     hyper=hyper,
-                    baseline_id=baseline_id,
-                    dataset_part=dataset_part,
+                    baseline_cnn_path=baseline_cnn_path,
                 )
 
-                patient_list = hyper["patients"][dataset_part]
+                self.__simulation_single_patient(
+                    patient=patient,
+                    idl_gtvt_dir=idl_gtvt_dir,
+                    hyper=hyper,
+                    segment_metrics=segment_metrics,
+                )
 
-                # loop through each patient
-                for patient in patient_list:
-                    self.__reset_cnn(
-                        hyper=hyper,
-                        baseline_cnn_path=baseline_cnn_path,
-                    )
-
-                    self.__simulation_single_patient(
-                        patient=patient,
-                        idl_gtvt_dir=idl_gtvt_dir,
-                        hyper=hyper,
-                        segment_metrics=segment_metrics,
-                        dataset_part=dataset_part,
-                    )
-
-                    # calculate and save avg and median scores
-                    self._inference_calculate_save_avg_median(
-                        idl_gtvt_dir,
-                        dataset_ver=hyper["dataset.ver"],
-                        dataset_part=dataset_part,
-                    )
+                # calculate and save avg and median scores
+                self._inference_calculate_save_avg_median(
+                    idl_gtvt_dir,
+                    dataset_ver=hyper["dataset.ver"],
+                )
 
             # record total time spent
             hyper["time.spent.total"] = datetime.now() - hyper["time.spent.total"]
@@ -942,18 +923,17 @@ class TrainingIDLGTVt(TrainingCore):
 
             self._save_hyper(hyper, hyper_save_path)
 
-    def real_idl(
+    def obs_study(
         self,
         idl_gtvt_id: str,
         patient: str,
-        dataset_ver: str = None,
         debug_mode: bool = False,
     ):
         print("")
-        print("real idl: {}".format(idl_gtvt_id))
+        print("observer study: {}".format(idl_gtvt_id))
 
         # load baseline data
-        baseline_id = "baseline_real.idl"
+        baseline_id = "baseline_obs.study"
         baseline_dir = self._find_train_dir(baseline_id)
 
         baseline_fold_dirs = Dir.get_sub_dirs(
@@ -961,20 +941,9 @@ class TrainingIDLGTVt(TrainingCore):
         )
         baseline_hyper = Json.load(os.path.join(baseline_fold_dirs[0], "hyper.json"))
         no_pt = baseline_hyper["no.pt"]
-        baseline_dataset_ver = baseline_hyper["dataset.ver"]
-
-        # check dataset version
-        dataset_ver = self._is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            origin_dataset_ver=baseline_dataset_ver,
-        )
-        if dataset_ver == DatasetVer.AU_3MM or dataset_ver == DatasetVer.AU_1MM:
-            dataset_part = DatasetPart.TEST_INTER
-        elif dataset_ver == DatasetVer.MDA:
-            dataset_part = DatasetPart.TEST
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # create idl result dir
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
@@ -992,7 +961,9 @@ class TrainingIDLGTVt(TrainingCore):
 
         # idl.gtvt doesnt have "no.pt" hyperparam, copy it from baseline
         hyper["no.pt"] = no_pt
-        hyper["dataset.ver"] = dataset_ver
+
+        # change dataset version to OBS_STUDY
+        hyper["dataset.ver"] = DatasetVer.OBS_STUDY
 
         # select scenario
         selected_slices_path = os.path.join(patient_dir, "selected_slices.json")
@@ -1020,28 +991,24 @@ class TrainingIDLGTVt(TrainingCore):
         hyper["time.spent.total"] = datetime.now()
 
         # idl progress init (after load hyper)
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step = 0
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step = 0
             dataset_len = hyper["augment.times"]
             dataset_len /= hyper["batch.size.actual"]
             dataset_len = math.ceil(dataset_len)
-            self._idl_progress.total_step = (
-                self._idl_progress.step.INIT_CNN
-                + self._idl_progress.step.INIT_DATALOADER
-                + self._idl_progress.step.INFERENCE_LOAD_IMG
-                + self._idl_progress.step.INFERENCE_FORWARD
+            self._obs_study_progress.total_step = (
+                self._obs_study_progress.step.INIT_CNN
+                + self._obs_study_progress.step.INIT_DATALOADER
+                + self._obs_study_progress.step.INFERENCE_LOAD_IMG
+                + self._obs_study_progress.step.INFERENCE_FORWARD
             )
-            self._idl_progress.total_step += hyper["iter"] * (
-                self._idl_progress.step.FIRST_BATCH
-                + self._idl_progress.step.OTHER_BATCH * (dataset_len - 1)
+            self._obs_study_progress.total_step += hyper["iter"] * (
+                self._obs_study_progress.step.FIRST_BATCH
+                + self._obs_study_progress.step.OTHER_BATCH * (dataset_len - 1)
             )
 
         # best baseline cnn is decided by dataset_part
-        baseline_cnn_path = self.__find_best_baseline_fold_cnn(
-            hyper=hyper,
-            baseline_id=baseline_id,
-            dataset_part=dataset_part,
-        )
+        baseline_cnn_path = self.__find_best_baseline_fold_cnn(baseline_id)
 
         self.__reset_cnn(
             hyper=hyper,
@@ -1050,9 +1017,9 @@ class TrainingIDLGTVt(TrainingCore):
 
         # idl progress INIT_CNN
         # self._timer.cal_duration("INIT_CNN")
-        if self._idl_progress is not None:
-            self._idl_progress.cur_step += self._idl_progress.step.INIT_CNN
-            self._idl_progress.emit_signal()
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += self._obs_study_progress.step.INIT_CNN
+            self._obs_study_progress.emit_signal()
 
         # create an empty loss.json
         Json.save(Dict(), os.path.join(patient_dir, "loss.json"))
@@ -1078,7 +1045,6 @@ class TrainingIDLGTVt(TrainingCore):
             round_dir=os.path.join(patient_dir, "round=01"),
             hyper=hyper,
             selected_slices=selected_slices,
-            dataset_part=dataset_part,
             segment_metrics=segment_metrics,
         )
 
@@ -1098,13 +1064,10 @@ class TrainingIDLGTVt(TrainingCore):
 
         self._save_hyper(hyper, hyper_save_path)
 
-        # if self._idl_progress is not None:
-        #     print(self._idl_progress.cur_step, self._idl_progress.total_step)
+        # if self._obs_study_progress is not None:
+        #     print(self._obs_study_progress.cur_step, self._obs_study_progress.total_step)
 
-        # print("")
-        # print("real idl.gtvt done!")
-
-    def inference_calculate_save_avg_median(self, idl_gtvt_id: str, dataset_part: str):
+    def inference_calculate_save_avg_median(self, idl_gtvt_id: str):
         print("")
         print("calculate and save avg and median score: {}".format(idl_gtvt_id))
 
@@ -1116,24 +1079,20 @@ class TrainingIDLGTVt(TrainingCore):
         hyper = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_part))
 
         self._inference_calculate_save_avg_median(
             idl_gtvt_dir=idl_gtvt_dir,
             dataset_ver=dataset_ver,
-            dataset_part=dataset_part,
         )
 
     def _inference_calculate_save_avg_median(
-        self, idl_gtvt_dir: str, dataset_ver: str, dataset_part: str
+        self,
+        idl_gtvt_dir: str,
+        dataset_ver: str,
     ):
         score_json_path = os.path.join(
-            idl_gtvt_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
+            idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
         )
         scores = Json.load(score_json_path)
         all_patient_scores = Dict()
@@ -1160,7 +1119,7 @@ class TrainingIDLGTVt(TrainingCore):
                 )
         Json.save(data=scores, path=os.path.join(score_json_path))
 
-    def inference(self, idl_gtvt_id: str, dataset_part: str, debug_mode: bool = False):
+    def inference(self, idl_gtvt_id: str, debug_mode: bool = False):
         print("")
         print("inference: {}".format(idl_gtvt_id))
 
@@ -1174,33 +1133,28 @@ class TrainingIDLGTVt(TrainingCore):
         dataset_ver = hyper["dataset.ver"]
         no_pt = hyper["no.pt"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_part))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # get all patients
         patients = self._load_patients(
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
-        patients = patients[dataset_part]
+        patients = patients[DatasetPart.TEST]
 
         # copy baseline score
         baseline_score = Json.load(
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
-                "inference_{}_{}.json".format(dataset_ver, dataset_part),
+                "inference_{}.json".format(dataset_ver),
             )
         )
         idl_gtvt_score_path = os.path.join(
-            idl_gtvt_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
+            idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
         )
         if os.path.exists(idl_gtvt_score_path):
             idl_gtvt_score = Json.load(idl_gtvt_score_path)
@@ -1233,7 +1187,6 @@ class TrainingIDLGTVt(TrainingCore):
                     round_dir=round_dir,
                     cnn=cnn,
                     dataset_ver=dataset_ver,
-                    dataset_part=dataset_part,
                     no_pt=no_pt,
                     segment_metrics=segment_metrics,
                 )
@@ -1241,7 +1194,6 @@ class TrainingIDLGTVt(TrainingCore):
         self._inference_calculate_save_avg_median(
             idl_gtvt_dir=idl_gtvt_dir,
             dataset_ver=dataset_ver,
-            dataset_part=dataset_part,
         )
 
     def _inference_single_patient_record_labels(self, labels: Dict):
@@ -1266,21 +1218,6 @@ class TrainingIDLGTVt(TrainingCore):
                         outputs["gtvt"]["pred"], cur_cc
                     )
 
-    def _is_valid_dataset_part(
-        self,
-        dataset_part: str,
-        dataset_ver: str = None,
-    ):
-        if dataset_part not in [
-            DatasetPart.TEST,
-            DatasetPart.TEST_INTER,
-            DatasetPart.TEST_EXTER,
-        ]:
-            Debug.error_exit(
-                "'dataset_part' must be one of 'test/test.inter/test.exter'!"
-            )
-
-        super()._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
+    def _is_valid_dataset_part(self, dataset_part: str):
+        if dataset_part != DatasetPart.TEST:
+            Debug.error_exit("'dataset_part' must be 'TEST'!")

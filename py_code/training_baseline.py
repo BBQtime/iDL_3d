@@ -10,7 +10,7 @@ from custom import Img, Json, List, Nii, Value
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from str_lib import DatasetPart, DatasetVer, Metric, Stat
+from str_lib import DatasetPart, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -150,8 +150,6 @@ class TrainingBaseline(TrainingCore):
         for i in [
             DatasetPart.TRAIN,
             DatasetPart.VALID,
-            DatasetPart.TEST_INTER,
-            DatasetPart.TEST_EXTER,
             DatasetPart.TEST,
         ]:
             ignore_list.append("{}.patients".format(i))
@@ -423,17 +421,15 @@ class TrainingBaseline(TrainingCore):
             )
 
             # inference
-            if hyper["dataset.ver"] == DatasetVer.MDA:
-                dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST]
-            else:
-                dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST_INTER]
+            dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST]
 
             # if baseline, save pred of training set
+            # (in baseline training, idl_gtvn_baseline_id == None)
             if idl_gtvn_baseline_id is None:
                 dataset_part_list.append(DatasetPart.TRAIN)
 
             for dataset_part in dataset_part_list:
-                self._fold_wise_inference(
+                self._inference_on_folds(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
@@ -446,33 +442,33 @@ class TrainingBaseline(TrainingCore):
             # cross validation evaluation after non optimal epochs removed
             dataset_part_list.remove(DatasetPart.VALID)
             for dataset_part in dataset_part_list:
-                self._cross_valid_inference(
+                self._inference_cross_valid(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
                     debug_mode=debug_mode,
                 )
 
-    def fold_wise_inference(
+    def inference_on_folds(
         self,
         baseline_id: str,
-        dataset_part: str,  # train/valid/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_part: str,  # train/valid/test
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
-        self._fold_wise_inference(
+        self._inference_on_folds(
             train_id=baseline_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _fold_wise_inference(
+    def _inference_on_folds(
         self,
         train_id: str,
-        dataset_part: str,  # train/valid/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_part: str,  # train/valid/test
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         print("")
@@ -494,15 +490,12 @@ class TrainingBaseline(TrainingCore):
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
+        self._is_valid_dataset_part(dataset_part)
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_part))
+        print("dataset part: {}".format(dataset_part))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # loop through fold dirs
         for fold_dir in fold_dirs:
@@ -528,11 +521,8 @@ class TrainingBaseline(TrainingCore):
                 cnn_path = os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch))
                 cnn = self._load_exist_cnn(cnn_path)
 
-                # initialize scores dict (only for test sets)
-                if (
-                    DatasetPart.TEST in dataset_part
-                    or DatasetPart.VALID in dataset_part
-                ):
+                # initialize scores dict (valid set only)
+                if dataset_part == DatasetPart.VALID:
                     epoch_scores = self._inference_init_scores(
                         baseline_id=baseline_id,
                         dataset_ver=dataset_ver,
@@ -554,7 +544,7 @@ class TrainingBaseline(TrainingCore):
                     )
 
                     # create folder and save preds of current patient
-                    self._fold_wise_inference_save_patient_preds(
+                    self._inference_on_folds_save_patient_preds(
                         patient=patient,
                         epoch_dir=epoch_dir,
                         patient_outputs=patient_outputs,
@@ -562,12 +552,9 @@ class TrainingBaseline(TrainingCore):
                         dataset_part=dataset_part,
                     )
 
-                    # record score of current patient (test and valid sets only)
-                    if (
-                        DatasetPart.TEST in dataset_part
-                        or DatasetPart.VALID in dataset_part
-                    ):
-                        self._fold_wise_inference_record_patient_score(
+                    # record score of current patient (valid set only)
+                    if dataset_part == DatasetPart.VALID:
+                        self._inference_on_folds_record_patient_score(
                             patient=patient,
                             patient_outputs=patient_outputs,
                             scores=epoch_scores,
@@ -575,15 +562,11 @@ class TrainingBaseline(TrainingCore):
 
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
-                if (
-                    DatasetPart.TEST in dataset_part
-                    or DatasetPart.VALID in dataset_part
-                ):
+                if dataset_part == DatasetPart.VALID:
                     self._inference_calculate_save_avg_median(
                         scores=epoch_scores,
                         save_dir=epoch_dir,
                         dataset_ver=dataset_ver,
-                        dataset_part=dataset_part,
                     )
 
                 continue  # next epoch
@@ -603,7 +586,7 @@ class TrainingBaseline(TrainingCore):
 
         return scores
 
-    def _fold_wise_inference_save_patient_preds(
+    def _inference_on_folds_save_patient_preds(
         self,
         patient: str,
         epoch_dir: str,
@@ -622,10 +605,10 @@ class TrainingBaseline(TrainingCore):
             Nii.save(
                 img=patient_outputs[gtv]["pred"],
                 save_path=os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv)),
-                spacing=g.NII_SPACING[dataset_ver],
+                spacing=g.NII_SPACING,
             )
 
-    def _fold_wise_inference_record_patient_score(
+    def _inference_on_folds_record_patient_score(
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for gtv in patient_outputs.keys():
@@ -639,7 +622,10 @@ class TrainingBaseline(TrainingCore):
                     scores[stat][gtv][metric].append(patient_outputs[gtv][metric])
 
     def _inference_calculate_save_avg_median(
-        self, scores: Dict, save_dir: str, dataset_ver: str, dataset_part: str
+        self,
+        scores: Dict,
+        save_dir: str,
+        dataset_ver: str,
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -651,31 +637,29 @@ class TrainingBaseline(TrainingCore):
         # save scores in json
         Json.save(
             data=scores,
-            path=os.path.join(
-                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
-            ),
+            path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
         )
 
-    def cross_valid_inference(
+    def inference_cross_valid(
         self,
         baseline_id: str,
-        dataset_part: str,  # train/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_part: str,  # train/test
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
-        self._cross_valid_inference(
+        self._inference_cross_valid(
             train_id=baseline_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _cross_valid_inference(
+    def _inference_cross_valid(
         self,
         train_id: str,
-        dataset_part: str,  # train/test.inter/test.exter/test
-        dataset_ver: str = None,  # au.1mm/au.3mm/mda
+        dataset_part: str,  # train/test
+        dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         print("")
@@ -696,15 +680,14 @@ class TrainingBaseline(TrainingCore):
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        self._cross_valid_inference_is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
+        if dataset_part == DatasetPart.VALID:
+            Debug.error_exit("Set dataset_part to 'train' instead of 'valid'!")
+        self._is_valid_dataset_part(dataset_part)
         print("dataset version: {}".format(dataset_ver))
-        print("dataset section: {}".format(dataset_part))
+        print("dataset part: {}".format(dataset_part))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics(dataset_ver)
+        segment_metrics = self._load_segment_metrics()
 
         # create folder in train_dir to save cross_valid preds
         Dir.create(os.path.join(Path(fold_dirs[0]).parent, "patients"))
@@ -715,7 +698,7 @@ class TrainingBaseline(TrainingCore):
         )
 
         # initialize scores dict
-        if DatasetPart.TEST in dataset_part:
+        if dataset_part == DatasetPart.TEST:
             scores = self._inference_init_scores(
                 baseline_id=baseline_id,
                 dataset_ver=dataset_ver,
@@ -780,15 +763,15 @@ class TrainingBaseline(TrainingCore):
                     Nii.save(
                         img=preds[gtv],
                         save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
-                        spacing=g.NII_SPACING[dataset_ver],
+                        spacing=g.NII_SPACING,
                     )
 
             # load labels and calculate metrics (on test set only)
-            if DatasetPart.TEST in dataset_part:
+            if dataset_part == DatasetPart.TEST:
                 labels = Img.load_labels(
                     dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
                 )
-                self._cross_valid_inference_record_patient_score(
+                self._inference_cross_valid_record_patient_score(
                     patient=patient,
                     preds=preds,
                     labels=labels,
@@ -798,28 +781,14 @@ class TrainingBaseline(TrainingCore):
 
         # all patients have been traversed
         # calculate avg and median score (on test set only)
-        if DatasetPart.TEST in dataset_part:
+        if dataset_part == DatasetPart.TEST:
             self._inference_calculate_save_avg_median(
                 scores=scores,
                 save_dir=Path(fold_dirs[0]).parent,
-                dataset_part=dataset_part,
                 dataset_ver=dataset_ver,
             )
 
-    def _cross_valid_inference_is_valid_dataset_part(
-        self,
-        dataset_part: str,
-        dataset_ver: str,
-    ):
-        if DatasetPart.VALID in dataset_part:
-            Debug.error_exit("Set dataset_part to 'train' instead of 'valid'!")
-
-        self._is_valid_dataset_part(
-            dataset_part=dataset_part,
-            dataset_ver=dataset_ver,
-        )
-
-    def _cross_valid_inference_record_patient_score(
+    def _inference_cross_valid_record_patient_score(
         self,
         patient: str,
         preds: Dict,
@@ -851,7 +820,8 @@ class TrainingBaseline(TrainingCore):
         dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
-        inference_json_name = "inference_{}_valid.json".format(dataset_ver)
+        # this json file is created by "inference_on_folds", only save valid scores
+        inference_json_name = "inference_{}.json".format(dataset_ver)
 
         for fold_dir in fold_dirs:
             fold_scores = Dict()

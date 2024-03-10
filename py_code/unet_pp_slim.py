@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from custom import GPU
 from custom import Global as g
-from str_lib import DatasetVer
 from torch import Tensor
 
 
@@ -104,10 +103,7 @@ class UNetPPSlim(nn.Module):
         self.up["2"]["1"] = nn.ConvTranspose3d(skip_chan, skip_chan, 2, 2)
         self.up["2"]["2"] = nn.ConvTranspose3d(edge_chan[2], edge_chan[2], 2, 2)
 
-        if dataset_ver == DatasetVer.AU_3MM:
-            kernel = (1, 2, 2)
-        else:
-            kernel = 2
+        kernel = 2
 
         self.up["1"]["0"] = nn.ConvTranspose3d(
             edge_chan[1], edge_chan[1], kernel, kernel
@@ -249,8 +245,8 @@ class UNetPPSlim(nn.Module):
 
 # for testing
 if 0:
-    # 1mm dataset avg shape: 221 265 233
-    img_shape = (72, 256, 256)
+    # dataset avg shape: 221 265 233
+    img_shape = (221, 265, 233)
     batch_size = 1
     in_chan = 5
     out_chan = 2

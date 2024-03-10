@@ -1,7 +1,0 @@
-dataset should contains:
-
-(1) aarhus.fold.1-5
-(2) aarhus.test.inter
-(3) aarhus.test.exter
-(4) md.anderson.fold.1-5
-(5) md.anderson.test

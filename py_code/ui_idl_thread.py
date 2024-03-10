@@ -49,27 +49,21 @@ class IDLGTVnThread(IDLThread):
         idl_gtvn_id: str,
         patient: str,
         idl_gtvn_clicks: ndarray,
-        dataset_part: str,
-        dataset_ver: str,
         debug_mode: bool,
     ):
         self.__idl_gtvn_id = idl_gtvn_id
         self.__patient = patient
         self.__idl_gtvn_clicks = idl_gtvn_clicks
-        self.__dataset_part = dataset_part
-        self.__dataset_ver = dataset_ver
         self.__debug_mode = debug_mode
 
     def run(self):
         self._show_progress_widgets()
         self.is_running = True
         training_idl_gtvn = TrainingIDLGTVn(self.progress_signal)
-        training_idl_gtvn.real_idl(
+        training_idl_gtvn.obs_study(
             idl_gtvn_id=self.__idl_gtvn_id,
             patient=self.__patient,
             idl_gtvn_clicks=self.__idl_gtvn_clicks,
-            dataset_part=self.__dataset_part,
-            dataset_ver=self.__dataset_ver,
             debug_mode=self.__debug_mode,
         )
         self._hide_progress_widgets()
@@ -85,22 +79,19 @@ class IDLGTVtThread(IDLThread):
         self,
         idl_gtvt_id: str,
         patient: str,
-        dataset_ver: str,
         debug_mode: bool,
     ):
         self.__idl_gtvt_id = idl_gtvt_id
         self.__patient = patient
-        self.__dataset_ver = dataset_ver
         self.__debug_mode = debug_mode
 
     def run(self):
         self._show_progress_widgets()
         self.is_running = True
         training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
-        training_idl_gtvt.real_idl(
+        training_idl_gtvt.obs_study(
             idl_gtvt_id=self.__idl_gtvt_id,
             patient=self.__patient,
-            dataset_ver=self.__dataset_ver,
             debug_mode=self.__debug_mode,
         )
         self._hide_progress_widgets()
