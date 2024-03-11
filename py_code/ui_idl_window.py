@@ -6,25 +6,18 @@ from pathlib import Path
 import cv2
 import numpy as np
 import qimage2ndarray
+import str_lib
 from custom import Debug, Dict, Dir
 from custom import Global as g
 from custom import Img, Json, List, Nii, Timer, Value
+from interpolation import interpolate_shapes
 from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QEvent, QPoint, QSize, Qt
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtWidgets import QMessageBox
 from scipy import ndimage
-from scipy.interpolate import interp1d
-from str_lib import (
-    DatasetPart,
-    DatasetVer,
-    DisplayMode,
-    DrawingMode,
-    IDLStep,
-    Modal,
-    Plane,
-)
+from str_lib import DatasetVer, DisplayMode, DrawingMode, IDLStep, Modal, Plane
 from superqt import QCollapsible
 from ui_drag_cross import DragCross
 from ui_idl_step_label import IDLStepLabel
@@ -194,7 +187,7 @@ class IDLWindow(ReplayWindow):
                     # clear slices within interpolation_step
                     slice_id_list = [d]
                     if self.interpolation_step > 1:
-                        for i in range(1, self.interpolation_step - 1):
+                        for i in range(1, self.interpolation_step):
                             slice_id_list.append(d + i)
                             slice_id_list.append(d - i)
                     for i in slice_id_list:
@@ -525,24 +518,33 @@ class IDLWindow(ReplayWindow):
                 end_slice_data = correction[end_slice_id, :, :]
 
             # generate interpolated slices
-            # origin_rgb = cv2.resize(
-            #     origin_rgb,
-            #     (
-            #         origin_rgb.shape[1],
-            #         spacing_height,
-            #     ),
-            #     interpolation=cv2.INTER_CUBIC,
-            # )
-            interpolation_func = interp1d(
-                [start_slice_id, end_slice_id],
-                np.array([start_slice_data, end_slice_data]),
-                axis=0,
-                kind="slinear",
+            interpolated_slices = interpolate_shapes(
+                start_slice=start_slice_data,
+                end_slice=end_slice_data,
+                steps=self.interpolation_step - 1,
             )
-            interpolated_slices = interpolation_func(
-                np.arange(start_slice_id + 1, end_slice_id)
-            )
+
             interpolated_slices = Img.binarize(interpolated_slices)
+            # first_interpolated_slice = interpolated_slices[0].copy()
+            # second_interpolated_slice = interpolated_slices[0].copy()
+            # Nii.save(
+            #     first_interpolated_slice - start_slice_data,
+            #     os.path.join(g.DEBUG_DIR, "first-start.nii.gz"),
+            # )
+            # Nii.save(
+            #     second_interpolated_slice - first_interpolated_slice,
+            #     os.path.join(g.DEBUG_DIR, "second-first.nii.gz"),
+            # )
+
+            # start_slice_expanded = np.expand_dims(start_slice_data, axis=0)
+            # end_slice_expanded = np.expand_dims(end_slice_data, axis=0)
+            # all_slices = np.concatenate(
+            #     [start_slice_expanded, interpolated_slices, end_slice_expanded], axis=0
+            # )
+            # Nii.save(
+            #     all_slices,
+            #     os.path.join(g.DEBUG_DIR, "all_slices.nii.gz"),
+            # )
 
             # add interpolated slices
             correction[start_slice_id + 1 : end_slice_id, :, :] = interpolated_slices
@@ -1912,7 +1914,9 @@ class IDLWindow(ReplayWindow):
         # load test set patients of all datasets
         self._patients = Dict()
         dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[DatasetVer.OBS_STUDY])
-        self._patients[DatasetVer.OBS_STUDY] = List(dataset_split[DatasetPart.TEST])
+        self._patients[DatasetVer.OBS_STUDY] = List(
+            dataset_split[str_lib.DatasetPart.TEST]
+        )
 
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)
