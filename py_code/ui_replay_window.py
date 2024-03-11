@@ -43,6 +43,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
     ):
         self._debug_mode = ui_setting["debug.mode"]
 
+        # =1 for replay window
+        self.interpolation_step = 1
+
         self._init_patients()
 
         # init baseline id and cur patient
@@ -622,6 +625,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return
 
     def _init_widgets(self, ui_setting: Dict):
+        self.__help_msg_box_shown = False
+
         self._collap = Dict()
         self._radio_btn = Dict()
         self._radio_group = Dict()
@@ -644,14 +649,21 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._collap[i].setStyleSheet(g.FONT_STYLE)
 
         # add collapsible bars into sidebar
-        v_layout = QtWidgets.QVBoxLayout()
+        container = QtWidgets.QWidget()
+        container.setContentsMargins(0, 0, 0, 0)
+        v_layout = QtWidgets.QVBoxLayout(container)
+        v_layout.setContentsMargins(0, 0, 0, 0)
         v_layout.setSpacing(1)
         for i in self._collap.keys():
             v_layout.addWidget(self._collap[i])
-        self._side_bar = QtWidgets.QWidget(self._central_widget)
-        self._side_bar.setLayout(v_layout)
+        self._side_bar = QtWidgets.QScrollArea(parent=self._central_widget)
+        self._side_bar.setWidgetResizable(True)
+        self._side_bar.setContentsMargins(0, 0, 0, 0)
+        self._side_bar.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self._side_bar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._side_bar.setWidget(container)
 
-        self.__side_bar_width = 310 if g.is_linux() else 430
+        self.__side_bar_width = 330 if g.is_linux() else 460
         self.setMinimumSize(self.__side_bar_width + 600, 600)
         self.resize(1200, 800)  # set origin size
         self.showMaximized()
@@ -662,9 +674,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         width = self.__side_bar_width - left * 2
         height = self._central_widget.height()
         left += self.geometry().width() - self.__side_bar_width
-        rect = QtCore.QRect(left, top, width, height)
-        self._side_bar.setGeometry(rect)
-        return
+        self._side_bar.move(left, top)
+        self._side_bar.setFixedWidth(width)
+        self._side_bar.setFixedHeight(height)
 
     # this function is connected to widget, dont set input params to this function
     def __on_modal_fixed_radio_group_clicked(self):
@@ -1732,7 +1744,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             top += 20
 
     # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
-    def change_mouse_cursor(self):
+    def change_mouse_cursor(self, check_mouse_over_img_frame: bool):
         return
 
     # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
@@ -1840,72 +1852,95 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             print("No focus at the moment.")
 
+    def __event_key_space(self):
+        # image not loaded
+        if self.img_3d[Modal.CT] is None:
+            return
+        # only switch the mix slider in PLANE_FIXED mode
+        if self.display_mode() == DisplayMode.PLANE_FIXED:
+            if self._slider["mix"].value() >= 50:
+                new_val = self._slider["mix"].minimum()
+                self._slider["mix"].setValue(new_val)
+            else:
+                new_val = self._slider["mix"].maximum()
+                self._slider["mix"].setValue(new_val)
+
+    def __event_key_page_up_down(self, event):
+        # image not loaded
+        if self.img_3d[Modal.CT] is None:
+            return
+
+        # check which img is under mouse
+        img_frame_name = self._under_mouse_img_frame_name()
+        if img_frame_name is None:
+            return
+
+        plane = self.img_frame[img_frame_name].plane
+        if plane == Plane.SAGITTAL:
+            slice_count = self.img_3d[Modal.CT].shape[2]
+        elif plane == Plane.CORONAL:
+            slice_count = self.img_3d[Modal.CT].shape[1]
+        elif plane == Plane.TRANSVERSE:
+            slice_count = self.img_3d[Modal.CT].shape[0]
+
+        if event.key() == Qt.Key_PageUp:
+            self.cur_slice_id[plane] -= 1
+        elif event.key() == Qt.Key_PageDown:
+            self.cur_slice_id[plane] += 1
+        # limite slice_id in range (0, slice_count)
+        self.cur_slice_id[plane] %= slice_count
+
+        # refresh imgs: refresh everything for a new slice
+        # (1) PLANE_FIXED mode, only refresh current img frame
+        if self.display_mode() == DisplayMode.PLANE_FIXED:
+            self.refresh_imgs(frame_name=img_frame_name)
+        # (2) MODAL_FIXED mode, refresh all 4 img frames
+        else:
+            self.refresh_imgs()
+
+    def __event_key_f1(self):
+        if not self.__help_msg_box_shown:
+            text = (
+                "Software Name: Interactive Deep-learning Tool\n"
+                "\n"
+                "Mouse wheel up - Previous slice\n"
+                "Mouse wheel down - Next slice.\n"
+                "Ctrl + mouse wheel up - Zoom in.\n"
+                "Ctrl + mouse wheel down - Zoom out.\n"
+                "I - Zoom in.\n"
+                "O - Zoom out.\n"
+                "X - Show/Hide contours.\n"
+                "Left click - Paint.\n"
+                "Right click - Drag and move image (when zoomed in).\n"
+                "Delete/Backspace - Remove a selected GTVt/GTVn center.\n"
+            )
+            self.__help_msg_box_shown = True
+            QMessageBox.information(
+                self,
+                "Help",
+                text,
+                QMessageBox.Ok,
+            )
+            self.__help_msg_box_shown = False
+
     def eventFilter(self, source, event):
         # Check if the event is a key press event
         if event.type() == QtCore.QEvent.KeyPress:
             # spacebar pressed
             if event.key() == Qt.Key_Space:
-                # image not loaded
-                if self.img_3d[Modal.CT] is None:
-                    return True
-                # only switch the mix slider in PLANE_FIXED mode
-                if self.display_mode() == DisplayMode.PLANE_FIXED:
-                    if self._slider["mix"].value() >= 50:
-                        new_val = self._slider["mix"].minimum()
-                        self._slider["mix"].setValue(new_val)
-                    else:
-                        new_val = self._slider["mix"].maximum()
-                        self._slider["mix"].setValue(new_val)
-                return True  # Event is handled
+                self.__event_key_space()
 
             # pageup or pagedown pressed, goto prev/next slice
             elif event.key() == Qt.Key_PageUp or event.key() == Qt.Key_PageDown:
-                # image not loaded
-                if self.img_3d[Modal.CT] is None:
-                    return True  # Event is handled
-
-                # check which img is under mouse
-                focus_img = None
-                for i in self.img_frame.keys():
-                    if self.img_frame[i].underMouse():
-                        focus_img = i
-                if focus_img is None:
-                    return True  # Event is handled
-
-                focus_plane = self.img_frame[focus_img].plane
-                if focus_plane == Plane.SAGITTAL:
-                    slice_count = self.img_3d[Modal.CT].shape[2]
-                elif focus_plane == Plane.CORONAL:
-                    slice_count = self.img_3d[Modal.CT].shape[1]
-                elif focus_plane == Plane.TRANSVERSE:
-                    slice_count = self.img_3d[Modal.CT].shape[0]
-
-                if event.key() == Qt.Key_PageUp:
-                    self.cur_slice_id[focus_plane] -= 1
-                elif event.key() == Qt.Key_PageDown:
-                    self.cur_slice_id[focus_plane] += 1
-                # limite slice_id in range (0, slice_count)
-                self.cur_slice_id[focus_plane] %= slice_count
-
-                # refresh imgs: refresh everything for a new slice
-                # (1) PLANE_FIXED mode, only refresh current img frame
-                if self.display_mode() == DisplayMode.PLANE_FIXED:
-                    self.refresh_imgs(frame_name=focus_img)
-                # (2) MODAL_FIXED mode, refresh all 4 img frames
-                else:
-                    self.refresh_imgs()
-
-                return True  # Event is handled
+                self.__event_key_page_up_down(event)
 
             # press "I"
             elif event.key() == Qt.Key_I:
-                self.__zoom_in(50)
-                return True  # Event is handled
+                self.__zoom_in(40)
 
             # press "O"
             elif event.key() == Qt.Key_O:
-                self.__zoom_out(50)
-                return True  # Event is handled
+                self.__zoom_out(40)
 
             # press "X"
             elif event.key() == Qt.Key_X:
@@ -1918,58 +1953,120 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     reload_origin_rgb=False,
                     reload_zoomed_rgb=False,
                 )
-                return True  # Event is handled
 
             # press "F1"
             elif event.key() == Qt.Key_F1:
-                text = (
-                    "Software Name: Interactive Deep-learning Tool\n"
-                    "\n"
-                    "Mouse wheel up - Previous slice\n"
-                    "Mouse wheel down - Next slice.\n"
-                    "Ctrl + mouse wheel up - Zoom in.\n"
-                    "Ctrl + mouse wheel down - Zoom out.\n"
-                    "I - Zoom in.\n"
-                    "O - Zoom out.\n"
-                    "X - Show/Hide contours.\n"
-                    "Left click - Paint.\n"
-                    "Right click - Drag and move image (when zoomed in).\n"
-                )
-                QMessageBox.information(
-                    self,
-                    "Help",
-                    text,
-                    QMessageBox.Ok,
-                )
-                return True
+                self.__event_key_f1()
+
+            elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
+                self.delete_selected_crosses()
+
+            # return True means event is handled
+            # block all key press event from reaching any widget
+            return True
 
         # use eventFilter to handle Ctrl+Wheel events for the parent
         # otherwise only child widget's wheel event is triggered
-        elif (
-            event.type() == QtCore.QEvent.Wheel
-            and source
-            in [
-                self.img_frame[Modal.CT],
-                self.img_frame[Modal.PT],
-                self.img_frame[Modal.MR1],
-                self.img_frame[Modal.MR2],
-                self.img_frame[Plane.TRANSVERSE],
-                self.img_frame[Plane.CORONAL],
-                self.img_frame[Plane.SAGITTAL],
-            ]
-            and QtWidgets.QApplication.keyboardModifiers() == Qt.ControlModifier
-        ):
-            # wheel up, zoom in
-            if event.angleDelta().y() > 0:
-                slice_delta = event.angleDelta().y() // 120
-                self.__zoom_in(step=slice_delta * 20)
-            # wheel down, zoom out
-            else:
-                slice_delta = -event.angleDelta().y() // 120
-                self.__zoom_out(step=slice_delta * 20)
+        elif event.type() == QtCore.QEvent.Wheel:
+            # hide popup of all combobox
+            for i in self.combox.keys():
+                self.combox[i].hidePopup()
+
+            img_frame_name = self._under_mouse_img_frame_name()
+
+            if img_frame_name is not None:
+                # ctrl + wheel up/down
+                if QtWidgets.QApplication.keyboardModifiers() == Qt.ControlModifier:
+                    # wheel up, zoom in
+                    if event.angleDelta().y() > 0:
+                        self.__zoom_in(step=20)
+                    # wheel down, zoom out
+                    else:
+                        self.__zoom_out(step=20)
+
+                # wheel up/down (without ctrl)
+                else:
+                    self.__event_wheel_switch_new_slice(
+                        event=event, img_frame_name=img_frame_name
+                    )
+
+            elif self._side_bar.underMouse():
+                self.__event_wheel_on_side_bar(event)
+
+            # return True means event is handled
+            # block all other wheel event from reaching any widget
+            return True
 
         # For other events, call the base class method to ensure standard event processing
-        return super().eventFilter(source, event)
+        else:
+            return super().eventFilter(source, event)
+
+    def __event_wheel_on_side_bar(self, event: QtCore.QEvent):
+        # control vertical scroll bar
+        v_scroll_bar = self._side_bar.verticalScrollBar()
+        if event.angleDelta().y() > 0:
+            v_scroll_bar.setValue(v_scroll_bar.value() - 20)
+        else:
+            v_scroll_bar.setValue(v_scroll_bar.value() + 20)
+
+    # abstract function for ObsStudyWindow
+    def delete_selected_crosses(self):
+        return
+
+    def __event_wheel_switch_new_slice(self, event: QtCore.QEvent, img_frame_name: str):
+
+        ct_img = self.img_3d[Modal.CT]
+        if ct_img is None:
+            return
+
+        plane = self.img_frame[img_frame_name].plane
+
+        if plane == Plane.SAGITTAL:
+            slice_count = ct_img.shape[2]
+        elif plane == Plane.CORONAL:
+            slice_count = ct_img.shape[1]
+        elif plane == Plane.TRANSVERSE:
+            slice_count = ct_img.shape[0]
+
+        if event.angleDelta().y() > 0:
+            slice_delta = 1
+        else:
+            slice_delta = -1
+        if plane == Plane.CORONAL:
+            slice_delta = -slice_delta
+        elif plane == Plane.TRANSVERSE:
+            slice_delta *= self.interpolation_step
+
+        # update slice id
+        new_slice_id = self.cur_slice_id[plane] - slice_delta
+        # make slice_id cycle in [0, slice_count-1]
+        if new_slice_id > slice_count - 1:
+            new_slice_id = 0
+        elif new_slice_id < 0:
+            new_slice_id = slice_count - 1
+        # make sure transverse slice id is a multiple of interpolation step
+        if plane == Plane.TRANSVERSE:
+            new_slice_id = self.ensure_slice_id_multiple(
+                slice_id=new_slice_id,
+                slice_count=slice_count,
+            )
+        self.cur_slice_id[plane] = new_slice_id
+
+        # refresh new slice
+        # (1) PLANE_FIXED mode, only refresh current img frame
+        if self.display_mode() == DisplayMode.PLANE_FIXED:
+            self.refresh_imgs(frame_name=plane)
+            self.refresh_crosses(frame_name=plane)
+        # (2) MODAL_FIXED mode, refresh all 4 img frames
+        else:
+            self.refresh_imgs()
+            self.refresh_crosses()
+
+    def _under_mouse_img_frame_name(self) -> str:
+        for i in self.img_frame.keys():
+            if self.img_frame[i].underMouse():
+                return i
+        return None
 
     def __zoom_in(self, step: int):
         cur_value = self._slider["zoom"].value()

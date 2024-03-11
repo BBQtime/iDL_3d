@@ -196,7 +196,7 @@ class ImgFrame(QLabel):
     def enterEvent(self, event):
         super().enterEvent(event)
 
-        self.window().change_mouse_cursor()
+        self.window().change_mouse_cursor(check_mouse_over_img_frame=False)
         if self.__should_paint_eraser_circle():
             self.__circle_pos = event.pos()
             self.update()  # repaint
@@ -445,54 +445,3 @@ class ImgFrame(QLabel):
         new_cross.load_png(new_cross.UNSELECTED_CROSS_ICON_PATH)
         new_cross.show()
         self.crosses_list.append(new_cross)
-
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-
-        # ctrl is not pressed
-        if QApplication.keyboardModifiers() != Qt.ControlModifier:
-
-            ct_img = self.window().img_3d[Modal.CT]
-            if ct_img is None:
-                return
-
-            if self.plane == Plane.SAGITTAL:
-                slice_count = ct_img.shape[2]
-            elif self.plane == Plane.CORONAL:
-                slice_count = ct_img.shape[1]
-            elif self.plane == Plane.TRANSVERSE:
-                slice_count = ct_img.shape[0]
-
-            slice_delta = event.angleDelta().y() // 120
-            if self.plane == Plane.CORONAL:
-                slice_delta = -slice_delta
-            if self.plane == Plane.TRANSVERSE:
-                slice_delta *= self.window().interpolation_step
-
-            # update slice id
-            new_slice_id = self.window().cur_slice_id[self.plane] - slice_delta
-            # make slice_id cycle in [0, slice_count-1]
-            if new_slice_id > slice_count - 1:
-                new_slice_id = 0
-            elif new_slice_id < 0:
-                new_slice_id = slice_count - 1
-            # make sure transverse slice id is a multiple of interpolation step
-            if self.plane == Plane.TRANSVERSE:
-                new_slice_id = self.window().ensure_slice_id_multiple(
-                    slice_id=new_slice_id,
-                    slice_count=slice_count,
-                )
-            self.window().cur_slice_id[self.plane] = new_slice_id
-
-            # refresh new slice
-            # (1) PLANE_FIXED mode, only refresh current img frame
-            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                self.window().refresh_imgs(frame_name=self.plane)
-                self.window().refresh_crosses(frame_name=self.plane)
-            # (2) MODAL_FIXED mode, refresh all 4 img frames
-            else:
-                self.window().refresh_imgs()
-                self.window().refresh_crosses()
-
-        # Mark the event as handled
-        event.accept()

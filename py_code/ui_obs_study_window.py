@@ -1225,7 +1225,7 @@ class ObsStudyWindow(ReplayWindow):
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
-            self.change_mouse_cursor(check_mouse_hover=True)
+            self.change_mouse_cursor(check_mouse_over_img_frame=True)
 
         # (5) end and start timer
         self.__timer[ObsStudyStep.WAITING_GTVT].end()
@@ -1354,7 +1354,7 @@ class ObsStudyWindow(ReplayWindow):
             # change mouse cursor after:
             # (1) idl step updated
             # (2) drawing mode updated
-            self.change_mouse_cursor(check_mouse_hover=True)
+            self.change_mouse_cursor(check_mouse_over_img_frame=True)
 
         # (5) end and start timer
         self.__timer[ObsStudyStep.WAITING_GTVN].end()
@@ -1427,7 +1427,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def change_mouse_cursor(
         self,
-        check_mouse_hover: bool = False,  # if = True, only change cursor when mouse is on a img
+        check_mouse_over_img_frame: bool,  # if = True, only change cursor when mouse is on a img
     ):
         if self.obs_study_step not in [
             ObsStudyStep.DRAW_GTVT,
@@ -1437,12 +1437,8 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             return
 
-        if check_mouse_hover:
-            is_mouse_over_img = False
-            for i in self.img_frame.keys():
-                if self.img_frame[i].underMouse():
-                    is_mouse_over_img = True
-            if not is_mouse_over_img:
+        if check_mouse_over_img_frame:
+            if self._under_mouse_img_frame_name() is None:
                 return
 
         # set cursor center based on cursor size
@@ -1998,16 +1994,6 @@ class ObsStudyWindow(ReplayWindow):
             self.obs_study_step
         )
         Json.save(idl_step_of_all_patients, self.__idl_step_json_path)
-
-    def keyPressEvent(self, event: QtGui.QKeyEvent):
-        if event.key() == Qt.Key_F12:
-            pass
-
-        # delete selected cross
-        elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
-            self.delete_selected_crosses()
-
-        super().keyPressEvent(event)
 
     def __clear_all_drawing_layers(self, img_frame: ImgFrame):
         if self.display_mode() == DisplayMode.MODAL_FIXED:

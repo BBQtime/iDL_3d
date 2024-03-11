@@ -1,5 +1,5 @@
 from custom import Global as g
-from PyQt5.QtCore import QSize
+from PyQt5.QtCore import QEvent, QSize
 from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QWidget
 
 

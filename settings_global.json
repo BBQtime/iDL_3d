@@ -2,7 +2,7 @@
     "cuda.visible.devices": "0,1",
     "dataset.dir.linux.au": "/mnt/faststorage/alan/Scans1mm/",
     "dataset.dir.linux.mda": "/mnt/faststorage/alan/MDACC/",
-    "dataset.dir.linux.obs.study": "",
+    "dataset.dir.linux.obs.study": "/mnt/faststorage/alan/Nifti_1mm_Grid/",
     "dataset.dir.windows.au": "E:/Alan/Scans1mm/",
     "dataset.dir.windows.mda": "E:/Alan/MDACC/",
     "dataset.dir.windows.obs.study": "E:/Jasper/HNSCC/observer_study/Nifti_1mm_Grid/",
