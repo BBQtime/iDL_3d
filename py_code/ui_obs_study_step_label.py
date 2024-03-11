@@ -2,7 +2,7 @@ from custom import Debug
 from custom import Global as g
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel, QWidget
-from str_lib import IDLStep
+from str_lib import ObsStudyStep
 
 
 class LabelStatus:
@@ -12,10 +12,10 @@ class LabelStatus:
     MISSING = "\u2716"  # this is only for gtvt transverse/coronal/sagittal delineation
 
 
-class IDLStepLabel(QLabel):
-    def __init__(self, idl_step: str, parent: QWidget = None):
+class ObsStudyStepLabel(QLabel):
+    def __init__(self, obs_study_step: str, parent: QWidget = None):
         super().__init__(parent=parent)
-        self.__idl_step = idl_step
+        self.__obs_study_step = obs_study_step
         self.__status = LabelStatus.NOT_START
         self.__font_weight = "light"
         self.__text_color = "white"
@@ -24,25 +24,25 @@ class IDLStepLabel(QLabel):
 
         # init text
         str_space = "            "
-        if self.__idl_step == IDLStep.SELECT_PATIENT:
+        if self.__obs_study_step == ObsStudyStep.SELECT_PATIENT:
             self.setText("STEP 1 - Select Patient")
-        elif self.__idl_step == IDLStep.CLICK_GTVT_CENTER:
+        elif self.__obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
             self.setText("STEP 2 - Click GTVt center")
-        elif self.__idl_step == IDLStep.DRAW_GTVT:
+        elif self.__obs_study_step == ObsStudyStep.DRAW_GTVT:
             self.setText("STEP 3 - Delineate GTVt")
-        elif self.__idl_step == IDLStep.DRAW_GTVT_TRANSVERSE:
+        elif self.__obs_study_step == ObsStudyStep.DRAW_GTVT_TRANSVERSE:
             self.setText(str_space + "- in Transverse")
-        elif self.__idl_step == IDLStep.DRAW_GTVT_CORONAL:
+        elif self.__obs_study_step == ObsStudyStep.DRAW_GTVT_CORONAL:
             self.setText(str_space + "- in Coronal")
-        elif self.__idl_step == IDLStep.DRAW_GTVT_SAGITTAL:
+        elif self.__obs_study_step == ObsStudyStep.DRAW_GTVT_SAGITTAL:
             self.setText(str_space + "- in Sagittal")
-        elif self.__idl_step == IDLStep.CLICK_GTVN_CENTER:
+        elif self.__obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
             self.setText("STEP 4 - Click GTVn center")
-        elif self.__idl_step == IDLStep.WAITING:
+        elif self.__obs_study_step == ObsStudyStep.WAITING:
             self.setText("STEP 5 - Generating Results")
-        elif self.__idl_step == IDLStep.CORRECT_GTVT:
+        elif self.__obs_study_step == ObsStudyStep.CORRECT_GTVT:
             self.setText("STEP 6 - Correct GTVt")
-        elif self.__idl_step == IDLStep.CORRECT_GTVN:
+        elif self.__obs_study_step == ObsStudyStep.CORRECT_GTVN:
             self.setText(str_space + "- Correct GTVn")
 
     def mousePressEvent(self, event):
@@ -53,16 +53,16 @@ class IDLStepLabel(QLabel):
     def __refresh_style(self):
         if self.__status in [LabelStatus.ONGOING, LabelStatus.MISSING]:
             self.setToolTip("Currently at this step")
-        elif self.__idl_step in [
-            IDLStep.SELECT_PATIENT,
-            IDLStep.CLICK_GTVT_CENTER,
-            IDLStep.DRAW_GTVT,
-            IDLStep.DRAW_GTVT_TRANSVERSE,
-            IDLStep.DRAW_GTVT_CORONAL,
-            IDLStep.DRAW_GTVT_SAGITTAL,
-            IDLStep.CLICK_GTVN_CENTER,
-            IDLStep.CORRECT_GTVT,
-            IDLStep.CORRECT_GTVN,
+        elif self.__obs_study_step in [
+            ObsStudyStep.SELECT_PATIENT,
+            ObsStudyStep.CLICK_GTVT_CENTER,
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.DRAW_GTVT_TRANSVERSE,
+            ObsStudyStep.DRAW_GTVT_CORONAL,
+            ObsStudyStep.DRAW_GTVT_SAGITTAL,
+            ObsStudyStep.CLICK_GTVN_CENTER,
+            ObsStudyStep.CORRECT_GTVT,
+            ObsStudyStep.CORRECT_GTVN,
         ]:
             if self.__status == LabelStatus.DONE:
                 self.setToolTip("Click to revert to this step")

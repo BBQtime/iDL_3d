@@ -7,7 +7,7 @@ from custom import Global as g
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QApplication
 from ui_custom_combox import CustomComboBox
-from ui_idl_window import IDLWindow
+from ui_obs_study_window import ObsStudyWindow
 from ui_replay_window import ReplayWindow
 
 
@@ -71,6 +71,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         self.__combox["user.name"].addItems(
             [
                 "~ Administrator",
+                "Jasper Nijkamp",
                 "Hanna Rahbek Mortensen",
                 "Kenneth Jensen",
                 "Jesper Grau Eriksen",
@@ -85,7 +86,7 @@ class LoginWindow(QtWidgets.QMainWindow):
 
     def __simplify_user_name(self):
         user_name = self.__combox["user.name"].currentText()
-        for i in ["Admin", "Hanna", "Kenneth", "Jesper"]:
+        for i in ["Admin", "Jasper", "Hanna", "Kenneth", "Jesper"]:
             if i in user_name:
                 user_name = i
                 break
@@ -127,7 +128,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         if train_id == "Replay Mode":
             self.__main_window = ReplayWindow()
         else:
-            self.__main_window = IDLWindow(
+            self.__main_window = ObsStudyWindow(
                 user_name=self.__simplify_user_name(),
                 train_id=train_id,
             )

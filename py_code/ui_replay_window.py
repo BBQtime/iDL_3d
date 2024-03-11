@@ -1305,7 +1305,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         plane = self.img_frame[frame_name].plane
 
         # idl mode
-        # "delete_all_crosses" is unique a function belonging to IDLWindow
+        # "delete_all_crosses" is unique a function belonging to ObsStudyWindow
         # for hasattr() function has to be a public or protected one, not private
         if hasattr(self, "delete_all_crosses"):
             # place top contour at the end of the list, click > pred.final
@@ -1731,11 +1731,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # mod y pos
             top += 20
 
-    # abstract function for IDLWindow, triggerd by ImgFrame.enterEvent()
+    # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
     def change_mouse_cursor(self):
         return
 
-    # abstract function for IDLWindow, triggerd by ImgFrame.enterEvent()
+    # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
     def restore_mouse_cursor(self):
         return
 

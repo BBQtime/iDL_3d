@@ -17,7 +17,7 @@ class DrawingMode:
     GTVN_RESTORE = "gtvn.restore"
 
 
-class IDLStep:
+class ObsStudyStep:
     SELECT_PATIENT = "select.patient"
     CLICK_GTVT_CENTER = "click.gtvt.center"
     DRAW_GTVT = "draw.gtvt"

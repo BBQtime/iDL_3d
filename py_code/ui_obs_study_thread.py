@@ -6,7 +6,7 @@ from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
 
 
-class IDLThread(QThread):
+class ObsStudyThread(QThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
 
@@ -40,7 +40,7 @@ class IDLThread(QThread):
         self._progress_bar.setValue(0)
 
 
-class IDLGTVnThread(IDLThread):
+class ObsStudyGTVnThread(ObsStudyThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
 
@@ -71,7 +71,7 @@ class IDLGTVnThread(IDLThread):
         self.complete_signal.emit()
 
 
-class IDLGTVtThread(IDLThread):
+class ObsStudyGTVtThread(ObsStudyThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
 
