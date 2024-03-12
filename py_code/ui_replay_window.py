@@ -1997,7 +1997,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # block all other wheel event from reaching any widget
             return True
 
-        # For other events, call the base class method to ensure standard event processing
+        # Allow other events to be processed as normal
         else:
             return super().eventFilter(source, event)
 

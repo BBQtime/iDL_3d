@@ -23,7 +23,7 @@
         "red": "255,50,0",
         "yellow": "255,255,0"
     },
-    "debug.mode": true,
+    "debug.mode": false,
     "eraser.size.min": 12,
     "eraser.size.step": 8,
     "interpolation.step": 2,

@@ -5,6 +5,7 @@ import qdarktheme
 from custom import GPU, Debug, Dict, Dir
 from custom import Global as g
 from PyQt5 import QtWidgets
+from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QApplication
 from ui_custom_combox import CustomComboBox
 from ui_obs_study_window import ObsStudyWindow
@@ -12,6 +13,15 @@ from ui_replay_window import ReplayWindow
 
 
 class LoginWindow(QtWidgets.QMainWindow):
+    def eventFilter(self, source, event):
+        # Block all key press and mouse wheel events
+        if event.type() == QEvent.KeyPress or event.type() == QEvent.Wheel:
+            # Event is blocked
+            return True
+        # Allow other events to be processed as normal
+        else:
+            return super().eventFilter(source, event)
+
     def __center(self):
         # Get the application instance
         app = QApplication.instance()
@@ -133,7 +143,7 @@ class LoginWindow(QtWidgets.QMainWindow):
                 train_id=train_id,
             )
 
-        # install the event filter on the QApplication instance
+        # Apply event filter to main window
         # This ensures that key press events will always trigger the main window's event handler,
         # regardless of which widget currently has focus.
         app = QApplication.instance()
@@ -151,5 +161,7 @@ if 0:
 app = QApplication(sys.argv)
 qdarktheme.setup_theme()
 login_window = LoginWindow()
+# Apply event filter to login window, block key press event and mouse wheel event
+app.installEventFilter(login_window)
 login_window.show()
 sys.exit(app.exec_())
