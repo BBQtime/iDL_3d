@@ -50,7 +50,7 @@ from training_idl_gtvt import TrainingIDLGTVt
 #     baseline.remove_non_optimal_epochs(
 #         baseline_id="baseline_2023.07.05.16.49.25",
 #     )
-# if 0:
+# if 1:
 #     baseline = TrainingBaseline()
 #     baseline.inference_cross_valid(
 #         baseline_id="baseline_obs.study",

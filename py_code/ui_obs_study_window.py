@@ -1887,12 +1887,14 @@ class ObsStudyWindow(ReplayWindow):
         # load test set patients of all datasets
         self._patients = Dict()
         dataset_ver_list = [str_lib.DatasetVer.OBS_STUDY]
-        if self.__user_name == "Admin":
-            dataset_ver_list.append(str_lib.DatasetVer.AU)
+        # if self.__user_name == "Admin":
+        #     dataset_ver_list.append(str_lib.DatasetVer.AU)
 
         for i in dataset_ver_list:
             dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[str_lib.DatasetPart.TEST])
+
+        self._patients[str_lib.DatasetVer.AU] = ["106"]
 
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)
