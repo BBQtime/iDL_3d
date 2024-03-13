@@ -47,11 +47,13 @@ class ObsStudyGTVnThread(ObsStudyThread):
     def set_param(
         self,
         idl_gtvn_id: str,
+        dataset_ver: str,
         patient: str,
         idl_gtvn_clicks: ndarray,
         debug_mode: bool,
     ):
         self.__idl_gtvn_id = idl_gtvn_id
+        self.__dataset_ver = dataset_ver
         self.__patient = patient
         self.__idl_gtvn_clicks = idl_gtvn_clicks
         self.__debug_mode = debug_mode
@@ -62,6 +64,7 @@ class ObsStudyGTVnThread(ObsStudyThread):
         training_idl_gtvn = TrainingIDLGTVn(self.progress_signal)
         training_idl_gtvn.obs_study(
             idl_gtvn_id=self.__idl_gtvn_id,
+            dataset_ver=self.__dataset_ver,
             patient=self.__patient,
             idl_gtvn_clicks=self.__idl_gtvn_clicks,
             debug_mode=self.__debug_mode,
@@ -78,10 +81,12 @@ class ObsStudyGTVtThread(ObsStudyThread):
     def set_param(
         self,
         idl_gtvt_id: str,
+        dataset_ver: str,
         patient: str,
         debug_mode: bool,
     ):
         self.__idl_gtvt_id = idl_gtvt_id
+        self.__dataset_ver = dataset_ver
         self.__patient = patient
         self.__debug_mode = debug_mode
 
@@ -91,6 +96,7 @@ class ObsStudyGTVtThread(ObsStudyThread):
         training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
         training_idl_gtvt.obs_study(
             idl_gtvt_id=self.__idl_gtvt_id,
+            dataset_ver=self.__dataset_ver,
             patient=self.__patient,
             debug_mode=self.__debug_mode,
         )

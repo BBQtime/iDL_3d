@@ -926,6 +926,7 @@ class TrainingIDLGTVt(TrainingCore):
     def obs_study(
         self,
         idl_gtvt_id: str,
+        dataset_ver: str,
         patient: str,
         debug_mode: bool = False,
     ):
@@ -962,8 +963,8 @@ class TrainingIDLGTVt(TrainingCore):
         # idl.gtvt doesnt have "no.pt" hyperparam, copy it from baseline
         hyper["no.pt"] = no_pt
 
-        # change dataset version to OBS_STUDY
-        hyper["dataset.ver"] = DatasetVer.OBS_STUDY
+        # change dataset version to input param
+        hyper["dataset.ver"] = dataset_ver
 
         # select scenario
         selected_slices_path = os.path.join(patient_dir, "selected_slices.json")

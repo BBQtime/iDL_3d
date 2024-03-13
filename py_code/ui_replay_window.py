@@ -850,8 +850,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         img = np.flip(img, axis=0)
 
         # flip left/right
-        if self.dataset_ver in [DatasetVer.AU]:
-            img = np.flip(img, axis=2)
+        img = np.flip(img, axis=2)
 
         return img
 

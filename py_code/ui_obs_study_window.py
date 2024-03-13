@@ -524,26 +524,6 @@ class ObsStudyWindow(ReplayWindow):
             )
 
             interpolated_slices = Img.binarize(interpolated_slices)
-            # first_interpolated_slice = interpolated_slices[0].copy()
-            # second_interpolated_slice = interpolated_slices[0].copy()
-            # Nii.save(
-            #     first_interpolated_slice - start_slice_data,
-            #     os.path.join(g.DEBUG_DIR, "first-start.nii.gz"),
-            # )
-            # Nii.save(
-            #     second_interpolated_slice - first_interpolated_slice,
-            #     os.path.join(g.DEBUG_DIR, "second-first.nii.gz"),
-            # )
-
-            # start_slice_expanded = np.expand_dims(start_slice_data, axis=0)
-            # end_slice_expanded = np.expand_dims(end_slice_data, axis=0)
-            # all_slices = np.concatenate(
-            #     [start_slice_expanded, interpolated_slices, end_slice_expanded], axis=0
-            # )
-            # Nii.save(
-            #     all_slices,
-            #     os.path.join(g.DEBUG_DIR, "all_slices.nii.gz"),
-            # )
 
             # add interpolated slices
             correction[start_slice_id + 1 : end_slice_id, :, :] = interpolated_slices
@@ -573,8 +553,7 @@ class ObsStudyWindow(ReplayWindow):
             for i in ["correction", "correction.mask"]:
                 img = self.img_3d["{}.{}".format(gtv, i)].copy()
                 # flip left/right
-                if self.dataset_ver in [str_lib.DatasetVer.AU]:
-                    img = np.flip(img, axis=2)
+                img = np.flip(img, axis=2)
                 # turn upside down
                 img = np.flip(img, axis=0)
                 # save
@@ -797,8 +776,7 @@ class ObsStudyWindow(ReplayWindow):
         Dir.create(cur_round_dir)
         idl_gtvt_click = self.img_3d["gtvt.click"].copy()
         # flip left/right
-        if self.dataset_ver in [str_lib.DatasetVer.AU]:
-            idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
+        idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
         # turn upside down
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
         Nii.save(
@@ -891,8 +869,7 @@ class ObsStudyWindow(ReplayWindow):
         Dir.create(cur_round_dir)
         gtvt_delineation_to_save = self.img_3d["gtvt.delineation"].copy()
         # flip left/right
-        if self.dataset_ver in [str_lib.DatasetVer.AU]:
-            gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
+        gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
         # turn upside down
         gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=0)
         Nii.save(
@@ -904,6 +881,7 @@ class ObsStudyWindow(ReplayWindow):
         # (3) start idl gtvt thread
         self.__idl_gtvt_thread.set_param(
             idl_gtvt_id=self._idl_id["gtvt"],
+            dataset_ver=self.dataset_ver,
             patient=self._cur_patient,
             debug_mode=self._debug_mode,
         )
@@ -1271,17 +1249,17 @@ class ObsStudyWindow(ReplayWindow):
         # (4) transform gtvn clicks ndarray for idl.gtvn thread
         # copy data (dont change origin ndarray)
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
-        # no need to flip empty img
+        # only flip non-empty img
         if idl_gtvn_clicks.max() > 0:
             # flip left/right
-            if self.dataset_ver in [str_lib.DatasetVer.AU]:
-                idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
+            idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
             # turn upside down
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
         # (5) start idl gtvn thread
         self.__idl_gtvn_thread.set_param(
             idl_gtvn_id=self._idl_id["gtvn"],
+            dataset_ver=self.dataset_ver,
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
             debug_mode=self._debug_mode,
@@ -1908,12 +1886,13 @@ class ObsStudyWindow(ReplayWindow):
     def _init_patients(self):
         # load test set patients of all datasets
         self._patients = Dict()
-        dataset_split = Json.load(
-            g.DATASET_SPLIT_JSON_PATH[str_lib.DatasetVer.OBS_STUDY]
-        )
-        self._patients[str_lib.DatasetVer.OBS_STUDY] = List(
-            dataset_split[str_lib.DatasetPart.TEST]
-        )
+        dataset_ver_list = [str_lib.DatasetVer.OBS_STUDY]
+        if self.__user_name == "Admin":
+            dataset_ver_list.append(str_lib.DatasetVer.AU)
+
+        for i in dataset_ver_list:
+            dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
+            self._patients[i] = List(dataset_split[str_lib.DatasetPart.TEST])
 
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)

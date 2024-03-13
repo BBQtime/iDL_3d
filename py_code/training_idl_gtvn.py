@@ -85,6 +85,7 @@ class TrainingIDLGTVn(TrainingBaseline):
     def obs_study(
         self,
         idl_gtvn_id: str,
+        dataset_ver: str,
         patient: str,
         idl_gtvn_clicks: ndarray = None,  # None means no gtvn click
         debug_mode=False,
@@ -162,7 +163,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             patient_outputs = self._inference_single_patient(
                 patient=patient,
                 cnn=cnn,
-                dataset_ver=DatasetVer.OBS_STUDY,
+                dataset_ver=dataset_ver,
                 dataset_part=DatasetPart.TEST,
                 no_pt=no_pt,
                 segment_metrics=segment_metrics,
@@ -175,7 +176,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 patient=patient,
                 epoch_dir=output_epoch_dir,
                 patient_outputs=patient_outputs,
-                dataset_ver=DatasetVer.OBS_STUDY,
+                dataset_ver=dataset_ver,
                 dataset_part=DatasetPart.TEST,
             )
 
