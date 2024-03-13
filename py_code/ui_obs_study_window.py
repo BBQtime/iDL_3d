@@ -680,29 +680,18 @@ class ObsStudyWindow(ReplayWindow):
                     file_name = i.replace(".", "_") + ".nii.gz"
                     Dir.delete(os.path.join(imgs_dir, file_name))
 
-                # delete idl.gtvn related files
+                # delete gtvn_distance_map together with gtvn.pred
                 if i == "gtvn.pred":
                     Dir.delete(os.path.join(imgs_dir, "gtvn_distance_map.nii.gz"))
-                    # fold_dirs = Dir.get_sub_dirs(
-                    #     input_dir=os.path.join(
-                    #         g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvn"]
-                    #     ),
-                    #     key_word="fold=",
-                    #     full_path=True,
-                    # )
-                    # for fold_dir in fold_dirs:
-                    #     Dir.delete(fold_dir)
 
                 # delete idl.gtvt related files
                 if i == "gtvt.pred":
+                    # NEVER delete "selected_slices.json",
+                    # otherwise SelectScenario will be GRAVITY_CENTER and
+                    # new selected slices will be generated
+                    # reclick gtvt center will regenerate "selected_slices.json",
                     Dir.delete(os.path.join(imgs_dir, "round=01.pt"))
                     Dir.delete(os.path.join(Path(imgs_dir).parent, "loss.json"))
-                    Dir.delete(
-                        os.path.join(Path(imgs_dir).parent, "selected_slices.json")
-                    )
-                    # Dir.delete(
-                    #     os.path.join(Path(imgs_dir).parent.parent.parent, "hyper.json")
-                    # )
                     Dir.delete(
                         os.path.join(Path(imgs_dir).parent.parent.parent, "loss.png")
                     )
@@ -720,7 +709,7 @@ class ObsStudyWindow(ReplayWindow):
         # DO NOT clear self.gtvn_clicks_pos_3d
 
         # (4) clear 3d imgs and delete nii files
-        img_name_list = ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]
+        img_name_list = ["gtvt.click", "gtvt.delineation", "gtvn.clicks"]
         for i in ["gtvt", "gtvn"]:
             img_name_list += [
                 "{}.pred".format(i),
@@ -791,6 +780,10 @@ class ObsStudyWindow(ReplayWindow):
         selected_slices[Plane.TRANSVERSE]["round=01"] = List(pos[0]).to_str()
         selected_slices[Plane.CORONAL]["round=01"] = List(pos[1]).to_str()
         selected_slices[Plane.SAGITTAL]["round=01"] = List(pos[2]).to_str()
+        # NEVER delete "selected_slices.json",
+        # otherwise SelectScenario will be GRAVITY_CENTER and
+        # new selected slices will be generated
+        # reclick gtvt center will regenerate "selected_slices.json",
         Json.save(
             data=selected_slices,
             path=os.path.join(cur_patient_dir, "selected_slices.json"),
@@ -1894,7 +1887,8 @@ class ObsStudyWindow(ReplayWindow):
             dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[str_lib.DatasetPart.TEST])
 
-        self._patients[str_lib.DatasetVer.AU] = ["106"]
+        if self.__user_name == "Admin":
+            self._patients[str_lib.DatasetVer.AU] = ["106"]
 
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)
