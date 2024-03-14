@@ -38,7 +38,7 @@ from training_idl_gtvt import TrainingIDLGTVt
 #         train_remark="obs.study.baseline",
 #         debug_mode=1,
 #     )
-# if 0:
+# if 1:
 #     baseline = TrainingBaseline()
 #     baseline.inference_on_folds(
 #         baseline_id="baseline_obs.study",

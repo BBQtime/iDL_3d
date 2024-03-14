@@ -983,8 +983,11 @@ class ObsStudyWindow(ReplayWindow):
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
         self._btn["next.step"].setEnabled(False)
-        self._collap["annotation"].collapse()
-        self._collap["patient"].expand()
+        # expand and collapse
+        if self._collap["annotation"].isExpanded():
+            self._collap["annotation"].collapse()
+        if not self._collap["patient"].isExpanded():
+            self._collap["patient"].expand()
 
         # (6) end timers
         self.__timer[ObsStudyStep.CORRECT_GTVT].end()
@@ -1123,7 +1126,6 @@ class ObsStudyWindow(ReplayWindow):
                 self.__goto_idl_step_correct_both(DrawingMode.GTVT_PEN)
             else:
                 self.__goto_idl_step_correct_both(DrawingMode.GTVN_PEN)
-            self._collap["patient"].collapse()
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
@@ -1699,7 +1701,8 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self._radio_btn[i].hide()
 
-        self._collap["annotation"].expand()
+        if not self._collap["annotation"].isExpanded():
+            self._collap["annotation"].expand()
 
     def __disable_annotation_tools(self):
         for i in ["pen", "eraser", "clear", "restore"]:
@@ -2143,10 +2146,10 @@ class ObsStudyWindow(ReplayWindow):
         self.__idl_gtvn_thread.stop()
 
         # update widgets
-        self._collap["patient"].collapse()
-        self._collap["annotation"].expand()
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
             self._collap[i].setEnabled(True)
+        if not self._collap["annotation"].isExpanded():
+            self._collap["annotation"].expand()
 
         # clear data
         self._clear_img_3d()

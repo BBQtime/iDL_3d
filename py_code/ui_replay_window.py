@@ -1607,8 +1607,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
             slice_count = self.img_3d[Modal.CT].shape[2]
         elif plane == Plane.CORONAL:
             slice_count = self.img_3d[Modal.CT].shape[1]
+            # img is flipped in coronal plane
+            cur_slice_id = slice_count - cur_slice_id + 1
         elif plane == Plane.TRANSVERSE:
             slice_count = self.img_3d[Modal.CT].shape[0]
+
         text = "{:03d}/{:03d}".format(cur_slice_id, slice_count)
 
         left = qimg.width() - 83
@@ -2078,6 +2081,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # reload from zoomed_rgb, no need to reload origin_rgb
             self.refresh_imgs(reload_origin_rgb=False)
             self.refresh_crosses()
+        if not self._collap["zoom"].isExpanded():
+            self._collap["zoom"].expand()
 
     def __zoom_out(self, step: int):
         cur_value = self._slider["zoom"].value()
@@ -2090,3 +2095,5 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # reload from zoomed_rgb, no need to reload origin_rgb
             self.refresh_imgs(reload_origin_rgb=False)
             self.refresh_crosses()
+        if not self._collap["zoom"].isExpanded():
+            self._collap["zoom"].expand()
