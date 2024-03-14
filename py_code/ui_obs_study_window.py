@@ -92,10 +92,23 @@ class ObsStudyWindow(ReplayWindow):
             gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_frame.plane]
             if self.cur_slice_id[img_frame.plane] != gtvt_center_slice_id:
                 self.cur_slice_id[img_frame.plane] = gtvt_center_slice_id
-                # (1) PLANE_FIXED mode, only refresh current img frame
+
+                # (1) PLANE_FIXED mode
                 if self.display_mode() == DisplayMode.PLANE_FIXED:
-                    frame_name = img_frame.get_frame_name()
-                    self.refresh_imgs(frame_name=frame_name)
+                    # (1-1) refresh current img frame from scratch
+                    cur_frame_name = img_frame.get_frame_name()
+                    self.refresh_imgs(frame_name=cur_frame_name)
+                    # (1-2) on other img frames, only refresh anatomical lines
+                    frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                    frame_name_list.remove(cur_frame_name)
+                    for i in frame_name_list:
+                        self.refresh_imgs(
+                            frame_name=i,
+                            reload_origin_rgb=False,
+                            reload_zoomed_rgb=False,
+                            reload_contours=False,
+                        )
+
                 # (2) MODAL_FIXED mode, refresh all 4 img frames
                 else:
                     self.refresh_imgs()
@@ -295,12 +308,6 @@ class ObsStudyWindow(ReplayWindow):
             self.img_frame[i].update()  # schedule a repaint
 
         self.paint_pos = event.pos()  # update paint pos
-
-    def get_zoomed_rgb_shape(self, frame_name: str):
-        return self._zoomed_rgb[frame_name][:, :, 0].shape
-
-    def get_origin_rgb_shape(self, frame_name: str):
-        return self._origin_rgb[frame_name][:, :, 0].shape
 
     def draw_on_img_frame_release(self, img_frame: ImgFrame):
         if self.paint_pos is None:
@@ -1558,6 +1565,8 @@ class ObsStudyWindow(ReplayWindow):
             center_slices_id[Plane.TRANSVERSE] = self.gtvt_click_pos_3d[0]
             center_slices_id[Plane.CORONAL] = self.gtvt_click_pos_3d[1]
             center_slices_id[Plane.SAGITTAL] = self.gtvt_click_pos_3d[2]
+            for i in center_slices_id.keys():
+                center_slices_id[i] = int(center_slices_id[i])
         return center_slices_id
 
     def __get_gtvn_center_slices_id(self):
@@ -1568,6 +1577,8 @@ class ObsStudyWindow(ReplayWindow):
             center_slices_id[Plane.TRANSVERSE] = self.gtvn_clicks_pos_3d[-1][0]
             center_slices_id[Plane.CORONAL] = self.gtvn_clicks_pos_3d[-1][1]
             center_slices_id[Plane.SAGITTAL] = self.gtvn_clicks_pos_3d[-1][2]
+            for i in center_slices_id.keys():
+                center_slices_id[i] = int(center_slices_id[i])
         return center_slices_id
 
     def delete_all_crosses(self):

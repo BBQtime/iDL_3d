@@ -365,7 +365,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __color_enhance_slider_value_update(self):
-        # refresh origin_rgb as bright/contrast changed
+        # refresh from scratch as bright/contrast changed
         self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
@@ -384,7 +384,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif self._radio_btn[DisplayMode.PLANE_FIXED][Modal.MR2].isChecked():
             self._text_label["other.modal"].setText("MR-T2")
 
-        # refresh from origin_rgb as modality changed
+        # refresh from scratch as modality changed
         self.refresh_imgs()
 
     def display_mode(self):
@@ -438,7 +438,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._slider["mix"].hide()
 
         self.reset_cur_slice_id()
-        # refresh everything as brightness/contrast might changed
+        # refresh from scratch as brightness/contrast might changed
         self.refresh_imgs()
         self.refresh_crosses()
 
@@ -703,7 +703,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 else:
                     self._radio_btn[DisplayMode.MODAL_FIXED][plane].setChecked(False)
 
-        # refresh from origin_rgb as anatomical plane changed
+        # refresh from scratch as anatomical plane changed
         self.refresh_imgs()
         self.refresh_crosses()
 
@@ -957,7 +957,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # refresh imgs after idl.gtvn is chosen
             self._load_idl_gtv_data(gtv=gtv, reset_id=reset_id, refresh_imgs=False)
 
-        # refresh everything as 3d images are updated
+        # refresh from scratch as 3d images are updated
         self.refresh_imgs()
 
     # load labels and gtvs gravity center
@@ -1153,7 +1153,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     ][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
-            # refresh everything as 3d images are updated
+            # refresh from scratch as 3d images are updated
             self.refresh_imgs()
 
     # this function is connected to widget, dont set input params to this function
@@ -1230,7 +1230,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_mix_slider_changed(self):
-        # refresh from origin_rgb as weight of different planes is changed
+        # refresh from scratch as weight of different planes is changed
         self.refresh_imgs()
 
     def __refresh_imgs_load_origin_rgb(self, frame_name: str):
@@ -1507,6 +1507,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         return final_rgb
 
+    def get_zoomed_rgb_shape(self, frame_name: str):
+        return self._zoomed_rgb[frame_name][:, :, 0].shape
+
+    def get_origin_rgb_shape(self, frame_name: str):
+        return self._origin_rgb[frame_name][:, :, 0].shape
+
     def refresh_imgs(
         self,
         frame_name: str = None,
@@ -1569,7 +1575,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 # make ndarray C-contiguous
                 final_rgb = np.ascontiguousarray(final_rgb)
 
-            # ndarray to qimage
+            # generate qimage from ndarray
             rgb_height = final_rgb.shape[0]
             rgb_width = final_rgb.shape[1]
             rgb_chan = final_rgb.shape[2]
@@ -1580,6 +1586,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 rgb_width * rgb_chan,  # bytesPerLine
                 QtGui.QImage.Format_RGB888,  # format
             )
+
+            # after qimage created:
+            # add short lines to show the other 2 anatomical planes
+            self.__add_anatomical_lines(frame_name=frame_name, qimg=qimg)
 
             # add text on top left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
@@ -1593,8 +1603,86 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # add slice number on bottom right
             self.__add_slice_id_on_bottom_right(frame_name=frame_name, qimg=qimg)
 
+            # set background and refresh
             self.img_frame[frame_name].set_background(qimg)
             self.img_frame[frame_name].update()
+
+    def __add_anatomical_lines(self, frame_name: str, qimg: QtGui.QImage):
+        line_len = 30
+        line_width = 2
+
+        img_frame = self.img_frame[frame_name]
+        plane = img_frame.plane
+        img_shape_3d = self.img_3d[Modal.CT]
+
+        # find percentage location in 3d image
+        if plane == Plane.TRANSVERSE:
+            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d.shape[2]
+            y_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d.shape[1]
+
+        elif plane == Plane.CORONAL:
+            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d.shape[2]
+            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d.shape[0]
+
+        elif plane == Plane.SAGITTAL:
+            x_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d.shape[1]
+            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d.shape[0]
+
+        # find location on img_frame
+        center_x_pct, center_y_pct = img_frame.img_center_pct
+        zoomed_h, zoomed_w = self.get_zoomed_rgb_shape(frame_name)
+
+        x_frame = img_frame.width() // 2 - (center_x_pct - x_pct) * zoomed_w
+        x_frame = round(x_frame)
+        y_frame = img_frame.height() // 2 - (center_y_pct - y_pct) * zoomed_h
+        y_frame = round(y_frame)
+
+        # start and end points
+        top_x1 = x_frame
+        top_y1 = 0
+        top_x2 = x_frame
+        top_y2 = line_len
+
+        bottom_x1 = x_frame
+        bottom_y1 = img_frame.height()
+        bottom_x2 = x_frame
+        bottom_y2 = img_frame.height() - line_len
+
+        left_x1 = 0
+        left_y1 = y_frame
+        left_x2 = line_len
+        left_y2 = y_frame
+
+        right_x1 = img_frame.width()
+        right_y1 = y_frame
+        right_x2 = img_frame.width() - line_len
+        right_y2 = y_frame
+
+        # define painter outside of for loop
+        painter = QtGui.QPainter(qimg)
+        for line_pos in [
+            (top_x1, top_y1, top_x2, top_y2),
+            (bottom_x1, bottom_y1, bottom_x2, bottom_y2),
+            (left_x1, left_y1, left_x2, left_y2),
+            (right_x1, right_y1, right_x2, right_y2),
+        ]:
+            # line_pos[0]=max(line_pos[0],0)
+
+            # draw black border of the line
+            border_pen = QtGui.QPen(Qt.black)
+            # Width includes the border and the line itself
+            border_pen.setWidth(line_width + 2)
+            painter.setPen(border_pen)
+            painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
+
+            # draw line
+            pen = QtGui.QPen(QtGui.QColor(*self.color["cyan"]))
+            pen.setWidth(line_width)
+            painter.setPen(pen)
+            painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
+
+        # Finalize the drawing
+        painter.end()
 
     def __add_slice_id_on_bottom_right(self, frame_name: str, qimg: QtGui.QImage):
         if self.img_3d[Modal.CT] is None:
@@ -1893,9 +1981,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.cur_slice_id[plane] %= slice_count
 
         # refresh imgs: refresh everything for a new slice
-        # (1) PLANE_FIXED mode, only refresh current img frame
+        # (1) PLANE_FIXED mode
         if self.display_mode() == DisplayMode.PLANE_FIXED:
+            # (1-1) refresh current img frame from scratch
             self.refresh_imgs(frame_name=img_frame_name)
+            # (1-2) on other img frames, only refresh anatomical lines
+            frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            frame_name_list.remove(img_frame_name)
+            for i in frame_name_list:
+                self.refresh_imgs(
+                    frame_name=i,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
         # (2) MODAL_FIXED mode, refresh all 4 img frames
         else:
             self.refresh_imgs()
@@ -2055,10 +2154,23 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.cur_slice_id[plane] = new_slice_id
 
         # refresh new slice
-        # (1) PLANE_FIXED mode, only refresh current img frame
+        # (1) PLANE_FIXED mode
         if self.display_mode() == DisplayMode.PLANE_FIXED:
+            # (1-1) refresh current img frame from scratch
             self.refresh_imgs(frame_name=plane)
+            # (1-2) on other img frames, only refresh anatomical lines
+            frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            frame_name_list.remove(plane)
+            for i in frame_name_list:
+                self.refresh_imgs(
+                    frame_name=i,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
+            # refresh crosses on current img frame
             self.refresh_crosses(frame_name=plane)
+
         # (2) MODAL_FIXED mode, refresh all 4 img frames
         else:
             self.refresh_imgs()

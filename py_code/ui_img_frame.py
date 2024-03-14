@@ -56,11 +56,18 @@ class ImgFrame(QLabel):
             self.window().reset_cur_slice_id()
             # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                # (1) refresh other img_frames from scratch
                 frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-                # only refresh other img_frames
                 frame_name_list.remove(self.plane)
                 for i in frame_name_list:
                     self.window().refresh_imgs(frame_name=i)
+                # (2) on current img frame, only refresh anatomical lines
+                self.window().refresh_imgs(
+                    frame_name=self.plane,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
             # refresh crosses
             self.window().refresh_crosses()
 
@@ -80,15 +87,18 @@ class ImgFrame(QLabel):
                 self.window().reset_cur_slice_id()
                 # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
                 if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                    frame_name_list = [
-                        Plane.TRANSVERSE,
-                        Plane.CORONAL,
-                        Plane.SAGITTAL,
-                    ]
-                    # only refresh other img_frames
+                    # (1) refresh other img_frames from scratch
+                    frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
                     frame_name_list.remove(self.plane)
                     for i in frame_name_list:
                         self.window().refresh_imgs(frame_name=i)
+                    # (2) on current img frame, only refresh anatomical lines
+                    self.window().refresh_imgs(
+                        frame_name=self.plane,
+                        reload_origin_rgb=False,
+                        reload_zoomed_rgb=False,
+                        reload_contours=False,
+                    )
                 # refresh crosses on all img frames
                 self.window().refresh_crosses()
 
@@ -134,8 +144,9 @@ class ImgFrame(QLabel):
             self.__drag_pos = event.pos()  # update offset
 
             # refresh img/imgs and crosses
+            # (1) PLANE_FIXED mode: refresh current img frame
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
-                # only refresh current img frame
+                # only update position
                 # no need to reload origin_rgb, zoomed_rgb, contours
                 self.window().refresh_imgs(
                     frame_name=self.plane,
@@ -147,9 +158,9 @@ class ImgFrame(QLabel):
                 # refresh crosses on self (current img frame)
                 self.refresh_crosses()
 
-            # MODAL_FIXED mode
+            # (2) MODAL_FIXED mode: refresh all 4 img frames
             else:
-                # refresh all 4 img frames
+                # only update position
                 # no need to reload origin_rgb, zoomed_rgb, contours
                 self.window().refresh_imgs(
                     reload_origin_rgb=False,

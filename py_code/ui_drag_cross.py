@@ -76,14 +76,22 @@ class DragCross(QWidget):
                 self.window().gtvn_clicks_pos_3d.append(self.cross_id)
 
             # refresh data and img after cross id updated
-            self.window().reset_cur_slice_id()  # update slice id to jump to clicked slice
+            # update slice id to jump to clicked slices
+            self.window().reset_cur_slice_id()
             if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                # (1) refresh other img_frames from scratch
                 frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
-                # only refresh other img frames
                 frame_name_list.remove(self.parent().plane)
                 for i in frame_name_list:
                     self.window().refresh_imgs(frame_name=i)
                     self.window().refresh_crosses(frame_name=i)
+                # (2) on current img frame, only refresh anatomical lines
+                self.window().refresh_imgs(
+                    frame_name=self.parent().plane,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
                 # select cross
                 self.window().select_cross(self.cross_id)
 
