@@ -712,7 +712,7 @@ class TrainingIDLGTVt(TrainingCore):
     def plot_loss_fig(self, idl_gtvt_id: str):
         for i in Dir.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
-            if i.endswith("/"):
+            if i.endswith("/") or i.endswith("\\"):
                 i = i[:-1]
             if i.endswith(idl_gtvt_id):
                 idl_gtvt_dir = i

@@ -45,6 +45,9 @@ class ImgFrame(QLabel):
         self.drawing_layer = self.drawing_layer.scaled(self.size())
 
     def mouse_press_event_left_button(self, event: QMouseEvent):
+        if not hasattr(self.window(), "obs_study_step"):
+            return
+
         if self.window().obs_study_step is None:
             return
 
@@ -115,6 +118,9 @@ class ImgFrame(QLabel):
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
 
+        if not hasattr(self.window(), "obs_study_step"):
+            return
+
         should_paint_eraser_circle = self.__should_paint_eraser_circle()
 
         # put this before draw_on_img_frame_move()
@@ -174,6 +180,9 @@ class ImgFrame(QLabel):
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
+        if not hasattr(self.window(), "obs_study_step"):
+            return
+
         if event.button() == Qt.LeftButton:
             if self.window().obs_study_step in [
                 ObsStudyStep.DRAW_GTVT,
@@ -189,6 +198,7 @@ class ImgFrame(QLabel):
     def __should_paint_eraser_circle(self):
         if not hasattr(self.window(), "obs_study_step"):
             return False
+
         elif self.window().obs_study_step in [
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CORRECT_GTVT,
@@ -242,7 +252,7 @@ class ImgFrame(QLabel):
             painter.drawPixmap(self.rect(), self.drawing_layer)
 
         # draw eraser circle
-        if self.__circle_pos:
+        if self.__circle_pos and hasattr(self.window(), "obs_study_step"):
             # circle color
             # delineate gtvt
             if self.window().obs_study_step == ObsStudyStep.DRAW_GTVT:

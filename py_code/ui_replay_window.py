@@ -902,6 +902,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 key_word=i,
                 full_path=True,
             ):
+                # skip "idl.gtvn_obs.study" which saves the cross-valid cnns
                 if Path(idl_result_dir).name == "idl.gtvn_obs.study":
                     continue
                 patient_dir = os.path.join(
@@ -1012,8 +1013,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self._idl_id[gtv] = "baseline"
                 self._idl_round[gtv] = "round=00"
             else:
-                self._idl_id[gtv] = combox_item[: combox_item.index("/")]
-                self._idl_round[gtv] = combox_item[combox_item.index("/") + 1 :]
+                slash = "/" if g.is_linux() else "\\"
+                self._idl_id[gtv] = combox_item[: combox_item.index(slash)]
+                self._idl_round[gtv] = combox_item[combox_item.index(slash) + 1 :]
             # self._reset_zoomin()
 
         # triggered by patient combox update, and find cur patient in idl.gtvn dir
@@ -1318,7 +1320,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # idl mode
         # "delete_all_crosses" is unique a function belonging to ObsStudyWindow
         # for hasattr() function has to be a public or protected one, not private
-        if hasattr(self, "delete_all_crosses"):
+        if hasattr(self, "obs_study_step"):
             # place top contour at the end of the list, click > pred.final
             seg_name_list = [
                 "gtvn.pred.final",
@@ -1588,8 +1590,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
 
             # after qimage created:
-            # add short lines to show the other 2 anatomical planes
-            self.__add_anatomical_lines(frame_name=frame_name, qimg=qimg)
+            # add short lines to show the other 2 anatomical planes (PLANE_FIXED mode only)
+            if frame_name in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                self.__add_anatomical_lines(frame_name=frame_name, qimg=qimg)
 
             # add text on top left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
