@@ -187,7 +187,9 @@ class ImgFrame(QLabel):
             self.__dragging = False
 
     def __should_paint_eraser_circle(self):
-        if self.window().obs_study_step in [
+        if not hasattr(self.window(), "obs_study_step"):
+            return False
+        elif self.window().obs_study_step in [
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CORRECT_GTVT,
             ObsStudyStep.CORRECT_GTVN,
@@ -376,6 +378,9 @@ class ImgFrame(QLabel):
             return frame_name
 
     def refresh_crosses(self):
+        if not hasattr(self, "obs_study_step"):
+            return
+
         if self.window().obs_study_step not in [
             ObsStudyStep.CLICK_GTVT_CENTER,
             ObsStudyStep.CLICK_GTVN_CENTER,

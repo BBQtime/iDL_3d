@@ -447,7 +447,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return
 
     # abstract function
-    def refresh_crosses(self):
+    def refresh_crosses(self, frame_name: str = None):
         return
 
     def _init_widgets_display_mode(self):
@@ -2146,7 +2146,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif new_slice_id < 0:
             new_slice_id = slice_count - 1
         # make sure transverse slice id is a multiple of interpolation step
-        if plane == Plane.TRANSVERSE:
+        if hasattr(self, "ensure_slice_id_multiple") and plane == Plane.TRANSVERSE:
             new_slice_id = self.ensure_slice_id_multiple(
                 slice_id=new_slice_id,
                 slice_count=slice_count,
