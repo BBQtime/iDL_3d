@@ -24,9 +24,9 @@
         "yellow": "255,255,0"
     },
     "debug.mode": false,
-    "eraser.size.min": 12,
-    "eraser.size.step": 8,
+    "eraser.size.max": 40,
+    "eraser.size.min": 8,
     "interpolation.step": 2,
-    "pen.size.min": 5,
-    "pen.size.step": 3
+    "pen.size.max": 10,
+    "pen.size.min": 3
 }

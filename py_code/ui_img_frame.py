@@ -45,7 +45,7 @@ class ImgFrame(QLabel):
         self.drawing_layer = self.drawing_layer.scaled(self.size())
 
     def mouse_press_event_left_button(self, event: QMouseEvent):
-        if not hasattr(self.window(), "obs_study_step"):
+        if not self.window().is_obs_study_window():
             return
 
         if self.window().obs_study_step is None:
@@ -118,7 +118,7 @@ class ImgFrame(QLabel):
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
 
-        if not hasattr(self.window(), "obs_study_step"):
+        if not self.window().is_obs_study_window():
             return
 
         should_paint_eraser_circle = self.__should_paint_eraser_circle()
@@ -180,7 +180,7 @@ class ImgFrame(QLabel):
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
-        if not hasattr(self.window(), "obs_study_step"):
+        if not self.window().is_obs_study_window():
             return
 
         if event.button() == Qt.LeftButton:
@@ -196,7 +196,7 @@ class ImgFrame(QLabel):
             self.__dragging = False
 
     def __should_paint_eraser_circle(self):
-        if not hasattr(self.window(), "obs_study_step"):
+        if not self.window().is_obs_study_window():
             return False
 
         elif self.window().obs_study_step in [
@@ -245,19 +245,21 @@ class ImgFrame(QLabel):
 
         if self.drawing_layer:
             # 0 for fully transparent, 255 for fully opaque
+            # (1) pen transparency
             if self.pen_mode:
                 painter.setOpacity(130 / 255)
+            # (2) eraser transparency
             else:
                 painter.setOpacity(180 / 255)
             painter.drawPixmap(self.rect(), self.drawing_layer)
 
         # draw eraser circle
-        if self.__circle_pos and hasattr(self.window(), "obs_study_step"):
+        if self.__circle_pos and self.window().is_obs_study_window():
             # circle color
-            # delineate gtvt
+            # (1) delineate gtvt
             if self.window().obs_study_step == ObsStudyStep.DRAW_GTVT:
                 circle_color = self.window().color["gtvt.delineation"]
-            # correct gtvt/gtvn
+            # (2) correct gtvt/gtvn
             else:
                 if self.window().drawing_mode == DrawingMode.GTVT_ERASER:
                     circle_color = self.window().color["gtvt.pred"]
@@ -269,6 +271,8 @@ class ImgFrame(QLabel):
             # circle size
             circle_border_width = 3
             pen.setWidth(circle_border_width)
+            # draw a non-transparent circle
+            painter.setOpacity(1.0)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
             radius = self.window().get_eraser_size() / 2.0
@@ -388,7 +392,7 @@ class ImgFrame(QLabel):
             return frame_name
 
     def refresh_crosses(self):
-        if not hasattr(self, "obs_study_step"):
+        if not self.window().is_obs_study_window():
             return
 
         if self.window().obs_study_step not in [

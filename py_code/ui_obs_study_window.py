@@ -1725,11 +1725,6 @@ class ObsStudyWindow(ReplayWindow):
             self._radio_btn[i].hide()
 
     def _init_widgets_annotation(self, ui_setting: Dict):
-        # load pen/eraser size
-        self.__pen_size_min = ui_setting["pen.size.min"]
-        self.__pen_size_step = ui_setting["pen.size.step"]
-        self.__eraser_size_min = ui_setting["eraser.size.min"]
-        self.__eraser_size_step = ui_setting["eraser.size.step"]
 
         # text label
         for i in ["gtvt.progress", "gtvn.progress", "pen.size", "eraser.size"]:
@@ -1801,15 +1796,25 @@ class ObsStudyWindow(ReplayWindow):
 
         # pen/eraser size slider
         for i in ["pen.size", "eraser.size"]:
+            # load setting
+            min_size = int(ui_setting["{}.min".format(i)])
+            min_size = max(min_size, 0)
+            max_size = int(ui_setting["{}.max".format(i)])
+            max_size = min(max_size, 100)
+            min_size = min(min_size, max_size)
+
+            # create slider
             self._slider[i] = QtWidgets.QSlider()
             self._slider[i].setFixedHeight(g.SLIDER_HEIGHT)
             self._slider[i].setOrientation(Qt.Horizontal)
             self._slider[i].hide()
-            self._slider[i].setMinimum(0)
-            self._slider[i].setMaximum(2)
-        self._slider["pen.size"].setValue(0)
-        self._slider["eraser.size"].setValue(1)
+            min_size *= 100
+            self._slider[i].setMinimum(min_size)
+            max_size *= 100
+            self._slider[i].setMaximum(max_size)
+            self._slider[i].setValue(min_size + (max_size - min_size) // 2)
 
+        # drawing mode radio buttons
         self.__radio_group_drawing_mode = QtWidgets.QButtonGroup()
         for i in ["gtvt", "gtvn"]:
             self.__radio_group_drawing_mode.addButton(
@@ -2027,18 +2032,12 @@ class ObsStudyWindow(ReplayWindow):
                 self.drawing_mode = DrawingMode.GTVN_RESTORE
 
     def get_pen_size(self):
-        pen_size = (
-            self._slider["pen.size"].value() * self.__pen_size_step
-            + self.__pen_size_min
-        )
+        pen_size = self._slider["pen.size"].value() / 100
         pen_size *= self.get_zoomin_factor()
         return pen_size
 
     def get_eraser_size(self):
-        eraser_size = (
-            self._slider["eraser.size"].value() * self.__eraser_size_step
-            + self.__eraser_size_min
-        )
+        eraser_size = self._slider["eraser.size"].value() / 100
         eraser_size *= self.get_zoomin_factor()
         return eraser_size
 
@@ -2520,3 +2519,6 @@ class ObsStudyWindow(ReplayWindow):
                     self.img_3d["{}.correction.mask".format(i)]
                     * self.img_3d["{}.correction".format(i)],
                 )
+
+    def is_obs_study_window(self):
+        return True

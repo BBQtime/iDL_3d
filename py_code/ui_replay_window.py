@@ -1317,10 +1317,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         plane = self.img_frame[frame_name].plane
 
-        # idl mode
-        # "delete_all_crosses" is unique a function belonging to ObsStudyWindow
-        # for hasattr() function has to be a public or protected one, not private
-        if hasattr(self, "obs_study_step"):
+        if self.is_obs_study_window():
             # place top contour at the end of the list, click > pred.final
             seg_name_list = [
                 "gtvn.pred.final",
@@ -2149,7 +2146,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif new_slice_id < 0:
             new_slice_id = slice_count - 1
         # make sure transverse slice id is a multiple of interpolation step
-        if hasattr(self, "ensure_slice_id_multiple") and plane == Plane.TRANSVERSE:
+        if self.is_obs_study_window() and plane == Plane.TRANSVERSE:
             new_slice_id = self.ensure_slice_id_multiple(
                 slice_id=new_slice_id,
                 slice_count=slice_count,
@@ -2212,3 +2209,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.refresh_crosses()
         if not self._collap["zoom"].isExpanded():
             self._collap["zoom"].expand()
+
+    def is_obs_study_window(self):
+        return False
