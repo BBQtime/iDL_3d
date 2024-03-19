@@ -111,7 +111,7 @@ class LoginWindow(QtWidgets.QMainWindow):
         # get all train results
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
         if user_name == "Admin":
-            key_word = ""
+            key_word = user_name  # ""
         else:
             key_word = user_name
         train_id_list = Dir.get_sub_dirs(input_dir=baseline_dir, key_word=key_word)

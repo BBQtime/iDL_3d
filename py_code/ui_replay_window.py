@@ -1359,21 +1359,18 @@ class ReplayWindow(QtWidgets.QMainWindow):
             segment = segment.astype(np.uint8)
 
             # skip if current segmentation is empty
-            if seg_name in [
-                "gtvn.pred.final",
-                "gtvt.pred.final",
-                "gtvn.correction",
-                "gtvt.correction",
-                "gtvt.delineation",
-            ]:
-                # perfomr erosion to remove overlap of 3 different planes
-                kernel = np.ones((3, 3), np.uint8)
-                eroded_segment = cv2.erode(segment, kernel, iterations=1)
-                if eroded_segment.max() <= 0:
-                    continue
-            else:
-                if segment.max() <= 0:
-                    continue
+            if (
+                seg_name
+                in [
+                    "gtvn.pred.final",
+                    "gtvt.pred.final",
+                    "gtvn.correction",
+                    "gtvt.correction",
+                    "gtvt.delineation",
+                ]
+                and segment.max() <= 0
+            ):
+                continue
 
             # zoom in segmentation
             zoomed_h = self._zoomed_rgb[frame_name].shape[0]

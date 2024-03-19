@@ -452,16 +452,7 @@ class ObsStudyWindow(ReplayWindow):
             # replace slice in 3d correction
             if img_frame.plane == Plane.TRANSVERSE:
                 correction[d, :, :] = new_drawing
-            elif img_frame.plane == Plane.CORONAL:
-                correction[:, h, :] = new_drawing
-            elif img_frame.plane == Plane.SAGITTAL:
-                correction[:, :, w] = new_drawing
-
-            if img_frame.plane == Plane.TRANSVERSE:
-                if new_drawing.max() == 0:
-                    correction_mask[d, :, :] = np.zeros_like(new_drawing)
-                else:
-                    correction_mask[d, :, :] = np.ones_like(new_drawing)
+                correction_mask[d, :, :] = np.ones_like(new_drawing)
                 self.__interpolation(
                     cur_slice_id=d,
                     correction=correction,
@@ -470,16 +461,12 @@ class ObsStudyWindow(ReplayWindow):
                 )
 
             elif img_frame.plane == Plane.CORONAL:
-                if new_drawing.max() == 0:
-                    correction_mask[:, h, :] = np.zeros_like(new_drawing)
-                else:
-                    correction_mask[:, h, :] = np.ones_like(new_drawing)
+                correction[:, h, :] = new_drawing
+                correction_mask[:, h, :] = np.ones_like(new_drawing)
 
             elif img_frame.plane == Plane.SAGITTAL:
-                if new_drawing.max() == 0:
-                    correction_mask[:, :, w] = np.zeros_like(new_drawing)
-                else:
-                    correction_mask[:, :, w] = np.ones_like(new_drawing)
+                correction[:, :, w] = new_drawing
+                correction_mask[:, :, w] = np.ones_like(new_drawing)
 
         # update values
         self.paint_pos = None
