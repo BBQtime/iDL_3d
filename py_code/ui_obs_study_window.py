@@ -122,6 +122,8 @@ class ObsStudyWindow(ReplayWindow):
             DrawingMode.GTVN_ERASER,
         ]:
             self.paint_pos = event.pos()
+            # click (without moving) will also draw or erase
+            self.draw_on_img_frame_move(event=event, img_frame=img_frame)
             return
 
         # (2) clear gtvt delineation in current plane
@@ -256,15 +258,54 @@ class ObsStudyWindow(ReplayWindow):
         if self.paint_pos is None:
             return
 
-        pen_size = self.get_pen_size()
-        eraser_size = self.get_eraser_size()
-        eraser_color = QtGui.QColor(*self.color["eraser"])
+        # (1) set drawing color and size
+        # (1-1) pen mode
+        if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
+            draw_size = self.get_pen_size()
+            # delineate gtvt
+            if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+                draw_color = QtGui.QColor(*self.color["gtvt.delineation"])
+            # correct gtvt/gtvn
+            elif self.obs_study_step in [
+                ObsStudyStep.CORRECT_GTVT,
+                ObsStudyStep.CORRECT_GTVN,
+                ObsStudyStep.CORRECT_BOTH,
+            ]:
+                if self.drawing_mode in [
+                    DrawingMode.GTVT_PEN,
+                    DrawingMode.GTVT_ERASER,
+                ]:
+                    draw_color = QtGui.QColor(*self.color["gtvt.pred"])
+                elif self.drawing_mode in [
+                    DrawingMode.GTVN_PEN,
+                    DrawingMode.GTVN_ERASER,
+                ]:
+                    draw_color = QtGui.QColor(*self.color["gtvn.pred"])
+        # (1-2) eraser mode
+        elif self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
+            draw_size = self.get_eraser_size()
+            draw_color = QtGui.QColor(*self.color["eraser"])
 
+        # (2) set pen
+        pen = QtGui.QPen(draw_color)
+        pen.setStyle(Qt.SolidLine)
+        pen.setCapStyle(Qt.RoundCap)
+        # mouse didnt move, draw circle
+        if self.paint_pos == event.pos():
+            radius = draw_size / 4
+            pen.setWidth(draw_size / 2)
+        # mouse moved, draw line
+        else:
+            pen.setWidth(draw_size)
+
+        # (3) loop through each image frame
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         else:
             frame_name_list = [img_frame.plane]
+
         for i in frame_name_list:
+            # create painter for current image frame
             painter = QtGui.QPainter(self.img_frame[i].drawing_layer)
 
             # transparent pen
@@ -278,36 +319,27 @@ class ObsStudyWindow(ReplayWindow):
             painter.setRenderHint(QtGui.QPainter.Antialiasing)
             # Set the composition mode to control alpha blending
             painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+            # set pen for painter
+            painter.setPen(pen)
 
-            # delineate gtvt
-            if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-                pen_color = QtGui.QColor(*self.color["gtvt.delineation"])
-            # correct gtvt/gtvn
-            else:
-                if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
-                    pen_color = QtGui.QColor(*self.color["gtvt.pred"])
-                elif self.drawing_mode in [
-                    DrawingMode.GTVN_PEN,
-                    DrawingMode.GTVN_ERASER,
-                ]:
-                    pen_color = QtGui.QColor(*self.color["gtvn.pred"])
-
+            # set img frame's pen mode
             if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
-                painter.setPen(
-                    QtGui.QPen(eraser_color, eraser_size, Qt.SolidLine, Qt.RoundCap)
-                )
                 self.img_frame[i].pen_mode = False
             elif self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
-                painter.setPen(
-                    QtGui.QPen(pen_color, pen_size, Qt.SolidLine, Qt.RoundCap)
-                )
                 self.img_frame[i].pen_mode = True
 
-            painter.drawLine(self.paint_pos, event.pos())
+            # mouse didnt move, draw circle
+            if self.paint_pos == event.pos():
+                painter.drawEllipse(event.pos(), radius, radius)
+            # mouse moved, draw line
+            else:
+                painter.drawLine(self.paint_pos, event.pos())
 
-            self.img_frame[i].update()  # schedule a repaint
+            # repaint current image frame
+            self.img_frame[i].update()
 
-        self.paint_pos = event.pos()  # update paint pos
+        # update paint pos in the last step
+        self.paint_pos = event.pos()
 
     def draw_on_img_frame_release(self, img_frame: ImgFrame):
         if self.paint_pos is None:
