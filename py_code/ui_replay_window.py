@@ -838,6 +838,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # ct windowing before normalization
         if "CT" in path:
             img = Img.ct_windowing(img)
+        elif "PT" in path or "T1dr" in path or "T2dr" in path:
+            img = Img.img_windowing(img)
 
         # normalization
         img = Img.normalize(img)

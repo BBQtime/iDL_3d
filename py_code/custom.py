@@ -245,16 +245,42 @@ class Img:
         img /= img.max()
         return img
 
-    # ct windowing (only focus on soft tissue)
-    def ct_windowing(ct_img):
-        # in origin_dicom, air is -1024. in our ct img, air is 0
-        window = 350  # window
-        level = 40 + 1024  # level
+    def estimate_window_level(img: ndarray):
+        # Ensure data is in float format for accurate calculations
+        data_flat = img.ravel()
+
+        # Exclude zero or negative values if present, which is common in PET or MR images
+        data_flat = data_flat[data_flat > 0]
+
+        # Calculate percentiles to exclude extreme values
+        # You can adjust these percentiles as needed
+        lower_percentile, upper_percentile = np.percentile(data_flat, [2, 99])
+
+        window = upper_percentile - lower_percentile
+        level = lower_percentile + window / 2
+
+        return window, level
+
+    def __img_windowing(img, window: int, level: int):
         high = level + window / 2
         low = level - window / 2
-        ct_img = np.where(ct_img > high, high, ct_img)
-        ct_img = np.where(ct_img < low, low, ct_img)
-        return ct_img
+        img = np.where(img > high, high, img)
+        img = np.where(img < low, low, img)
+        return img
+
+    # ct windowing (only focus on soft tissue)
+    def ct_windowing(img):
+        # in origin_dicom, air is -1024, soft tissue is 40
+        # in our ct img, air is 0, soft tissue is 40+1024
+        window = 350
+        level = 40 + 1024
+        img = Img.__img_windowing(img=img, window=window, level=level)
+        return img
+
+    def img_windowing(img):
+        window, level = Img.estimate_window_level(img)
+        img = Img.__img_windowing(img=img, window=window, level=level)
+        return img
 
     # max size: 89 283 280
     def central_crop(img: ndarray, target_shape: tuple) -> ndarray:
@@ -366,8 +392,12 @@ class Img:
         return rgb_img
 
     def gray_to_colormap(gray_img: ndarray) -> ndarray:
-        gray_img = cv2.convertScaleAbs(1 - gray_img, alpha=255.0)
-        color_map = cv2.applyColorMap(gray_img, cv2.COLORMAP_JET)
+        # Scale to [0, 255] and convert to uint8
+        scaled_img = np.clip(gray_img * 255, 0, 255).astype(np.uint8)
+        color_map = cv2.applyColorMap(
+            scaled_img,
+            cv2.COLORMAP_HOT,  # black to blue to white
+        )
         return color_map
 
     # use this in case there is no gtvn or gtvs nii file
