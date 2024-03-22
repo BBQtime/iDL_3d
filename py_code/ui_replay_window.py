@@ -33,7 +33,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def _init_patients(self):
         # load test set patients of all datasets
         self._patients = Dict()
-        for i in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.MDA]:
+        for i in [
+            # DatasetVer.AU,
+            DatasetVer.OBS_STUDY,
+            # DatasetVer.MDA,
+        ]:
             dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[DatasetPart.TEST])
 
@@ -1361,18 +1365,24 @@ class ReplayWindow(QtWidgets.QMainWindow):
             segment = segment.astype(np.uint8)
 
             # skip if current segmentation is empty
-            if (
-                seg_name
-                in [
-                    "gtvn.pred.final",
-                    "gtvt.pred.final",
-                    "gtvn.correction",
-                    "gtvt.correction",
-                    "gtvt.delineation",
-                ]
-                and segment.max() <= 0
-            ):
-                continue
+            if seg_name in [
+                "gtvn.pred.final",
+                "gtvt.pred.final",
+                "gtvn.correction",
+                "gtvt.correction",
+            ]:
+                if segment.max() <= 0:
+                    continue
+
+            # perfomr erosion to remove the overlap of anatomical planes
+            elif seg_name == "gtvt.delineation":
+                if segment.max() <= 0:
+                    continue
+                else:
+                    kernel = np.ones((3, 3), np.uint8)
+                    eroded_segment = cv2.erode(segment, kernel, iterations=1)
+                    if eroded_segment.max() <= 0:
+                        continue
 
             # zoom in segmentation
             zoomed_h = self._zoomed_rgb[frame_name].shape[0]
@@ -1714,7 +1724,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
         return 25 if g.is_linux() else 28
 
     def _get_text_pos_left(self):
-        return [10, 65, 110]
+        left = 10
+        step1 = 55 if g.is_linux() else 65
+        step2 = 45 if g.is_linux() else 55
+        return [
+            left,
+            left + step1,
+            left + step1 + step2,
+        ]
 
     # from buttom to top
     def _get_text_pos_bottom(self, qimg: QtGui.QImage):
@@ -1797,14 +1814,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
         top = self._get_text_pos_top()
 
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            left = self._get_text_pos_left()[0]
+            left = self._get_text_pos_left()
 
             # "Metric.DSC/Metric.MSD/Metric.HD95: "
             text = metric.upper() + ": "
             self._qimg_draw_text(
                 qimg=qimg,
                 text=text,
-                pos=(left, top),
+                pos=(left[0], top),
                 color=self.color["green"],
             )
             # load scores
@@ -1819,18 +1836,24 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     text = "NaN"
                 # mod x pos
                 if i == "gtvt":
-                    left += 55
+                    pos = (left[1], top)
                 else:
-                    left += 50
+                    pos = (left[2], top)
                 # draw text
                 self._qimg_draw_text(
                     qimg=qimg,
                     text=text,
-                    pos=(left, top),
+                    pos=pos,
                     color=self.color["{}.pred".format(i)],
                 )
             # mod y pos
             top += 20
+
+    def draw_on_img_frame_move(self, *args, **kwargs):
+        return
+
+    def draw_on_img_frame_release(self, *args, **kwargs):
+        return
 
     # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
     def change_mouse_cursor(self, check_mouse_over_img_frame: bool):

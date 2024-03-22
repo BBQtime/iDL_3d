@@ -258,6 +258,14 @@ class ObsStudyWindow(ReplayWindow):
         if self.paint_pos is None:
             return
 
+        if self.obs_study_step not in [
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CORRECT_GTVT,
+            ObsStudyStep.CORRECT_GTVN,
+            ObsStudyStep.CORRECT_BOTH,
+        ]:
+            return
+
         # (1) set drawing color and size
         # (1-1) pen mode
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
@@ -343,6 +351,14 @@ class ObsStudyWindow(ReplayWindow):
 
     def draw_on_img_frame_release(self, img_frame: ImgFrame):
         if self.paint_pos is None:
+            return
+
+        if self.obs_study_step not in [
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CORRECT_GTVT,
+            ObsStudyStep.CORRECT_GTVN,
+            ObsStudyStep.CORRECT_BOTH,
+        ]:
             return
 
         # get img frame name
@@ -1913,20 +1929,6 @@ class ObsStudyWindow(ReplayWindow):
         super()._clear_img_3d()
         for i in ["gtvt.correction.mask", "gtvn.correction.mask"]:
             self.img_3d[i] = None
-
-    def _init_patients(self):
-        # load test set patients of all datasets
-        self._patients = Dict()
-        dataset_ver_list = [str_lib.DatasetVer.OBS_STUDY]
-        # if self.__user_name == "Admin":
-        #     dataset_ver_list.append(str_lib.DatasetVer.AU)
-
-        for i in dataset_ver_list:
-            dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
-            self._patients[i] = List(dataset_split[str_lib.DatasetPart.TEST])
-
-        if self.__user_name == "Admin":
-            self._patients[str_lib.DatasetVer.AU] = ["106"]
 
     def _init_data(self, ui_setting: Dict):
         super()._init_data(ui_setting)

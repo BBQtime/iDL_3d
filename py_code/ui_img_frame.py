@@ -118,9 +118,6 @@ class ImgFrame(QLabel):
     def mouseMoveEvent(self, event: QMouseEvent):
         super().mouseMoveEvent(event)
 
-        if not self.window().is_obs_study_window():
-            return
-
         should_paint_eraser_circle = self.__should_paint_eraser_circle()
 
         # put this before draw_on_img_frame_move()
@@ -130,12 +127,7 @@ class ImgFrame(QLabel):
 
         # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
-        if event.buttons() == Qt.LeftButton and self.window().obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if event.buttons() == Qt.LeftButton:
             # this function will trigger repaint
             self.window().draw_on_img_frame_move(event=event, img_frame=self)
 
@@ -143,7 +135,7 @@ class ImgFrame(QLabel):
             self.update()  # repaint
 
         # right click dragging
-        if self.__dragging:
+        if event.buttons() == Qt.RightButton and self.__dragging:
             diff_x = event.pos().x() - self.__drag_pos.x()
             diff_y = event.pos().y() - self.__drag_pos.y()
             img_pos_diff = (diff_x, diff_y)
@@ -180,17 +172,8 @@ class ImgFrame(QLabel):
     def mouseReleaseEvent(self, event: QMouseEvent):
         super().mouseReleaseEvent(event)
 
-        if not self.window().is_obs_study_window():
-            return
-
         if event.button() == Qt.LeftButton:
-            if self.window().obs_study_step in [
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-                ObsStudyStep.CORRECT_BOTH,
-            ]:
-                self.window().draw_on_img_frame_release(self)
+            self.window().draw_on_img_frame_release(self)
 
         elif event.button() == Qt.RightButton:
             self.__dragging = False
