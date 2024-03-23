@@ -711,6 +711,21 @@ class Timer:
 
 
 class Global:
+    def combine_pred_correction(origin_pred, correction, correction_mask):
+        if correction is None or correction_mask is None:
+            if origin_pred is None:
+                return None
+            else:
+                return origin_pred.copy()
+        else:
+            if origin_pred is None:
+                return correction * correction_mask
+            else:
+                return np.maximum(
+                    origin_pred * (1 - correction_mask),
+                    correction * correction_mask,
+                )
+
     def is_linux():
         return platform.system().lower() == "linux"
 

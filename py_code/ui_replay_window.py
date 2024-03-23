@@ -136,6 +136,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     def _init_color(self, ui_setting: Dict):
         self.color = Dict()
+        # load color value
         for i in [
             "black",
             "red",
@@ -149,21 +150,26 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.color[i] = List(ui_setting["color.def"][i])
             self.color[i] = tuple(int(k) for k in self.color[i])
 
-        for i in [
-            "gtvt.pred",
-            "gtvt.label",
-            "gtvn.pred",
-            "gtvn.label",
-            "gtvt.correction",
-            "gtvn.correction",
-        ]:
-            self.color[i] = self.color[ui_setting["color.contour"][i]]
+        # load color of coutours
+        for gtv in ["gtvt", "gtvn"]:
+            for i in ["pred", "label", "correction"]:
+                self.color["{}.{}".format(gtv, i)] = self.color[
+                    ui_setting["color.contour"][gtv][i]
+                ]
 
         # colors for replay mode only
-        for i in ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]:
-            self.color[i] = self.color[
-                ui_setting["color.contour"]["{}.replay".format(i)]
+        if not self.is_obs_study_window():
+            self.color["gtvt.click"] = self.color[
+                ui_setting["color.contour"]["gtvt"]["click.replay"]
             ]
+            self.color["gtvn.clicks"] = self.color[
+                ui_setting["color.contour"]["gtvn"]["clicks.replay"]
+            ]
+            self.color["gtvt.delineation"] = self.color[
+                ui_setting["color.contour"]["gtvt"]["delineation.replay"]
+            ]
+            self.color["gtvt.pred.final"] = self.color["gtvt.correction"]
+            self.color["gtvn.pred.final"] = self.color["gtvn.correction"]
 
     def setupUi(self, Core):
         Core.setObjectName("Core")
@@ -1076,8 +1082,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # load gtvt data
             if gtv == "gtvt":
                 # load gtvt nii
-                for i in ["click", "delineation", "correction"]:
-                    nii_path = os.path.join(cur_round_dir, "gtvt_{}.nii.gz".format(i))
+                for i in ["click", "delineation", "correction", "correction.mask"]:
+                    nii_path = os.path.join(
+                        cur_round_dir, "gtvt_{}.nii.gz".format(i.replace(".", "_"))
+                    )
                     if os.path.exists(nii_path):
                         self.img_3d["gtvt.{}".format(i)] = self._load_3d_img(
                             nii_path, binary=True
@@ -1111,15 +1119,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
                             selected_slices_list[i] = int(selected_slices_list[i])
                         self.__gtvt_selected_slices_3d[plane] = selected_slices_list
 
-                # refresh gtvt selected slices (2d)
-                # after gtvt selected slices (3d) is loaded
-                # self.__refresh_gtvt_selected_slices_2d()
-
             # load gtvn data
             elif gtv == "gtvn":
                 # load gtvn nii
-                for i in ["clicks", "correction"]:
-                    nii_path = os.path.join(cur_round_dir, "gtvn_{}.nii.gz".format(i))
+                for i in ["clicks", "correction", "correction.mask"]:
+                    nii_path = os.path.join(
+                        cur_round_dir, "gtvn_{}.nii.gz".format(i.replace(".", "_"))
+                    )
                     if os.path.exists(nii_path):
                         self.img_3d["gtvn.{}".format(i)] = self._load_3d_img(
                             nii_path, binary=True
@@ -1129,6 +1135,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # load preds
         self.img_3d["{}.pred".format(gtv)] = self._load_3d_img(pred_path, binary=True)
+        self.img_3d["{}.pred.final".format(gtv)] = g.combine_pred_correction(
+            origin_pred=self.img_3d["{}.pred".format(gtv)],
+            correction=self.img_3d["{}.correction".format(gtv)],
+            correction_mask=self.img_3d["{}.correction.mask".format(gtv)],
+        )
 
         # load baseline scores
         if self._idl_id[gtv] == "baseline":
@@ -1337,13 +1348,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # place top contour at the end of the list
             # click > correction > delineation > pred > label
             seg_name_list = [
-                "gtvn.label",
-                "gtvt.label",
+                # "gtvn.label",
+                # "gtvt.label",
+                "gtvn.pred.final",
+                "gtvt.pred.final",
                 "gtvn.pred",
                 "gtvt.pred",
                 "gtvt.delineation",
-                "gtvn.correction",
-                "gtvt.correction",
                 "gtvn.clicks",
                 "gtvt.click",
             ]
@@ -1748,23 +1759,32 @@ class ReplayWindow(QtWidgets.QMainWindow):
         bottom = self._get_text_pos_bottom(qimg)
 
         # label
+        if 0:
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="Label:",
+                pos=(left[0], bottom[2]),
+                color=self.color["green"],
+            )
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="GTVt",
+                pos=(left[1], bottom[2]),
+                color=self.color["gtvt.label"],
+            )
+            self._qimg_draw_text(
+                qimg=qimg,
+                text="GTVn",
+                pos=(left[2], bottom[2]),
+                color=self.color["gtvn.label"],
+            )
+
+        # Delineation
         self._qimg_draw_text(
             qimg=qimg,
-            text="Label:",
+            text="Delineation",
             pos=(left[0], bottom[2]),
-            color=self.color["green"],
-        )
-        self._qimg_draw_text(
-            qimg=qimg,
-            text="GTVt",
-            pos=(left[1], bottom[2]),
-            color=self.color["gtvt.label"],
-        )
-        self._qimg_draw_text(
-            qimg=qimg,
-            text="GTVn",
-            pos=(left[2], bottom[2]),
-            color=self.color["gtvn.label"],
+            color=self.color["gtvt.delineation"],
         )
 
         # pred
@@ -1787,24 +1807,24 @@ class ReplayWindow(QtWidgets.QMainWindow):
             color=self.color["gtvn.pred"],
         )
 
-        # user input
+        # correction
         self._qimg_draw_text(
             qimg=qimg,
-            text="User:",
+            text="Correction:",
             pos=(left[0], bottom[0]),
             color=self.color["green"],
         )
         self._qimg_draw_text(
             qimg=qimg,
-            text="Init",
+            text="GTVt",
             pos=(left[1], bottom[0]),
-            color=self.color["gtvt.delineation"],
+            color=self.color["gtvt.correction"],
         )
         self._qimg_draw_text(
             qimg=qimg,
-            text="Correction",
+            text="GTVn",
             pos=(left[2], bottom[0]),
-            color=self.color["gtvt.correction"],
+            color=self.color["gtvn.correction"],
         )
 
     def _add_instruction_on_top_left(self, qimg: QtGui.QImage):

@@ -1539,10 +1539,15 @@ class ObsStudyWindow(ReplayWindow):
         self.color["gtvn.correction"] = self.color["gtvn.pred"]
         self.color["gtvt.pred.final"] = self.color["gtvt.pred"]
         self.color["gtvn.pred.final"] = self.color["gtvn.pred"]
-
-        # colors for idl mode only
-        for i in ["gtvt.click", "gtvn.clicks", "gtvt.delineation"]:
-            self.color[i] = self.color[ui_setting["color.contour"]["{}.idl".format(i)]]
+        self.color["gtvt.click"] = self.color[
+            ui_setting["color.contour"]["gtvt"]["click.obs.study"]
+        ]
+        self.color["gtvn.clicks"] = self.color[
+            ui_setting["color.contour"]["gtvn"]["clicks.obs.study"]
+        ]
+        self.color["gtvt.delineation"] = self.color[
+            ui_setting["color.contour"]["gtvt"]["delineation.obs.study"]
+        ]
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_restore_clicked(self):

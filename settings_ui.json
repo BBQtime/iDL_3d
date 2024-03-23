@@ -1,17 +1,21 @@
 {
     "color.contour": {
-        "gtvn.clicks.idl": "orange",
-        "gtvn.clicks.replay": "magenta",
-        "gtvn.correction": "red",
-        "gtvn.label": "blue",
-        "gtvn.pred": "cyan",
-        "gtvt.click.idl": "orange",
-        "gtvt.click.replay": "magenta",
-        "gtvt.correction": "red",
-        "gtvt.delineation.idl": "orange",
-        "gtvt.delineation.replay": "magenta",
-        "gtvt.label": "orange",
-        "gtvt.pred": "yellow"
+        "gtvn": {
+            "clicks.obs.study": "orange",
+            "clicks.replay": "magenta",
+            "correction": "blue",
+            "label": "blue",
+            "pred": "cyan"
+        },
+        "gtvt": {
+            "click.obs.study": "orange",
+            "click.replay": "magenta",
+            "correction": "orange",
+            "delineation.obs.study": "orange",
+            "delineation.replay": "magenta",
+            "label": "orange",
+            "pred": "yellow"
+        }
     },
     "color.def": {
         "black": "0,0,0",
