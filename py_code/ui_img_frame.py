@@ -46,9 +46,27 @@ class ImgFrame(QLabel):
 
     def mouse_press_event_left_button(self, event: QMouseEvent):
         if not self.window().is_obs_study_window():
-            return
+            # update cur slices id
+            pos_3d = self.get_pos_in_3d(event.pos())
+            self.window().cur_slice_id[Plane.TRANSVERSE] = int(pos_3d[0])
+            self.window().cur_slice_id[Plane.CORONAL] = int(pos_3d[1])
+            self.window().cur_slice_id[Plane.SAGITTAL] = int(pos_3d[2])
+            # in PLANE_FIXED mode, refresh other img_frames to switch to current slice
+            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                # (1) refresh other img_frames from scratch
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                frame_name_list.remove(self.plane)
+                for i in frame_name_list:
+                    self.window().refresh_imgs(frame_name=i)
+                # (2) on current img frame, only refresh anatomical lines
+                self.window().refresh_imgs(
+                    frame_name=self.plane,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
 
-        if self.window().obs_study_step is None:
+        elif self.window().obs_study_step is None:
             return
 
         elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
@@ -357,10 +375,11 @@ class ImgFrame(QLabel):
         # w = img_shape_3d[2] - w
 
         # (3) make sure transverse slice id is a multiple of interpolation step
-        d = self.window().ensure_slice_id_multiple(
-            slice_id=d,
-            slice_count=img_shape_3d[0],
-        )
+        if self.window().is_obs_study_window():
+            d = self.window().ensure_slice_id_multiple(
+                slice_id=d,
+                slice_count=img_shape_3d[0],
+            )
 
         return d, h, w
 

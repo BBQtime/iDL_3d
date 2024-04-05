@@ -1712,12 +1712,6 @@ class ObsStudyWindow(ReplayWindow):
         for i in frame_name_list:
             self.img_frame[i].select_cross(cross_id)
 
-    def get_3d_img_shape(self):
-        if self.img_3d[Modal.CT] is not None:
-            return self.img_3d[Modal.CT].shape
-        else:
-            return None
-
     def __enable_annotation_tools(self):
         # annotation buttons
         for i in ["pen", "eraser", "clear"]:

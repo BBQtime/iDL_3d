@@ -108,6 +108,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
         input_widget.setObjectName(random_name)
         input_widget.setStyleSheet(f"#{random_name} {{border: 2px solid gray;}}")
 
+    def get_3d_img_shape(self):
+        if self.img_3d[Modal.CT] is not None:
+            return self.img_3d[Modal.CT].shape
+        else:
+            return None
+
     def _clear_img_3d(self):
         for i in [
             Modal.CT,
@@ -1343,6 +1349,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "gtvn.clicks",
                 "gtvt.click",
             ]
+
         # replay mode
         else:
             # place top contour at the end of the list
