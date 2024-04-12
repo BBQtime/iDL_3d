@@ -62,6 +62,9 @@ class Metric:
     DSC = "dsc"
     MSD = "msd"
     HD95 = "hd95"
+    APL_VOXEL = "apl.voxel"
+    APL_PCT = "apl.pct"
+    SDSC = "sdsc"
 
 
 class Plane:

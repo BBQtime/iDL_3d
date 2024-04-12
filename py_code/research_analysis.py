@@ -1,10 +1,12 @@
 import os
 
-import numpy as np
+from added_path_length import APL
 from custom import Debug, Dict, Dir
 from custom import Global as g
-from custom import Json, Nii
+from custom import Json, Nii, Value
 from segment_metric import avg_surface_distance_symmetric, dice, hausdorff_distance_95
+from str_lib import Metric, Stat
+from surface_dice import SurfaceDice
 from tqdm import tqdm
 
 
@@ -28,6 +30,18 @@ def cal_obs_study_metrics(obs_study_id: str):
     Json.save(data=obs_metrics, path=obs_metrics_path)
 
     patient_dir_list = Dir.get_sub_dirs(os.path.join(obs_study_dir, "patients"))
+
+    for stat in [Stat.AVG, Stat.MEDIAN]:
+        for i in ["correct.vs.origin"]:
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
+                obs_metrics[stat][i][metric] = []
 
     for patient_dir in tqdm(patient_dir_list):
         if not os.path.exists(os.path.join(baseline_dir, "patients", patient_dir)):
@@ -59,47 +73,92 @@ def cal_obs_study_metrics(obs_study_id: str):
         )
 
         volume_pairs = Dict()
-        volume_pairs["correct.pred"] = (final_pred, origin_pred)
-        volume_pairs["pred.baseline"] = (final_pred, baseline_pred)
-        volume_pairs["correct.baseline"] = (final_pred, baseline_pred)
+        volume_pairs["correct.vs.origin"] = (final_pred, origin_pred)
+        # volume_pairs["origin.vs.baseline"] = (origin_pred, baseline_pred)
+        # volume_pairs["correct.vs.baseline"] = (final_pred, baseline_pred)
 
         for cur_key in volume_pairs.keys():
-            volume_1 = volume_pairs[cur_key][0]
-            volume_2 = volume_pairs[cur_key][1]
+            reference = volume_pairs[cur_key][0]
+            test = volume_pairs[cur_key][1]
             dsc = dice(
-                test=volume_1,
-                reference=volume_2,
+                test=test,
+                reference=reference,
                 nan_for_nonexisting=False,
             )
 
             msd = avg_surface_distance_symmetric(
-                test=volume_1,
-                reference=volume_2,
+                test=test,
+                reference=reference,
                 none_for_nonexisting=True,
                 voxel_spacing=g.NII_SPACING,
             )
 
             hd95 = hausdorff_distance_95(
-                test=volume_1,
-                reference=volume_2,
+                test=test,
+                reference=reference,
                 none_for_nonexisting=True,
                 voxel_spacing=g.NII_SPACING,
             )
 
-            obs_metrics[patient_dir][cur_key]["dsc"] = dsc
-            obs_metrics[patient_dir][cur_key]["msd"] = msd
-            obs_metrics[patient_dir][cur_key]["hd95"] = hd95
+            obs_metrics[patient_dir][cur_key][Metric.DSC] = dsc
+            obs_metrics[patient_dir][cur_key][Metric.MSD] = msd
+            obs_metrics[patient_dir][cur_key][Metric.HD95] = hd95
+
+            # added path length
+            apl = APL(reference_structure=reference, other_structure=test)
+            obs_metrics[patient_dir][cur_key][Metric.APL_PCT] = apl.get_apl(
+                normalized=True
+            )
+            obs_metrics[patient_dir][cur_key][Metric.APL_VOXEL] = apl.get_apl(
+                normalized=False
+            )
+
+            # surface dice
+            sdsc = SurfaceDice(reference_image=reference, other_image=test)
+            obs_metrics[patient_dir][cur_key][Metric.SDSC] = sdsc.get_surface_dice()
+
+            # record value for avg and median calculation
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                for metric in [
+                    Metric.DSC,
+                    Metric.MSD,
+                    Metric.HD95,
+                    Metric.APL_PCT,
+                    Metric.APL_VOXEL,
+                    Metric.SDSC,
+                ]:
+                    obs_metrics[stat][cur_key][metric].append(
+                        obs_metrics[patient_dir][cur_key][metric]
+                    )
+
+    for i in ["correct.vs.origin"]:
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            obs_metrics[Stat.MEDIAN][i][metric] = Value.median(
+                obs_metrics[Stat.MEDIAN][i][metric]
+            )
+            obs_metrics[Stat.AVG][i][metric] = Value.avg(
+                obs_metrics[Stat.AVG][i][metric]
+            )
 
     Json.save(data=obs_metrics, path=obs_metrics_path)
 
 
 obs_study_id_list = [
-    "idl.gtvt_2024.03.18.09.05.54_Jesper",
-    "idl.gtvn_2024.03.18.09.05.54_Jesper",
-    "idl.gtvt_2024.03.21.13.07.10_Hanna",
-    "idl.gtvn_2024.03.21.13.07.10_Hanna",
-    "idl.gtvt_2024.03.22.10.08.33_Kenneth",
-    "idl.gtvn_2024.03.22.10.08.33_Kenneth",
+    # "idl.gtvt_2024.03.18.09.05.54_Jesper",
+    # "idl.gtvn_2024.03.18.09.05.54_Jesper",
+    # "idl.gtvt_2024.03.21.13.07.10_Hanna",
+    # "idl.gtvn_2024.03.21.13.07.10_Hanna",
+    # "idl.gtvt_2024.03.22.10.08.33_Kenneth",
+    # "idl.gtvn_2024.03.22.10.08.33_Kenneth",
+    "idl.gtvn_2024.04.12.12.05.44_Kenneth",
+    "idl.gtvt_2024.04.12.12.05.44_Kenneth",
 ]
 for obs_study_id in obs_study_id_list:
     cal_obs_study_metrics(obs_study_id)

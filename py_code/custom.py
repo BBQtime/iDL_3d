@@ -491,6 +491,17 @@ class Nii:
 
 
 class Json:
+    class NumpyEncoder(json.JSONEncoder):
+        # """ Custom encoder for numpy data types """
+        def default(self, obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return json.JSONEncoder.default(self, obj)
+
     def save(data: dict, path: str):
         with open(path, mode="w", encoding="utf-8") as json_file:
             # ensure_ascii == false, non-ASCII characters is available
@@ -502,6 +513,7 @@ class Json:
                 indent=4,
                 sort_keys=True,
                 skipkeys=False,
+                cls=Json.NumpyEncoder,
             )
 
     # after json loaded, key(int) will become string
@@ -711,6 +723,27 @@ class Timer:
 
 
 class Global:
+    def find_contours(image_array):
+        # Convert the numpy array to a SimpleITK Image
+        image = sitk.GetImageFromArray(image_array)
+
+        # Apply a thresholding filter to segment the image
+        # Adjust the lower and upper thresholds according to your image's characteristics
+        segmented = sitk.BinaryThreshold(
+            image, lowerThreshold=1, upperThreshold=255, insideValue=1, outsideValue=0
+        )
+
+        # Generate the contour for the segmented image
+        contour_filter = sitk.BinaryContourImageFilter()
+        contour_filter.SetFullyConnected(True)
+        contour_filter.SetBackgroundValue(0)
+        contour_image = contour_filter.Execute(segmented)
+
+        # Convert back to numpy array
+        contour_array = sitk.GetArrayFromImage(contour_image)
+
+        return contour_array
+
     def combine_pred_correction(origin_pred, correction, correction_mask):
         if correction is None or correction_mask is None:
             if origin_pred is None:
