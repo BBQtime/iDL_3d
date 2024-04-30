@@ -1,9 +1,10 @@
+import csv
 import os
 
 import cv2
 import numpy as np
 import torch
-from added_path_length import APL
+from added_path_len import APL
 from custom import Debug, Dict
 from custom import Global as g
 from custom import Json, Nii, Value
@@ -22,7 +23,6 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
 
     if obs_study_id.startswith("idl.gtvn_"):
         gtv = "gtvn"
-
     elif obs_study_id.startswith("idl.gtvt_"):
         gtv = "gtvt"
     else:
@@ -32,8 +32,8 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
     )
 
-    obs_metrics = Dict()
-    obs_metrics_path = os.path.join(obs_study_dir, "obs_study_metrics_3d.json")
+    metrics_dict = Dict()
+    metrics_path = os.path.join(obs_study_dir, "obs_study_metrics_3d.json")
     for stat in [Stat.AVG, Stat.MEDIAN]:
         for i in ["correct.vs.idl"]:
             for metric in [
@@ -44,8 +44,8 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                 Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
-                obs_metrics[stat][i][metric] = []
-    Json.save(data=obs_metrics, path=obs_metrics_path)
+                metrics_dict[stat][i][metric] = []
+    Json.save(data=metrics_dict, path=metrics_path)
 
     patient_list = []
     # open "obs_study_step.json" and find approved patients
@@ -129,9 +129,9 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                 msd = 0.0
                 hd95 = 0.0
 
-            obs_metrics[patient][i][Metric.DSC] = dsc
-            obs_metrics[patient][i][Metric.MSD] = msd
-            obs_metrics[patient][i][Metric.HD95] = hd95
+            metrics_dict[patient][i][Metric.DSC] = dsc
+            metrics_dict[patient][i][Metric.MSD] = msd
+            metrics_dict[patient][i][Metric.HD95] = hd95
 
             # added path length
             if os.path.exists(patient_dir):
@@ -142,8 +142,8 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                 apl_pct = 0.0
                 apl_voxel = 0
 
-            obs_metrics[patient][i][Metric.APL_PCT] = apl_pct
-            obs_metrics[patient][i][Metric.APL_VOXEL] = apl_voxel
+            metrics_dict[patient][i][Metric.APL_PCT] = apl_pct
+            metrics_dict[patient][i][Metric.APL_VOXEL] = apl_voxel
 
             # surface dice
             if os.path.exists(patient_dir):
@@ -161,11 +161,11 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                     class_thresholds=[1.0],
                 )
                 # tensor to float
-                obs_metrics[patient][i][Metric.SDSC] = sdsc.item()
+                metrics_dict[patient][i][Metric.SDSC] = sdsc.item()
                 # sdsc = SurfaceDice(reference_image=reference, other_image=test)
-                # obs_metrics[patient][i][Metric.SDSC] = sdsc.get_surface_dice()
+                # metrics_dict[patient][i][Metric.SDSC] = sdsc.get_surface_dice()
             else:
-                obs_metrics[patient][i][Metric.SDSC] = 1.0
+                metrics_dict[patient][i][Metric.SDSC] = 1.0
 
             # record value for avg and median calculation
             for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -177,7 +177,9 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                     Metric.APL_VOXEL,
                     Metric.SDSC,
                 ]:
-                    obs_metrics[stat][i][metric].append(obs_metrics[patient][i][metric])
+                    metrics_dict[stat][i][metric].append(
+                        metrics_dict[patient][i][metric]
+                    )
 
     for i in ["correct.vs.idl"]:
         for metric in [
@@ -188,14 +190,14 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            obs_metrics[Stat.MEDIAN][i][metric] = Value.median(
-                obs_metrics[Stat.MEDIAN][i][metric]
+            metrics_dict[Stat.MEDIAN][i][metric] = Value.median(
+                metrics_dict[Stat.MEDIAN][i][metric]
             )
-            obs_metrics[Stat.AVG][i][metric] = Value.avg(
-                obs_metrics[Stat.AVG][i][metric]
+            metrics_dict[Stat.AVG][i][metric] = Value.avg(
+                metrics_dict[Stat.AVG][i][metric]
             )
 
-    Json.save(data=obs_metrics, path=obs_metrics_path)
+    Json.save(data=metrics_dict, path=metrics_path)
 
 
 def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
@@ -206,8 +208,8 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
     )
 
-    obs_metrics = Dict()
-    obs_metrics_path = os.path.join(
+    metrics_dict = Dict()
+    metrics_path = os.path.join(
         obs_study_dir, "obs_study_metrics_gtvt_central_slices.json"
     )
     for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -220,8 +222,8 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
             Metric.SDSC,
         ]:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                obs_metrics[stat][metric][plane] = []
-    Json.save(data=obs_metrics, path=obs_metrics_path)
+                metrics_dict[stat][metric][plane] = []
+    Json.save(data=metrics_dict, path=metrics_path)
 
     patient_list = []
     # open "obs_study_step.json" and find approved patients
@@ -300,16 +302,16 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
                 none_for_nonexisting=True,
                 voxel_spacing=(1, 1),  # g.NII_SPACING,
             )
-            obs_metrics[patient][Metric.DSC][plane] = dsc
-            obs_metrics[patient][Metric.MSD][plane] = msd
-            obs_metrics[patient][Metric.HD95][plane] = hd95
+            metrics_dict[patient][Metric.DSC][plane] = dsc
+            metrics_dict[patient][Metric.MSD][plane] = msd
+            metrics_dict[patient][Metric.HD95][plane] = hd95
 
             # added path length
             apl = APL(reference_structure=final_pred_2d, other_structure=delineation_2d)
             apl_pct = apl.get_apl(normalized=True)
             apl_voxel = apl.get_apl(normalized=False)
-            obs_metrics[patient][Metric.APL_PCT][plane] = apl_pct
-            obs_metrics[patient][Metric.APL_VOXEL][plane] = apl_voxel
+            metrics_dict[patient][Metric.APL_PCT][plane] = apl_pct
+            metrics_dict[patient][Metric.APL_VOXEL][plane] = apl_voxel
 
             # surface dice
             final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
@@ -326,11 +328,11 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
                 class_thresholds=[1.0],
             )
             # tensor to float
-            obs_metrics[patient][Metric.SDSC][plane] = sdsc.item()
+            metrics_dict[patient][Metric.SDSC][plane] = sdsc.item()
             # sdsc = SurfaceDice(
             #     reference_image=final_pred_2d, other_image=delineation_2d
             # )
-            # obs_metrics[patient][Metric.SDSC][plane] = sdsc.get_surface_dice()
+            # metrics_dict[patient][Metric.SDSC][plane] = sdsc.get_surface_dice()
 
             # record value for avg and median calculation
             for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -342,8 +344,8 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
                     Metric.APL_VOXEL,
                     Metric.SDSC,
                 ]:
-                    obs_metrics[stat][metric][plane].append(
-                        obs_metrics[patient][metric][plane]
+                    metrics_dict[stat][metric][plane].append(
+                        metrics_dict[patient][metric][plane]
                     )
 
     # calculate avg and median
@@ -356,14 +358,150 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
         Metric.SDSC,
     ]:
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            obs_metrics[Stat.MEDIAN][metric][plane] = Value.median(
-                obs_metrics[Stat.MEDIAN][metric][plane]
+            metrics_dict[Stat.MEDIAN][metric][plane] = Value.median(
+                metrics_dict[Stat.MEDIAN][metric][plane]
             )
-            obs_metrics[Stat.AVG][metric][plane] = Value.avg(
-                obs_metrics[Stat.AVG][metric][plane]
+            metrics_dict[Stat.AVG][metric][plane] = Value.avg(
+                metrics_dict[Stat.AVG][metric][plane]
             )
 
-    Json.save(data=obs_metrics, path=obs_metrics_path)
+    Json.save(data=metrics_dict, path=metrics_path)
+
+
+def create_table_metrics_3d(obs_study_id_list: list):
+    table_path = Dict()
+    table_data = Dict()
+
+    for i in ["gtvt", "gtvn"]:
+        table_path[i] = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            "obs_study_metrics_3d_{}.csv".format(i),
+        )
+
+        table_data[i] = [
+            ["Metric", "Statistics", "Jesper", "Kenneth", "Hanna"],  # Header row
+        ]
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                cur_item = [metric, stat, "", "", ""]
+                table_data[i].append(cur_item)
+
+    for obs_study_id in tqdm(obs_study_id_list):
+        if obs_study_id.startswith("idl.gtvn_"):
+            cur_table_data = table_data["gtvn"]
+        elif obs_study_id.startswith("idl.gtvt_"):
+            cur_table_data = table_data["gtvt"]
+        else:
+            Debug.error_exit("obs study train id error")
+
+        obs_study_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+        )
+        metrics_dict = Json.load(
+            os.path.join(obs_study_dir, "obs_study_metrics_3d.json")
+        )
+
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                cur_value = metrics_dict[stat]["correct.vs.idl"][metric]
+                for item in cur_table_data:
+                    if item[0] == metric and item[1] == stat:
+                        if "Jesper" in obs_study_id:
+                            item[2] = cur_value
+                        elif "Kenneth" in obs_study_id:
+                            item[3] = cur_value
+                        elif "Hanna" in obs_study_id:
+                            item[4] = cur_value
+                        break
+
+    for i in ["gtvt", "gtvn"]:
+        with open(table_path[i], "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerows(table_data[i])
+
+
+def create_table_metrics_gtvt_central_slices(obs_study_id_list: list):
+    # tabel_path=Dict()
+
+    table_path = os.path.join(
+        g.TRAIN_RESULTS_DIR,
+        "baseline_obs.study",
+        "obs_study_metrics_gtvt_central_slices.csv",
+    )
+    # Header row
+    table_data = [
+        [
+            "Metric",
+            "Anatomical Plane",
+            "Statistics",
+            "Jesper",
+            "Kenneth",
+            "Hanna",
+        ],
+    ]
+    for metric in [
+        Metric.DSC,
+        Metric.MSD,
+        Metric.HD95,
+        Metric.APL_PCT,
+        Metric.APL_VOXEL,
+        Metric.SDSC,
+    ]:
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                cur_item = [metric, plane, stat, "", "", ""]
+                table_data.append(cur_item)
+
+    for obs_study_id in tqdm(obs_study_id_list):
+        if not obs_study_id.startswith("idl.gtvt_"):
+            Debug.error_exit("Must be an 'idl.gtvt' id")
+
+        obs_study_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+        )
+        metrics_dict = Json.load(
+            os.path.join(obs_study_dir, "obs_study_metrics_gtvt_central_slices.json")
+        )
+
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                for stat in [Stat.AVG, Stat.MEDIAN]:
+                    cur_value = metrics_dict[stat][metric][plane]
+                    for item in table_data:
+                        if item[0] == metric and item[1] == plane and item[2] == stat:
+                            if "Jesper" in obs_study_id:
+                                item[3] = cur_value
+                            elif "Kenneth" in obs_study_id:
+                                item[4] = cur_value
+                            elif "Hanna" in obs_study_id:
+                                item[5] = cur_value
+                            break
+
+    with open(table_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(table_data)
 
 
 if 1:
@@ -375,14 +513,18 @@ if 1:
         "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
         "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
     ]
-    for obs_study_id in obs_study_id_list:
-        cal_obs_study_metrics_3d(obs_study_id)
+    # for obs_study_id in obs_study_id_list:
+    #     cal_obs_study_metrics_3d(obs_study_id)
 
-else:
+    create_table_metrics_3d(obs_study_id_list)
+
+if 1:
     obs_study_id_list = [
         "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
         "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
         "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
     ]
-    for obs_study_id in obs_study_id_list:
-        cal_obs_study_metrics_gtvt_central_slices(obs_study_id)
+    # for obs_study_id in obs_study_id_list:
+    #     cal_obs_study_metrics_gtvt_central_slices(obs_study_id)
+
+    create_table_metrics_gtvt_central_slices(obs_study_id_list)
