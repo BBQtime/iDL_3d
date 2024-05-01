@@ -3,8 +3,8 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import custom as g
 import cv2
+import global_core as g
 import numpy as np
 import qimage2ndarray
 from custom_dict import Dict

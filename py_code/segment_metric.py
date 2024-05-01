@@ -1,6 +1,6 @@
 from typing import Union
 
-import custom as g
+import global_core as g
 import numpy as np
 import torch.nn as nn
 from medpy.metric import asd, assd, hd, hd95

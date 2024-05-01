@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 from tkinter import Tk, filedialog
 
-import custom as g
 import cv2
+import global_core as g
 import numpy as np
 from custom_dict import Dict
 from custom_list import List

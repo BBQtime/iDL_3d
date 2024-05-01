@@ -5,7 +5,7 @@ from collections import OrderedDict
 from itertools import product
 from pathlib import Path
 
-import custom as g
+import global_core as g
 import torch
 from custom_dict import Dict
 from custom_list import List

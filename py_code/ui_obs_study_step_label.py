@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel, QWidget
 from str_lib import ObsStudyStep

@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 import torch
 import torch.nn as nn
 from torch import Tensor

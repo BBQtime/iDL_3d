@@ -2,7 +2,7 @@ import os
 import random
 from typing import Tuple
 
-import custom as g
+import global_core as g
 import torch
 from custom_dict import Dict
 from dataset_core import DatasetCore

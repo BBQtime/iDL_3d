@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from PyQt5.QtCore import QSize
 from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QWidget
 

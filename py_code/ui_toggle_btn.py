@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from PyQt5.QtWidgets import QPushButton
 
 

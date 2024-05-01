@@ -1,8 +1,8 @@
 import csv
 import os
 
-import custom as g
 import cv2
+import global_core as g
 import numpy as np
 import torch
 from added_path_len import APL

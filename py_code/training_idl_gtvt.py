@@ -6,7 +6,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import custom as g
+import global_core as g
 import matplotlib.pyplot as plt
 import numpy as np
 from custom_dict import Dict

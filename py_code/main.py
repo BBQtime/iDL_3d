@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from str_lib import DatasetPart, DatasetVer
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn

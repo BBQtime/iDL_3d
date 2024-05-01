@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap

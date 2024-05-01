@@ -1,4 +1,4 @@
-import custom as g
+import global_core as g
 from numpy import ndarray
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal

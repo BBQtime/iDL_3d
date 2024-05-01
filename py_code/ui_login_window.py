@@ -1,7 +1,7 @@
 import os
 import sys
 
-import custom as g
+import global_core as g
 import qdarktheme
 from custom_dict import Dict
 from PyQt5 import QtWidgets
