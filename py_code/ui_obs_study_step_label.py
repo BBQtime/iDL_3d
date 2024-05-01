@@ -1,5 +1,4 @@
-from custom import Debug
-from custom import Global as g
+import custom as g
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QLabel, QWidget
 from str_lib import ObsStudyStep
@@ -134,7 +133,7 @@ class ObsStudyStepLabel(QLabel):
             LabelStatus.NOT_START,
             LabelStatus.MISSING,
         ]:
-            Debug.error_exit("Invalid input_status value!")
+            g.error_exit("Invalid input_status value!")
         self.__remove_head_symbol()
         text = self.text()
         self.__status = input_status

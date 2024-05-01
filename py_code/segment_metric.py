@@ -1,10 +1,8 @@
 from typing import Union
 
+import custom as g
 import numpy as np
 import torch.nn as nn
-from custom import Debug
-from custom import Global as g
-from custom import Img
 from medpy.metric import asd, assd, hd, hd95
 from numpy import ndarray
 from str_lib import Metric
@@ -538,7 +536,7 @@ class SegmentationMetric(nn.Module):
         super().__init__()
         self.__metric = metric
         if self.__metric not in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            Debug.error_exit("Value of metric must be one of dsc/msd/hd95!")
+            g.error_exit("Value of metric must be one of dsc/msd/hd95!")
 
     def forward(self, preds: Union[Tensor, ndarray], labels: Union[Tensor, ndarray]):
         if len(preds.shape) == 4:
@@ -551,8 +549,8 @@ class SegmentationMetric(nn.Module):
         else:
             pass
 
-        preds = Img.binarize(preds)
-        labels = Img.binarize(labels)
+        preds = g.binarize_img(preds)
+        labels = g.binarize_img(labels)
 
         if isinstance(preds, Tensor):
             preds = preds.cpu().numpy()

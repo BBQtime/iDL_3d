@@ -1,4 +1,4 @@
-from custom import GPU
+import custom as g
 from numpy import ndarray
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -23,7 +23,7 @@ class ObsStudyThread(QThread):
     def stop(self):
         if self.is_running:
             self.terminate()  # force stop
-            GPU.clear_cache()
+            g.clear_gpu_cache()
             # self.quit()  # signal the thread to exit its event loop
             # self.wait()  # wait for the thread to be cleaned up properly
             self.is_running = False

@@ -6,11 +6,11 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import custom as g
 import matplotlib.pyplot as plt
 import numpy as np
-from custom import GPU, Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom_dict import Dict
+from custom_list import List
 from dataset_idl_gtvt import DataSetIDLGTVt
 from loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
 from numpy import ndarray
@@ -51,8 +51,8 @@ class TrainingIDLGTVt(TrainingCore):
         if next_round > len(hyper["lr"]):
             next_round = len(hyper["lr"])
 
-        if GPU.used_count() > 1:
-            hyper["lr.actual"].append(hyper["lr"][next_round - 1] * GPU.used_count())
+        if g.used_gpu_count() > 1:
+            hyper["lr.actual"].append(hyper["lr"][next_round - 1] * g.used_gpu_count())
         else:
             hyper["lr.actual"].append(hyper["lr"][next_round - 1])
 
@@ -79,7 +79,7 @@ class TrainingIDLGTVt(TrainingCore):
             # at least 2 iters to compare loss difference
             hyper["iter"] = 1
         else:
-            hyper["iter"] = Value.limit_range(hyper["iter"], (1, None))
+            hyper["iter"] = g.clamp_value(hyper["iter"], (1, None))
 
         # lr
         # lr is saved in json file as a string, not a list, because:
@@ -88,26 +88,24 @@ class TrainingIDLGTVt(TrainingCore):
         hyper["lr"] = List(hyper["lr"])
         for i in range(len(hyper["lr"])):
             hyper["lr"][i] = float(hyper["lr"][i])
-            hyper["lr"][i] = Value.limit_range(hyper["lr"][i], (Value.EPS, 1))
+            hyper["lr"][i] = g.clamp_value(hyper["lr"][i], (g.EPS, 1))
             # check min lr, make sure it is lower than any lr in the lr list
-            hyper["lr.min"] = Value.limit_range(
-                hyper["lr.min"], (Value.EPS, hyper["lr"][i])
-            )
+            hyper["lr.min"] = g.clamp_value(hyper["lr.min"], (g.EPS, hyper["lr"][i]))
 
         # actual lr
         hyper["lr.actual"] = List()
-        if GPU.used_count() > 1:
-            hyper["lr.actual"].append(hyper["lr"][0] * GPU.used_count())
+        if g.used_gpu_count() > 1:
+            hyper["lr.actual"].append(hyper["lr"][0] * g.used_gpu_count())
         else:
             hyper["lr.actual"].append(hyper["lr"][0])
 
         # lr decay patience (before shared hyper)
-        hyper["lr.decay.patience"] = Value.limit_range(
+        hyper["lr.decay.patience"] = g.clamp_value(
             hyper["lr.decay.patience"], (1, hyper["iter"])
         )
 
         # augmentation times
-        hyper["augment.times"] = Value.limit_range(hyper["augment.times"], (1, None))
+        hyper["augment.times"] = g.clamp_value(hyper["augment.times"], (1, None))
 
         # augmentation percent (based on augment_times)
         hyper["augment.pct"] = hyper["augment.times"] / (hyper["augment.times"] + 1)
@@ -121,7 +119,7 @@ class TrainingIDLGTVt(TrainingCore):
             hyper[plane] = List(hyper[plane])
             for i in range(len(hyper[plane])):
                 hyper[plane][i] = int(hyper[plane][i])
-                hyper[plane][i] = Value.limit_range(hyper[plane][i], (0, None))
+                hyper[plane][i] = g.clamp_value(hyper[plane][i], (0, None))
 
         # select scenario
         if hyper["select.scenario"] not in [
@@ -133,19 +131,19 @@ class TrainingIDLGTVt(TrainingCore):
             hyper["select.scenario"] = SelectScenario.RANDOM
 
         # weight map parameters
-        hyper["weight.background"] = Value.limit_range(
+        hyper["weight.background"] = g.clamp_value(
             hyper["weight.background"], (0.0, 1.0)
         )
-        hyper["weight.selected.slice"] = Value.limit_range(
+        hyper["weight.selected.slice"] = g.clamp_value(
             hyper["weight.selected.slice"], (hyper["weight.background"], None)
         )
-        hyper["weight.fp.fn"] = Value.limit_range(
+        hyper["weight.fp.fn"] = g.clamp_value(
             hyper["weight.fp.fn"], (hyper["weight.selected.slice"], None)
         )
-        hyper["weight.distance.step"] = Value.limit_range(
+        hyper["weight.distance.step"] = g.clamp_value(
             hyper["weight.distance.step"], (1, None)
         )
-        hyper["weight.prev.round.decay"] = Value.limit_range(
+        hyper["weight.prev.round.decay"] = g.clamp_value(
             hyper["weight.prev.round.decay"], (0.0, 1.0)
         )
 
@@ -198,7 +196,7 @@ class TrainingIDLGTVt(TrainingCore):
 
     def _save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self._simplify_hyper(hyper)
-        Json.save(data=simple_hyper, path=json_path)
+        g.save_json(data=simple_hyper, path=json_path)
 
     # in this function, cur round slices have not been added into selected_slices
     def __select_new_round_slices(
@@ -221,7 +219,7 @@ class TrainingIDLGTVt(TrainingCore):
         patient = Path(patient_dir).name
         patient = patient[len("patient=") :]
 
-        label = Nii.load(
+        label = g.load_nii(
             os.path.join(
                 g.DATASET_DIR[hyper["dataset.ver"]], "HNCDL_{}_GTVt.nii".format(patient)
             ),
@@ -290,7 +288,7 @@ class TrainingIDLGTVt(TrainingCore):
                 for part in range(1, divided_parts):
                     idx = len(candidates) * part / divided_parts
                     idx = round(idx)
-                    idx = Value.limit_range(idx, (1, len(candidates)))
+                    idx = g.clamp_value(idx, (1, len(candidates)))
                     new_round_slices[plane].append(candidates[idx - 1])
 
             # (1) "random"
@@ -325,14 +323,14 @@ class TrainingIDLGTVt(TrainingCore):
         # change "patient=123" into "123"
         patient = patient[len("patient=") :]
 
-        label = Nii.load(
+        label = g.load_nii(
             os.path.join(
                 g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
             ),
             binary=True,
         )
 
-        selected_slices = Json.load(os.path.join(patient_dir, "selected_slices.json"))
+        selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
 
         # selected slices mask
         selected_slices_mask = Dict()
@@ -412,13 +410,13 @@ class TrainingIDLGTVt(TrainingCore):
                 idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
             )
             if os.path.exists(score_json_path):
-                score = Json.load(score_json_path)
+                score = g.load_json(score_json_path)
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     score[patient][metric][cur_round] = patient_outputs["gtvt"][metric]
-                Json.save(score, score_json_path)
+                g.save_json(score, score_json_path)
 
         # save pred of cur patient
-        Nii.save(
+        g.save_nii(
             img=patient_outputs["gtvt"]["pred"],
             save_path=os.path.join(round_dir, "gtvt_pred.nii.gz"),
             spacing=g.NII_SPACING,
@@ -431,7 +429,7 @@ class TrainingIDLGTVt(TrainingCore):
         selected_slices: Dict,
         segment_metrics: Dict = None,
     ):
-        Dir.create(round_dir)
+        g.create_dir(round_dir)
 
         cur_round = Path(round_dir).name
         cur_round = int(cur_round[len("round=") :])
@@ -441,7 +439,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         idl_gtvt_dir = patient_dir.parent.parent
         loss_json_path = os.path.join(patient_dir, "loss.json")
-        loss_dict = Json.load(loss_json_path)
+        loss_dict = g.load_json(loss_json_path)
 
         # pred dir
         if cur_round == 1:
@@ -506,7 +504,6 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # idl progress INIT_DATALOADER
-        # self._timer.cal_duration("INIT_DATALOADER")
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += (
                 self._obs_study_progress.step.INIT_DATALOADER
@@ -529,7 +526,7 @@ class TrainingIDLGTVt(TrainingCore):
 
             # freeze layers before iDL
             if hyper["layer.freezing"]:
-                if GPU.used_count() > 1:
+                if g.used_gpu_count() > 1:
                     # here, hyper["cnn"] is DataParallel, not network itself
                     hyper["cnn"].module.freeze_top()
                 else:
@@ -551,14 +548,12 @@ class TrainingIDLGTVt(TrainingCore):
 
                 # idl progress MINI_BATCH
                 if batch_count <= 1:
-                    # self._timer.cal_duration("FIRST_BATCH")
                     if self._obs_study_progress is not None:
                         self._obs_study_progress.cur_step += (
                             self._obs_study_progress.step.FIRST_BATCH
                         )
                         self._obs_study_progress.emit_signal()
                 else:
-                    # self._timer.cal_duration("OTHER_BATCH")
                     if self._obs_study_progress is not None:
                         self._obs_study_progress.cur_step += (
                             self._obs_study_progress.step.OTHER_BATCH
@@ -575,9 +570,9 @@ class TrainingIDLGTVt(TrainingCore):
                 "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
             ] = iter_loss
             # save loss and update loss figure after every iter, if there is only one patient
-            patient_dirs_list = Dir.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))
+            patient_dirs_list = g.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))
             if len(patient_dirs_list) <= 1:
-                Json.save(loss_dict, loss_json_path)
+                g.save_json(loss_dict, loss_json_path)
                 self._plot_loss_fig(idl_gtvt_dir)
 
         # current round idl finished
@@ -595,7 +590,7 @@ class TrainingIDLGTVt(TrainingCore):
                     selected_slices_to_save[plane][cur_round] = selected_slices_to_save[
                         plane
                     ][cur_round].to_str()
-            Json.save(
+            g.save_json(
                 data=selected_slices_to_save,
                 path=os.path.join(patient_dir, "selected_slices.json"),
             )
@@ -619,7 +614,7 @@ class TrainingIDLGTVt(TrainingCore):
             hyper[key_name] += time_spent
 
         # save loss
-        Json.save(loss_dict, loss_json_path)
+        g.save_json(loss_dict, loss_json_path)
 
     def __simulation_single_patient(
         self,
@@ -635,19 +630,19 @@ class TrainingIDLGTVt(TrainingCore):
         patient_dir = os.path.join(
             idl_gtvt_dir, "patients", "patient={}".format(patient)
         )
-        Dir.create(patient_dir)
+        g.create_dir(patient_dir)
         # create an empty loss.json
-        Json.save(Dict(), os.path.join(patient_dir, "loss.json"))
+        g.save_json(Dict(), os.path.join(patient_dir, "loss.json"))
 
         # copy baseline scores
-        baseline_score = Json.load(
+        baseline_score = g.load_json(
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
                 "inference_{}.json".format(hyper["dataset.ver"]),
             )
         )
-        idl_gtvt_score = Json.load(
+        idl_gtvt_score = g.load_json(
             os.path.join(
                 idl_gtvt_dir,
                 "inference_{}.json".format(hyper["dataset.ver"]),
@@ -657,7 +652,7 @@ class TrainingIDLGTVt(TrainingCore):
             idl_gtvt_score["patient={}".format(patient)][metric]["round=00"] = (
                 baseline_score["patient={}".format(patient)]["gtvt"][metric]
             )
-        Json.save(
+        g.save_json(
             idl_gtvt_score,
             os.path.join(
                 idl_gtvt_dir,
@@ -710,7 +705,7 @@ class TrainingIDLGTVt(TrainingCore):
         self._plot_loss_fig(idl_gtvt_dir)
 
     def plot_loss_fig(self, idl_gtvt_id: str):
-        for i in Dir.walk_sub_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
+        for i in g.get_deep_dirs(g.TRAIN_RESULTS_DIR, key_word=idl_gtvt_id):
             # remove "/" if str endswith it
             if i.endswith("/") or i.endswith("\\"):
                 i = i[:-1]
@@ -722,12 +717,12 @@ class TrainingIDLGTVt(TrainingCore):
     def _plot_loss_fig(self, idl_gtvt_dir: str):
         # avg loss dict
         avg_loss = Dict()
-        for patient_dir in Dir.get_sub_dirs(
+        for patient_dir in g.get_sub_dirs(
             os.path.join(idl_gtvt_dir, "patients"), full_path=True
         ):
             loss_path = os.path.join(patient_dir, "loss.json")
             if os.path.exists(loss_path):
-                cur_patient_loss = Json.load(loss_path)
+                cur_patient_loss = g.load_json(loss_path)
                 if avg_loss == {}:
                     for i in cur_patient_loss:
                         avg_loss[i] = [cur_patient_loss[i]]
@@ -739,7 +734,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         if len(avg_loss) > 0:
             for i in avg_loss:
-                avg_loss[i] = Value.avg(avg_loss[i])
+                avg_loss[i] = g.calculate_avg(avg_loss[i])
 
             avg_loss = avg_loss.to_list()
 
@@ -752,19 +747,19 @@ class TrainingIDLGTVt(TrainingCore):
     def __find_best_baseline_fold_cnn(self, baseline_id: str) -> str:
         scores = Dict()
 
-        fold_dirs = Dir.get_sub_dirs(
+        fold_dirs = g.get_sub_dirs(
             input_dir=os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline"),
             key_word="fold=",
             full_path=True,
         )
         for fold_dir in fold_dirs:
-            baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
+            baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
                 "dataset.ver"
             ]
 
             fold = Path(fold_dir).name
-            epoch_dir = Dir.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
-            epoch_scores = Json.load(
+            epoch_dir = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
+            epoch_scores = g.load_json(
                 os.path.join(
                     epoch_dir,
                     "inference_{}.json".format(baseline_dataset_ver),
@@ -805,12 +800,12 @@ class TrainingIDLGTVt(TrainingCore):
         best_fold_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, baseline_id, "baseline", best_fold
         )
-        best_epoch_dir = Dir.get_sub_dirs(
+        best_epoch_dir = g.get_sub_dirs(
             best_fold_dir, key_word="epoch=", full_path=True
         )[0]
-        best_cnn_path = Dir.get_sub_files(
-            best_epoch_dir, key_word=".pt", full_path=True
-        )[0]
+        best_cnn_path = g.get_sub_files(best_epoch_dir, key_word=".pt", full_path=True)[
+            0
+        ]
         return best_cnn_path
 
     def simulation(
@@ -824,12 +819,12 @@ class TrainingIDLGTVt(TrainingCore):
         self._is_valid_baseline_id(baseline_id)
         baseline_dir = self._find_train_dir(baseline_id)
         if baseline_dir is None:
-            Debug.error_exit("Can not find 'baseline_id'!")
+            g.error_exit("Can not find 'baseline_id'!")
 
-        baseline_fold_dirs = Dir.get_sub_dirs(
+        baseline_fold_dirs = g.get_sub_dirs(
             baseline_dir, key_word="fold=", full_path=True
         )
-        baseline_hyper = Json.load(os.path.join(baseline_fold_dirs[0], "hyper.json"))
+        baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
         no_pt = baseline_hyper["no.pt"]
         baseline_dataset_ver = baseline_hyper["dataset.ver"]
 
@@ -863,7 +858,7 @@ class TrainingIDLGTVt(TrainingCore):
 
             # create idl result dir
             idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
-            Dir.create(idl_gtvt_dir)
+            g.create_dir(idl_gtvt_dir)
 
             # load and print hyper
             self._load_hyper(
@@ -882,7 +877,7 @@ class TrainingIDLGTVt(TrainingCore):
             hyper["time.spent.total"] = datetime.now()
 
             # create an empty score json files
-            Json.save(
+            g.save_json(
                 Dict(),
                 os.path.join(
                     idl_gtvt_dir,
@@ -942,10 +937,10 @@ class TrainingIDLGTVt(TrainingCore):
         baseline_id = "baseline_obs.study"
         baseline_dir = self._find_train_dir(baseline_id)
 
-        baseline_fold_dirs = Dir.get_sub_dirs(
+        baseline_fold_dirs = g.get_sub_dirs(
             baseline_dir, key_word="fold=", full_path=True
         )
-        baseline_hyper = Json.load(os.path.join(baseline_fold_dirs[0], "hyper.json"))
+        baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
         no_pt = baseline_hyper["no.pt"]
 
         # load segmentation metrics
@@ -953,13 +948,13 @@ class TrainingIDLGTVt(TrainingCore):
 
         # create idl result dir
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
-        Dir.create(idl_gtvt_dir)
+        g.create_dir(idl_gtvt_dir)
 
         # create current patient folder
         patient_dir = os.path.join(
             idl_gtvt_dir, "patients", "patient={}".format(patient)
         )
-        Dir.create(patient_dir)
+        g.create_dir(patient_dir)
 
         # load hyper
         hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
@@ -1030,17 +1025,16 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # idl progress INIT_CNN
-        # self._timer.cal_duration("INIT_CNN")
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += self._obs_study_progress.step.INIT_CNN
             self._obs_study_progress.emit_signal()
 
         # create an empty loss.json
-        Json.save(Dict(), os.path.join(patient_dir, "loss.json"))
+        g.save_json(Dict(), os.path.join(patient_dir, "loss.json"))
 
         # load selected slices
         if os.path.exists(selected_slices_path):
-            selected_slices = Json.load(
+            selected_slices = g.load_json(
                 os.path.join(patient_dir, "selected_slices.json"),
             )
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -1088,9 +1082,9 @@ class TrainingIDLGTVt(TrainingCore):
         # find idl gtvt folder
         idl_gtvt_dir = self._find_train_dir(idl_gtvt_id)
         if idl_gtvt_dir is None:
-            Debug.error_exit("'idl_gtvt_id' not found!")
+            g.error_exit("'idl_gtvt_id' not found!")
 
-        hyper = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))
+        hyper = g.load_json(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
         print("dataset version: {}".format(dataset_ver))
@@ -1108,7 +1102,7 @@ class TrainingIDLGTVt(TrainingCore):
         score_json_path = os.path.join(
             idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
         )
-        scores = Json.load(score_json_path)
+        scores = g.load_json(score_json_path)
         all_patient_scores = Dict()
 
         # add all patients score in to a list
@@ -1125,13 +1119,13 @@ class TrainingIDLGTVt(TrainingCore):
         # calculate median score
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             for cur_round in all_patient_scores[metric]:
-                scores[Stat.MEDIAN][metric][cur_round] = Value.median(
+                scores[Stat.MEDIAN][metric][cur_round] = g.calculate_median(
                     all_patient_scores[metric][cur_round]
                 )
-                scores[Stat.AVG][metric][cur_round] = Value.avg(
+                scores[Stat.AVG][metric][cur_round] = g.calculate_avg(
                     all_patient_scores[metric][cur_round]
                 )
-        Json.save(data=scores, path=os.path.join(score_json_path))
+        g.save_json(data=scores, path=os.path.join(score_json_path))
 
     def inference(self, idl_gtvt_id: str, debug_mode: bool = False):
         print("")
@@ -1140,10 +1134,10 @@ class TrainingIDLGTVt(TrainingCore):
         # find idl gtvt folder
         idl_gtvt_dir = self._find_train_dir(idl_gtvt_id)
         if idl_gtvt_dir is None:
-            Debug.error_exit("'idl_gtvt_id' not found!")
+            g.error_exit("'idl_gtvt_id' not found!")
 
         # load dataset version
-        hyper = Json.load(os.path.join(idl_gtvt_dir, "hyper.json"))
+        hyper = g.load_json(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
         no_pt = hyper["no.pt"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
@@ -1160,7 +1154,7 @@ class TrainingIDLGTVt(TrainingCore):
         patients = patients[DatasetPart.TEST]
 
         # copy baseline score
-        baseline_score = Json.load(
+        baseline_score = g.load_json(
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
@@ -1171,7 +1165,7 @@ class TrainingIDLGTVt(TrainingCore):
             idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
         )
         if os.path.exists(idl_gtvt_score_path):
-            idl_gtvt_score = Json.load(idl_gtvt_score_path)
+            idl_gtvt_score = g.load_json(idl_gtvt_score_path)
         else:
             idl_gtvt_score = Dict()
         for patient in patients:
@@ -1179,7 +1173,7 @@ class TrainingIDLGTVt(TrainingCore):
                 idl_gtvt_score["patient={}".format(patient)][metric]["round=00"] = (
                     baseline_score["patient={}".format(patient)]["gtvt"][metric]
                 )
-        Json.save(idl_gtvt_score, idl_gtvt_score_path)
+        g.save_json(idl_gtvt_score, idl_gtvt_score_path)
 
         # loop through each patient
         for patient in tqdm(patients):
@@ -1188,13 +1182,11 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
             # loop through each round
-            for round_dir in Dir.get_sub_dirs(
+            for round_dir in g.get_sub_dirs(
                 patient_dir, key_word="round=", full_path=True
             ):
                 # load current round cnn
-                cnn_path = Dir.get_sub_files(round_dir, key_word=".pt", full_path=True)[
-                    0
-                ]
+                cnn_path = g.get_sub_files(round_dir, key_word=".pt", full_path=True)[0]
                 cnn = self._load_exist_cnn(cnn_path)
 
                 self.__inference_cur_round(
@@ -1224,7 +1216,7 @@ class TrainingIDLGTVt(TrainingCore):
         self, outputs: Dict, idl_gtvt_label_masked_by_selected_slices: ndarray
     ):
         if idl_gtvt_label_masked_by_selected_slices is not None:
-            cc_list = Img.connected_components(outputs["gtvt"]["pred"])
+            cc_list = g.get_connected_components(outputs["gtvt"]["pred"])
             outputs["gtvt"]["pred"] = np.zeros_like(outputs["gtvt"]["pred"])
             for cur_cc in cc_list:
                 if (cur_cc * idl_gtvt_label_masked_by_selected_slices).sum() > 0:
@@ -1234,4 +1226,4 @@ class TrainingIDLGTVt(TrainingCore):
 
     def _is_valid_dataset_part(self, dataset_part: str):
         if dataset_part != DatasetPart.TEST:
-            Debug.error_exit("'dataset_part' must be 'TEST'!")
+            g.error_exit("'dataset_part' must be 'TEST'!")

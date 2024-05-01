@@ -2,11 +2,10 @@ import os
 import random
 from typing import Tuple
 
+import custom as g
 import numpy as np
 import torch
-from custom import Dict
-from custom import Global as g
-from custom import Img, Nii
+from custom_dict import Dict
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
@@ -34,10 +33,10 @@ class DataSetIDLGTVt(DatasetCore):
 
         # observer study
         if delineation_path is not None:
-            self.__origin["label"] = Nii.load(delineation_path, binary=True)
+            self.__origin["label"] = g.load_nii(delineation_path, binary=True)
         # simulation
         else:
-            self.__origin["label"] = Nii.load(
+            self.__origin["label"] = g.load_nii(
                 os.path.join(
                     g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
                 ),
@@ -45,26 +44,26 @@ class DataSetIDLGTVt(DatasetCore):
             )
 
         # load pred
-        self.__origin["pred"] = Nii.load(
+        self.__origin["pred"] = g.load_nii(
             os.path.join(pred_dir, "gtvt_pred.nii.gz"), binary=True
         )
 
         # load ct/pt/mr1/mr2
-        self.__origin[Modal.CT] = Nii.load(
+        self.__origin[Modal.CT] = g.load_nii(
             os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(patient))
         )
         if not self._no_pt:
-            self.__origin[Modal.PT] = Nii.load(
+            self.__origin[Modal.PT] = g.load_nii(
                 os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(patient))
             )
-        self.__origin[Modal.MR1] = Nii.load(
+        self.__origin[Modal.MR1] = g.load_nii(
             os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
         )
-        self.__origin[Modal.MR2] = Nii.load(
+        self.__origin[Modal.MR2] = g.load_nii(
             os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
         )
         # ct windowing
-        self.__origin[Modal.CT] = Img.ct_windowing(self.__origin[Modal.CT])
+        self.__origin[Modal.CT] = g.windowing_ct(self.__origin[Modal.CT])
 
         # load weight map
         self.__origin["weight.map"], selected_slices_mask = self.__load_weight_map(
@@ -190,7 +189,7 @@ class DataSetIDLGTVt(DatasetCore):
 
         # normalize before augmentation
         if normalize and (not img.max() == img.min() == 0):
-            img = Img.normalize(img)
+            img = g.normalize_img(img)
 
         # data augmentation
         img = self._augment.transform(input_data=img, seed=augment_seed)
@@ -200,7 +199,7 @@ class DataSetIDLGTVt(DatasetCore):
         # nomalization might give background a positive value
 
         # pad/crop after augmentation, max size: 89 283 280
-        img = Img.central_pad_and_crop(img, self._img_shape)
+        img = g.center_align_img(img, self._img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, clip_up_limit)
@@ -232,7 +231,7 @@ class DataSetIDLGTVt(DatasetCore):
                 tmp[i] = self._preprocess(
                     img=self.__origin[i], augment_seed=tmp["seed"]
                 )
-                tmp[i] = Img.binarize(tmp[i])
+                tmp[i] = g.binarize_img(tmp[i])
 
             tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
 

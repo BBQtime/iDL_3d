@@ -1,4 +1,4 @@
-from custom import Dict
+from custom_dict import Dict
 from loss_func import UnifiedFocalLoss
 from torch import Tensor
 

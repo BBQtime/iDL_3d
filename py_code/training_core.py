@@ -5,10 +5,10 @@ from collections import OrderedDict
 from itertools import product
 from pathlib import Path
 
+import custom as g
 import torch
-from custom import GPU, Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Timer, Value
+from custom_dict import Dict
+from custom_list import List
 from dataset_baseline import DataSetBaseline
 from numpy import ndarray
 from segment_metric import SegmentationMetric
@@ -37,7 +37,7 @@ class ObsStudyProgress:
 
 class TrainingCore:
     def __init__(self):
-        self._timer = Timer()
+        # self._timer = Timer()
         self._obs_study_progress = None
 
     def _load_patients(
@@ -47,7 +47,7 @@ class TrainingCore:
         debug_mode: bool = False,
     ):
         patients = Dict()
-        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
+        dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
 
         if dataset_ver == DatasetVer.OBS_STUDY:
             patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
@@ -89,7 +89,7 @@ class TrainingCore:
         elif hyper["cnn"] == "unet.slim":
             cnn = UNetSlim
         else:
-            Debug.error_exit("Incorrect hyper[cnn] value!")
+            g.error_exit("Incorrect hyper[cnn] value!")
         hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
@@ -97,14 +97,14 @@ class TrainingCore:
             dropout=hyper["dropout"],
         )
         # set multi-GPU
-        if GPU.used_count() > 1:
+        if g.used_gpu_count() > 1:
             hyper["cnn"] = DataParallel(hyper["cnn"])
         # to gpu (if gpu available)
         hyper["cnn"] = hyper["cnn"].to(g.DEVICE)
 
     def _load_exist_cnn(self, cnn_path: str):
         cnn = torch.load(cnn_path)
-        if GPU.used_count() > 1:
+        if g.used_gpu_count() > 1:
             cnn = DataParallel(cnn)
         cnn = cnn.to(g.DEVICE)
         return cnn
@@ -114,7 +114,7 @@ class TrainingCore:
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             segment_metrics[metric] = SegmentationMetric(metric)
             # following line will cause bug, cant figure out why:
-            # if GPU.used_count() > 1:
+            # if g.used_gpu_count() > 1:
             #     segment_metrics[metric] = DataParallel(segment_metrics[metric])
             segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
         return segment_metrics
@@ -131,10 +131,10 @@ class TrainingCore:
             baseline_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, idl_baseline_id, "baseline"
             )
-            baseline_fold_dir = Dir.get_sub_dirs(
+            baseline_fold_dir = g.get_sub_dirs(
                 baseline_dir, key_word="fold=", full_path=True
             )[0]
-            baseline_dataset_ver = Json.load(
+            baseline_dataset_ver = g.load_json(
                 os.path.join(baseline_fold_dir, "hyper.json")
             )["dataset.ver"]
             hyper["dataset.ver"] = self._is_valid_dataset_version(
@@ -144,40 +144,40 @@ class TrainingCore:
 
     def _load_hyper(self, hyper: Dict) -> None:
         # device name
-        if GPU.used_count() < 1:
+        if g.used_gpu_count() < 1:
             hyper["device"] = "cpu"
         else:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
 
         # dropout
-        hyper["dropout"] = Value.limit_range(hyper["dropout"], (0.0, 1.0))
+        hyper["dropout"] = g.clamp_value(hyper["dropout"], (0.0, 1.0))
 
         # batch size
-        hyper["batch.size"] = Value.limit_range(hyper["batch.size"], (1, None))
-        if GPU.used_count() > 1:
-            hyper["batch.size.actual"] = hyper["batch.size"] * GPU.used_count()
+        hyper["batch.size"] = g.clamp_value(hyper["batch.size"], (1, None))
+        if g.used_gpu_count() > 1:
+            hyper["batch.size.actual"] = hyper["batch.size"] * g.used_gpu_count()
         else:
             hyper["batch.size.actual"] = hyper["batch.size"]
 
         # = 1 will cause error
-        hyper["lr.decay.factor"] = Value.limit_range(
-            hyper["lr.decay.factor"], (Value.EPS, 1 - Value.EPS)
+        hyper["lr.decay.factor"] = g.clamp_value(
+            hyper["lr.decay.factor"], (g.EPS, 1 - g.EPS)
         )
 
         # augment methods
         hyper["augment.methods"] = List(hyper["augment.methods"])
 
         # augment lower/upper limit
-        hyper["augment.max"] = Value.limit_range(
+        hyper["augment.max"] = g.clamp_value(
             hyper["augment.max"], (1, len(hyper["augment.methods"]))
         )
-        hyper["augment.min"] = Value.limit_range(
+        hyper["augment.min"] = g.clamp_value(
             hyper["augment.min"], (1, hyper["augment.max"])
         )
 
         # loss function parameters
-        hyper["loss.weight"] = Value.limit_range(hyper["loss.weight"], (0.0, 1.0))
-        hyper["loss.delta"] = Value.limit_range(hyper["loss.delta"], (0.0, 1.0))
+        hyper["loss.weight"] = g.clamp_value(hyper["loss.weight"], (0.0, 1.0))
+        hyper["loss.delta"] = g.clamp_value(hyper["loss.delta"], (0.0, 1.0))
 
     def _load_hyper_optim_and_scheduler(self, hyper: Dict, lr: float = None):
         if lr is None:
@@ -223,7 +223,7 @@ class TrainingCore:
                 elif isinstance(cnn, UNetSlim):
                     simple_hyper[key_name] = "unet.slim"
                 else:
-                    Debug.error_exit("Incorrect cnn type!")
+                    g.error_exit("Incorrect cnn type!")
 
             # only save optimizer name
             elif key_name == "optim":
@@ -246,7 +246,7 @@ class TrainingCore:
 
     # split dataset and save result into json file
     def __split_dataset(self) -> Dict:
-        dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH)
+        dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH)
         train_patients = List()
 
         for key_name in dataset_split.keys():
@@ -266,13 +266,13 @@ class TrainingCore:
                 ].to_str()
                 train_patients = train_patients[fold_len:]
 
-        Json.save(dataset_split, g.DATASET_SPLIT_JSON_PATH)
+        g.save_json(dataset_split, g.DATASET_SPLIT_JSON_PATH)
         return dataset_split
 
     def _save_cnn(self, hyper: Dict, save_path: str):
         if not save_path.endswith(".pt"):
             save_path += ".pt"
-        if GPU.used_count() > 1:
+        if g.used_gpu_count() > 1:
             torch.save(hyper["cnn"].module, save_path)
         else:
             torch.save(hyper["cnn"], save_path)
@@ -281,11 +281,11 @@ class TrainingCore:
     def _init_train_id(
         self, hyper: Dict, hyper_json_path: str, train_remark: str, debug_mode: bool
     ) -> str:
-        train_id = Timer.cur_time_str()
+        train_id = g.get_cur_time_str()
 
         if debug_mode:
             train_id += "_"
-            train_id += Debug.DELETE_FLAG
+            train_id += g.DELETE_FLAG
 
         if train_remark != "" and train_remark is not None:
             while train_remark.startswith("_"):
@@ -295,7 +295,7 @@ class TrainingCore:
             train_id += "_" + train_remark
 
         # add important hyper param (that need to be compared) to train_id
-        origin_hyper_dict = Json.load(hyper_json_path)
+        origin_hyper_dict = g.load_json(hyper_json_path)
         # make sure all values of hyper dict are "list" type
         for i in origin_hyper_dict:
             if not isinstance(origin_hyper_dict[i], list):
@@ -320,7 +320,7 @@ class TrainingCore:
 
     def _load_hyper_series_from_json(self, path: str) -> List:
         hyper_series_list = List()
-        origin_hyper_dict = Json.load(path)
+        origin_hyper_dict = g.load_json(path)
         hyper_keys = origin_hyper_dict.keys()
 
         # make sure all values of hyper dict are "list" type
@@ -353,8 +353,8 @@ class TrainingCore:
 
         # train id is a iDL
         else:
-            for baseline_dir in Dir.get_sub_dirs(g.TRAIN_RESULTS_DIR, full_path=True):
-                for train_dir in Dir.get_sub_dirs(baseline_dir, full_path=True):
+            for baseline_dir in g.get_sub_dirs(g.TRAIN_RESULTS_DIR, full_path=True):
+                for train_dir in g.get_sub_dirs(baseline_dir, full_path=True):
                     if Path(train_dir).name == train_id:
                         return train_dir
             # cant find train_dir
@@ -382,7 +382,7 @@ class TrainingCore:
         )
 
         # load labels
-        labels = Img.load_labels(
+        labels = g.load_gtv_labels(
             dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
         )
         # outputs structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
@@ -399,7 +399,6 @@ class TrainingCore:
         labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
 
         # idl progress INFERENCE_LOAD_IMG
-        # self._timer.cal_duration("INFERENCE_LOAD_IMG")
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += (
                 self._obs_study_progress.step.INFERENCE_LOAD_IMG
@@ -414,7 +413,6 @@ class TrainingCore:
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
         # idl progress INFERENCE_FORWARD
-        # self._timer.cal_duration("INFERENCE_FORWARD")
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += (
                 self._obs_study_progress.step.INFERENCE_FORWARD
@@ -432,7 +430,7 @@ class TrainingCore:
         # pad and crop all imgs to original size
         for gtv in outputs.keys():
             for i in outputs[gtv].keys():
-                outputs[gtv][i] = Img.central_pad_and_crop(
+                outputs[gtv][i] = g.center_align_img(
                     outputs[gtv][i], outputs[gtv]["label"].shape
                 )
 
@@ -451,9 +449,6 @@ class TrainingCore:
                         outputs[gtv]["pred"],
                         outputs[gtv]["label"],
                     )
-
-        # self._timer.cal_duration("INFERENCE_CAL_SCORES")
-
         return outputs
 
     def _inference_single_patient_load_dataset(
@@ -493,10 +488,10 @@ class TrainingCore:
     # make this function protected, idl will use it
     def _is_valid_baseline_id(self, baseline_id: str):
         if not baseline_id.startswith("baseline_"):
-            Debug.error_exit("'baseline_id' must start with 'baseline_'!")
+            g.error_exit("'baseline_id' must start with 'baseline_'!")
 
         if not os.path.exists(os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)):
-            Debug.error_exit("'baseline_id' does not exist!")
+            g.error_exit("'baseline_id' does not exist!")
 
     def _is_valid_dataset_version(
         self,
@@ -513,12 +508,12 @@ class TrainingCore:
                 DatasetVer.MDA,
                 DatasetVer.OBS_STUDY,
             ]:
-                Debug.error_exit(
+                g.error_exit(
                     "Invalid 'origin_dataset_ver' value: {}!".format(origin_dataset_ver)
                 )
 
             elif origin_dataset_ver == DatasetVer.MDA and dataset_ver != DatasetVer.MDA:
-                Debug.error_exit(
+                g.error_exit(
                     "'dataset_ver' is restricted to 'MDA' only, "
                     "as 'origin_dataset_ver' is 'MDA'!"
                 )
@@ -528,7 +523,7 @@ class TrainingCore:
             DatasetVer.MDA,
             DatasetVer.OBS_STUDY,
         ]:
-            Debug.error_exit("Invalid 'dataset_ver' value: {}!".format(dataset_ver))
+            g.error_exit("Invalid 'dataset_ver' value: {}!".format(dataset_ver))
 
         return dataset_ver
 
@@ -538,4 +533,4 @@ class TrainingCore:
             DatasetPart.VALID,
             DatasetPart.TEST,
         ]:
-            Debug.error_exit("'dataset_part' must be one of 'TRAIN/VALID/TEST'!")
+            g.error_exit("'dataset_part' must be one of 'TRAIN/VALID/TEST'!")

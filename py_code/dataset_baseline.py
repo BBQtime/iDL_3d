@@ -2,8 +2,9 @@ import os
 import random
 from typing import Tuple
 
+import custom as g
 import torch
-from custom import Dict, Img, Nii
+from custom_dict import Dict
 from dataset_core import DatasetCore
 from torch import Tensor
 
@@ -25,7 +26,7 @@ class DataSetBaseline(DatasetCore):
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
         # load origin labels
-        origin = Img.load_labels(dataset_dir=self._dataset_dir, patient=patient)
+        origin = g.load_gtv_labels(dataset_dir=self._dataset_dir, patient=patient)
         tmp = Dict()
         final = Dict()
 
@@ -38,7 +39,7 @@ class DataSetBaseline(DatasetCore):
 
             # load gtvs
             tmp["gtvs"] = self._preprocess(origin["gtvs"], tmp["seed"])
-            tmp["gtvs"] = Img.binarize(tmp["gtvs"])
+            tmp["gtvs"] = g.binarize_img(tmp["gtvs"])
 
             # target volume is not big enough
             if tmp["gtvs"].sum() < origin["gtvs"].sum() * 0.999:
@@ -56,7 +57,7 @@ class DataSetBaseline(DatasetCore):
         # preprocess gtvt and gtvn based on final augment seed
         for gtv in ["gtvt", "gtvn"]:
             final[gtv] = self._preprocess(origin[gtv], final["seed"])
-            final[gtv] = Img.binarize(final[gtv])
+            final[gtv] = g.binarize_img(final[gtv])
 
         # load background
         background = 1 - torch.maximum(final["gtvt"], final["gtvn"])
@@ -73,11 +74,11 @@ class DataSetBaseline(DatasetCore):
             img_path = os.path.join(
                 self._dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )
-            img = Nii.load(img_path)
+            img = g.load_nii(img_path)
 
             # ct windowing before normalization
             if i == "CT":
-                img = Img.ct_windowing(img)
+                img = g.windowing_ct(img)
 
             img = self._preprocess(img, final["seed"])
 

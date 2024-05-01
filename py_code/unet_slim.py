@@ -1,7 +1,6 @@
+import custom as g
 import torch
 import torch.nn as nn
-from custom import GPU
-from custom import Global as g
 from torch import Tensor
 
 
@@ -198,7 +197,7 @@ if 0:
     out_chan = 3
 
     cnn = UNetSlim(in_chan, out_chan)
-    if GPU.used_count() > 1:
+    if g.used_gpu_count() > 1:
         cnn = nn.DataParallel(cnn)
     cnn = cnn.to(g.DEVICE)
 

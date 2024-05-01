@@ -2,11 +2,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import custom as g
 import numpy as np
 import torch
-from custom import GPU, Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom_dict import Dict
+from custom_list import List
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
@@ -32,40 +32,40 @@ class TrainingBaseline(TrainingCore):
             # only train 2 epoch in debug mode
             hyper["epochs"] = 2
         else:
-            hyper["epochs"] = Value.limit_range(hyper["epochs"], (1, None))
+            hyper["epochs"] = g.clamp_value(hyper["epochs"], (1, None))
 
         # record actual epochs because of early stop
         hyper["epochs.actual"] = 0
 
         # early stop, based on epoch
-        hyper["early.stop.epochs"] = Value.limit_range(
+        hyper["early.stop.epochs"] = g.clamp_value(
             hyper["early.stop.epochs"], (1, hyper["epochs"])
         )
 
         # lr
-        hyper["lr"] = Value.limit_range(hyper["lr"], (Value.EPS, 1.0))
+        hyper["lr"] = g.clamp_value(hyper["lr"], (g.EPS, 1.0))
 
         # actual lr
-        if GPU.used_count() > 1:
-            hyper["lr.actual"] = hyper["lr"] * GPU.used_count()
+        if g.used_gpu_count() > 1:
+            hyper["lr.actual"] = hyper["lr"] * g.used_gpu_count()
         else:
             hyper["lr.actual"] = hyper["lr"]
 
         # min lr
-        hyper["lr.min"] = Value.limit_range(hyper["lr.min"], (Value.EPS, hyper["lr"]))
+        hyper["lr.min"] = g.clamp_value(hyper["lr.min"], (g.EPS, hyper["lr"]))
 
         # lr decay patience, based on epoch, must be defined before shared_hyper()
-        hyper["lr.decay.patience"] = Value.limit_range(
+        hyper["lr.decay.patience"] = g.clamp_value(
             hyper["lr.decay.patience"], (1, hyper["epochs"])
         )
 
         # number of best valid loss cnn retained
-        hyper["keep.best.cnn.num"] = Value.limit_range(
+        hyper["keep.best.cnn.num"] = g.clamp_value(
             hyper["keep.best.cnn.num"], (1, hyper["epochs"])
         )
 
         # augment percent
-        hyper["augment.pct"] = Value.limit_range(hyper["augment.pct"], (0.0, 1.0))
+        hyper["augment.pct"] = g.clamp_value(hyper["augment.pct"], (0.0, 1.0))
 
         self._load_hyper_dataset_version(
             hyper=hyper,
@@ -173,13 +173,13 @@ class TrainingBaseline(TrainingCore):
 
     def _save_hyper(self, hyper: Dict, json_path: str):
         simple_hyper = self._simplify_hyper(hyper)
-        Json.save(data=simple_hyper, path=json_path)
+        g.save_json(data=simple_hyper, path=json_path)
 
     # protected function, TrainingIDLGTVn will inherit it
     def _plot_lr_fig(self, lr_json_path: str):
         plt.figure().clear()
 
-        lr_dict = Json.load(lr_json_path)
+        lr_dict = g.load_json(lr_json_path)
         lr_list = List()
         for i in lr_dict:
             lr_list.append(lr_dict[i])
@@ -190,7 +190,7 @@ class TrainingBaseline(TrainingCore):
 
     # protected function, TrainingIDLGTVn will inherit it
     def _plot_loss_fig(self, loss_json_path: str):
-        loss_dict = Json.load(loss_json_path)
+        loss_dict = g.load_json(loss_json_path)
         train_loss = List()
         valid_loss = List()
 
@@ -255,21 +255,21 @@ class TrainingBaseline(TrainingCore):
             hyper["epochs.actual"] = epoch
 
             # save loss in json
-            loss_dict = Json.load(loss_json_path)
+            loss_dict = g.load_json(loss_json_path)
             epoch_loss = Dict()
             epoch_loss[DatasetPart.TRAIN] = train_loss
             epoch_loss[DatasetPart.VALID] = valid_loss
             loss_dict["epoch={:03d}".format(hyper["epochs.actual"])] = epoch_loss
-            Json.save(loss_dict, loss_json_path)
+            g.save_json(loss_dict, loss_json_path)
             # draw loss figure
             self._plot_loss_fig(loss_json_path)
 
             # save lr in json
-            lr_dict = Json.load(lr_json_path)
+            lr_dict = g.load_json(lr_json_path)
             for param_group in hyper["optim"].param_groups:
                 epoch_lr = param_group["lr"]
             lr_dict["epoch={:03d}".format(hyper["epochs.actual"])] = epoch_lr
-            Json.save(lr_dict, lr_json_path)
+            g.save_json(lr_dict, lr_json_path)
             # draw lr figure
             self._plot_lr_fig(lr_json_path)
 
@@ -277,7 +277,7 @@ class TrainingBaseline(TrainingCore):
             if len(best_loss_dict) < hyper["keep.best.cnn.num"]:
                 best_loss_dict[epoch] = valid_loss
                 epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                Dir.create(epoch_dir)
+                g.create_dir(epoch_dir)
                 self._save_cnn(
                     hyper,
                     os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch)),
@@ -286,13 +286,13 @@ class TrainingBaseline(TrainingCore):
                 worst_epoch = best_loss_dict.key_with_max_value()
                 worst_loss = best_loss_dict[worst_epoch]
                 if valid_loss < worst_loss:
-                    Dir.delete(
+                    g.delete_path(
                         os.path.join(fold_dir, "epoch={:03d}".format(worst_epoch))
                     )
                     best_loss_dict.pop(worst_epoch)
                     best_loss_dict[epoch] = valid_loss
                     epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
-                    Dir.create(epoch_dir)
+                    g.create_dir(epoch_dir)
                     self._save_cnn(
                         hyper,
                         os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch)),
@@ -306,11 +306,11 @@ class TrainingBaseline(TrainingCore):
     def _training_all_folds(
         self, hyper: Dict, train_dir: str, idl_gtvn_baseline_id: str, debug_mode: bool
     ):
-        Dir.create(train_dir)
+        g.create_dir(train_dir)
 
         # cross validation
         fold = int(hyper["fold"])
-        fold = Value.limit_range(fold, (0, g.DATASET_FOLDS))
+        fold = g.clamp_value(fold, (0, g.DATASET_FOLDS))
         # fold=0 will activate cross validation
         if fold == 0:
             fold_list = List(range(1, g.DATASET_FOLDS + 1))
@@ -325,7 +325,7 @@ class TrainingBaseline(TrainingCore):
         # loop through each fold
         for fold in fold_list:
             fold_dir = os.path.join(train_dir, "fold={}".format(fold))
-            Dir.create(fold_dir)
+            g.create_dir(fold_dir)
 
             # load and print hyperparams
             self._load_hyper(
@@ -341,9 +341,9 @@ class TrainingBaseline(TrainingCore):
             print("fold: {}".format(fold))
 
             # save an empty loss.json
-            Json.save(Dict(), os.path.join(fold_dir, "loss.json"))
+            g.save_json(Dict(), os.path.join(fold_dir, "loss.json"))
             # save an empty lr.json
-            Json.save(Dict(), os.path.join(fold_dir, "lr.json"))
+            g.save_json(Dict(), os.path.join(fold_dir, "lr.json"))
 
             # save hyper before training
             hyper_save_path = os.path.join(fold_dir, "hyper.json")
@@ -476,13 +476,13 @@ class TrainingBaseline(TrainingCore):
 
         train_dir = self._find_train_dir(train_id)
         if train_dir is None:
-            Debug.error_exit("'train_id' not found!")
+            g.error_exit("'train_id' not found!")
 
         baseline_id = Path(train_dir).parent.name
 
-        fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
+        fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
-        hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
+        hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
         training_dataset_ver = hyper["dataset.ver"]
 
@@ -511,7 +511,7 @@ class TrainingBaseline(TrainingCore):
             )
 
             # loop through epoch dirs
-            for epoch_dir in Dir.get_sub_dirs(
+            for epoch_dir in g.get_sub_dirs(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = int(Path(epoch_dir).name[len("epoch=") :])
@@ -599,10 +599,10 @@ class TrainingBaseline(TrainingCore):
             "patients",
             "patient={}".format(patient),
         )
-        Dir.create(patient_dir)
+        g.create_dir(patient_dir)
 
         for gtv in ["gtvt", "gtvn"]:
-            Nii.save(
+            g.save_nii(
                 img=patient_outputs[gtv]["pred"],
                 save_path=os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv)),
                 spacing=g.NII_SPACING,
@@ -629,13 +629,15 @@ class TrainingBaseline(TrainingCore):
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                scores[Stat.MEDIAN][gtv][metric] = Value.median(
+                scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
                     scores[Stat.MEDIAN][gtv][metric]
                 )
-                scores[Stat.AVG][gtv][metric] = Value.avg(scores[Stat.AVG][gtv][metric])
+                scores[Stat.AVG][gtv][metric] = g.calculate_avg(
+                    scores[Stat.AVG][gtv][metric]
+                )
 
         # save scores in json
-        Json.save(
+        g.save_json(
             data=scores,
             path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
         )
@@ -667,13 +669,13 @@ class TrainingBaseline(TrainingCore):
 
         train_dir = self._find_train_dir(train_id)
         if train_dir is None:
-            Debug.error_exit("'train_id' not found!")
+            g.error_exit("'train_id' not found!")
 
         baseline_id = Path(train_dir).parent.name
 
-        fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
+        fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
-        hyper = Json.load(os.path.join(fold_dirs[0], "hyper.json"))
+        hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
         training_dataset_ver = hyper["dataset.ver"]
 
         dataset_ver = self._is_valid_dataset_version(
@@ -681,7 +683,7 @@ class TrainingBaseline(TrainingCore):
             origin_dataset_ver=training_dataset_ver,
         )
         if dataset_part == DatasetPart.VALID:
-            Debug.error_exit("Set dataset_part to 'train' instead of 'valid'!")
+            g.error_exit("Set dataset_part to 'train' instead of 'valid'!")
         self._is_valid_dataset_part(dataset_part)
         print("dataset version: {}".format(dataset_ver))
         print("dataset part: {}".format(dataset_part))
@@ -690,7 +692,7 @@ class TrainingBaseline(TrainingCore):
         segment_metrics = self._load_segment_metrics()
 
         # create folder in train_dir to save cross_valid preds
-        Dir.create(os.path.join(Path(fold_dirs[0]).parent, "patients"))
+        g.create_dir(os.path.join(Path(fold_dirs[0]).parent, "patients"))
 
         patients = self._load_patients(
             dataset_ver=dataset_ver,
@@ -714,12 +716,10 @@ class TrainingBaseline(TrainingCore):
 
             for fold_dir in fold_dirs:
                 # find epoch dir
-                epoch_dirs = Dir.get_sub_dirs(
-                    fold_dir, key_word="epoch=", full_path=True
-                )
+                epoch_dirs = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)
                 if len(epoch_dirs) > 1:
                     self.remove_non_optimal_epochs(train_id)
-                    epoch_dir = Dir.get_sub_dirs(
+                    epoch_dir = g.get_sub_dirs(
                         fold_dir, key_word="epoch=", full_path=True
                     )[0]
                 else:
@@ -732,7 +732,7 @@ class TrainingBaseline(TrainingCore):
                 for gtv in ["gtvt", "gtvn"]:
                     pred_path = os.path.join(patient_dir, "{}_pred.nii.gz".format(gtv))
                     if os.path.exists(pred_path):
-                        img = Nii.load(path=pred_path, binary=False)
+                        img = g.load_nii(path=pred_path, binary=False)
                         if preds[gtv] is None:
                             preds[gtv] = img
                         else:
@@ -755,12 +755,12 @@ class TrainingBaseline(TrainingCore):
             )
             if len(preds.keys()) == 1:
                 pred_dir = os.path.join(pred_dir, "round=01")
-            Dir.create(pred_dir)
+            g.create_dir(pred_dir)
 
             # save cross_valid preds (only save gtvt and gtvn)
             for gtv in preds.keys():
                 if gtv != "gtvs":
-                    Nii.save(
+                    g.save_nii(
                         img=preds[gtv],
                         save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
                         spacing=g.NII_SPACING,
@@ -768,7 +768,7 @@ class TrainingBaseline(TrainingCore):
 
             # load labels and calculate metrics (on test set only)
             if dataset_part == DatasetPart.TEST:
-                labels = Img.load_labels(
+                labels = g.load_gtv_labels(
                     dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
                 )
                 self._inference_cross_valid_record_patient_score(
@@ -814,10 +814,12 @@ class TrainingBaseline(TrainingCore):
         print("remove non optimal epochs: {}".format(train_id))
 
         train_dir = self._find_train_dir(train_id)
-        fold_dirs = Dir.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
+        fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         # load dataset version
-        dataset_ver = Json.load(os.path.join(fold_dirs[0], "hyper.json"))["dataset.ver"]
+        dataset_ver = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))[
+            "dataset.ver"
+        ]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
         # this json file is created by "inference_on_folds", only save valid scores
@@ -826,12 +828,12 @@ class TrainingBaseline(TrainingCore):
         for fold_dir in fold_dirs:
             fold_scores = Dict()
 
-            for epoch_dir in Dir.get_sub_dirs(
+            for epoch_dir in g.get_sub_dirs(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
                 # load and record scores of current epoch
-                epoch_scores = Json.load(os.path.join(epoch_dir, inference_json_name))
+                epoch_scores = g.load_json(os.path.join(epoch_dir, inference_json_name))
 
                 self._remove_non_optimal_epochs_record_epoch_scores(
                     fold_scores=fold_scores, epoch_scores=epoch_scores, epoch=epoch
@@ -842,12 +844,12 @@ class TrainingBaseline(TrainingCore):
             )
 
             # delete non-optimal epochs
-            for epoch_dir in Dir.get_sub_dirs(
+            for epoch_dir in g.get_sub_dirs(
                 fold_dir, key_word="epoch=", full_path=True
             ):
                 epoch = Path(epoch_dir).name
                 if epoch != best_epoch:
-                    Dir.delete(epoch_dir)
+                    g.delete_path(epoch_dir)
                     print("delete: {} {}".format(Path(fold_dir).name, epoch))
 
     def _remove_non_optimal_epochs_record_epoch_scores(

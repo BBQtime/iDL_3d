@@ -2,11 +2,11 @@ import os
 from pathlib import Path
 from tkinter import Tk, filedialog
 
+import custom as g
 import cv2
 import numpy as np
-from custom import Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom_dict import Dict
+from custom_list import List
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
@@ -23,7 +23,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setupUi(self)
         # load setting
-        ui_setting = Json.load(os.path.join(g.PROJ_DIR, "settings_ui.json"))
+        ui_setting = g.load_json(os.path.join(g.PROJ_DIR, "settings_ui.json"))
         self._init_data(ui_setting)
         self._init_color(ui_setting)  # before init_widgets()
         self._init_widgets(ui_setting)  # after _init_data()
@@ -38,7 +38,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             DatasetVer.OBS_STUDY,
             # DatasetVer.MDA,
         ]:
-            dataset_split = Json.load(g.DATASET_SPLIT_JSON_PATH[i])
+            dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[DatasetPart.TEST])
 
     def _init_data(
@@ -104,7 +104,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.__clear_gtvt_selected_slices_3d()
 
     def _add_border(self, input_widget: QtWidgets.QWidget):
-        random_name = Value.random_str()
+        random_name = g.generate_random_str()
         input_widget.setObjectName(random_name)
         input_widget.setStyleSheet(f"#{random_name} {{border: 2px solid gray;}}")
 
@@ -231,7 +231,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self.combox[i].setEnabled(False)
 
         # fill combox baseline
-        baseline_id_list = Dir.get_sub_dirs(
+        baseline_id_list = g.get_sub_dirs(
             g.TRAIN_RESULTS_DIR, key_word="baseline_", shuffle=False
         )
         self.combox["baseline"].addItems(baseline_id_list)
@@ -785,8 +785,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def _load_dataset_dir(self):
         # load slice thickness from baseline hyper
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
-        fold_dir = Dir.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
-        baseline_dataset_ver = Json.load(os.path.join(fold_dir, "hyper.json"))[
+        fold_dir = g.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
+        baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
             "dataset.ver"
         ]
 
@@ -798,20 +798,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
         elif self._cur_patient in self._patients[DatasetVer.MDA]:
             self.dataset_ver = DatasetVer.MDA
         else:
-            Debug.error_exit("Can't find current patient in testset patients!")
+            g.error_exit("Can't find current patient in testset patients!")
 
         # set dataset dir and nii spacing
         self._dataset_dir = g.DATASET_DIR[self.dataset_ver]
 
     def _fill_combox_patient(self):
-        # combox_patients = Dir.get_sub_dirs(
+        # combox_patients = g.get_sub_dirs(
         #     os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
         # )
         # # from "patient=123" to "123"
         # for i in range(len(combox_patients)):
         #     combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        # combox_patients.find_identical_items(self._patients.to_list())
+        # combox_patients.find_identicals(self._patients.to_list())
         combox_patients = self._patients.to_list()
         combox_patients.sort()
         self.combox["patient"].addItems(combox_patients)
@@ -849,20 +849,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._load_patient_data(reset_patient)
 
     def _load_3d_img(self, path: str, binary: bool = False):
-        img = Nii.load(path, binary=False)
+        img = g.load_nii(path, binary=False)
 
         # ct windowing before normalization
         if "CT" in path:
-            img = Img.ct_windowing(img)
+            img = g.windowing_ct(img)
         elif "PT" in path or "T1dr" in path or "T2dr" in path:
-            img = Img.img_windowing(img)
+            img = g.windowing_img(img)
 
         # normalization
-        img = Img.normalize(img)
+        img = g.normalize_img(img)
 
         # binarize img after normalization
         if binary:
-            img = Img.binarize(img)
+            img = g.binarize_img(img)
 
         # turn upside down
         img = np.flip(img, axis=0)
@@ -915,7 +915,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         for i in ["idl.gtvt", "idl.gtvn"]:
             combox_items = ["baseline"]
             # get all round folder under current patient folder
-            for idl_result_dir in Dir.get_sub_dirs(
+            for idl_result_dir in g.get_sub_dirs(
                 os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id),
                 key_word=i,
                 full_path=True,
@@ -929,7 +929,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     "patient={}".format(self._cur_patient),
                 )
                 if os.path.exists(patient_dir):
-                    round_folders = Dir.get_sub_dirs(
+                    round_folders = g.get_sub_dirs(
                         patient_dir,
                         key_word="round=",
                         full_path=False,
@@ -981,7 +981,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     # load labels and gtvs gravity center
     def __load_labels(self):
-        labels = Img.load_labels(
+        labels = g.load_gtv_labels(
             dataset_dir=self._dataset_dir,
             patient=self._cur_patient,
             nii_load_func=self._load_3d_img,
@@ -1109,7 +1109,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 ):
                     self.__clear_gtvt_selected_slices_3d()
                 else:
-                    self.__gtvt_selected_slices_3d = Json.load(
+                    self.__gtvt_selected_slices_3d = g.load_json(
                         selected_slices_json_path
                     )
                     for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -1156,7 +1156,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "inference_{}.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
-                gtvn_score = Json.load(gtvn_score_path)
+                gtvn_score = g.load_json(gtvn_score_path)
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     self.__scores[gtv][metric] = gtvn_score[
                         "patient={}".format(self._cur_patient)
@@ -1171,7 +1171,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "inference_{}.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
-                gtvn_score = Json.load(gtvn_score_path)
+                gtvn_score = g.load_json(gtvn_score_path)
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     self.__scores[gtv][metric] = gtvn_score[
                         "patient={}".format(self._cur_patient)
@@ -1275,11 +1275,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 slice_ct = self.img_3d[Modal.CT][:, :, cur_slice_id]
                 slice_2d = self.img_3d[modal][:, :, cur_slice_id]
 
-            slice_ct = Img.gray_to_rgb(slice_ct)
+            slice_ct = g.gray_to_rgb(slice_ct)
             if modal == Modal.PT:
-                slice_2d = Img.gray_to_colormap(slice_2d)
+                slice_2d = g.gray_to_colormap(slice_2d)
             else:
-                slice_2d = Img.gray_to_rgb(slice_2d)
+                slice_2d = g.gray_to_rgb(slice_2d)
 
             # brightness and contrast
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
@@ -1316,7 +1316,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 slice_2d = self.img_3d[frame_name][:, cur_slice_id, :]
             elif plane == Plane.SAGITTAL:
                 slice_2d = self.img_3d[frame_name][:, :, cur_slice_id]
-            slice_2d = Img.gray_to_rgb(slice_2d)
+            slice_2d = g.gray_to_rgb(slice_2d)
 
             # brightness and contrast
             # cv2.addWeighted: dst = src1 * alpha + src2 * beta + gamma
@@ -1854,7 +1854,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # load scores
             for i in ["gtvt", "gtvn"]:
                 # text
-                if Value.is_number(self.__scores[i][metric]):
+                if g.is_number(self.__scores[i][metric]):
                     if metric == Metric.DSC:
                         text = "{:.2f}".format(self.__scores[i][metric])
                     else:

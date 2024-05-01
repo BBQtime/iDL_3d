@@ -1,13 +1,12 @@
 import csv
 import os
 
+import custom as g
 import cv2
 import numpy as np
 import torch
 from added_path_len import APL
-from custom import Debug, Dict
-from custom import Global as g
-from custom import Json, Nii, Value
+from custom_dict import Dict
 from monai.metrics import compute_surface_dice
 from segment_metric import avg_surface_distance_symmetric, dice, hausdorff_distance_95
 
@@ -26,7 +25,7 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
     elif obs_study_id.startswith("idl.gtvt_"):
         gtv = "gtvt"
     else:
-        Debug.error_exit("obs study train id error")
+        g.error_exit("obs study train id error")
 
     obs_study_dir = os.path.join(
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
@@ -45,17 +44,17 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
                 Metric.SDSC,
             ]:
                 metrics_dict[stat][i][metric] = []
-    Json.save(data=metrics_dict, path=metrics_path)
+    g.save_json(data=metrics_dict, path=metrics_path)
 
     patient_list = []
     # open "obs_study_step.json" and find approved patients
     obs_study_step_json_path = os.path.join(
         g.TRAIN_RESULTS_DIR,
         "baseline_obs.study",
-        Value.replace_char(obs_study_id, 7, "t"),
+        g.replace_char_in_str(obs_study_id, 7, "t"),
         "obs_study_step.json",
     )
-    obs_study_step = Json.load(obs_study_step_json_path)
+    obs_study_step = g.load_json(obs_study_step_json_path)
     for patient in obs_study_step.keys():
         if obs_study_step[patient] == ObsStudyStep.APPROVED:
             patient_list.append(patient)
@@ -64,7 +63,7 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
         # # skip the patients without baseline
         # if not os.path.exists(os.path.join(baseline_dir, "patients", patient)):
         #     continue
-        # baseline_pred = Nii.load(
+        # baseline_pred = g.load_nii(
         #     os.path.join(
         #         baseline_dir, "patients", patient, "{}_pred.nii.gz".format(gtv)
         #     ),
@@ -75,15 +74,15 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
 
         if os.path.exists(patient_dir):
             idl_img_dir = os.path.join(patient_dir, "round=01")
-            origin_pred = Nii.load(
+            origin_pred = g.load_nii(
                 os.path.join(idl_img_dir, "{}_pred.nii.gz".format(gtv)),
                 binary=True,
             )
-            correction_mask = Nii.load(
+            correction_mask = g.load_nii(
                 os.path.join(idl_img_dir, "{}_correction_mask.nii.gz".format(gtv)),
                 binary=True,
             )
-            correction = Nii.load(
+            correction = g.load_nii(
                 os.path.join(idl_img_dir, "{}_correction.nii.gz".format(gtv)),
                 binary=True,
             )
@@ -190,19 +189,19 @@ def cal_obs_study_metrics_3d(obs_study_id: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            metrics_dict[Stat.MEDIAN][i][metric] = Value.median(
+            metrics_dict[Stat.MEDIAN][i][metric] = g.calculate_median(
                 metrics_dict[Stat.MEDIAN][i][metric]
             )
-            metrics_dict[Stat.AVG][i][metric] = Value.avg(
+            metrics_dict[Stat.AVG][i][metric] = g.calculate_avg(
                 metrics_dict[Stat.AVG][i][metric]
             )
 
-    Json.save(data=metrics_dict, path=metrics_path)
+    g.save_json(data=metrics_dict, path=metrics_path)
 
 
 def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
     if not obs_study_id.startswith("idl.gtvt_"):
-        Debug.error_exit("Must be an 'idl.gtvt' id")
+        g.error_exit("Must be an 'idl.gtvt' id")
 
     obs_study_dir = os.path.join(
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
@@ -223,11 +222,11 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
         ]:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 metrics_dict[stat][metric][plane] = []
-    Json.save(data=metrics_dict, path=metrics_path)
+    g.save_json(data=metrics_dict, path=metrics_path)
 
     patient_list = []
     # open "obs_study_step.json" and find approved patients
-    obs_study_step = Json.load(
+    obs_study_step = g.load_json(
         os.path.join(
             obs_study_dir,
             "obs_study_step.json",
@@ -242,19 +241,19 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
         patient_dir = os.path.join(obs_study_dir, "patients", patient)
         idl_img_dir = os.path.join(patient_dir, "round=01")
 
-        delineation = Nii.load(
+        delineation = g.load_nii(
             os.path.join(idl_img_dir, "gtvt_delineation.nii.gz"),
             binary=True,
         )
-        origin_pred = Nii.load(
+        origin_pred = g.load_nii(
             os.path.join(idl_img_dir, "gtvt_pred.nii.gz"),
             binary=True,
         )
-        correction_mask = Nii.load(
+        correction_mask = g.load_nii(
             os.path.join(idl_img_dir, "gtvt_correction_mask.nii.gz"),
             binary=True,
         )
-        correction = Nii.load(
+        correction = g.load_nii(
             os.path.join(idl_img_dir, "gtvt_correction.nii.gz"),
             binary=True,
         )
@@ -264,7 +263,7 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
             correction_mask=correction_mask,
         )
 
-        selected_slices = Json.load(os.path.join(patient_dir, "selected_slices.json"))
+        selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
 
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             slice_id = int(selected_slices[plane]["round=01"])
@@ -279,10 +278,10 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
                 delineation_2d = delineation[:, :, slice_id]
                 final_pred_2d = final_pred[:, :, slice_id]
 
-            # Nii.save(delineation_2d, os.path.join(g.DEBUG_DIR, "before_open.nii.gz"))
+            # g.save_nii(delineation_2d, os.path.join(g.DEBUG_DIR, "before_open.nii.gz"))
             kernel = np.ones((3, 3), np.uint8)
             delineation_2d = cv2.morphologyEx(delineation_2d, cv2.MORPH_OPEN, kernel)
-            # Nii.save(delineation_2d, os.path.join(g.DEBUG_DIR, "after_open.nii.gz"))
+            # g.save_nii(delineation_2d, os.path.join(g.DEBUG_DIR, "after_open.nii.gz"))
 
             # dsc/msd/hd95
             dsc = dice(
@@ -358,14 +357,14 @@ def cal_obs_study_metrics_gtvt_central_slices(obs_study_id: str):
         Metric.SDSC,
     ]:
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            metrics_dict[Stat.MEDIAN][metric][plane] = Value.median(
+            metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
                 metrics_dict[Stat.MEDIAN][metric][plane]
             )
-            metrics_dict[Stat.AVG][metric][plane] = Value.avg(
+            metrics_dict[Stat.AVG][metric][plane] = g.calculate_avg(
                 metrics_dict[Stat.AVG][metric][plane]
             )
 
-    Json.save(data=metrics_dict, path=metrics_path)
+    g.save_json(data=metrics_dict, path=metrics_path)
 
 
 def create_table_metrics_3d(obs_study_id_list: list):
@@ -400,12 +399,12 @@ def create_table_metrics_3d(obs_study_id_list: list):
         elif obs_study_id.startswith("idl.gtvt_"):
             cur_table_data = table_data["gtvt"]
         else:
-            Debug.error_exit("obs study train id error")
+            g.error_exit("obs study train id error")
 
         obs_study_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
         )
-        metrics_dict = Json.load(
+        metrics_dict = g.load_json(
             os.path.join(obs_study_dir, "obs_study_metrics_3d.json")
         )
 
@@ -469,12 +468,12 @@ def create_table_metrics_gtvt_central_slices(obs_study_id_list: list):
 
     for obs_study_id in tqdm(obs_study_id_list):
         if not obs_study_id.startswith("idl.gtvt_"):
-            Debug.error_exit("Must be an 'idl.gtvt' id")
+            g.error_exit("Must be an 'idl.gtvt' id")
 
         obs_study_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
         )
-        metrics_dict = Json.load(
+        metrics_dict = g.load_json(
             os.path.join(obs_study_dir, "obs_study_metrics_gtvt_central_slices.json")
         )
 

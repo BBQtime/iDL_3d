@@ -1,9 +1,9 @@
 import os
 import sys
 
+import custom as g
 import qdarktheme
-from custom import GPU, Debug, Dict, Dir
-from custom import Global as g
+from custom_dict import Dict
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QApplication
@@ -114,7 +114,7 @@ class LoginWindow(QtWidgets.QMainWindow):
             key_word = user_name  # ""
         else:
             key_word = user_name
-        train_id_list = Dir.get_sub_dirs(input_dir=baseline_dir, key_word=key_word)
+        train_id_list = g.get_sub_dirs(input_dir=baseline_dir, key_word=key_word)
 
         # add train results into combobox
         for train_id in train_id_list:
@@ -151,10 +151,10 @@ class LoginWindow(QtWidgets.QMainWindow):
 
 
 # clear cache
-if 0:
-    GPU.clear_cache()
-    Debug.clear_debug_data()
-    Debug.clear_linux_trash()
+if 1:
+    g.clear_gpu_cache()
+    g.clear_debug_data()
+    g.clear_linux_trash()
 
 
 # show login window

@@ -2,11 +2,10 @@ import os
 import random
 from typing import Tuple
 
+import custom as g
 import numpy as np
 import torch
-from custom import Dict
-from custom import Global as g
-from custom import Img, Nii
+from custom_dict import Dict
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt, measurements
@@ -40,7 +39,7 @@ class DataSetIDLGTVn(DatasetCore):
         self.__origin = Dict()
 
         # load pred
-        self.__origin["pred"] = Nii.load(
+        self.__origin["pred"] = g.load_nii(
             os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self.__baseline_id,
@@ -53,7 +52,7 @@ class DataSetIDLGTVn(DatasetCore):
         )
 
         # load label
-        self.__origin["label"] = Img.load_labels(
+        self.__origin["label"] = g.load_gtv_labels(
             dataset_dir=self._dataset_dir, patient=patient
         )["gtvn"]
 
@@ -64,7 +63,7 @@ class DataSetIDLGTVn(DatasetCore):
         # origin_pred needs to be binarized (without changing original img)
         # otherwise origin_label_pred_sum is too high
         origin_label_pred_sum = (
-            self.__origin["label"].sum() + Img.binarize(self.__origin["pred"]).sum()
+            self.__origin["label"].sum() + g.binarize_img(self.__origin["pred"]).sum()
         )
 
         # loop until target volume is big enough
@@ -79,7 +78,7 @@ class DataSetIDLGTVn(DatasetCore):
                 tmp[i] = self._preprocess(
                     img=self.__origin[i], augment_seed=tmp["seed"]
                 )
-                tmp[i] = Img.binarize(tmp[i])
+                tmp[i] = g.binarize_img(tmp[i])
 
             tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
 
@@ -120,10 +119,10 @@ class DataSetIDLGTVn(DatasetCore):
             )
             # loop through each connected components
             # cc_count = 1
-            for cur_gtvn_cc in Img.connected_components(self.__origin["label"]):
+            for cur_gtvn_cc in g.get_connected_components(self.__origin["label"]):
                 if self.__random_click:
                     # random point (d,h,w)
-                    pos = Img.find_random_point(cur_gtvn_cc)
+                    pos = g.get_random_nonzero_pos(cur_gtvn_cc)
                 else:
                     # gravity center: (d,h,w)
                     pos = list(measurements.center_of_mass(cur_gtvn_cc))
@@ -160,11 +159,11 @@ class DataSetIDLGTVn(DatasetCore):
             img_path = os.path.join(
                 self._dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
             )
-            img = Nii.load(img_path)
+            img = g.load_nii(img_path)
 
             # ct windowing before normalization
             if i == "CT":
-                img = Img.ct_windowing(img)
+                img = g.windowing_ct(img)
 
             img = self._preprocess(img, final["seed"])
 

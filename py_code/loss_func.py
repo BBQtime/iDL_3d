@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from custom import Dict
+from custom_dict import Dict
 from torch import Tensor, tensor
 
 

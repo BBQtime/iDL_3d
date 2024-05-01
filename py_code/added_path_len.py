@@ -1,8 +1,8 @@
 from typing import Union
 
+import custom as g
 import numpy as np
 import SimpleITK as sitk
-from custom import Global as g
 
 
 def is_image(obj):

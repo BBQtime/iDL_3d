@@ -1,8 +1,7 @@
+import custom as g
 import numpy as np
 import torch
-from custom import Dict
-from custom import Global as g
-from custom import Img
+from custom_dict import Dict
 from data_augment import DataAugmentation
 from numpy import ndarray
 
@@ -25,7 +24,7 @@ class DatasetCore(torch.utils.data.Dataset):
 
         # normalize before augmentation
         if not img.max() == img.min() == 0:
-            img = Img.normalize(img)
+            img = g.normalize_img(img)
 
         # data augmentation
         img = self._augment.transform(input_data=img, seed=augment_seed)
@@ -35,7 +34,7 @@ class DatasetCore(torch.utils.data.Dataset):
         # nomalization might give background a positive value
 
         # crop and pad after augmentation, max size: 89 283 280
-        img = Img.central_pad_and_crop(img, self._img_shape)
+        img = g.center_align_img(img, self._img_shape)
 
         # clip, because data augmentation will sometime make img >1 or <0
         img = np.clip(img, 0, 1)

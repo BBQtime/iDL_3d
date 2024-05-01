@@ -1,16 +1,16 @@
 import os
 from pathlib import Path
 
+import custom as g
 import numpy as np
 import torch
-from custom import Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Nii, Value
+from custom_dict import Dict
+from custom_list import List
 from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
-from str_lib import DatasetPart, DatasetVer, Metric, Stat
+from str_lib import DatasetPart, Metric, Stat
 from torch import Tensor
 from training_baseline import TrainingBaseline
 from training_core import ObsStudyProgress
@@ -98,16 +98,16 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         obs_study_cnns_base_dir = os.path.join(baseline_dir, "idl.gtvn_obs.study")
         if not os.path.exists(obs_study_cnns_base_dir):
-            Debug.error_exit("'idl.gtvn_obs.study' folder not found!")
+            g.error_exit("'idl.gtvn_obs.study' folder not found!")
 
         obs_study_output_dir = os.path.join(baseline_dir, idl_gtvn_id)
         if not os.path.exists(obs_study_output_dir):
-            Dir.create(obs_study_output_dir)
+            g.create_dir(obs_study_output_dir)
 
-        cnn_fold_dirs = Dir.get_sub_dirs(
+        cnn_fold_dirs = g.get_sub_dirs(
             obs_study_cnns_base_dir, key_word="fold=", full_path=True
         )
-        hyper = Json.load(os.path.join(cnn_fold_dirs[0], "hyper.json"))
+        hyper = g.load_json(os.path.join(cnn_fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
 
         # load segmentation metrics
@@ -137,22 +137,21 @@ class TrainingIDLGTVn(TrainingBaseline):
             output_fold_dir = os.path.join(
                 obs_study_output_dir, Path(cnn_fold_dir).name
             )
-            Dir.create(output_fold_dir)
+            g.create_dir(output_fold_dir)
 
-            cnn_epoch_dir = Dir.get_sub_dirs(
+            cnn_epoch_dir = g.get_sub_dirs(
                 cnn_fold_dir, key_word="epoch=", full_path=True
             )[0]
             epoch = int(Path(cnn_epoch_dir).name[len("epoch=") :])
 
             output_epoch_dir = os.path.join(output_fold_dir, Path(cnn_epoch_dir).name)
-            Dir.create(output_epoch_dir)
+            g.create_dir(output_epoch_dir)
 
             # load cnn
             cnn_path = os.path.join(cnn_epoch_dir, "epoch={:03d}.pt".format(epoch))
             cnn = self._load_exist_cnn(cnn_path)
 
             # idl progress INFERENCE_INIT
-            # self._timer.cal_duration("INFERENCE_INIT")
             if self._obs_study_progress is not None:
                 self._obs_study_progress.cur_step += (
                     self._obs_study_progress.step.INFERENCE_INIT
@@ -181,7 +180,6 @@ class TrainingIDLGTVn(TrainingBaseline):
             )
 
             # idl progress INFERENCE_SAVE_PRED
-            # self._timer.cal_duration("INFERENCE_SAVE_PRED")
             if self._obs_study_progress is not None:
                 self._obs_study_progress.cur_step += (
                     self._obs_study_progress.step.INFERENCE_SAVE_PRED
@@ -198,12 +196,12 @@ class TrainingIDLGTVn(TrainingBaseline):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             preds[gtv] = None
 
-        output_fold_dirs = Dir.get_sub_dirs(
+        output_fold_dirs = g.get_sub_dirs(
             obs_study_output_dir, key_word="fold=", full_path=True
         )
         for output_fold_dir in output_fold_dirs:
             # find epoch dir
-            output_epoch_dir = Dir.get_sub_dirs(
+            output_epoch_dir = g.get_sub_dirs(
                 output_fold_dir, key_word="epoch=", full_path=True
             )[0]
 
@@ -216,7 +214,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     output_patient_dir, "{}_pred.nii.gz".format(gtv)
                 )
                 if os.path.exists(pred_path):
-                    img = Nii.load(path=pred_path, binary=False)
+                    img = g.load_nii(path=pred_path, binary=False)
                     if preds[gtv] is None:
                         preds[gtv] = img
                     else:
@@ -238,19 +236,18 @@ class TrainingIDLGTVn(TrainingBaseline):
             obs_study_output_dir, "patients", "patient={}".format(patient)
         )
         pred_dir = os.path.join(pred_dir, "round=01")
-        Dir.create(pred_dir)
+        g.create_dir(pred_dir)
 
         # save cross_valid preds (only save gtvt and gtvn)
         for gtv in preds.keys():
             if gtv != "gtvs":
-                Nii.save(
+                g.save_nii(
                     img=preds[gtv],
                     save_path=os.path.join(pred_dir, "{}_pred.nii.gz".format(gtv)),
                     spacing=g.NII_SPACING,
                 )
 
         # idl progress CROSS_VALID
-        # self._timer.cal_duration("CROSS_VALID")
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += (
                 self._obs_study_progress.step.CROSS_VALID
@@ -292,7 +289,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         # only load baseline scores of test set, because there is no validation scores
         if DatasetPart.TEST in dataset_part:
             # load baseline scores
-            baseline_scores = Json.load(
+            baseline_scores = g.load_json(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
                     baseline_id,
@@ -333,7 +330,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             "patients",
             "patient={}".format(patient),
         )
-        Dir.create(epoch_patient_dir)
+        g.create_dir(epoch_patient_dir)
 
         # create cross validation dir to save distance maps and clicks
         cross_valid_patient_dir = os.path.join(
@@ -342,10 +339,10 @@ class TrainingIDLGTVn(TrainingBaseline):
             "patient={}".format(patient),
             "round=01",
         )
-        Dir.create(cross_valid_patient_dir)
+        g.create_dir(cross_valid_patient_dir)
 
         # save pred
-        Nii.save(
+        g.save_nii(
             img=patient_outputs["gtvn"]["pred"],
             save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii.gz"),
             spacing=g.NII_SPACING,
@@ -357,7 +354,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 "gtvn_{}.nii.gz".format(i.replace(".", "_")),
             )
             if not os.path.exists(save_path):
-                Nii.save(
+                g.save_nii(
                     img=patient_outputs["gtvn"][i],
                     save_path=save_path,
                     spacing=g.NII_SPACING,
@@ -382,22 +379,22 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset_ver: str,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            scores[Stat.MEDIAN][metric]["round=01"] = Value.median(
+            scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
                 scores[Stat.MEDIAN][metric]["round=01"]
             )
-            scores[Stat.AVG][metric]["round=01"] = Value.avg(
+            scores[Stat.AVG][metric]["round=01"] = g.calculate_avg(
                 scores[Stat.AVG][metric]["round=01"]
             )
 
         # save scores in json
-        Json.save(
+        g.save_json(
             data=scores,
             path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):
         if not idl_gtvn_id.startswith("idl.gtvn_"):
-            Debug.error_exit("'idl_gtvn_id' must start with 'idl.gtvn_'!")
+            g.error_exit("'idl_gtvn_id' must start with 'idl.gtvn_'!")
 
     def remove_non_optimal_epochs(self, idl_gtvn_id: str):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
@@ -485,7 +482,7 @@ class TrainingIDLGTVn(TrainingBaseline):
 
     def _inference_single_patient_gtvn_post_process(self, outputs: Dict):
         if 0:
-            cc_list = Img.connected_components(outputs["gtvn"]["pred"])
+            cc_list = g.get_connected_components(outputs["gtvn"]["pred"])
             outputs["gtvn"]["pred"] = np.zeros_like(outputs["gtvn"]["pred"])
             for cur_cc in cc_list:
                 if (cur_cc * outputs["gtvn"]["clicks"]).sum() > 0:

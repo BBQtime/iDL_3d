@@ -1,4 +1,4 @@
-from custom import Debug, Value
+import custom as g
 from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
@@ -365,9 +365,9 @@ class ImgFrame(QLabel):
             h = x
             d = y
 
-        w = Value.limit_range(w, (0, img_shape_3d[2] - 1))
-        h = Value.limit_range(h, (0, img_shape_3d[1] - 1))
-        d = Value.limit_range(d, (0, img_shape_3d[0] - 1))
+        w = g.clamp_value(w, (0, img_shape_3d[2] - 1))
+        h = g.clamp_value(h, (0, img_shape_3d[1] - 1))
+        d = g.clamp_value(d, (0, img_shape_3d[0] - 1))
 
         # (1) dont neet to turn upside down
 
@@ -389,7 +389,7 @@ class ImgFrame(QLabel):
             if self.window().img_frame[i] == self:
                 frame_name = i
         if frame_name is None:
-            Debug.error_exit("img_frame error")
+            g.error_exit("img_frame error")
         else:
             return frame_name
 

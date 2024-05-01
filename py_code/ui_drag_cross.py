@@ -1,6 +1,6 @@
 import os
 
-from custom import Global as g
+import custom as g
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget

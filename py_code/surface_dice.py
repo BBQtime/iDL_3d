@@ -1,6 +1,5 @@
+import custom as g
 import numpy as np
-import SimpleITK as sitk
-from custom import Global as g
 
 
 def find_distance_for_coord(

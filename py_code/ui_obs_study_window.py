@@ -3,13 +3,12 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import custom as g
 import cv2
 import numpy as np
 import qimage2ndarray
-import str_lib
-from custom import Debug, Dict, Dir
-from custom import Global as g
-from custom import Img, Json, List, Nii, Timer, Value
+from custom_dict import Dict
+from custom_list import List
 from interpolation import interpolate_shapes
 from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
@@ -46,7 +45,7 @@ class ObsStudyTimer:
         )
         # create an empty json file
         if not os.path.exists(self.__json_path):
-            Json.save({}, self.__json_path)
+            g.save_json({}, self.__json_path)
 
     def start(self):
         self.__start_time = datetime.now()
@@ -62,9 +61,9 @@ class ObsStudyTimer:
         duration = timedelta(seconds=total_seconds)
         duration = str(duration)
         # save json
-        time_log = Json.load(self.__json_path)
+        time_log = g.load_json(self.__json_path)
         time_log["patient={}".format(self.__patient)][self.__obs_study_step] = duration
-        Json.save(time_log, self.__json_path)
+        g.save_json(time_log, self.__json_path)
 
 
 class ObsStudyWindow(ReplayWindow):
@@ -376,7 +375,7 @@ class ObsStudyWindow(ReplayWindow):
         new_drawing = qimage2ndarray.alpha_view(qimg).astype(np.float32)
         new_drawing /= 255
         # binarization (before resize)
-        new_drawing = Img.binarize(img=new_drawing, threshold=binary_threshold)
+        new_drawing = g.binarize_img(img=new_drawing, threshold=binary_threshold)
 
         # overwrite delineation back to zoomed_img
         empty_zoomed_img = np.zeros_like(self._zoomed_rgb[frame_name][:, :, 0])
@@ -426,7 +425,7 @@ class ObsStudyWindow(ReplayWindow):
             interpolation=cv2.INTER_AREA,  # best for scaling down
         )
         # binarization (after resize)
-        new_drawing = Img.binarize(img=new_drawing, threshold=binary_threshold)
+        new_drawing = g.binarize_img(img=new_drawing, threshold=binary_threshold)
 
         # add 2d delineation/correction on 3d ndarray
 
@@ -565,7 +564,7 @@ class ObsStudyWindow(ReplayWindow):
                 steps=self.interpolation_step - 1,
             )
 
-            interpolated_slices = Img.binarize(interpolated_slices)
+            interpolated_slices = g.binarize_img(interpolated_slices)
 
             # add interpolated slices
             correction[start_slice_id + 1 : end_slice_id, :, :] = interpolated_slices
@@ -599,7 +598,7 @@ class ObsStudyWindow(ReplayWindow):
                 # turn upside down
                 img = np.flip(img, axis=0)
                 # save
-                Nii.save(
+                g.save_nii(
                     img=img,
                     save_path=os.path.join(
                         cur_round_dir,
@@ -720,11 +719,11 @@ class ObsStudyWindow(ReplayWindow):
                 # delete nii file
                 if i.startswith(gtv):
                     file_name = i.replace(".", "_") + ".nii.gz"
-                    Dir.delete(os.path.join(imgs_dir, file_name))
+                    g.delete_path(os.path.join(imgs_dir, file_name))
 
                 # delete gtvn_distance_map together with gtvn.pred
                 if i == "gtvn.pred":
-                    Dir.delete(os.path.join(imgs_dir, "gtvn_distance_map.nii.gz"))
+                    g.delete_path(os.path.join(imgs_dir, "gtvn_distance_map.nii.gz"))
 
                 # delete idl.gtvt related files
                 if i == "gtvt.pred":
@@ -732,9 +731,9 @@ class ObsStudyWindow(ReplayWindow):
                     # otherwise SelectScenario will be GRAVITY_CENTER and
                     # new selected slices will be generated
                     # reclick gtvt center will regenerate "selected_slices.json",
-                    Dir.delete(os.path.join(imgs_dir, "round=01.pt"))
-                    Dir.delete(os.path.join(Path(imgs_dir).parent, "loss.json"))
-                    Dir.delete(
+                    g.delete_path(os.path.join(imgs_dir, "round=01.pt"))
+                    g.delete_path(os.path.join(Path(imgs_dir).parent, "loss.json"))
+                    g.delete_path(
                         os.path.join(Path(imgs_dir).parent.parent.parent, "loss.png")
                     )
 
@@ -804,13 +803,13 @@ class ObsStudyWindow(ReplayWindow):
             cur_patient_dir,
             "round=01",
         )
-        Dir.create(cur_round_dir)
+        g.create_dir(cur_round_dir)
         idl_gtvt_click = self.img_3d["gtvt.click"].copy()
         # flip left/right
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
         # turn upside down
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
-        Nii.save(
+        g.save_nii(
             img=idl_gtvt_click,
             save_path=os.path.join(cur_round_dir, "gtvt_click.nii.gz"),
             spacing=g.NII_SPACING,
@@ -826,7 +825,7 @@ class ObsStudyWindow(ReplayWindow):
         # otherwise SelectScenario will be GRAVITY_CENTER and
         # new selected slices will be generated
         # reclick gtvt center will regenerate "selected_slices.json",
-        Json.save(
+        g.save_json(
             data=selected_slices,
             path=os.path.join(cur_patient_dir, "selected_slices.json"),
         )
@@ -901,13 +900,13 @@ class ObsStudyWindow(ReplayWindow):
             "patient={}".format(self._cur_patient),
             "round=01",
         )
-        Dir.create(cur_round_dir)
+        g.create_dir(cur_round_dir)
         gtvt_delineation_to_save = self.img_3d["gtvt.delineation"].copy()
         # flip left/right
         gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
         # turn upside down
         gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=0)
-        Nii.save(
+        g.save_nii(
             img=gtvt_delineation_to_save,
             save_path=os.path.join(cur_round_dir, "gtvt_delineation.nii.gz"),
             spacing=g.NII_SPACING,
@@ -1196,7 +1195,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __update_idl_gtvt_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
-        Value.limit_range(progress_int, (0, 100))
+        g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvt"].setValue(progress_int)
 
     def __on_idl_gtvt_thread_finished(self):
@@ -1328,7 +1327,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __update_idl_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
-        Value.limit_range(progress_int, (0, 100))
+        g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvn"].setValue(progress_int)
 
     def __on_idl_gtvn_thread_finished(self):
@@ -1599,7 +1598,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __get_gtvt_center_slices_id(self):
         if self.gtvt_click_pos_3d is None:
-            Debug.error_exit("self.gtvt_click_pos_3d is empty")
+            g.error_exit("self.gtvt_click_pos_3d is empty")
         else:
             center_slices_id = Dict()
             center_slices_id[Plane.TRANSVERSE] = self.gtvt_click_pos_3d[0]
@@ -1611,7 +1610,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __get_gtvn_center_slices_id(self):
         if len(self.gtvn_clicks_pos_3d) == 0:
-            Debug.error_exit("self.gtvn_clicks_pos_3d is empty")
+            g.error_exit("self.gtvn_clicks_pos_3d is empty")
         else:
             center_slices_id = Dict()
             center_slices_id[Plane.TRANSVERSE] = self.gtvn_clicks_pos_3d[-1][0]
@@ -1938,7 +1937,7 @@ class ObsStudyWindow(ReplayWindow):
         # (1) new training
         # initlize idl.gtvt/gtvn id
         if self.__train_id == "Start a new experiment":
-            cur_time = Timer.cur_time_str()
+            cur_time = g.get_cur_time_str()
             for i in ["gtvt", "gtvn"]:
                 self._idl_id[i] = "idl.{}_".format(i) + cur_time
 
@@ -1950,11 +1949,11 @@ class ObsStudyWindow(ReplayWindow):
                     self._idl_id[i] += "_" + self.__user_name
 
                 if self._debug_mode:
-                    self._idl_id[i] += "_" + Debug.DELETE_FLAG
+                    self._idl_id[i] += "_" + g.DELETE_FLAG
 
             # create idl.gtvt/gtvn folders
             for i in ["gtvt", "gtvn"]:
-                Dir.create(
+                g.create_dir(
                     os.path.join(
                         g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id[i]
                     )
@@ -1985,7 +1984,7 @@ class ObsStudyWindow(ReplayWindow):
             "obs_study_step.json",
         )
         if not os.path.exists(self.__idl_step_json_path):
-            Json.save({}, self.__idl_step_json_path)
+            g.save_json({}, self.__idl_step_json_path)
 
         # load/save interpolation step
         interpolation_setting_path = os.path.join(
@@ -1995,19 +1994,19 @@ class ObsStudyWindow(ReplayWindow):
             "interpolation.json",
         )
         if os.path.exists(interpolation_setting_path):
-            self.interpolation_step = Json.load(interpolation_setting_path)["step"]
+            self.interpolation_step = g.load_json(interpolation_setting_path)["step"]
             self.interpolation_step = max(1, int(self.interpolation_step))
         else:
             self.interpolation_step = ui_setting["interpolation.step"]
             self.interpolation_step = max(1, int(self.interpolation_step))
-            Json.save({"step": self.interpolation_step}, interpolation_setting_path)
+            g.save_json({"step": self.interpolation_step}, interpolation_setting_path)
 
     def __save_idl_step(self):
-        idl_step_of_all_patients = Json.load(self.__idl_step_json_path)
+        idl_step_of_all_patients = g.load_json(self.__idl_step_json_path)
         idl_step_of_all_patients["patient={}".format(self._cur_patient)] = (
             self.obs_study_step
         )
-        Json.save(idl_step_of_all_patients, self.__idl_step_json_path)
+        g.save_json(idl_step_of_all_patients, self.__idl_step_json_path)
 
     def __clear_all_drawing_layers(self, img_frame: ImgFrame):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
@@ -2220,7 +2219,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # load current idl step from json(after cur_patient is updated)
         # init and save idl step of all patients
-        idl_step_of_all_patients = Json.load(self.__idl_step_json_path)
+        idl_step_of_all_patients = g.load_json(self.__idl_step_json_path)
         self.obs_study_step = idl_step_of_all_patients[
             "patient={}".format(self._cur_patient)
         ]
@@ -2278,7 +2277,7 @@ class ObsStudyWindow(ReplayWindow):
             and slice_id + self.interpolation_step <= slice_count - 1
         ):
             slice_id += self.interpolation_step
-        slice_id = Value.limit_range(slice_id, (0, slice_count - 1))
+        slice_id = g.clamp_value(slice_id, (0, slice_count - 1))
         return slice_id
 
     def reset_cur_slice_id(self):

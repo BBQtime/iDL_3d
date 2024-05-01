@@ -1,5 +1,6 @@
 import imgaug as ia
-from custom import Dict, List
+from custom_dict import Dict
+from custom_list import List
 from imgaug import augmenters as iaa
 from numpy import ndarray
 
