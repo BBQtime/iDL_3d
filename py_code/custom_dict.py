@@ -43,3 +43,11 @@ class Dict(dict):
             else:
                 output_list.append(value)
         return output_list
+
+    def key_index(self, key_name) -> int:
+        idx = 0
+        for i in self.keys():
+            if i == key_name:
+                return idx
+            idx += 1
+        return -1
