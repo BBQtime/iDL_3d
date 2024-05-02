@@ -686,6 +686,11 @@ def combine_pred_correction(origin_pred, correction, correction_mask):
             )
 
 
+def random_color():
+    # random values for R, G, B
+    return [random.random() for _ in range(3)]
+
+
 PROJ_DIR = os.path.dirname(os.path.dirname(__file__))
 DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
 

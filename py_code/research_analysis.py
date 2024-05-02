@@ -9,7 +9,12 @@ import torch
 from added_path_len import APL
 from custom_dict import Dict
 from monai.metrics import compute_surface_dice
-from segment_metric import avg_surface_distance_symmetric, dice, hausdorff_distance_95
+from segment_metric import (
+    avg_surface_distance_symmetric,
+    dice,
+    hausdorff_distance,
+    hausdorff_distance_95,
+)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -282,6 +287,7 @@ def calculate_metrics_gtvt_delineation_vs_idl(obs_study_id: str):
                 none_for_nonexisting=True,
                 voxel_spacing=(1, 1),  # g.NII_SPACING,
             )
+
             metrics_dict[patient][Metric.DSC][plane] = dsc
             metrics_dict[patient][Metric.MSD][plane] = msd
             metrics_dict[patient][Metric.HD95][plane] = hd95
@@ -416,7 +422,6 @@ def create_table_correct_vs_idl(obs_study_id_list: list):
 
 
 def create_table_gtvt_delineation_vs_idl(obs_study_id_list: list):
-    # tabel_path=Dict()
 
     table_path = os.path.join(
         g.TRAIN_RESULTS_DIR,
@@ -599,3 +604,177 @@ def plot_fig_correct_vs_idl(obs_study_id_list: list):
 
             # Save the plot as a PDF file in the specified directory
             plt.savefig(fig_path[gtv], format="pdf")
+
+
+def calculate_gtvt_delineation_hd100(obs_study_id: str):
+    if not obs_study_id.startswith("idl.gtvt_"):
+        g.error_exit("Must be an 'idl.gtvt' id")
+
+    obs_study_dir = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+    )
+
+    metrics_dict = Dict()
+    metrics_path = os.path.join(obs_study_dir, "gtvt_delineation_hd100.json")
+    for stat in [Stat.AVG, Stat.MEDIAN]:
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            metrics_dict[stat][plane] = []
+    g.save_json(data=metrics_dict, path=metrics_path)
+
+    # get patients
+    patient_list = []
+    # open "obs_study_step.json" and find approved patients
+    obs_study_step = g.load_json(
+        os.path.join(
+            obs_study_dir,
+            "obs_study_step.json",
+        )
+    )
+    for patient in obs_study_step.keys():
+        if obs_study_step[patient] == ObsStudyStep.APPROVED:
+            patient_list.append(patient)
+
+    # loop through patients
+    for patient in tqdm(patient_list):
+        patient_dir = os.path.join(obs_study_dir, "patients", patient)
+        idl_img_dir = os.path.join(patient_dir, "round=01")
+
+        delineation_3d = g.load_nii(
+            os.path.join(idl_img_dir, "gtvt_delineation.nii.gz"),
+            binary=True,
+        )
+        # delineation_2d = Dict()
+        selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
+
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            slice_id = int(selected_slices[plane]["round=01"])
+
+            if plane == Plane.TRANSVERSE:
+                delineation_2d = delineation_3d[slice_id, :, :]
+            elif plane == Plane.CORONAL:
+                delineation_2d = delineation_3d[:, slice_id, :]
+            elif plane == Plane.SAGITTAL:
+                delineation_2d = delineation_3d[:, :, slice_id]
+
+            kernel = np.ones((3, 3), np.uint8)
+            delineation_2d_fixed = cv2.morphologyEx(
+                delineation_2d, cv2.MORPH_OPEN, kernel
+            )
+            delineation_2d_fixed = cv2.morphologyEx(
+                delineation_2d_fixed, cv2.MORPH_CLOSE, kernel
+            )
+
+            hd100 = hausdorff_distance(
+                test=delineation_2d,
+                reference=delineation_2d_fixed,
+                none_for_nonexisting=True,
+                voxel_spacing=(1, 1),  # g.NII_SPACING,
+            )
+            metrics_dict[patient][plane] = hd100
+
+            # record value for avg and median calculation
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                metrics_dict[stat][plane].append(hd100)
+
+    # calculate avg and median
+    for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        metrics_dict[Stat.MEDIAN][plane] = g.calculate_median(
+            metrics_dict[Stat.MEDIAN][plane]
+        )
+        metrics_dict[Stat.AVG][plane] = g.calculate_avg(metrics_dict[Stat.AVG][plane])
+
+    g.save_json(data=metrics_dict, path=metrics_path)
+
+
+def plot_fig_gtvt_delineation_hd100(obs_study_id_list: list):
+
+    for metric in [Metric.MSD, Metric.HD95]:
+        # init fig_path and fig_data
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            "gtvt_delineation_hd100_{}.pdf".format(metric),
+        )
+
+        fig_data = Dict()
+        fig_data["x"] = []
+        fig_data["y"] = []
+
+        for obs_study_id in tqdm(obs_study_id_list):
+            if not obs_study_id.startswith("idl.gtvt_"):
+                g.error_exit("Must be an 'idl.gtvt' id")
+
+            obs_study_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+            )
+            x_axis_dict = g.load_json(
+                os.path.join(obs_study_dir, "gtvt_delineation_hd100.json")
+            )
+            y_axis_dict = g.load_json(
+                os.path.join(obs_study_dir, "gtvt_delineation_vs_idl.json")
+            )
+
+            # get patients
+            patient_list = []
+            # open "obs_study_step.json" and find approved patients
+            obs_study_step = g.load_json(
+                os.path.join(
+                    obs_study_dir,
+                    "obs_study_step.json",
+                )
+            )
+            for patient in obs_study_step.keys():
+                if obs_study_step[patient] == ObsStudyStep.APPROVED:
+                    patient_list.append(patient)
+
+            # loop through patients
+            for patient in patient_list:
+                x_value = x_axis_dict[patient]
+                x_value = max(
+                    x_value[Plane.TRANSVERSE],
+                    x_value[Plane.CORONAL],
+                    x_value[Plane.SAGITTAL],
+                )
+                fig_data["x"].append(x_value)
+
+                y_value = y_axis_dict[patient][metric]
+                y_value = max(
+                    y_value[Plane.TRANSVERSE],
+                    y_value[Plane.CORONAL],
+                    y_value[Plane.SAGITTAL],
+                )
+                fig_data["y"].append(y_value)
+
+        # Create a grouped bar plot
+        _, ax = plt.subplots()
+
+        # Generate random colors
+        # colors = [g.random_color() for _ in range(len(fig_data["x"]))]
+
+        ax.scatter(
+            x=fig_data["x"],
+            y=fig_data["y"],
+            # color=colors,
+            # width=0.4,
+        )
+
+        # Configure title and labels
+        ax.set_title("GTVt User Input vs Initial Segmentation")
+        ax.set_ylabel(
+            ylabel=metric.upper(),
+            rotation=0,
+            position=(0, 1),
+            va="bottom",
+            labelpad=-9,
+        )
+        ax.set_xlabel(
+            xlabel="Max Anatomical Variation (Hausdorff Distance) of GTVt User Input",
+            # position=(1, 0),
+            # labelpad=-11,
+        )
+
+        # Add a legend to describe the observers
+        ax.legend()
+
+        # Save the plot as a PDF file in the specified directory
+        plt.savefig(fig_path, format="pdf")

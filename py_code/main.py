@@ -1,10 +1,12 @@
 import global_core as g
 from research_analysis import (
+    calculate_gtvt_delineation_hd100,
     calculate_metrics_correct_vs_idl,
     calculate_metrics_gtvt_delineation_vs_idl,
     create_table_correct_vs_idl,
     create_table_gtvt_delineation_vs_idl,
     plot_fig_correct_vs_idl,
+    plot_fig_gtvt_delineation_hd100,
 )
 
 # from str_lib import DatasetPart, DatasetVer
@@ -42,7 +44,7 @@ if 1:
     if 0:
         create_table_correct_vs_idl(obs_study_id_list)
 
-    if 1:
+    if 0:
         plot_fig_correct_vs_idl(obs_study_id_list)
 
 
@@ -60,6 +62,13 @@ if 1:
 
     if 0:
         create_table_gtvt_delineation_vs_idl(obs_study_id_list)
+
+    if 0:
+        for obs_study_id in obs_study_id_list:
+            calculate_gtvt_delineation_hd100(obs_study_id)
+
+    if 1:
+        plot_fig_gtvt_delineation_hd100(obs_study_id_list)
 
 
 # ############# Baseline #############
