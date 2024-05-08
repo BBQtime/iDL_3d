@@ -762,13 +762,23 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                 "2d_{}_vs_{}_{}.pdf".format(target_1, target_2, metric),
             )
 
-            fig_data = Dict()
-            fig_data["x"] = []
-            fig_data["y"] = []
+            # Create a grouped bar plot
+            _, ax = plt.subplots()
 
             for obs_study_id in tqdm(obs_study_id_list):
+
+                x_list = []
+                y_list = []
+
                 if not obs_study_id.startswith("idl.gtvt_"):
                     g.error_exit("Must be an 'idl.gtvt' id!")
+
+                if "Jesper" in obs_study_id:
+                    observer = "Observer 1"
+                elif "Kenneth" in obs_study_id:
+                    observer = "Observer 2"
+                elif "Hanna" in obs_study_id:
+                    observer = "Observer 3"
 
                 obs_study_dir = os.path.join(
                     g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
@@ -803,28 +813,30 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                         x_value[Plane.CORONAL],
                         x_value[Plane.SAGITTAL],
                     )
-                    fig_data["x"].append(x_value)
-                    # for i in range(3):
-                    #     fig_data["x"].append(x_value)
+                    if 1:
+                        x_list.append(x_value)
+                    else:
+                        for i in range(3):
+                            x_list.append(x_value)
 
                     y_value = y_axis_dict[patient][metric]
-                    y_value = max(
-                        y_value[Plane.TRANSVERSE],
-                        y_value[Plane.CORONAL],
-                        y_value[Plane.SAGITTAL],
-                    )
-                    fig_data["y"].append(y_value)
-                    # fig_data["y"].append(y_value[Plane.TRANSVERSE])
-                    # fig_data["y"].append(y_value[Plane.CORONAL])
-                    # fig_data["y"].append(y_value[Plane.SAGITTAL])
+                    if 1:
+                        y_value = max(
+                            y_value[Plane.TRANSVERSE],
+                            y_value[Plane.CORONAL],
+                            y_value[Plane.SAGITTAL],
+                        )
+                        y_list.append(y_value)
+                    else:
+                        y_list.append(y_value[Plane.TRANSVERSE])
+                        y_list.append(y_value[Plane.CORONAL])
+                        y_list.append(y_value[Plane.SAGITTAL])
 
-            # Create a grouped bar plot
-            _, ax = plt.subplots()
-
-            ax.scatter(
-                x=fig_data["x"],
-                y=fig_data["y"],
-            )
+                ax.scatter(
+                    x=x_list,
+                    y=y_list,
+                    label=observer,
+                )
 
             # Configure title and labels
             if target_1 == "delineation":
@@ -853,6 +865,9 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             ax.set_xlabel(
                 xlabel="Anatomical Plane Variation (HD 100) of GTVt User Input",
             )
+
+            # Add a legend to describe the observers
+            ax.legend()
 
             # Save the plot as a PDF file in the specified directory
             plt.savefig(fig_path, format="pdf")
