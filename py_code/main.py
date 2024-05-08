@@ -20,7 +20,7 @@ from research_analysis import (
 
 
 ############# Clear Cache #############
-if 0:
+if 1:
     g.clear_gpu_cache()
     g.clear_debug_data()
     g.clear_linux_trash()

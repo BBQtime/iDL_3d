@@ -14,6 +14,7 @@ from segment_metric import (
     dice,
     hausdorff_distance,
     hausdorff_distance_95,
+    surface_distances,
 )
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
@@ -676,8 +677,9 @@ def calculate_gtvt_input_variation(obs_study_id: str):
     metrics_dict = Dict()
     metrics_path = os.path.join(obs_study_dir, "gtvt_input_variation.json")
     for stat in [Stat.AVG, Stat.MEDIAN]:
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            metrics_dict[stat][plane] = []
+        metrics_dict[stat] = []
+        # for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        #     metrics_dict[stat][plane] = []
     g.save_json(data=metrics_dict, path=metrics_path)
 
     # get patients
@@ -705,6 +707,8 @@ def calculate_gtvt_input_variation(obs_study_id: str):
         # delineation_2d = Dict()
         selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
 
+        sds_full = None
+
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             slice_id = int(selected_slices[plane]["round=01"])
 
@@ -723,24 +727,47 @@ def calculate_gtvt_input_variation(obs_study_id: str):
                 delineation_2d_fixed, cv2.MORPH_CLOSE, kernel
             )
 
-            hd100 = hausdorff_distance(
-                test=delineation_2d,
-                reference=delineation_2d_fixed,
-                none_for_nonexisting=True,
-                voxel_spacing=(1, 1),  # g.NII_SPACING,
-            )
-            metrics_dict[patient][plane] = hd100
+            # hd100 = hausdorff_distance(
+            #     test=delineation_2d,
+            #     reference=delineation_2d_fixed,
+            #     none_for_nonexisting=True,
+            #     voxel_spacing=(1, 1),  # g.NII_SPACING,
+            # )
+            # hd95 = hausdorff_distance_95(
+            #     test=delineation_2d,
+            #     reference=delineation_2d_fixed,
+            #     none_for_nonexisting=True,
+            #     voxel_spacing=(1, 1),  # g.NII_SPACING,
+            # )
 
-            # record value for avg and median calculation
-            for stat in [Stat.AVG, Stat.MEDIAN]:
-                metrics_dict[stat][plane].append(hd100)
+            sds1 = surface_distances(
+                binary_img_1=delineation_2d,
+                binary_img_2=delineation_2d_fixed,
+                spacing=(1, 1),
+            )
+            sds2 = surface_distances(
+                binary_img_1=delineation_2d_fixed,
+                binary_img_2=delineation_2d,
+                spacing=(1, 1),
+            )
+            sds = np.hstack((sds1, sds2))
+            if sds_full is None:
+                sds_full = sds
+            else:
+                sds_full = np.hstack((sds_full, sds))
+
+        # hd100 of 3 planes
+        hd100 = max(sds_full)
+        # hd95 = np.percentile(sds_full, 95)
+        metrics_dict[patient] = hd100
+
+        # record value for avg and median calculation
+        for stat in [Stat.AVG, Stat.MEDIAN]:
+            metrics_dict[stat].append(hd100)
 
     # calculate avg and median
-    for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-        metrics_dict[Stat.MEDIAN][plane] = g.calculate_median(
-            metrics_dict[Stat.MEDIAN][plane]
-        )
-        metrics_dict[Stat.AVG][plane] = g.calculate_avg(metrics_dict[Stat.AVG][plane])
+    metrics_dict[Stat.MEDIAN] = g.calculate_median(metrics_dict[Stat.MEDIAN])
+    metrics_dict[Stat.AVG] = g.calculate_avg(metrics_dict[Stat.AVG])
 
     g.save_json(data={"hd100": metrics_dict}, path=metrics_path)
 
@@ -808,11 +835,11 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                 # loop through patients
                 for patient in patient_list:
                     x_value = x_axis_dict[patient]
-                    x_value = max(
-                        x_value[Plane.TRANSVERSE],
-                        x_value[Plane.CORONAL],
-                        x_value[Plane.SAGITTAL],
-                    )
+                    # x_value = max(
+                    #     x_value[Plane.TRANSVERSE],
+                    #     x_value[Plane.CORONAL],
+                    #     x_value[Plane.SAGITTAL],
+                    # )
                     if 1:
                         x_list.append(x_value)
                     else:

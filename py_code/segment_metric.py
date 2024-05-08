@@ -5,6 +5,8 @@ import numpy as np
 import torch.nn as nn
 from medpy.metric import asd, assd, hd, hd95
 from numpy import ndarray
+from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.spatial import cKDTree
 from str_lib import Metric
 from torch import Tensor
 
@@ -525,6 +527,43 @@ ALL_METRICS = {
     "Total Positives Reference": total_positives_reference,
     "total Negatives Reference": total_negatives_reference,
 }
+
+
+# Define the function find_surface_pixels
+def find_surface_pixels(binary_img):
+    """Find surface (boundary) pixels in the binary image using morphological operations."""
+
+    binary_img = binary_img.astype(bool)
+    dilated_img = binary_dilation(binary_img)
+    eroded_img = binary_erosion(binary_img)
+    surface_img = dilated_img != eroded_img
+    return np.argwhere(surface_img)
+
+
+def surface_distances(binary_img_1, binary_img_2, spacing=(1, 1, 1)):
+    """
+    Calculate distances from each surface pixel in binary_img_1 to the nearest surface point in binary_img_2.
+
+    :param binary_img_1: First binary image (numpy array).
+    :param binary_img_2: Second binary image (numpy array).
+    :param spacing: Tuple representing the pixel spacing in each dimension (dz, dy, dx).
+    :return: Array of distances.
+    """
+    # Get the surface pixels for both images
+    # surface_points_1 = g.find_contours(binary_img_1)
+    # surface_points_2 = g.find_contours(binary_img_2)
+    surface_points_1 = find_surface_pixels(binary_img_1)
+    surface_points_2 = find_surface_pixels(binary_img_2)
+
+    # Adjust points by the spacing for accurate distance calculation
+    surface_points_1 = surface_points_1 * np.array(spacing)
+    surface_points_2 = surface_points_2 * np.array(spacing)
+
+    # Use KDTree for efficient nearest neighbor calculation
+    tree = cKDTree(surface_points_2)
+    distances, _ = tree.query(surface_points_1)
+
+    return distances
 
 
 # only for inference
