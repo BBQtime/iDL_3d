@@ -19,7 +19,7 @@ from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
 
-def calculate_metrics_correct_vs_idl(obs_study_id: str):
+def calculate_3d_idl_vs_correct(obs_study_id: str):
 
     if obs_study_id.startswith("idl.gtvn_"):
         gtv = "gtvn"
@@ -33,7 +33,7 @@ def calculate_metrics_correct_vs_idl(obs_study_id: str):
     )
 
     metrics_dict = Dict()
-    metrics_path = os.path.join(obs_study_dir, "correct_vs_idl.json")
+    metrics_path = os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
     for stat in [Stat.AVG, Stat.MEDIAN]:
         for metric in [
             Metric.DSC,
@@ -178,179 +178,7 @@ def calculate_metrics_correct_vs_idl(obs_study_id: str):
     g.save_json(data=metrics_dict, path=metrics_path)
 
 
-def calculate_metrics_gtvt_delineation_vs_idl(obs_study_id: str):
-    if not obs_study_id.startswith("idl.gtvt_"):
-        g.error_exit("Must be an 'idl.gtvt' id")
-
-    obs_study_dir = os.path.join(
-        g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
-    )
-
-    metrics_dict = Dict()
-    metrics_path = os.path.join(obs_study_dir, "gtvt_delineation_vs_idl.json")
-    for stat in [Stat.AVG, Stat.MEDIAN]:
-        for metric in [
-            Metric.DSC,
-            Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            Metric.APL_VOXEL,
-            Metric.SDSC,
-        ]:
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                metrics_dict[stat][metric][plane] = []
-    g.save_json(data=metrics_dict, path=metrics_path)
-
-    patient_list = []
-    # open "obs_study_step.json" and find approved patients
-    obs_study_step = g.load_json(
-        os.path.join(
-            obs_study_dir,
-            "obs_study_step.json",
-        )
-    )
-    for patient in obs_study_step.keys():
-        if obs_study_step[patient] == ObsStudyStep.APPROVED:
-            patient_list.append(patient)
-
-    # loop through patients
-    # nii_idx = 1
-    for patient in tqdm(patient_list):
-        patient_dir = os.path.join(obs_study_dir, "patients", patient)
-        idl_img_dir = os.path.join(patient_dir, "round=01")
-
-        delineation = g.load_nii(
-            os.path.join(idl_img_dir, "gtvt_delineation.nii.gz"),
-            binary=True,
-        )
-        origin_pred = g.load_nii(
-            os.path.join(idl_img_dir, "gtvt_pred.nii.gz"),
-            binary=True,
-        )
-        correction_mask = g.load_nii(
-            os.path.join(idl_img_dir, "gtvt_correction_mask.nii.gz"),
-            binary=True,
-        )
-        correction = g.load_nii(
-            os.path.join(idl_img_dir, "gtvt_correction.nii.gz"),
-            binary=True,
-        )
-        final_pred = g.combine_pred_correction(
-            origin_pred=origin_pred,
-            correction=correction,
-            correction_mask=correction_mask,
-        )
-
-        selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
-
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            slice_id = int(selected_slices[plane]["round=01"])
-
-            if plane == Plane.TRANSVERSE:
-                delineation_2d = delineation[slice_id, :, :]
-                final_pred_2d = final_pred[slice_id, :, :]
-            elif plane == Plane.CORONAL:
-                delineation_2d = delineation[:, slice_id, :]
-                final_pred_2d = final_pred[:, slice_id, :]
-            elif plane == Plane.SAGITTAL:
-                delineation_2d = delineation[:, :, slice_id]
-                final_pred_2d = final_pred[:, :, slice_id]
-
-            # g.save_nii(
-            #     delineation_2d,
-            #     os.path.join(g.DEBUG_DIR, "{:02d}_before_open.nii.gz".format(nii_idx)),
-            # )
-            kernel = np.ones((3, 3), np.uint8)
-            delineation_2d = cv2.morphologyEx(delineation_2d, cv2.MORPH_OPEN, kernel)
-            delineation_2d = cv2.morphologyEx(delineation_2d, cv2.MORPH_CLOSE, kernel)
-            # g.save_nii(
-            #     delineation_2d,
-            #     os.path.join(g.DEBUG_DIR, "{:02d}_after_open.nii.gz".format(nii_idx)),
-            # )
-            # nii_idx += 1
-
-            # dsc/msd/hd95
-            dsc = dice(
-                test=delineation_2d,
-                reference=final_pred_2d,
-                nan_for_nonexisting=False,
-            )
-            msd = avg_surface_distance_symmetric(
-                test=delineation_2d,
-                reference=final_pred_2d,
-                none_for_nonexisting=True,
-                voxel_spacing=(1, 1),  # g.NII_SPACING,
-            )
-            hd95 = hausdorff_distance_95(
-                test=delineation_2d,
-                reference=final_pred_2d,
-                none_for_nonexisting=True,
-                voxel_spacing=(1, 1),  # g.NII_SPACING,
-            )
-
-            metrics_dict[patient][Metric.DSC][plane] = dsc
-            metrics_dict[patient][Metric.MSD][plane] = msd
-            metrics_dict[patient][Metric.HD95][plane] = hd95
-
-            # added path length
-            apl = APL(reference_structure=final_pred_2d, other_structure=delineation_2d)
-            apl_pct = apl.get_apl(normalized=True)
-            apl_voxel = apl.get_apl(normalized=False)
-            metrics_dict[patient][Metric.APL_PCT][plane] = apl_pct
-            metrics_dict[patient][Metric.APL_VOXEL][plane] = apl_voxel
-
-            # surface dice
-            final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
-            final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
-            if len(final_pred_2d.shape) == 5:
-                final_pred_2d = np.transpose(final_pred_2d, (0, 1, 3, 4, 2))
-            delineation_2d = np.expand_dims(delineation_2d, axis=0)
-            delineation_2d = np.expand_dims(delineation_2d, axis=0)
-            if len(delineation_2d.shape) == 5:
-                delineation_2d = np.transpose(delineation_2d, (0, 1, 3, 4, 2))
-            sdsc = compute_surface_dice(
-                y_pred=torch.tensor(final_pred_2d),
-                y=torch.tensor(delineation_2d),
-                class_thresholds=[1.0],
-            )
-            # tensor to float
-            metrics_dict[patient][Metric.SDSC][plane] = sdsc.item()
-
-            # record value for avg and median calculation
-            for stat in [Stat.AVG, Stat.MEDIAN]:
-                for metric in [
-                    Metric.DSC,
-                    Metric.MSD,
-                    Metric.HD95,
-                    Metric.APL_PCT,
-                    Metric.APL_VOXEL,
-                    Metric.SDSC,
-                ]:
-                    metrics_dict[stat][metric][plane].append(
-                        metrics_dict[patient][metric][plane]
-                    )
-
-    # calculate avg and median
-    for metric in [
-        Metric.DSC,
-        Metric.MSD,
-        Metric.HD95,
-        Metric.APL_PCT,
-        Metric.APL_VOXEL,
-        Metric.SDSC,
-    ]:
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
-                metrics_dict[Stat.MEDIAN][metric][plane]
-            )
-            metrics_dict[Stat.AVG][metric][plane] = g.calculate_avg(
-                metrics_dict[Stat.AVG][metric][plane]
-            )
-
-    g.save_json(data=metrics_dict, path=metrics_path)
-
-
-def create_table_correct_vs_idl(obs_study_id_list: list):
+def create_table_3d_idl_vs_correct(obs_study_id_list: list):
     table_path = Dict()
     table_data = Dict()
 
@@ -358,7 +186,7 @@ def create_table_correct_vs_idl(obs_study_id_list: list):
         table_path[i] = os.path.join(
             g.TRAIN_RESULTS_DIR,
             "baseline_obs.study",
-            "correct_vs_idl_{}.csv".format(i),
+            "3d_idl_vs_correct_{}.csv".format(i),
         )
 
         table_data[i] = [
@@ -390,7 +218,9 @@ def create_table_correct_vs_idl(obs_study_id_list: list):
         obs_study_dir = os.path.join(
             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
         )
-        metrics_dict = g.load_json(os.path.join(obs_study_dir, "correct_vs_idl.json"))
+        metrics_dict = g.load_json(
+            os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
+        )
 
         for metric in [
             Metric.DSC,
@@ -421,81 +251,7 @@ def create_table_correct_vs_idl(obs_study_id_list: list):
             writer.writerows(table_data[i])
 
 
-def create_table_gtvt_delineation_vs_idl(obs_study_id_list: list):
-
-    table_path = os.path.join(
-        g.TRAIN_RESULTS_DIR,
-        "baseline_obs.study",
-        "gtvt_delineation_vs_idl.csv",
-    )
-    # Header row
-    table_data = [
-        [
-            "Metric",
-            "Anatomical Plane",
-            "Statistics",
-            "Jesper",
-            "Kenneth",
-            "Hanna",
-        ],
-    ]
-    for metric in [
-        Metric.DSC,
-        Metric.MSD,
-        Metric.HD95,
-        Metric.APL_PCT,
-        Metric.APL_VOXEL,
-        # Metric.SDSC,
-    ]:
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            for stat in [
-                # Stat.AVG,
-                Stat.MEDIAN,
-            ]:
-                cur_item = [metric, plane, stat, "", "", ""]
-                table_data.append(cur_item)
-
-    for obs_study_id in tqdm(obs_study_id_list):
-        if not obs_study_id.startswith("idl.gtvt_"):
-            g.error_exit("Must be an 'idl.gtvt' id")
-
-        obs_study_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
-        )
-        metrics_dict = g.load_json(
-            os.path.join(obs_study_dir, "gtvt_delineation_vs_idl.json")
-        )
-
-        for metric in [
-            Metric.DSC,
-            Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            Metric.APL_VOXEL,
-            # Metric.SDSC,
-        ]:
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                for stat in [
-                    # Stat.AVG,
-                    Stat.MEDIAN,
-                ]:
-                    cur_value = metrics_dict[stat][metric][plane]
-                    for item in table_data:
-                        if item[0] == metric and item[1] == plane and item[2] == stat:
-                            if "Jesper" in obs_study_id:
-                                item[3] = cur_value
-                            elif "Kenneth" in obs_study_id:
-                                item[4] = cur_value
-                            elif "Hanna" in obs_study_id:
-                                item[5] = cur_value
-                            break
-
-    with open(table_path, "w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerows(table_data)
-
-
-def plot_fig_correct_vs_idl(obs_study_id_list: list):
+def plot_3d_idl_vs_correct(obs_study_id_list: list):
 
     patients_list = ["489", "496", "499", "509", "513", "536", "538"]
     observers_list = ["Jesper", "Kenneth", "Hanna"]
@@ -518,7 +274,7 @@ def plot_fig_correct_vs_idl(obs_study_id_list: list):
             fig_path[gtv] = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 "baseline_obs.study",
-                "correct_vs_idl_{}_{}.pdf".format(gtv, metric),
+                "3d_idl_vs_correct_{}_{}.pdf".format(gtv, metric),
             )
 
             for observer in observers_list:
@@ -538,7 +294,7 @@ def plot_fig_correct_vs_idl(obs_study_id_list: list):
                     g.TRAIN_RESULTS_DIR,
                     "baseline_obs.study",
                     obs_study_id,
-                    "correct_vs_idl.json",
+                    "3d_idl_vs_correct.json",
                 )
             )
 
@@ -573,7 +329,7 @@ def plot_fig_correct_vs_idl(obs_study_id_list: list):
                 )
 
             # Configure title and labels
-            ax.set_title("Initial Segmentation vs Final Segmentation")
+            ax.set_title("Initial Segmentation vs Final Correction")
             # if metric==Metric.
             #     ylabel=
             ax.set_ylabel(
@@ -606,16 +362,319 @@ def plot_fig_correct_vs_idl(obs_study_id_list: list):
             plt.savefig(fig_path[gtv], format="pdf")
 
 
-def calculate_gtvt_delineation_hd100(obs_study_id: str):
+def calculate_gtvt_slices_metrics(obs_study_id: str):
     if not obs_study_id.startswith("idl.gtvt_"):
-        g.error_exit("Must be an 'idl.gtvt' id")
+        g.error_exit("Must be an 'idl.gtvt' id!")
+
+    target_pairs = [
+        ("idl", "correct"),
+        ("delineation", "idl"),
+        ("delineation", "correct"),
+    ]
+
+    obs_study_dir = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+    )
+    for target_1, target_2 in target_pairs:
+        metrics_dict = Dict()
+        metrics_path = os.path.join(
+            obs_study_dir, "2d_{}_vs_{}.json".format(target_1, target_2)
+        )
+        for stat in [Stat.AVG, Stat.MEDIAN]:
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+            ]:
+                plane_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                for plane in plane_list:
+                    metrics_dict[stat][metric][plane] = []
+        g.save_json(data=metrics_dict, path=metrics_path)
+
+        patient_list = []
+        # open "obs_study_step.json" and find approved patients
+        obs_study_step = g.load_json(
+            os.path.join(
+                obs_study_dir,
+                "obs_study_step.json",
+            )
+        )
+        for patient in obs_study_step.keys():
+            if obs_study_step[patient] == ObsStudyStep.APPROVED:
+                patient_list.append(patient)
+
+        # loop through patients
+        for patient in tqdm(patient_list):
+            patient_dir = os.path.join(obs_study_dir, "patients", patient)
+            idl_img_dir = os.path.join(patient_dir, "round=01")
+
+            delineation = g.load_nii(
+                os.path.join(idl_img_dir, "gtvt_delineation.nii.gz"),
+                binary=True,
+            )
+            origin_pred = g.load_nii(
+                os.path.join(idl_img_dir, "gtvt_pred.nii.gz"),
+                binary=True,
+            )
+            correction_mask = g.load_nii(
+                os.path.join(idl_img_dir, "gtvt_correction_mask.nii.gz"),
+                binary=True,
+            )
+            correction = g.load_nii(
+                os.path.join(idl_img_dir, "gtvt_correction.nii.gz"),
+                binary=True,
+            )
+            final_pred = g.combine_pred_correction(
+                origin_pred=origin_pred,
+                correction=correction,
+                correction_mask=correction_mask,
+            )
+
+            selected_slices = g.load_json(
+                os.path.join(patient_dir, "selected_slices.json")
+            )
+
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                slice_id = int(selected_slices[plane]["round=01"])
+
+                if plane == Plane.TRANSVERSE:
+                    delineation_2d = delineation[slice_id, :, :]
+                    origin_pred_2d = origin_pred[slice_id, :, :]
+                    final_pred_2d = final_pred[slice_id, :, :]
+                elif plane == Plane.CORONAL:
+                    delineation_2d = delineation[:, slice_id, :]
+                    origin_pred_2d = origin_pred[:, slice_id, :]
+                    final_pred_2d = final_pred[:, slice_id, :]
+                elif plane == Plane.SAGITTAL:
+                    delineation_2d = delineation[:, :, slice_id]
+                    origin_pred_2d = origin_pred[:, :, slice_id]
+                    final_pred_2d = final_pred[:, :, slice_id]
+
+                if patient == "patient=513":
+                    g.save_nii(
+                        delineation_2d,
+                        os.path.join(
+                            g.DEBUG_DIR,
+                            "{}_{}_delineation.nii.gz".format(patient, plane),
+                        ),
+                    )
+                    g.save_nii(
+                        origin_pred_2d,
+                        os.path.join(
+                            g.DEBUG_DIR,
+                            "{}_{}_idl.nii.gz".format(patient, plane),
+                        ),
+                    )
+                    g.save_nii(
+                        final_pred_2d,
+                        os.path.join(
+                            g.DEBUG_DIR,
+                            "{}_{}_correct.nii.gz".format(patient, plane),
+                        ),
+                    )
+
+                kernel = np.ones((3, 3), np.uint8)
+                delineation_2d = cv2.morphologyEx(
+                    delineation_2d, cv2.MORPH_OPEN, kernel
+                )
+                delineation_2d = cv2.morphologyEx(
+                    delineation_2d, cv2.MORPH_CLOSE, kernel
+                )
+
+                # test
+                if target_1 == "delineation":
+                    test = delineation_2d
+                elif target_1 == "idl":
+                    test = origin_pred_2d
+                elif target_1 == "correct":
+                    test = final_pred_2d
+
+                # reference
+                if target_2 == "delineation":
+                    reference = delineation_2d
+                elif target_2 == "idl":
+                    reference = origin_pred_2d
+                elif target_2 == "correct":
+                    reference = final_pred_2d
+
+                # dsc/msd/hd95
+                dsc = dice(
+                    test=test,
+                    reference=reference,
+                    nan_for_nonexisting=False,
+                )
+                msd = avg_surface_distance_symmetric(
+                    test=test,
+                    reference=reference,
+                    none_for_nonexisting=True,
+                    voxel_spacing=(1, 1),  # g.NII_SPACING,
+                )
+                hd95 = hausdorff_distance_95(
+                    test=test,
+                    reference=reference,
+                    none_for_nonexisting=True,
+                    voxel_spacing=(1, 1),  # g.NII_SPACING,
+                )
+
+                metrics_dict[patient][Metric.DSC][plane] = dsc
+                metrics_dict[patient][Metric.MSD][plane] = msd
+                metrics_dict[patient][Metric.HD95][plane] = hd95
+
+                # added path length
+                apl = APL(reference_structure=reference, other_structure=test)
+                apl_pct = apl.get_apl(normalized=True)
+                apl_voxel = apl.get_apl(normalized=False)
+                metrics_dict[patient][Metric.APL_PCT][plane] = apl_pct
+                metrics_dict[patient][Metric.APL_VOXEL][plane] = apl_voxel
+
+                # # surface dice
+                # final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
+                # final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
+                # if len(final_pred_2d.shape) == 5:
+                #     final_pred_2d = np.transpose(final_pred_2d, (0, 1, 3, 4, 2))
+                # delineation_2d = np.expand_dims(delineation_2d, axis=0)
+                # delineation_2d = np.expand_dims(delineation_2d, axis=0)
+                # if len(delineation_2d.shape) == 5:
+                #     delineation_2d = np.transpose(delineation_2d, (0, 1, 3, 4, 2))
+                # sdsc = compute_surface_dice(
+                #     y_pred=torch.tensor(final_pred_2d),
+                #     y=torch.tensor(delineation_2d),
+                #     class_thresholds=[1.0],
+                # )
+                # # tensor to float
+                # metrics_dict[patient][Metric.SDSC][plane] = sdsc.item()
+
+                # record value for avg and median calculation
+                for stat in [Stat.AVG, Stat.MEDIAN]:
+                    for metric in [
+                        Metric.DSC,
+                        Metric.MSD,
+                        Metric.HD95,
+                        Metric.APL_PCT,
+                        Metric.APL_VOXEL,
+                    ]:
+                        metrics_dict[stat][metric][plane].append(
+                            metrics_dict[patient][metric][plane]
+                        )
+
+        # calculate avg and median
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+        ]:
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
+                    metrics_dict[Stat.MEDIAN][metric][plane]
+                )
+                metrics_dict[Stat.AVG][metric][plane] = g.calculate_avg(
+                    metrics_dict[Stat.AVG][metric][plane]
+                )
+
+        g.save_json(data=metrics_dict, path=metrics_path)
+
+
+def create_table_gtvt_slices_metrics(obs_study_id_list: list):
+    target_pairs = [
+        ("idl", "correct"),
+        ("delineation", "idl"),
+        ("delineation", "correct"),
+    ]
+
+    for target_1, target_2 in target_pairs:
+
+        table_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            "2d_{}_vs_{}.csv".format(target_1, target_2),
+        )
+        # Header row
+        table_data = [
+            [
+                "Metric",
+                "Anatomical Plane",
+                "Statistics",
+                "Jesper",
+                "Kenneth",
+                "Hanna",
+            ],
+        ]
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            # Metric.SDSC,
+        ]:
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                for stat in [
+                    # Stat.AVG,
+                    Stat.MEDIAN,
+                ]:
+                    cur_item = [metric, plane, stat, "", "", ""]
+                    table_data.append(cur_item)
+
+        for obs_study_id in tqdm(obs_study_id_list):
+            if not obs_study_id.startswith("idl.gtvt_"):
+                g.error_exit("Must be an 'idl.gtvt' id!")
+
+            obs_study_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+            )
+            metrics_dict = g.load_json(
+                os.path.join(
+                    obs_study_dir, "2d_{}_vs_{}.json".format(target_1, target_2)
+                )
+            )
+
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                # Metric.SDSC,
+            ]:
+                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                    for stat in [
+                        # Stat.AVG,
+                        Stat.MEDIAN,
+                    ]:
+                        cur_value = metrics_dict[stat][metric][plane]
+                        for item in table_data:
+                            if (
+                                item[0] == metric
+                                and item[1] == plane
+                                and item[2] == stat
+                            ):
+                                if "Jesper" in obs_study_id:
+                                    item[3] = cur_value
+                                elif "Kenneth" in obs_study_id:
+                                    item[4] = cur_value
+                                elif "Hanna" in obs_study_id:
+                                    item[5] = cur_value
+                                break
+
+        with open(table_path, "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerows(table_data)
+
+
+def calculate_gtvt_input_variation(obs_study_id: str):
+    if not obs_study_id.startswith("idl.gtvt_"):
+        g.error_exit("Must be an 'idl.gtvt' id!")
 
     obs_study_dir = os.path.join(
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
     )
 
     metrics_dict = Dict()
-    metrics_path = os.path.join(obs_study_dir, "gtvt_delineation_hd100.json")
+    metrics_path = os.path.join(obs_study_dir, "gtvt_input_variation.json")
     for stat in [Stat.AVG, Stat.MEDIAN]:
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             metrics_dict[stat][plane] = []
@@ -683,98 +742,117 @@ def calculate_gtvt_delineation_hd100(obs_study_id: str):
         )
         metrics_dict[Stat.AVG][plane] = g.calculate_avg(metrics_dict[Stat.AVG][plane])
 
-    g.save_json(data=metrics_dict, path=metrics_path)
+    g.save_json(data={"hd100": metrics_dict}, path=metrics_path)
 
 
-def plot_fig_gtvt_delineation_hd100(obs_study_id_list: list):
+def plot_gtvt_slices_metrics(obs_study_id_list: list):
+    target_pairs = [
+        ("idl", "correct"),
+        ("delineation", "idl"),
+        ("delineation", "correct"),
+    ]
 
-    for metric in [Metric.MSD, Metric.HD95]:
-        # init fig_path and fig_data
-        fig_path = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            "baseline_obs.study",
-            "gtvt_delineation_hd100_{}.pdf".format(metric),
-        )
+    for target_1, target_2 in target_pairs:
 
-        fig_data = Dict()
-        fig_data["x"] = []
-        fig_data["y"] = []
-
-        for obs_study_id in tqdm(obs_study_id_list):
-            if not obs_study_id.startswith("idl.gtvt_"):
-                g.error_exit("Must be an 'idl.gtvt' id")
-
-            obs_study_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
-            )
-            x_axis_dict = g.load_json(
-                os.path.join(obs_study_dir, "gtvt_delineation_hd100.json")
-            )
-            y_axis_dict = g.load_json(
-                os.path.join(obs_study_dir, "gtvt_delineation_vs_idl.json")
+        for metric in [Metric.MSD, Metric.HD95]:
+            # init fig_path and fig_data
+            fig_path = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                "baseline_obs.study",
+                "2d_{}_vs_{}_{}.pdf".format(target_1, target_2, metric),
             )
 
-            # get patients
-            patient_list = []
-            # open "obs_study_step.json" and find approved patients
-            obs_study_step = g.load_json(
-                os.path.join(
-                    obs_study_dir,
-                    "obs_study_step.json",
+            fig_data = Dict()
+            fig_data["x"] = []
+            fig_data["y"] = []
+
+            for obs_study_id in tqdm(obs_study_id_list):
+                if not obs_study_id.startswith("idl.gtvt_"):
+                    g.error_exit("Must be an 'idl.gtvt' id!")
+
+                obs_study_dir = os.path.join(
+                    g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
                 )
+                x_axis_dict = g.load_json(
+                    os.path.join(obs_study_dir, "gtvt_input_variation.json")
+                )["hd100"]
+                y_axis_dict = g.load_json(
+                    os.path.join(
+                        obs_study_dir, "2d_{}_vs_{}.json".format(target_1, target_2)
+                    )
+                )
+
+                # get patients
+                patient_list = []
+                # open "obs_study_step.json" and find approved patients
+                obs_study_step = g.load_json(
+                    os.path.join(
+                        obs_study_dir,
+                        "obs_study_step.json",
+                    )
+                )
+                for patient in obs_study_step.keys():
+                    if obs_study_step[patient] == ObsStudyStep.APPROVED:
+                        patient_list.append(patient)
+
+                # loop through patients
+                for patient in patient_list:
+                    x_value = x_axis_dict[patient]
+                    x_value = max(
+                        x_value[Plane.TRANSVERSE],
+                        x_value[Plane.CORONAL],
+                        x_value[Plane.SAGITTAL],
+                    )
+                    fig_data["x"].append(x_value)
+                    # for i in range(3):
+                    #     fig_data["x"].append(x_value)
+
+                    y_value = y_axis_dict[patient][metric]
+                    y_value = max(
+                        y_value[Plane.TRANSVERSE],
+                        y_value[Plane.CORONAL],
+                        y_value[Plane.SAGITTAL],
+                    )
+                    fig_data["y"].append(y_value)
+                    # fig_data["y"].append(y_value[Plane.TRANSVERSE])
+                    # fig_data["y"].append(y_value[Plane.CORONAL])
+                    # fig_data["y"].append(y_value[Plane.SAGITTAL])
+
+            # Create a grouped bar plot
+            _, ax = plt.subplots()
+
+            ax.scatter(
+                x=fig_data["x"],
+                y=fig_data["y"],
             )
-            for patient in obs_study_step.keys():
-                if obs_study_step[patient] == ObsStudyStep.APPROVED:
-                    patient_list.append(patient)
 
-            # loop through patients
-            for patient in patient_list:
-                x_value = x_axis_dict[patient]
-                x_value = max(
-                    x_value[Plane.TRANSVERSE],
-                    x_value[Plane.CORONAL],
-                    x_value[Plane.SAGITTAL],
-                )
-                fig_data["x"].append(x_value)
+            # Configure title and labels
+            if target_1 == "delineation":
+                str_1 = "User Input"
+            elif target_1 == "idl":
+                str_1 = "Initial Segmentation"
+            elif target_1 == "correct":
+                str_1 = "Final Correction"
 
-                y_value = y_axis_dict[patient][metric]
-                y_value = max(
-                    y_value[Plane.TRANSVERSE],
-                    y_value[Plane.CORONAL],
-                    y_value[Plane.SAGITTAL],
-                )
-                fig_data["y"].append(y_value)
+            if target_2 == "delineation":
+                str_2 = "User Input"
+            elif target_2 == "idl":
+                str_2 = "Initial Segmentation"
+            elif target_2 == "correct":
+                str_2 = "Final Correction"
 
-        # Create a grouped bar plot
-        _, ax = plt.subplots()
+            ax.set_title("GTVt - {} vs {}".format(str_1, str_2))
 
-        # Generate random colors
-        # colors = [g.random_color() for _ in range(len(fig_data["x"]))]
+            ax.set_ylabel(
+                ylabel=metric.upper(),
+                rotation=0,
+                position=(0, 1),
+                va="bottom",
+                labelpad=-9,
+            )
+            ax.set_xlabel(
+                xlabel="Anatomical Plane Variation (HD 100) of GTVt User Input",
+            )
 
-        ax.scatter(
-            x=fig_data["x"],
-            y=fig_data["y"],
-            # color=colors,
-            # width=0.4,
-        )
-
-        # Configure title and labels
-        ax.set_title("GTVt User Input vs Initial Segmentation")
-        ax.set_ylabel(
-            ylabel=metric.upper(),
-            rotation=0,
-            position=(0, 1),
-            va="bottom",
-            labelpad=-9,
-        )
-        ax.set_xlabel(
-            xlabel="Max Anatomical Variation (Hausdorff Distance) of GTVt User Input",
-            # position=(1, 0),
-            # labelpad=-11,
-        )
-
-        # Add a legend to describe the observers
-        ax.legend()
-
-        # Save the plot as a PDF file in the specified directory
-        plt.savefig(fig_path, format="pdf")
+            # Save the plot as a PDF file in the specified directory
+            plt.savefig(fig_path, format="pdf")

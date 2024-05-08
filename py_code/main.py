@@ -1,12 +1,12 @@
 import global_core as g
 from research_analysis import (
-    calculate_gtvt_delineation_hd100,
-    calculate_metrics_correct_vs_idl,
-    calculate_metrics_gtvt_delineation_vs_idl,
-    create_table_correct_vs_idl,
-    create_table_gtvt_delineation_vs_idl,
-    plot_fig_correct_vs_idl,
-    plot_fig_gtvt_delineation_hd100,
+    calculate_3d_idl_vs_correct,
+    calculate_gtvt_input_variation,
+    calculate_gtvt_slices_metrics,
+    create_table_3d_idl_vs_correct,
+    create_table_gtvt_slices_metrics,
+    plot_3d_idl_vs_correct,
+    plot_gtvt_slices_metrics,
 )
 
 # from str_lib import DatasetPart, DatasetVer
@@ -39,16 +39,16 @@ if 1:
 
     if 0:
         for obs_study_id in obs_study_id_list:
-            calculate_metrics_correct_vs_idl(obs_study_id)
+            calculate_3d_idl_vs_correct(obs_study_id)
 
     if 0:
-        create_table_correct_vs_idl(obs_study_id_list)
+        create_table_3d_idl_vs_correct(obs_study_id_list)
 
     if 0:
-        plot_fig_correct_vs_idl(obs_study_id_list)
+        plot_3d_idl_vs_correct(obs_study_id_list)
 
 
-############# gtvt delineation vs idl #############
+############# gtvt anatomical slices #############
 if 1:
     obs_study_id_list = [
         "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
@@ -58,17 +58,17 @@ if 1:
 
     if 0:
         for obs_study_id in obs_study_id_list:
-            calculate_metrics_gtvt_delineation_vs_idl(obs_study_id)
+            calculate_gtvt_slices_metrics(obs_study_id)
 
     if 0:
-        create_table_gtvt_delineation_vs_idl(obs_study_id_list)
+        create_table_gtvt_slices_metrics(obs_study_id_list)
 
     if 0:
         for obs_study_id in obs_study_id_list:
-            calculate_gtvt_delineation_hd100(obs_study_id)
+            calculate_gtvt_input_variation(obs_study_id)
 
-    if 1:
-        plot_fig_gtvt_delineation_hd100(obs_study_id_list)
+    if 0:
+        plot_gtvt_slices_metrics(obs_study_id_list)
 
 
 # ############# Baseline #############
