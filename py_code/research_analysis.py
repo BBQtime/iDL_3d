@@ -8,15 +8,26 @@ import numpy as np
 import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
-from segment_metric import (
-    avg_surface_distance_symmetric,
-    dice,
-    hausdorff_distance_95,
-    surface_dice,
-    surface_distances,
-)
+from segment_metric import (avg_surface_distance_symmetric, dice,
+                            hausdorff_distance_95, surface_dice,
+                            surface_distances)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
+
+
+def explain_metric(metric: str):
+    if metric == Metric.DSC:
+        return "DSC"
+    elif metric == Metric.MSD:
+        return "Mean Surface Distance"
+    elif metric == Metric.HD95:
+        return "Hausdorff Distance 95"
+    elif metric == Metric.APL_PCT:
+        return "Added Path Length (Normalized)"
+    elif metric == Metric.APL_VOXEL:
+        return "Added Path Length (Voxels)"
+    elif metric == Metric.SDSC:
+        return "Surface DSC"
 
 
 def calculate_3d_idl_vs_correct(obs_study_id: str):
@@ -244,10 +255,41 @@ def create_table_3d_idl_vs_correct(obs_study_id_list: list):
 
 
 def plot_3d_idl_vs_correct(obs_study_id_list: list):
+    gtv = None
+    for obs_study_id in obs_study_id_list:
+        if obs_study_id.startswith("idl.gtvn_"):
+            cur_gtv = "gtvn"
+        elif obs_study_id.startswith("idl.gtvt_"):
+            cur_gtv = "gtvt"
+        else:
+            g.error_exit("obs study train id error")
+
+        if gtv is None:
+            gtv = cur_gtv
+        elif gtv != cur_gtv:
+            g.error_exit("All items in obs_study_id_list should be same gtv type")
+
+    fig_path = os.path.join(
+        g.TRAIN_RESULTS_DIR,
+        "baseline_obs.study",
+        "3d_idl_vs_correct_{}.pdf".format(gtv),
+    )
 
     patients_list = ["489", "496", "499", "509", "513", "536", "538"]
     observers_list = ["Jesper", "Kenneth", "Hanna"]
 
+    # Set up a 2x3 grid of subplots
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10))
+    if gtv == "gtvt":
+        title_gtv = "GTVt"
+    elif gtv == "gtvn":
+        title_gtv = "GTVn"
+    fig.suptitle(
+        "{} Initial Segmentation vs Final Correction".format(title_gtv), fontsize=20
+    )
+    axes = axes.flatten()
+
+    i = 0
     for metric in tqdm(
         [
             Metric.DSC,
@@ -258,28 +300,13 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
             Metric.SDSC,
         ]
     ):
-        # init fig_path and fig_data
-        fig_path = Dict()
+
         fig_data = Dict()
-
-        for gtv in ["gtvt", "gtvn"]:
-            fig_path[gtv] = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                "baseline_obs.study",
-                "3d_idl_vs_correct_{}_{}.pdf".format(gtv, metric),
-            )
-
-            for observer in observers_list:
-                fig_data[gtv][observer] = []
+        for observer in observers_list:
+            fig_data[observer] = []
 
         # loop through observer study train id
         for obs_study_id in obs_study_id_list:
-            if obs_study_id.startswith("idl.gtvn_"):
-                gtv = "gtvn"
-            elif obs_study_id.startswith("idl.gtvt_"):
-                gtv = "gtvt"
-            else:
-                g.error_exit("obs study train id error")
 
             metrics_dict = g.load_json(
                 os.path.join(
@@ -296,62 +323,64 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
                     break
 
             for patient in patients_list:
-                fig_data[gtv][observer].append(
+                fig_data[observer].append(
                     metrics_dict["patient={}".format(patient)][metric]
                 )
 
-        for gtv in ["gtvt", "gtvn"]:
-            # Create a grouped bar plot
-            _, ax = plt.subplots()
+        ax = axes[i]
 
-            # Define bar width for clarity in grouped bars
-            bar_width = 0.25
+        # Define bar width for clarity in grouped bars
+        bar_width = 0.25
 
-            # Calculate indices for x-axis where groups of bars will be located
-            indices = np.arange(len(patients_list))
+        # Calculate indices for x-axis where groups of bars will be located
+        indices = np.arange(len(patients_list))
 
-            # Plot bars for each observer
-            for observer in observers_list:
-                idx = fig_data[gtv].key_index(observer)
-                ax.bar(
-                    x=indices + idx * bar_width,  # list
-                    height=fig_data[gtv][observer],  # list
-                    width=bar_width,
-                    label="Observer {}".format(observers_list.index(observer) + 1),
-                )
-
-            # Configure title and labels
-            ax.set_title("Initial Segmentation vs Final Correction")
-            # if metric==Metric.
-            #     ylabel=
-            ax.set_ylabel(
-                ylabel=metric.upper(),
-                rotation=0,
-                position=(0, 1),
-                va="bottom",
-                labelpad=-9,
-            )
-            ax.set_xlabel(
-                xlabel="Patient",
-                position=(1, 0),
-                labelpad=-11,
+        # Plot bars for each observer
+        for observer in observers_list:
+            idx = fig_data.key_index(observer)
+            ax.bar(
+                x=indices + idx * bar_width,  # list
+                height=fig_data[observer],  # list
+                width=bar_width,
+                label="Observer {}".format(observers_list.index(observer) + 1),
             )
 
-            # Define y-axis range to accommodate label placement above 1.0
-            # Define y-axis ticks to display key points including 1.0
-            if metric == Metric.DSC or metric == Metric.SDSC:
-                ax.set_ylim(0, 1.2)
-                # ax.set_yticks(np.linspace(0, 1, 6))
+        # Configure title and labels
+        # ax.set_title("Initial Segmentation vs Final Correction")
+        ax.set_title(explain_metric(metric))
+        # ax.set_ylabel(
+        #     ylabel=explain_metric(metric),
+        #     # rotation=0,
+        #     # position=(0, 1),
+        #     # va="bottom",
+        #     # labelpad=-9,
+        # )
+        ax.set_xlabel(
+            xlabel="Patient",
+            # position=(1, 0),
+            # labelpad=-11,
+        )
 
-            # Set x-axis ticks to be centered under each group of bars
-            ax.set_xticks(indices + bar_width)
-            ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
+        # Define y-axis range to accommodate label placement above 1.0
+        # Define y-axis ticks to display key points including 1.0
+        if metric == Metric.DSC or metric == Metric.SDSC:
+            ax.set_ylim(0, 1.2)
+            # ax.set_yticks(np.linspace(0, 1, 6))
 
-            # Add a legend to describe the observers
-            ax.legend()
+        # Set x-axis ticks to be centered under each group of bars
+        ax.set_xticks(indices + bar_width)
+        ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
 
-            # Save the plot as a PDF file in the specified directory
-            plt.savefig(fig_path[gtv], format="pdf")
+        # Add a legend to describe the observers
+        ax.legend()
+
+        # next sub plot
+        i += 1
+
+    # Adjust layout to prevent overlap and save the entire figure as a PDF
+    plt.tight_layout()
+    # Save the plot as a PDF file in the specified directory
+    plt.savefig(fig_path, format="pdf")
 
 
 def calculate_gtvt_slices_metrics(obs_study_id: str):
@@ -755,16 +784,38 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
 
     for target_1, target_2 in target_pairs:
 
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            "2d_{}_vs_{}.pdf".format(target_1, target_2),
+        )
+
+        fig, axes = plt.subplots(1, 2, figsize=(20, 10))
+        # Configure title and labels
+        if target_1 == "delineation":
+            str_1 = "User Input"
+        elif target_1 == "idl":
+            str_1 = "Initial Segmentation"
+        elif target_1 == "correct":
+            str_1 = "Final Correction"
+
+        if target_2 == "delineation":
+            str_2 = "User Input"
+        elif target_2 == "idl":
+            str_2 = "Initial Segmentation"
+        elif target_2 == "correct":
+            str_2 = "Final Correction"
+
+        fig.suptitle(
+            "Selected GTVt slices - {} vs {}".format(str_1, str_2), fontsize=20
+        )
+        axes = axes.flatten()
+
+        i = 0
         for metric in [Metric.MSD, Metric.HD95]:
-            # init fig_path and fig_data
-            fig_path = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                "baseline_obs.study",
-                "2d_{}_vs_{}_{}.pdf".format(target_1, target_2, metric),
-            )
 
             # Create a grouped bar plot
-            _, ax = plt.subplots()
+            ax = axes[i]
 
             for obs_study_id in tqdm(obs_study_id_list):
 
@@ -839,30 +890,15 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                     label=observer,
                 )
 
-            # Configure title and labels
-            if target_1 == "delineation":
-                str_1 = "User Input"
-            elif target_1 == "idl":
-                str_1 = "Initial Segmentation"
-            elif target_1 == "correct":
-                str_1 = "Final Correction"
+            ax.set_title(explain_metric(metric))
 
-            if target_2 == "delineation":
-                str_2 = "User Input"
-            elif target_2 == "idl":
-                str_2 = "Initial Segmentation"
-            elif target_2 == "correct":
-                str_2 = "Final Correction"
-
-            ax.set_title("GTVt - {} vs {}".format(str_1, str_2))
-
-            ax.set_ylabel(
-                ylabel=metric.upper(),
-                rotation=0,
-                position=(0, 1),
-                va="bottom",
-                labelpad=-9,
-            )
+            # ax.set_ylabel(
+            #     ylabel=metric.upper(),
+            #     rotation=0,
+            #     position=(0, 1),
+            #     va="bottom",
+            #     labelpad=-9,
+            # )
             ax.set_xlabel(
                 xlabel="Anatomical Plane Variation (HD 100) of GTVt User Input",
             )
@@ -870,8 +906,14 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             # Add a legend to describe the observers
             ax.legend()
 
-            # Save the plot as a PDF file in the specified directory
-            plt.savefig(fig_path, format="pdf")
+            # # Ensuring the plot is square
+            # ax.set_aspect("equal")
+
+            # next sub fig
+            i += 1
+
+        # Save the plot as a PDF file in the specified directory
+        plt.savefig(fig_path, format="pdf")
 
 
 def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
@@ -1067,7 +1109,7 @@ def plot_iov():
                 title_img_name = "Final Correction"
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(18, 12))
+            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 10))
             fig.suptitle(
                 "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
                 fontsize=20,
@@ -1117,19 +1159,7 @@ def plot_iov():
                     cbar=False,
                 )
 
-                if metric == Metric.DSC:
-                    subtitle = "Dice"
-                elif metric == Metric.MSD:
-                    subtitle = "Mean Surface Distance"
-                elif metric == Metric.HD95:
-                    subtitle = "Hausdorff Distance 95"
-                elif metric == Metric.APL_PCT:
-                    subtitle = "Added Path Length (Normalized)"
-                elif metric == Metric.APL_VOXEL:
-                    subtitle = "Added Path Length (Voxels)"
-                elif metric == Metric.SDSC:
-                    subtitle = "Surface Dice"
-
+                subtitle = explain_metric(metric)
                 axes[i].set_title(subtitle)
                 axes[i].set_xticklabels(["Observer 1", "Observer 2", "Observer 3"])
                 axes[i].set_yticklabels(["Observer 1", "Observer 2", "Observer 3"])
