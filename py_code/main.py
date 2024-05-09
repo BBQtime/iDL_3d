@@ -8,6 +8,7 @@ from research_analysis import (
     create_table_gtvt_slices_metrics,
     plot_3d_idl_vs_correct,
     plot_gtvt_slices_metrics,
+    plot_iov,
 )
 
 # from str_lib import DatasetPart, DatasetVer
@@ -86,6 +87,9 @@ if 0:
         calculate_iov(obs_study_id_list[0], obs_study_id_list[1])
         calculate_iov(obs_study_id_list[1], obs_study_id_list[2])
         calculate_iov(obs_study_id_list[2], obs_study_id_list[0])
+
+if 1:
+    plot_iov()
 
 
 # ############# Baseline #############

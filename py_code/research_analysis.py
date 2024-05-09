@@ -1053,27 +1053,90 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
 
 
 def plot_iov():
+    obs_study_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
+    for gtv in ["gtvt", "gtvn"]:
+        if gtv == "gtvt":
+            title_gtv = "GTVt"
+        elif gtv == "gtvn":
+            title_gtv = "GTVn"
 
-    # Assuming you have your data
-    # Generate random data for demonstration purposes
-    np.random.seed(42)
-    data_A = np.random.normal(20, 3, 10)
-    data_B = np.random.normal(22, 3, 10)
-    data_C = np.random.normal(21, 3, 10)
+        for img_name in tqdm(["idl", "correct"]):
+            if img_name == "idl":
+                title_img_name = "Initial Segmentation"
+            elif img_name == "correct":
+                title_img_name = "Final Correction"
 
-    # Compute the correlation matrix
-    data = np.array([data_A, data_B, data_C])
-    corr_matrix = np.corrcoef(data)
+            # Setting up the figure and axes for a 2x3 grid
+            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(18, 12))
+            fig.suptitle(
+                "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
+                fontsize=20,
+            )
+            # Flattening the axes array for easier iteration
+            axes = axes.flatten()
 
-    # Creating the heatmap with a white-to-blue color gradient
-    plt.figure(figsize=(8, 6))  # Adjust the size to fit your needs
-    sns.heatmap(
-        corr_matrix,
-        annot=True,
-        cmap="Blues",
-        xticklabels=["Observer A", "Observer B", "Observer C"],
-        yticklabels=["Observer A", "Observer B", "Observer C"],
-    )
-    plt.title("Heatmap of Correlation Among Observers")
+            i = 0
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
 
-    plt.savefig(os.path.join(g.DEBUG_DIR, "heat_map.pdf"))
+                for observer_pair in [
+                    "Jesper_vs_Kenneth",
+                    "Kenneth_vs_Hanna",
+                    "Hanna_vs_Jesper",
+                ]:
+                    json_path = os.path.join(
+                        obs_study_dir,
+                        "iov_{}_{}_{}.json".format(observer_pair, gtv, img_name),
+                    )
+                    data = g.load_json(json_path)["median"][metric]
+
+                    if observer_pair == "Jesper_vs_Kenneth":
+                        iov_12 = data
+                    elif observer_pair == "Kenneth_vs_Hanna":
+                        iov_23 = data
+                    elif observer_pair == "Hanna_vs_Jesper":
+                        iov_31 = data
+
+                iov_matrix = np.array(
+                    [[0, iov_12, iov_31], [iov_12, 0, iov_23], [iov_31, iov_23, 0]]
+                )
+
+                # Creating the heatmap with a white-to-blue color gradient
+                sns.heatmap(
+                    iov_matrix,
+                    ax=axes[i],
+                    annot=True,
+                    cmap="Blues",
+                    square=True,
+                    cbar=False,
+                )
+
+                if metric == Metric.DSC:
+                    subtitle = "Dice"
+                elif metric == Metric.MSD:
+                    subtitle = "Mean Surface Distance"
+                elif metric == Metric.HD95:
+                    subtitle = "Hausdorff Distance 95"
+                elif metric == Metric.APL_PCT:
+                    subtitle = "Added Path Length (Normalized)"
+                elif metric == Metric.APL_VOXEL:
+                    subtitle = "Added Path Length (Voxels)"
+                elif metric == Metric.SDSC:
+                    subtitle = "Surface Dice"
+
+                axes[i].set_title(subtitle)
+                axes[i].set_xticklabels(["Observer 1", "Observer 2", "Observer 3"])
+                axes[i].set_yticklabels(["Observer 1", "Observer 2", "Observer 3"])
+
+                i += 1
+
+            fig_path = os.path.join(
+                obs_study_dir, "iov_{}_{}.pdf".format(gtv, img_name)
+            )
+            plt.savefig(fig_path)
