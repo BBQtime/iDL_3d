@@ -5,15 +5,14 @@ import cv2
 import global_core as g
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
+import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
-from monai.metrics import compute_surface_dice
 from segment_metric import (
     avg_surface_distance_symmetric,
     dice,
-    hausdorff_distance,
     hausdorff_distance_95,
+    surface_dice,
     surface_distances,
 )
 from str_lib import Metric, ObsStudyStep, Plane, Stat
@@ -132,21 +131,13 @@ def calculate_3d_idl_vs_correct(obs_study_id: str):
 
         # surface dice
         if os.path.exists(patient_dir):
-            test = np.expand_dims(test, axis=0)
-            test = np.expand_dims(test, axis=0)
-            if len(test.shape) == 5:
-                test = np.transpose(test, (0, 1, 3, 4, 2))
-            reference = np.expand_dims(reference, axis=0)
-            reference = np.expand_dims(reference, axis=0)
-            if len(reference.shape) == 5:
-                reference = np.transpose(reference, (0, 1, 3, 4, 2))
-            sdsc = compute_surface_dice(
-                y_pred=torch.tensor(test),
-                y=torch.tensor(reference),
-                class_thresholds=[1.0],
+            sdsc = surface_dice(
+                test=test,
+                reference=reference,
+                tolerance=1.0,
             )
             # tensor to float
-            metrics_dict[patient][Metric.SDSC] = sdsc.item()
+            metrics_dict[patient][Metric.SDSC] = sdsc
         else:
             metrics_dict[patient][Metric.SDSC] = 1.0
 
@@ -530,23 +521,6 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                 metrics_dict[patient][Metric.APL_PCT][plane] = apl_pct
                 metrics_dict[patient][Metric.APL_VOXEL][plane] = apl_voxel
 
-                # # surface dice
-                # final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
-                # final_pred_2d = np.expand_dims(final_pred_2d, axis=0)
-                # if len(final_pred_2d.shape) == 5:
-                #     final_pred_2d = np.transpose(final_pred_2d, (0, 1, 3, 4, 2))
-                # delineation_2d = np.expand_dims(delineation_2d, axis=0)
-                # delineation_2d = np.expand_dims(delineation_2d, axis=0)
-                # if len(delineation_2d.shape) == 5:
-                #     delineation_2d = np.transpose(delineation_2d, (0, 1, 3, 4, 2))
-                # sdsc = compute_surface_dice(
-                #     y_pred=torch.tensor(final_pred_2d),
-                #     y=torch.tensor(delineation_2d),
-                #     class_thresholds=[1.0],
-                # )
-                # # tensor to float
-                # metrics_dict[patient][Metric.SDSC][plane] = sdsc.item()
-
                 # record value for avg and median calculation
                 for stat in [Stat.AVG, Stat.MEDIAN]:
                     for metric in [
@@ -898,3 +872,208 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
 
             # Save the plot as a PDF file in the specified directory
             plt.savefig(fig_path, format="pdf")
+
+
+def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
+    obs_study_id = Dict()
+    obs_study_id["1"] = obs_study_id_1
+    obs_study_id["2"] = obs_study_id_2
+
+    if obs_study_id["1"] == obs_study_id["2"]:
+        g.error_exit("2 input obs_study_ids cannot be identical.")
+
+    if obs_study_id["1"].startswith("idl.gtvn_") and obs_study_id["2"].startswith(
+        "idl.gtvn_"
+    ):
+        gtv = "gtvn"
+    elif obs_study_id["1"].startswith("idl.gtvt_") and obs_study_id["2"].startswith(
+        "idl.gtvt_"
+    ):
+        gtv = "gtvt"
+    else:
+        g.error_exit("obs study train id error")
+
+    observer = Dict()
+    # get observer from obs study id
+    for name in ["Jesper", "Kenneth", "Hanna"]:
+        for idx in ["1", "2"]:
+            if name in obs_study_id[idx]:
+                observer[idx] = name
+    if observer["1"] == observer["2"]:
+        g.error_exit("2 observers cannot be identical.")
+
+    obs_study_dir = Dict()
+    for idx in ["1", "2"]:
+        obs_study_dir[idx] = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id[idx]
+        )
+
+    for img_name in ["idl", "correct"]:
+        metrics_dict = Dict()
+        metrics_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            "iov_{}_vs_{}_{}_{}.json".format(
+                observer["1"], observer["2"], gtv, img_name
+            ),
+        )
+
+        for stat in [Stat.AVG, Stat.MEDIAN]:
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
+                metrics_dict[stat][metric] = []
+        g.save_json(data=metrics_dict, path=metrics_path)
+
+        patients = ["489", "496", "499", "509", "513", "536", "538"]
+        for patient in tqdm(patients):
+            patient = "patient={}".format(patient)
+
+            idl_img_dir = Dict()
+            img_data = Dict()
+            for idx in ["1", "2"]:
+                idl_img_dir[idx] = os.path.join(
+                    obs_study_dir[idx],
+                    "patients",
+                    patient,
+                    "round=01",
+                )
+
+                if os.path.exists(idl_img_dir[idx]):
+                    origin_pred = g.load_nii(
+                        os.path.join(idl_img_dir[idx], "{}_pred.nii.gz".format(gtv)),
+                        binary=True,
+                    )
+                    if img_name == "idl":
+                        img_data[idx] = origin_pred
+                    elif img_name == "correct":
+                        correction_mask = g.load_nii(
+                            os.path.join(
+                                idl_img_dir[idx],
+                                "{}_correction_mask.nii.gz".format(gtv),
+                            ),
+                            binary=True,
+                        )
+                        correction = g.load_nii(
+                            os.path.join(
+                                idl_img_dir[idx], "{}_correction.nii.gz".format(gtv)
+                            ),
+                            binary=True,
+                        )
+                        img_data[idx] = g.combine_pred_correction(
+                            origin_pred=origin_pred,
+                            correction=correction,
+                            correction_mask=correction_mask,
+                        )
+                else:
+                    img_data[idx] = None
+
+            if img_data["1"] is None and img_data["2"] is None:
+                dsc = 1.0
+                msd = 0.0
+                hd95 = 0.0
+                apl_pct = 0.0
+                apl_voxel = 0
+                sdsc = 1.0
+
+            elif img_data["1"] is not None and img_data["2"] is not None:
+                dsc = dice(
+                    test=img_data["1"],
+                    reference=img_data["2"],
+                    nan_for_nonexisting=False,
+                )
+                msd = avg_surface_distance_symmetric(
+                    test=img_data["1"],
+                    reference=img_data["2"],
+                    none_for_nonexisting=True,
+                    voxel_spacing=g.NII_SPACING,
+                )
+                hd95 = hausdorff_distance_95(
+                    test=img_data["1"],
+                    reference=img_data["2"],
+                    none_for_nonexisting=True,
+                    voxel_spacing=g.NII_SPACING,
+                )
+                apl = APL(
+                    reference_structure=img_data["2"],
+                    other_structure=img_data["1"],
+                )
+                apl_pct = apl.get_apl(normalized=True)
+                apl_voxel = apl.get_apl(normalized=False)
+                sdsc = surface_dice(
+                    test=img_data["1"],
+                    reference=img_data["2"],
+                    tolerance=1.0,
+                )
+
+            else:
+                g.error_exit("One of the observer has not patient data.")
+
+            metrics_dict[patient][Metric.DSC] = dsc
+            metrics_dict[patient][Metric.MSD] = msd
+            metrics_dict[patient][Metric.HD95] = hd95
+            metrics_dict[patient][Metric.APL_PCT] = apl_pct
+            metrics_dict[patient][Metric.APL_VOXEL] = apl_voxel
+            metrics_dict[patient][Metric.SDSC] = sdsc
+
+            # record value for avg and median calculation
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                for metric in [
+                    Metric.DSC,
+                    Metric.MSD,
+                    Metric.HD95,
+                    Metric.APL_PCT,
+                    Metric.APL_VOXEL,
+                    Metric.SDSC,
+                ]:
+                    metrics_dict[stat][metric].append(metrics_dict[patient][metric])
+
+        # calculate avg and median
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            metrics_dict[Stat.MEDIAN][metric] = g.calculate_median(
+                metrics_dict[Stat.MEDIAN][metric]
+            )
+            metrics_dict[Stat.AVG][metric] = g.calculate_avg(
+                metrics_dict[Stat.AVG][metric]
+            )
+
+        g.save_json(data=metrics_dict, path=metrics_path)
+
+
+def plot_iov():
+
+    # Assuming you have your data
+    # Generate random data for demonstration purposes
+    np.random.seed(42)
+    data_A = np.random.normal(20, 3, 10)
+    data_B = np.random.normal(22, 3, 10)
+    data_C = np.random.normal(21, 3, 10)
+
+    # Compute the correlation matrix
+    data = np.array([data_A, data_B, data_C])
+    corr_matrix = np.corrcoef(data)
+
+    # Creating the heatmap with a white-to-blue color gradient
+    plt.figure(figsize=(8, 6))  # Adjust the size to fit your needs
+    sns.heatmap(
+        corr_matrix,
+        annot=True,
+        cmap="Blues",
+        xticklabels=["Observer A", "Observer B", "Observer C"],
+        yticklabels=["Observer A", "Observer B", "Observer C"],
+    )
+    plt.title("Heatmap of Correlation Among Observers")
+
+    plt.savefig(os.path.join(g.DEBUG_DIR, "heat_map.pdf"))

@@ -2,8 +2,10 @@ from typing import Union
 
 import global_core as g
 import numpy as np
+import torch
 import torch.nn as nn
 from medpy.metric import asd, assd, hd, hd95
+from monai.metrics import compute_surface_dice
 from numpy import ndarray
 from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.spatial import cKDTree
@@ -564,6 +566,26 @@ def surface_distances(binary_img_1, binary_img_2, spacing=(1, 1, 1)):
     distances, _ = tree.query(surface_points_1)
 
     return distances
+
+
+def surface_dice(test: ndarray, reference: ndarray, tolerance: float = 1.0):
+    test = np.expand_dims(test, axis=0)
+    test = np.expand_dims(test, axis=0)
+    if len(test.shape) == 5:
+        test = np.transpose(test, (0, 1, 3, 4, 2))
+
+    reference = np.expand_dims(reference, axis=0)
+    reference = np.expand_dims(reference, axis=0)
+    if len(reference.shape) == 5:
+        reference = np.transpose(reference, (0, 1, 3, 4, 2))
+
+    sdsc = compute_surface_dice(
+        y_pred=torch.tensor(test),
+        y=torch.tensor(reference),
+        class_thresholds=[tolerance],
+    )
+    # tensor to float
+    return sdsc.item()
 
 
 # only for inference
