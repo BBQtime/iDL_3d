@@ -5,16 +5,13 @@ import cv2
 import global_core as g
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
-from segment_metric import (
-    avg_surface_distance_symmetric,
-    dice,
-    hausdorff_distance_95,
-    surface_dice,
-    surface_distances,
-)
+from segment_metric import (avg_surface_distance_symmetric, dice,
+                            hausdorff_distance_95, surface_dice,
+                            surface_distances)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -1184,6 +1181,12 @@ def seconds_to_minutes_decimal(seconds):
     return total_minutes
 
 
+def time_str_to_seconds(time_str: str):
+    h, m, s = map(int, time_str.split(":"))
+    seconds = h * 3600 + m * 60 + s
+    return seconds
+
+
 def plot_time_per_patient(obs_study_id_list: list):
     patients_list = ["489", "496", "499", "509", "513", "536", "538"]
     observers_list = ["Jesper", "Kenneth", "Hanna"]
@@ -1217,8 +1220,7 @@ def plot_time_per_patient(obs_study_id_list: list):
                 "waiting.gtvt",
                 "correct.gtvt",
             ]:
-                h, m, s = map(int, patient_time[i].split(":"))
-                cur_gtvt_sec = h * 3600 + m * 60 + s
+                cur_gtvt_sec = time_str_to_seconds(patient_time[i])
                 total_gtvt_sec += cur_gtvt_sec
 
             for i in [
@@ -1228,8 +1230,7 @@ def plot_time_per_patient(obs_study_id_list: list):
                 "waiting.gtvn",
                 "correct.gtvn",
             ]:
-                h, m, s = map(int, patient_time[i].split(":"))
-                cur_gtvn_sec = h * 3600 + m * 60 + s
+                cur_gtvn_sec = time_str_to_seconds(patient_time[i])
                 total_gtvn_sec += cur_gtvn_sec
 
             # print(total_gtvt_sec, total_gtvn_sec)
@@ -1284,5 +1285,181 @@ def plot_time_per_patient(obs_study_id_list: list):
     # Save the plot as a PDF file in the specified directory
     fig_path = os.path.join(
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_patient.pdf"
+    )
+    plt.savefig(fig_path, format="pdf")
+
+
+def explain_idl_step(idl_step: str):
+    if idl_step == "click.gtvn.center":
+        return "Click GTVn Centers"
+    elif idl_step == "click.gtvt.center":
+        return "Click GTVt Center"
+    elif idl_step == "correct.gtvn":
+        return "Correct GTVn"
+    elif idl_step == "correct.gtvt":
+        return "Correct GTVt"
+    elif idl_step == "draw.gtvt":
+        return "Delineate GTVt Slices"
+    elif idl_step == "waiting.gtvn":
+        return "Generating GTVn Segmentation"
+    elif idl_step == "waiting.gtvt":
+        return "Generating GTVt Segmentation"
+
+
+def plot_time_per_step(obs_study_id_list: list):
+    observers_list = ["Jesper", "Kenneth", "Hanna"]
+    idl_step_list = [
+        "click.gtvt.center",
+        "draw.gtvt",
+        "waiting.gtvt",
+        "correct.gtvt",
+        "click.gtvn.center",
+        "waiting.gtvn",
+        "correct.gtvn",
+    ]
+
+    # Set up a 2x3 grid of subplots
+    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+    fig.suptitle("Mean Time Consumption per iDL Step", fontsize=20)
+    axes = axes.flatten()
+
+    sub_fig_idx = 0
+    # loop through observer study train id
+    for obs_study_id in tqdm(obs_study_id_list):
+        if not obs_study_id.startswith("idl.gtvt_"):
+            g.error_exit("Must be an 'idl.gtvt' id!")
+
+        # init data
+        fig_data = Dict()
+        for idl_step in idl_step_list:
+            fig_data[idl_step]["value"] = []
+
+        # load json
+        json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id, "time_used.json"
+        )
+        time_dict = g.load_json(json_path)
+
+        # calculate avrage time used of each step
+        for patient in time_dict.keys():
+            for idl_step in idl_step_list:
+                seconds = time_str_to_seconds(time_dict[patient][idl_step])
+                fig_data[idl_step]["value"].append(seconds)
+
+            # fix gtvn correction time
+            # sometimes gtvn corerction time is much lower than gtvt
+            # this is caused by user's regret
+            gtvt_time = (
+                fig_data["waiting.gtvt"]["value"][-1]
+                + fig_data["correct.gtvt"]["value"][-1]
+            )
+            gtvn_time = (
+                fig_data["click.gtvn.center"]["value"][-1]
+                + fig_data["waiting.gtvn"]["value"][-1]
+                + fig_data["correct.gtvn"]["value"][-1]
+            )
+            if gtvt_time != gtvn_time:
+                fig_data["correct.gtvn"]["value"][-1] = (
+                    gtvt_time
+                    - fig_data["click.gtvn.center"]["value"][-1]
+                    - fig_data["waiting.gtvn"]["value"][-1]
+                )
+
+        for idl_step in idl_step_list:
+            fig_data[idl_step]["value"] = g.calculate_median(
+                fig_data[idl_step]["value"]
+            )
+
+        # add start time
+        fig_data["click.gtvt.center"]["start"] = 0
+        fig_data["draw.gtvt"]["start"] = fig_data["click.gtvt.center"]["value"]
+        fig_data["waiting.gtvt"]["start"] = fig_data["click.gtvn.center"]["start"] = (
+            fig_data["draw.gtvt"]["start"] + fig_data["draw.gtvt"]["value"]
+        )
+        fig_data["waiting.gtvn"]["start"] = (
+            fig_data["click.gtvn.center"]["start"]
+            + fig_data["click.gtvn.center"]["value"]
+        )
+        fig_data["correct.gtvt"]["start"] = (
+            fig_data["waiting.gtvt"]["start"] + fig_data["waiting.gtvt"]["value"]
+        )
+        fig_data["correct.gtvn"]["start"] = (
+            fig_data["waiting.gtvn"]["start"] + fig_data["waiting.gtvn"]["value"]
+        )
+        # time_range = (
+        #     fig_data["correct.gtvt"]["start"] + fig_data["correct.gtvt"]["value"]
+        # )
+        # time_range *= 1.1
+        # time_range = np.arange(time_range)
+
+        # seconds to minutes
+        for idl_step in idl_step_list:
+            for i in ["start", "value"]:
+                fig_data[idl_step][i] = seconds_to_minutes_decimal(
+                    fig_data[idl_step][i]
+                )
+
+        # create sub fig
+        ax = axes[sub_fig_idx]
+        bar_height = 5
+        step_space = 2  # Space between bars
+        total_height = len(idl_step) * (bar_height + step_space)
+        y_positions = [
+            total_height - (i * (bar_height + step_space))
+            for i in range(len(idl_step_list))
+        ]
+
+        # Creating a DataFrame for easier plotting
+        # df_dict = Dict()
+        # for idl_step in idl_step_list:
+        #     lower = fig_data[idl_step]["start"]
+        #     upper = fig_data[idl_step]["start"] + fig_data[idl_step]["value"]
+        #     df_dict[explain_idl_step(idl_step)] = np.where(
+        #         (time_range >= lower) & (time_range <= upper), 1, 0
+        #     )
+        # df_area = pd.DataFrame(df_dict, index=time_range)
+        # df_area.plot.area(ax=ax, alpha=0.4)
+
+        # set title
+        for observer in observers_list:
+            if observer in obs_study_id:
+                break
+        ax.set_title(
+            "Observer {}".format(observers_list.index(observer) + 1),
+        )
+        ax.set_xlabel("Time (Minutes)")
+        ax.set_yticks([y + bar_height / 2 for y in y_positions])
+        ax.set_yticklabels([explain_idl_step(idl_step) for idl_step in idl_step_list])
+        ax.grid(True)
+
+        # Adding bars for each step
+        colors = [
+            "tab:blue",
+            "tab:orange",
+            "tab:green",
+            "tab:red",
+            "tab:purple",
+            "tab:brown",
+            "tab:pink",
+        ]
+
+        for idl_step in idl_step_list:
+            idx = idl_step_list.index(idl_step)
+            lower = fig_data[idl_step]["start"]
+            value = fig_data[idl_step]["value"]
+            ax.broken_barh(
+                [(lower, value)],
+                (y_positions[idx], bar_height),
+                facecolors=colors[idx],
+            )
+
+        # next sub plot
+        sub_fig_idx += 1
+
+    # Adjust layout to prevent overlap and save the entire figure as a PDF
+    plt.tight_layout()
+    # Save the plot as a PDF file in the specified directory
+    fig_path = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_step.pdf"
     )
     plt.savefig(fig_path, format="pdf")

@@ -10,6 +10,7 @@ from research_analysis import (
     plot_gtvt_slices_metrics,
     plot_iov,
     plot_time_per_patient,
+    plot_time_per_step,
 )
 
 # from str_lib import DatasetPart, DatasetVer
@@ -105,13 +106,16 @@ if 0:
 
 
 ############# Time consumed #############
+obs_study_id_list = [
+    "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+    "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+    "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+]
 if 0:
-    obs_study_id_list = [
-        "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-    ]
     plot_time_per_patient(obs_study_id_list)
+
+if 0:
+    plot_time_per_step(obs_study_id_list)
 
 
 # ############# Baseline #############
