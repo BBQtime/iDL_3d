@@ -9,9 +9,10 @@ import pandas as pd
 import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
+from custom_list import List
 from segment_metric import (avg_surface_distance_symmetric, dice,
-                            hausdorff_distance_95, surface_dice,
-                            surface_distances)
+                            hausdorff_distance, hausdorff_distance_95,
+                            surface_dice, surface_distances)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -411,6 +412,8 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                 Metric.APL_VOXEL,
             ]:
                 plane_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                if metric == Metric.MSD or metric == Metric.HD95:
+                    plane_list.append("anatomical")
                 for plane in plane_list:
                     metrics_dict[stat][metric][plane] = []
         g.save_json(data=metrics_dict, path=metrics_path)
@@ -458,6 +461,8 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                 os.path.join(patient_dir, "selected_slices.json")
             )
 
+            # for anatomical msd and hd95
+            sds_full = None
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 slice_id = int(selected_slices[plane]["round=01"])
 
@@ -473,29 +478,6 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                     delineation_2d = delineation[:, :, slice_id]
                     origin_pred_2d = origin_pred[:, :, slice_id]
                     final_pred_2d = final_pred[:, :, slice_id]
-
-                if patient == "patient=513":
-                    g.save_nii(
-                        delineation_2d,
-                        os.path.join(
-                            g.DEBUG_DIR,
-                            "{}_{}_delineation.nii.gz".format(patient, plane),
-                        ),
-                    )
-                    g.save_nii(
-                        origin_pred_2d,
-                        os.path.join(
-                            g.DEBUG_DIR,
-                            "{}_{}_idl.nii.gz".format(patient, plane),
-                        ),
-                    )
-                    g.save_nii(
-                        final_pred_2d,
-                        os.path.join(
-                            g.DEBUG_DIR,
-                            "{}_{}_correct.nii.gz".format(patient, plane),
-                        ),
-                    )
 
                 kernel = np.ones((3, 3), np.uint8)
                 delineation_2d = cv2.morphologyEx(
@@ -544,6 +526,23 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                 metrics_dict[patient][Metric.MSD][plane] = msd
                 metrics_dict[patient][Metric.HD95][plane] = hd95
 
+                # calculate anatomical msd and hd95
+                sds1 = surface_distances(
+                    binary_img_1=test,
+                    binary_img_2=reference,
+                    spacing=(1, 1),
+                )
+                sds2 = surface_distances(
+                    binary_img_1=reference,
+                    binary_img_2=test,
+                    spacing=(1, 1),
+                )
+                sds = np.hstack((sds1, sds2))
+                if sds_full is None:
+                    sds_full = sds
+                else:
+                    sds_full = np.hstack((sds_full, sds))
+
                 # added path length
                 apl = APL(reference_structure=reference, other_structure=test)
                 apl_pct = apl.get_apl(normalized=True)
@@ -564,6 +563,18 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
                             metrics_dict[patient][metric][plane]
                         )
 
+            # anatomical msd and hd95
+            metrics_dict[patient][Metric.MSD]["anatomical"] = np.mean(sds_full)
+            metrics_dict[patient][Metric.HD95]["anatomical"] = np.percentile(
+                sds_full, 95
+            )
+            # record value for avg and median calculation
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                for metric in [Metric.MSD, Metric.HD95]:
+                    metrics_dict[stat][metric]["anatomical"].append(
+                        metrics_dict[patient][metric]["anatomical"]
+                    )
+
         # calculate avg and median
         for metric in [
             Metric.DSC,
@@ -572,7 +583,10 @@ def calculate_gtvt_slices_metrics(obs_study_id: str):
             Metric.APL_PCT,
             Metric.APL_VOXEL,
         ]:
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            plane_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+            if metric == Metric.MSD or metric == Metric.HD95:
+                plane_list.append("anatomical")
+            for plane in plane_list:
                 metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
                     metrics_dict[Stat.MEDIAN][metric][plane]
                 )
@@ -711,6 +725,7 @@ def calculate_gtvt_input_variation(obs_study_id: str):
         # delineation_2d = Dict()
         selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
 
+        # hd100_max = None
         sds_full = None
 
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -737,12 +752,10 @@ def calculate_gtvt_input_variation(obs_study_id: str):
             #     none_for_nonexisting=True,
             #     voxel_spacing=(1, 1),  # g.NII_SPACING,
             # )
-            # hd95 = hausdorff_distance_95(
-            #     test=delineation_2d,
-            #     reference=delineation_2d_fixed,
-            #     none_for_nonexisting=True,
-            #     voxel_spacing=(1, 1),  # g.NII_SPACING,
-            # )
+            # if hd100_max is None:
+            #     hd100_max = hd100
+            # elif hd100 > hd100_max:
+            #     hd100_max = hd100
 
             sds1 = surface_distances(
                 binary_img_1=delineation_2d,
@@ -763,7 +776,7 @@ def calculate_gtvt_input_variation(obs_study_id: str):
         # hd100 of 3 planes
         hd100 = max(sds_full)
         # hd95 = np.percentile(sds_full, 95)
-        metrics_dict[patient] = hd100
+        metrics_dict[patient] = round(hd100)
 
         # record value for avg and median calculation
         for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -791,7 +804,7 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             "2d_{}_vs_{}.pdf".format(target_1, target_2),
         )
 
-        fig, axes = plt.subplots(1, 2, figsize=(20, 10))
+        fig, axes = plt.subplots(1, 2, figsize=(20, 8))
         # Configure title and labels
         if target_1 == "delineation":
             str_1 = "User Input"
@@ -820,8 +833,8 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
 
             for obs_study_id in tqdm(obs_study_id_list):
 
-                x_list = []
-                y_list = []
+                x_list = List()
+                y_list = List()
 
                 if not obs_study_id.startswith("idl.gtvt_"):
                     g.error_exit("Must be an 'idl.gtvt' id!")
@@ -861,37 +874,31 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                 # loop through patients
                 for patient in patient_list:
                     x_value = x_axis_dict[patient]
-                    # x_value = max(
-                    #     x_value[Plane.TRANSVERSE],
-                    #     x_value[Plane.CORONAL],
-                    #     x_value[Plane.SAGITTAL],
-                    # )
-                    if 1:
-                        x_list.append(x_value)
-                    else:
-                        for i in range(3):
-                            x_list.append(x_value)
+                    x_list.append(x_value)
 
-                    y_value = y_axis_dict[patient][metric]
-                    if 1:
-                        y_value = max(
-                            y_value[Plane.TRANSVERSE],
-                            y_value[Plane.CORONAL],
-                            y_value[Plane.SAGITTAL],
-                        )
-                        y_list.append(y_value)
-                    else:
-                        y_list.append(y_value[Plane.TRANSVERSE])
-                        y_list.append(y_value[Plane.CORONAL])
-                        y_list.append(y_value[Plane.SAGITTAL])
+                    y_value = y_axis_dict[patient][metric]["anatomical"]
+                    y_list.append(y_value)
 
+                # Perform linear regression
+                # Sort x_list and get the indices of the sorted order
+                sorted_indices = np.argsort(x_list)
+                x_list = np.array(x_list)[sorted_indices]
+                # Reorder y_list using the sorted indices
+                y_list = [y_list[i] for i in sorted_indices]
+                x_list = np.array(x_list)
+                y_list = np.array(y_list)
+                m, b = np.polyfit(x_list, y_list, 1)
+
+                # Scatter plot
                 ax.scatter(
                     x=x_list,
                     y=y_list,
                     label=observer,
                 )
+                # Plot the regression line
+                ax.plot(x_list, m * x_list + b)
 
-            ax.set_title(explain_metric(metric))
+            ax.set_title("Anatomical " + explain_metric(metric))
 
             # ax.set_ylabel(
             #     ylabel=metric.upper(),
@@ -1248,7 +1255,7 @@ def plot_time_per_patient(obs_study_id_list: list):
             fig_data[observer][i] = seconds_to_minutes_decimal(fig_data[observer][i])
 
     # Set up a 2x3 grid of subplots
-    _, ax = plt.subplots()
+    _, ax = plt.subplots(figsize=(8, 5))
 
     # Define bar width for clarity in grouped bars
     bar_width = 0.25
