@@ -8,9 +8,13 @@ import numpy as np
 import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
-from segment_metric import (avg_surface_distance_symmetric, dice,
-                            hausdorff_distance_95, surface_dice,
-                            surface_distances)
+from segment_metric import (
+    avg_surface_distance_symmetric,
+    dice,
+    hausdorff_distance_95,
+    surface_dice,
+    surface_distances,
+)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -1170,3 +1174,115 @@ def plot_iov():
                 obs_study_dir, "iov_{}_{}.pdf".format(gtv, img_name)
             )
             plt.savefig(fig_path)
+
+
+def seconds_to_minutes_decimal(seconds):
+    minutes = seconds // 60
+    remaining_seconds = seconds % 60
+    decimal_minutes = remaining_seconds / 60
+    total_minutes = minutes + decimal_minutes
+    return total_minutes
+
+
+def plot_time_per_patient(obs_study_id_list: list):
+    patients_list = ["489", "496", "499", "509", "513", "536", "538"]
+    observers_list = ["Jesper", "Kenneth", "Hanna"]
+
+    fig_data = Dict()
+    for observer in observers_list:
+        fig_data[observer] = []
+
+    # loop through observer study train id
+    for obs_study_id in tqdm(obs_study_id_list):
+        if not obs_study_id.startswith("idl.gtvt_"):
+            g.error_exit("Must be an 'idl.gtvt' id!")
+        json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id, "time_used.json"
+        )
+        time_dict = g.load_json(json_path)
+
+        # get observer name from train id
+        for observer in observers_list:
+            if observer in obs_study_id:
+                break
+
+        for patient in patients_list:
+            total_gtvt_sec = 0
+            total_gtvn_sec = 0
+            patient_time = time_dict["patient={}".format(patient)]
+
+            for i in [
+                "click.gtvt.center",
+                "draw.gtvt",
+                "waiting.gtvt",
+                "correct.gtvt",
+            ]:
+                h, m, s = map(int, patient_time[i].split(":"))
+                cur_gtvt_sec = h * 3600 + m * 60 + s
+                total_gtvt_sec += cur_gtvt_sec
+
+            for i in [
+                "click.gtvt.center",
+                "draw.gtvt",
+                "click.gtvn.center",
+                "waiting.gtvn",
+                "correct.gtvn",
+            ]:
+                h, m, s = map(int, patient_time[i].split(":"))
+                cur_gtvn_sec = h * 3600 + m * 60 + s
+                total_gtvn_sec += cur_gtvn_sec
+
+            # print(total_gtvt_sec, total_gtvn_sec)
+            fig_data[observer].append(max(total_gtvt_sec, total_gtvn_sec))
+
+        # calculate avg and mean
+        avg = g.calculate_avg(fig_data[observer])
+        avg = round(avg)
+        median = g.calculate_median(fig_data[observer])
+        median = round(median)
+        fig_data[observer].append(avg)
+        fig_data[observer].append(median)
+
+        for i in range(len(fig_data[observer])):
+            fig_data[observer][i] = seconds_to_minutes_decimal(fig_data[observer][i])
+
+    # Set up a 2x3 grid of subplots
+    _, ax = plt.subplots()
+
+    # Define bar width for clarity in grouped bars
+    bar_width = 0.25
+
+    # Calculate indices for x-axis where groups of bars will be located
+    indices = np.arange(len(patients_list) + 2)
+
+    # Plot bars for each observer
+    for observer in observers_list:
+        idx = fig_data.key_index(observer)
+        ax.bar(
+            x=indices + idx * bar_width,  # list
+            height=fig_data[observer],  # list
+            width=bar_width,
+            label="Observer {}".format(observers_list.index(observer) + 1),
+        )
+
+    # Configure title and labels
+    # ax.set_title("Initial Segmentation vs Final Correction")
+    ax.set_xlabel("Patients")
+    ax.set_ylabel("Time Used (Minutes)")
+    ax.set_title("Time Used by Observers for Each Patient")
+
+    # Set x-axis ticks to be centered under each group of bars
+    ax.set_xticks(indices + bar_width)
+    ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7", "Mean", "Median"])
+
+    # Add a legend to describe the observers
+    ax.legend()
+
+    # Adjust layout to prevent overlap and save the entire figure as a PDF
+    plt.tight_layout()
+
+    # Save the plot as a PDF file in the specified directory
+    fig_path = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_patient.pdf"
+    )
+    plt.savefig(fig_path, format="pdf")

@@ -592,22 +592,29 @@ def get_sub_dirs(
 
 
 def __get_deep_dirs(input_dir: str) -> List:
-    sub_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
-    for sub_dir in sub_dirs.copy():
-        sub_dirs.extend(__get_deep_dirs(sub_dir))
-    return sub_dirs
+    deep_dirs = [f.path for f in os.scandir(input_dir) if f.is_dir()]
+    for deep_dir in deep_dirs.copy():
+        deep_dirs.extend(__get_deep_dirs(deep_dir))
+    return deep_dirs
 
 
 def get_deep_dirs(input_dir: str, key_word: str = "", suffle=False) -> List:
-    sub_dirs = List()
-    for sub_dir in __get_deep_dirs(input_dir):
-        if key_word == "" or key_word in sub_dir:
-            sub_dirs.append(sub_dir)
+    deep_dirs = List()
+    for deep_dir in __get_deep_dirs(input_dir):
+        if key_word == "" or key_word in deep_dir:
+            deep_dirs.append(deep_dir)
     if suffle:
-        sub_dirs.shuffle()
+        deep_dirs.shuffle()
     else:
-        sub_dirs.sort()
-    return sub_dirs
+        deep_dirs.sort()
+    return deep_dirs
+
+
+def delete_deep_files(file_name: str):
+    deep_dirs = get_deep_dirs(PROJ_DIR)
+    for deep_dir in deep_dirs:
+        file_path = os.path.join(deep_dir, file_name)
+        delete_path(file_path)
 
 
 def clear_gpu_cache():
