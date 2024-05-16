@@ -29,7 +29,7 @@ def explain_metric(metric: str):
     elif metric == Metric.APL_VOXEL:
         return "Added Path Length (Voxels)"
     elif metric == Metric.SDSC:
-        return "Surface DSC"
+        return "Surface DSC (1mm)"
 
 
 def calculate_3d_idl_vs_correct(obs_study_id: str):
@@ -298,7 +298,7 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
             Metric.MSD,
             Metric.HD95,
             Metric.APL_PCT,
-            Metric.APL_VOXEL,
+            # Metric.APL_VOXEL,
             Metric.SDSC,
         ]
     ):
@@ -365,8 +365,8 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
 
         # Define y-axis range to accommodate label placement above 1.0
         # Define y-axis ticks to display key points including 1.0
-        if metric == Metric.DSC or metric == Metric.SDSC:
-            ax.set_ylim(0, 1.2)
+        if metric == Metric.DSC or metric == Metric.SDSC or metric == Metric.APL_PCT:
+            ax.set_ylim(0, 1.1)
             # ax.set_yticks(np.linspace(0, 1, 6))
 
         # Set x-axis ticks to be centered under each group of bars
@@ -374,10 +374,15 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
 
         # Add a legend to describe the observers
-        ax.legend()
+        legend = ax.legend(loc="best")  # "upper right")
+        legend.get_frame().set_alpha(0.3)
 
         # next sub plot
         i += 1
+
+    # turn off axis of the last figure
+    # axes[-1].axis("off")
+    fig.delaxes(axes[-1])
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
@@ -958,16 +963,14 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id[idx]
         )
 
-    for img_name in ["idl", "correct"]:
-        metrics_dict = Dict()
-        metrics_path = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            "baseline_obs.study",
-            "iov_{}_vs_{}_{}_{}.json".format(
-                observer["1"], observer["2"], gtv, img_name
-            ),
-        )
+    metrics_dict = Dict()
+    metrics_path = os.path.join(
+        g.TRAIN_RESULTS_DIR,
+        "baseline_obs.study",
+        "iov_{}_vs_{}.json".format(observer["1"], observer["2"]),
+    )
 
+    for img_name in ["idl", "correct"]:
         for stat in [Stat.AVG, Stat.MEDIAN]:
             for metric in [
                 Metric.DSC,
@@ -977,8 +980,7 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                 Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
-                metrics_dict[stat][metric] = []
-        g.save_json(data=metrics_dict, path=metrics_path)
+                metrics_dict[img_name][stat][metric] = []
 
         patients = ["489", "496", "499", "509", "513", "536", "538"]
         for patient in tqdm(patients):
@@ -1064,12 +1066,12 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             else:
                 g.error_exit("One of the observer has not patient data.")
 
-            metrics_dict[patient][Metric.DSC] = dsc
-            metrics_dict[patient][Metric.MSD] = msd
-            metrics_dict[patient][Metric.HD95] = hd95
-            metrics_dict[patient][Metric.APL_PCT] = apl_pct
-            metrics_dict[patient][Metric.APL_VOXEL] = apl_voxel
-            metrics_dict[patient][Metric.SDSC] = sdsc
+            metrics_dict[img_name][patient][Metric.DSC] = dsc
+            metrics_dict[img_name][patient][Metric.MSD] = msd
+            metrics_dict[img_name][patient][Metric.HD95] = hd95
+            metrics_dict[img_name][patient][Metric.APL_PCT] = apl_pct
+            metrics_dict[img_name][patient][Metric.APL_VOXEL] = apl_voxel
+            metrics_dict[img_name][patient][Metric.SDSC] = sdsc
 
             # record value for avg and median calculation
             for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -1081,7 +1083,9 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                     Metric.APL_VOXEL,
                     Metric.SDSC,
                 ]:
-                    metrics_dict[stat][metric].append(metrics_dict[patient][metric])
+                    metrics_dict[img_name][stat][metric].append(
+                        metrics_dict[img_name][patient][metric]
+                    )
 
         # calculate avg and median
         for metric in [
@@ -1092,14 +1096,19 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            metrics_dict[Stat.MEDIAN][metric] = g.calculate_median(
-                metrics_dict[Stat.MEDIAN][metric]
+            metrics_dict[img_name][Stat.MEDIAN][metric] = g.calculate_median(
+                metrics_dict[img_name][Stat.MEDIAN][metric]
             )
-            metrics_dict[Stat.AVG][metric] = g.calculate_avg(
-                metrics_dict[Stat.AVG][metric]
+            metrics_dict[img_name][Stat.AVG][metric] = g.calculate_avg(
+                metrics_dict[img_name][Stat.AVG][metric]
             )
 
-        g.save_json(data=metrics_dict, path=metrics_path)
+    if os.path.exists(metrics_path):
+        final_dict = g.load_json(metrics_path)
+    else:
+        final_dict = Dict()
+    final_dict[gtv] = metrics_dict
+    g.save_json(data=final_dict, path=metrics_path)
 
 
 def plot_iov():

@@ -31,21 +31,17 @@ if 1:
 
 
 ############# correction vs idl #############
-obs_study_id_list = [
-    "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-    "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-    "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-    "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
-    "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
-    "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
-]
-
 if 0:
+    obs_study_id_list = [
+        "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+        "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+        "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+        "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
+        "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
+        "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
+    ]
     for obs_study_id in obs_study_id_list:
         calculate_3d_idl_vs_correct(obs_study_id)
-
-if 0:
-    create_table_3d_idl_vs_correct(obs_study_id_list)
 
 if 0:
     gtvt_obs_study_id_list = [
@@ -72,9 +68,6 @@ obs_study_id_list = [
 if 0:
     for obs_study_id in obs_study_id_list:
         calculate_gtvt_slices_metrics(obs_study_id)
-
-if 0:
-    create_table_gtvt_slices_metrics(obs_study_id_list)
 
 if 0:
     for obs_study_id in obs_study_id_list:
