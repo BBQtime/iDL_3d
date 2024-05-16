@@ -10,9 +10,14 @@ import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
 from custom_list import List
-from segment_metric import (avg_surface_distance_symmetric, dice,
-                            hausdorff_distance, hausdorff_distance_95,
-                            surface_dice, surface_distances)
+from segment_metric import (
+    avg_surface_distance_symmetric,
+    dice,
+    hausdorff_distance,
+    hausdorff_distance_95,
+    surface_dice,
+    surface_distances,
+)
 from str_lib import Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -1126,7 +1131,7 @@ def plot_iov():
                 title_img_name = "Final Correction"
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(20, 10))
+            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(18, 12))
             fig.suptitle(
                 "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
                 fontsize=20,
@@ -1140,7 +1145,7 @@ def plot_iov():
                 Metric.MSD,
                 Metric.HD95,
                 Metric.APL_PCT,
-                Metric.APL_VOXEL,
+                # Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
 
@@ -1150,10 +1155,10 @@ def plot_iov():
                     "Hanna_vs_Jesper",
                 ]:
                     json_path = os.path.join(
-                        obs_study_dir,
-                        "iov_{}_{}_{}.json".format(observer_pair, gtv, img_name),
+                        obs_study_dir, "iov_{}.json".format(observer_pair)
                     )
-                    data = g.load_json(json_path)["median"][metric]
+                    data = g.load_json(json_path)
+                    data = data[gtv][img_name]["median"][metric]
 
                     if observer_pair == "Jesper_vs_Kenneth":
                         iov_12 = data
@@ -1182,6 +1187,10 @@ def plot_iov():
                 axes[i].set_yticklabels(["Observer 1", "Observer 2", "Observer 3"])
 
                 i += 1
+
+            # turn off axis of the last figure
+            # axes[-1].axis("off")
+            fig.delaxes(axes[-1])
 
             fig_path = os.path.join(
                 obs_study_dir, "iov_{}_{}.pdf".format(gtv, img_name)
@@ -1293,7 +1302,9 @@ def plot_time_per_patient(obs_study_id_list: list):
     ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7", "Mean", "Median"])
 
     # Add a legend to describe the observers
-    ax.legend()
+    # ax.legend()
+    legend = ax.legend(loc="best")  # "upper right")
+    legend.get_frame().set_alpha(0.3)
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
@@ -1382,9 +1393,7 @@ def plot_time_per_step(obs_study_id_list: list):
                 )
 
         for idl_step in idl_step_list:
-            fig_data[idl_step]["value"] = g.calculate_median(
-                fig_data[idl_step]["value"]
-            )
+            fig_data[idl_step]["value"] = g.calculate_avg(fig_data[idl_step]["value"])
 
         # add start time
         fig_data["click.gtvt.center"]["start"] = 0
