@@ -1,4 +1,5 @@
 import copy
+import itertools
 import random
 
 from natsort import natsorted
@@ -61,3 +62,7 @@ class List(list):
 
     def remove_duplicates(self):
         self[:] = List(set(self))
+
+    def get_combinations(self, length: int = 2):
+        result = itertools.combinations(self, length)
+        return List(result)

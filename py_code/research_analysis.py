@@ -18,7 +18,7 @@ from segment_metric import (
     surface_dice,
     surface_distances,
 )
-from str_lib import Metric, ObsStudyStep, Plane, Stat
+from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
 
@@ -942,7 +942,20 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
     if obs_study_id["1"] == obs_study_id["2"]:
         g.error_exit("2 input obs_study_ids cannot be identical.")
 
-    if obs_study_id["1"].startswith("idl.gtvn_") and obs_study_id["2"].startswith(
+    if obs_study_id["1"].startswith("idl.gtvn_") and obs_study_id["2"] == "label":
+        obs_study_id["2"] = obs_study_id["2"].capitalize()
+        gtv = "gtvn"
+    elif obs_study_id["1"].startswith("idl.gtvt_") and obs_study_id["2"] == "label":
+        obs_study_id["2"] = obs_study_id["2"].capitalize()
+        gtv = "gtvt"
+    elif obs_study_id["1"] == "label" and obs_study_id["2"].startswith("idl.gtvn_"):
+        obs_study_id["1"] = obs_study_id["1"].capitalize()
+        gtv = "gtvn"
+    elif obs_study_id["1"] == "label" and obs_study_id["2"].startswith("idl.gtvt_"):
+        obs_study_id["1"] = obs_study_id["1"].capitalize()
+        gtv = "gtvt"
+
+    elif obs_study_id["1"].startswith("idl.gtvn_") and obs_study_id["2"].startswith(
         "idl.gtvn_"
     ):
         gtv = "gtvn"
@@ -950,32 +963,22 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
         "idl.gtvt_"
     ):
         gtv = "gtvt"
+
     else:
         g.error_exit("obs study train id error")
 
     observer = Dict()
     # get observer from obs study id
-    for name in ["Jesper", "Kenneth", "Hanna"]:
+    for name in ["Jesper", "Kenneth", "Hanna", "Label"]:
         for idx in ["1", "2"]:
             if name in obs_study_id[idx]:
                 observer[idx] = name
     if observer["1"] == observer["2"]:
         g.error_exit("2 observers cannot be identical.")
 
-    obs_study_dir = Dict()
-    for idx in ["1", "2"]:
-        obs_study_dir[idx] = os.path.join(
-            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id[idx]
-        )
-
     metrics_dict = Dict()
-    metrics_path = os.path.join(
-        g.TRAIN_RESULTS_DIR,
-        "baseline_obs.study",
-        "iov_{}_vs_{}.json".format(observer["1"], observer["2"]),
-    )
 
-    for img_name in ["idl", "correct"]:
+    for result_type in ["idl", "correct"]:
         for stat in [Stat.AVG, Stat.MEDIAN]:
             for metric in [
                 Metric.DSC,
@@ -985,60 +988,65 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                 Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
-                metrics_dict[img_name][stat][metric] = []
+                metrics_dict[result_type][stat][metric] = []
 
         patients = ["489", "496", "499", "509", "513", "536", "538"]
         for patient in tqdm(patients):
             patient = "patient={}".format(patient)
 
-            idl_img_dir = Dict()
             img_data = Dict()
             for idx in ["1", "2"]:
-                idl_img_dir[idx] = os.path.join(
-                    obs_study_dir[idx],
-                    "patients",
-                    patient,
-                    "round=01",
-                )
-
-                if os.path.exists(idl_img_dir[idx]):
-                    origin_pred = g.load_nii(
-                        os.path.join(idl_img_dir[idx], "{}_pred.nii.gz".format(gtv)),
+                if observer[idx] == "Label":
+                    img_data[idx] = g.load_nii(
+                        os.path.join(
+                            g.DATASET_DIR[DatasetVer.OBS_STUDY],
+                            "HNCDL_{}_GTV{}.nii".format(
+                                patient[len("patient=") :], gtv[-1]
+                            ),
+                        ),
                         binary=True,
                     )
-                    if img_name == "idl":
-                        img_data[idx] = origin_pred
-                    elif img_name == "correct":
-                        correction_mask = g.load_nii(
-                            os.path.join(
-                                idl_img_dir[idx],
-                                "{}_correction_mask.nii.gz".format(gtv),
-                            ),
-                            binary=True,
-                        )
-                        correction = g.load_nii(
-                            os.path.join(
-                                idl_img_dir[idx], "{}_correction.nii.gz".format(gtv)
-                            ),
-                            binary=True,
-                        )
-                        img_data[idx] = g.combine_pred_correction(
-                            origin_pred=origin_pred,
-                            correction=correction,
-                            correction_mask=correction_mask,
-                        )
                 else:
-                    img_data[idx] = None
+                    idl_img_dir = os.path.join(
+                        g.TRAIN_RESULTS_DIR,
+                        "baseline_obs.study",
+                        obs_study_id[idx],
+                        "patients",
+                        patient,
+                        "round=01",
+                    )
+                    if os.path.exists(idl_img_dir):
+                        origin_pred = g.load_nii(
+                            os.path.join(idl_img_dir, "{}_pred.nii.gz".format(gtv)),
+                            binary=True,
+                        )
+                        if result_type == "idl":
+                            img_data[idx] = origin_pred
+                        elif result_type == "correct":
+                            correction_mask = g.load_nii(
+                                os.path.join(
+                                    idl_img_dir,
+                                    "{}_correction_mask.nii.gz".format(gtv),
+                                ),
+                                binary=True,
+                            )
+                            correction = g.load_nii(
+                                os.path.join(
+                                    idl_img_dir, "{}_correction.nii.gz".format(gtv)
+                                ),
+                                binary=True,
+                            )
+                            img_data[idx] = g.combine_pred_correction(
+                                origin_pred=origin_pred,
+                                correction=correction,
+                                correction_mask=correction_mask,
+                            )
+                    else:
+                        img_data[idx] = None
 
-            if img_data["1"] is None and img_data["2"] is None:
-                dsc = 1.0
-                msd = 0.0
-                hd95 = 0.0
-                apl_pct = 0.0
-                apl_voxel = 0
-                sdsc = 1.0
-
-            elif img_data["1"] is not None and img_data["2"] is not None:
+            if img_data["1"] is not None and img_data["2"] is not None:
+                if img_data["1"].shape != img_data["2"].shape:
+                    g.error_exit("Img size of observer 1 and 2 are different!")
                 dsc = dice(
                     test=img_data["1"],
                     reference=img_data["2"],
@@ -1067,16 +1075,26 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                     reference=img_data["2"],
                     tolerance=1.0,
                 )
-
+            elif (
+                (img_data["1"] is None and img_data["2"] is None)
+                or (img_data["1"] is None and observer["2"] == "Label")
+                or (img_data["2"] is None and observer["1"] == "Label")
+            ):
+                dsc = 1.0
+                msd = 0.0
+                hd95 = 0.0
+                apl_pct = 0.0
+                apl_voxel = 0
+                sdsc = 1.0
             else:
                 g.error_exit("One of the observer has not patient data.")
 
-            metrics_dict[img_name][patient][Metric.DSC] = dsc
-            metrics_dict[img_name][patient][Metric.MSD] = msd
-            metrics_dict[img_name][patient][Metric.HD95] = hd95
-            metrics_dict[img_name][patient][Metric.APL_PCT] = apl_pct
-            metrics_dict[img_name][patient][Metric.APL_VOXEL] = apl_voxel
-            metrics_dict[img_name][patient][Metric.SDSC] = sdsc
+            metrics_dict[result_type][patient][Metric.DSC] = dsc
+            metrics_dict[result_type][patient][Metric.MSD] = msd
+            metrics_dict[result_type][patient][Metric.HD95] = hd95
+            metrics_dict[result_type][patient][Metric.APL_PCT] = apl_pct
+            metrics_dict[result_type][patient][Metric.APL_VOXEL] = apl_voxel
+            metrics_dict[result_type][patient][Metric.SDSC] = sdsc
 
             # record value for avg and median calculation
             for stat in [Stat.AVG, Stat.MEDIAN]:
@@ -1088,8 +1106,8 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                     Metric.APL_VOXEL,
                     Metric.SDSC,
                 ]:
-                    metrics_dict[img_name][stat][metric].append(
-                        metrics_dict[img_name][patient][metric]
+                    metrics_dict[result_type][stat][metric].append(
+                        metrics_dict[result_type][patient][metric]
                     )
 
         # calculate avg and median
@@ -1101,13 +1119,19 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            metrics_dict[img_name][Stat.MEDIAN][metric] = g.calculate_median(
-                metrics_dict[img_name][Stat.MEDIAN][metric]
+            metrics_dict[result_type][Stat.MEDIAN][metric] = g.calculate_median(
+                metrics_dict[result_type][Stat.MEDIAN][metric]
             )
-            metrics_dict[img_name][Stat.AVG][metric] = g.calculate_avg(
-                metrics_dict[img_name][Stat.AVG][metric]
+            metrics_dict[result_type][Stat.AVG][metric] = g.calculate_avg(
+                metrics_dict[result_type][Stat.AVG][metric]
             )
 
+    # save json
+    metrics_path = os.path.join(
+        g.TRAIN_RESULTS_DIR,
+        "baseline_obs.study",
+        "iov_{}_vs_{}.json".format(observer["1"], observer["2"]),
+    )
     if os.path.exists(metrics_path):
         final_dict = g.load_json(metrics_path)
     else:
@@ -1117,6 +1141,8 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
 
 
 def plot_iov():
+    observer_list = List(["Jesper", "Kenneth", "Hanna", "Label"])
+
     obs_study_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
     for gtv in ["gtvt", "gtvn"]:
         if gtv == "gtvt":
@@ -1124,14 +1150,14 @@ def plot_iov():
         elif gtv == "gtvn":
             title_gtv = "GTVn"
 
-        for img_name in tqdm(["idl", "correct"]):
-            if img_name == "idl":
+        for result_type in tqdm(["idl", "correct"]):
+            if result_type == "idl":
                 title_img_name = "Initial Segmentation"
-            elif img_name == "correct":
+            elif result_type == "correct":
                 title_img_name = "Final Correction"
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(18, 12))
+            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(19, 12))
             fig.suptitle(
                 "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
                 fontsize=20,
@@ -1148,28 +1174,23 @@ def plot_iov():
                 # Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
+                if metric in [Metric.MSD, Metric.HD95]:
+                    iov_matrix = np.zeros(shape=(4, 4))
+                else:
+                    iov_matrix = np.ones(shape=(4, 4))
 
-                for observer_pair in [
-                    "Jesper_vs_Kenneth",
-                    "Kenneth_vs_Hanna",
-                    "Hanna_vs_Jesper",
-                ]:
+                for observer_1, observer_2 in observer_list.get_combinations():
                     json_path = os.path.join(
-                        obs_study_dir, "iov_{}.json".format(observer_pair)
+                        obs_study_dir,
+                        "iov_{}_vs_{}.json".format(observer_1, observer_2),
                     )
                     data = g.load_json(json_path)
-                    data = data[gtv][img_name]["median"][metric]
+                    data = data[gtv][result_type]["median"][metric]
 
-                    if observer_pair == "Jesper_vs_Kenneth":
-                        iov_12 = data
-                    elif observer_pair == "Kenneth_vs_Hanna":
-                        iov_23 = data
-                    elif observer_pair == "Hanna_vs_Jesper":
-                        iov_31 = data
-
-                iov_matrix = np.array(
-                    [[0, iov_12, iov_31], [iov_12, 0, iov_23], [iov_31, iov_23, 0]]
-                )
+                    x = observer_list.index(observer_1)
+                    y = observer_list.index(observer_2)
+                    iov_matrix[x][y] = data
+                    iov_matrix[y][x] = data
 
                 # Creating the heatmap with a white-to-blue color gradient
                 sns.heatmap(
@@ -1183,8 +1204,12 @@ def plot_iov():
 
                 subtitle = explain_metric(metric)
                 axes[i].set_title(subtitle)
-                axes[i].set_xticklabels(["Observer 1", "Observer 2", "Observer 3"])
-                axes[i].set_yticklabels(["Observer 1", "Observer 2", "Observer 3"])
+                axes[i].set_xticklabels(
+                    ["Observer 1", "Observer 2", "Observer 3", "Label"]
+                )
+                axes[i].set_yticklabels(
+                    ["Observer 1", "Observer 2", "Observer 3", "Label"]
+                )
 
                 i += 1
 
@@ -1193,7 +1218,7 @@ def plot_iov():
             fig.delaxes(axes[-1])
 
             fig_path = os.path.join(
-                obs_study_dir, "iov_{}_{}.pdf".format(gtv, img_name)
+                obs_study_dir, "iov_{}_{}.pdf".format(gtv, result_type)
             )
             plt.savefig(fig_path)
 

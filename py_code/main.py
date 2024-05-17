@@ -1,4 +1,5 @@
 import global_core as g
+from custom_list import List
 from research_analysis import (
     calculate_3d_idl_vs_correct,
     calculate_gtvt_input_variation,
@@ -79,20 +80,25 @@ if 0:
 
 ############# IOV #############
 if 0:
-    gtvt_obs_study_id_list = [
-        "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-    ]
-    gtvn_obs_study_id_list = [
-        "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
-    ]
-    for obs_study_id_list in [gtvt_obs_study_id_list, gtvn_obs_study_id_list]:
-        calculate_iov(obs_study_id_list[0], obs_study_id_list[1])
-        calculate_iov(obs_study_id_list[1], obs_study_id_list[2])
-        calculate_iov(obs_study_id_list[2], obs_study_id_list[0])
+    gtvt_obs_study_id_list = List(
+        (
+            "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+            "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+            "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+            "label",
+        )
+    )
+    gtvn_obs_study_id_list = List(
+        (
+            "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
+            "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
+            "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
+            "label",
+        )
+    )
+    for obs_study_id_list in [gtvn_obs_study_id_list, gtvt_obs_study_id_list]:
+        for pair in obs_study_id_list.get_combinations(2):
+            calculate_iov(pair[0], pair[1])
 
 if 0:
     plot_iov()
