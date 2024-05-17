@@ -12,6 +12,7 @@ from research_analysis import (
     plot_iov,
     plot_time_per_patient,
     plot_time_per_step,
+    update_font_size,
 )
 
 # from str_lib import DatasetPart, DatasetVer

@@ -22,6 +22,19 @@ from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
 
+def update_font_size():
+    plt.rcParams.update(
+        {
+            "axes.titlesize": 18,  # Title font size
+            "axes.labelsize": 16,  # X and Y label font size
+            "xtick.labelsize": 14,  # X tick label font size
+            "ytick.labelsize": 14,  # Y tick label font size
+            "legend.fontsize": 16,  # Legend font size
+            "figure.titlesize": 20,  # Figure title font size
+        }
+    )
+
+
 def explain_metric(metric: str):
     if metric == Metric.DSC:
         return "DSC"
@@ -286,13 +299,13 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
     observers_list = ["Jesper", "Kenneth", "Hanna"]
 
     # Set up a 2x3 grid of subplots
-    fig, axes = plt.subplots(2, 3, figsize=(20, 10))
+    fig, axes = plt.subplots(3, 2, figsize=(20, 16))
     if gtv == "gtvt":
         title_gtv = "GTVt"
     elif gtv == "gtvn":
         title_gtv = "GTVn"
     fig.suptitle(
-        "{} Initial Segmentation vs Final Correction".format(title_gtv), fontsize=20
+        "{} Initial Segmentation vs Final Correction".format(title_gtv),
     )
     axes = axes.flatten()
 
@@ -301,10 +314,10 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         [
             Metric.DSC,
             Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            # Metric.APL_VOXEL,
             Metric.SDSC,
+            Metric.HD95,
+            # Metric.APL_VOXEL,
+            Metric.APL_PCT,
         ]
     ):
 
@@ -831,7 +844,7 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             str_2 = "Final Correction"
 
         fig.suptitle(
-            "Selected GTVt slices - {} vs {}".format(str_1, str_2), fontsize=20
+            "Selected GTVt slices - {} vs {}".format(str_1, str_2),
         )
         axes = axes.flatten()
 
@@ -1157,10 +1170,9 @@ def plot_iov():
                 title_img_name = "Final Correction"
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(19, 12))
+            fig, axes = plt.subplots(3, 2, figsize=(15, 23))
             fig.suptitle(
                 "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
-                fontsize=20,
             )
             # Flattening the axes array for easier iteration
             axes = axes.flatten()
@@ -1169,10 +1181,10 @@ def plot_iov():
             for metric in [
                 Metric.DSC,
                 Metric.MSD,
-                Metric.HD95,
-                Metric.APL_PCT,
-                # Metric.APL_VOXEL,
                 Metric.SDSC,
+                Metric.HD95,
+                # Metric.APL_VOXEL,
+                Metric.APL_PCT,
             ]:
                 if metric in [Metric.MSD, Metric.HD95]:
                     iov_matrix = np.zeros(shape=(4, 4))
@@ -1205,10 +1217,12 @@ def plot_iov():
                 subtitle = explain_metric(metric)
                 axes[i].set_title(subtitle)
                 axes[i].set_xticklabels(
-                    ["Observer 1", "Observer 2", "Observer 3", "Label"]
+                    ["Observer 1", "Observer 2", "Observer 3", "Label"],
+                    rotation=30,
                 )
                 axes[i].set_yticklabels(
-                    ["Observer 1", "Observer 2", "Observer 3", "Label"]
+                    ["Observer 1", "Observer 2", "Observer 3", "Label"],
+                    rotation=30,
                 )
 
                 i += 1
@@ -1265,20 +1279,20 @@ def plot_time_per_patient(obs_study_id_list: list):
             patient_time = time_dict["patient={}".format(patient)]
 
             for i in [
-                "click.gtvt.center",
-                "draw.gtvt",
-                "waiting.gtvt",
-                "correct.gtvt",
+                ObsStudyStep.CLICK_GTVT_CENTER,
+                ObsStudyStep.DRAW_GTVT,
+                ObsStudyStep.WAITING_GTVT,
+                ObsStudyStep.CORRECT_GTVT,
             ]:
                 cur_gtvt_sec = time_str_to_seconds(patient_time[i])
                 total_gtvt_sec += cur_gtvt_sec
 
             for i in [
-                "click.gtvt.center",
-                "draw.gtvt",
-                "click.gtvn.center",
-                "waiting.gtvn",
-                "correct.gtvn",
+                ObsStudyStep.CLICK_GTVT_CENTER,
+                ObsStudyStep.DRAW_GTVT,
+                ObsStudyStep.CLICK_GTVN_CENTER,
+                ObsStudyStep.WAITING_GTVN,
+                ObsStudyStep.CORRECT_GTVN,
             ]:
                 cur_gtvn_sec = time_str_to_seconds(patient_time[i])
                 total_gtvn_sec += cur_gtvn_sec
@@ -1298,7 +1312,7 @@ def plot_time_per_patient(obs_study_id_list: list):
             fig_data[observer][i] = seconds_to_minutes_decimal(fig_data[observer][i])
 
     # Set up a 2x3 grid of subplots
-    _, ax = plt.subplots(figsize=(8, 5))
+    _, ax = plt.subplots(figsize=(12, 8))
 
     # Define bar width for clarity in grouped bars
     bar_width = 0.25
@@ -1341,38 +1355,40 @@ def plot_time_per_patient(obs_study_id_list: list):
     plt.savefig(fig_path, format="pdf")
 
 
-def explain_idl_step(idl_step: str):
-    if idl_step == "click.gtvn.center":
+def __explain_idl_step(idl_step: str):
+    if idl_step == ObsStudyStep.CLICK_GTVN_CENTER:
         return "Click GTVn Centers"
-    elif idl_step == "click.gtvt.center":
+    elif idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
         return "Click GTVt Center"
-    elif idl_step == "correct.gtvn":
-        return "Correct GTVn"
-    elif idl_step == "correct.gtvt":
-        return "Correct GTVt"
-    elif idl_step == "draw.gtvt":
-        return "Delineate GTVt Slices"
-    elif idl_step == "waiting.gtvn":
-        return "Generating GTVn Segmentation"
-    elif idl_step == "waiting.gtvt":
-        return "Generating GTVt Segmentation"
+    elif idl_step == ObsStudyStep.CORRECT_GTVN:
+        return "Correction"
+    elif idl_step == ObsStudyStep.DRAW_GTVT:
+        return "Delineate GTVt"
+    elif idl_step == ObsStudyStep.WAITING_GTVN:
+        return "AI Generate GTVn"
+    elif idl_step == ObsStudyStep.WAITING_GTVT:
+        return "AI Generate GTVt"
+    else:
+        return None
 
 
 def plot_time_per_step(obs_study_id_list: list):
     observers_list = ["Jesper", "Kenneth", "Hanna"]
     idl_step_list = [
-        "click.gtvt.center",
-        "draw.gtvt",
-        "waiting.gtvt",
-        "correct.gtvt",
-        "click.gtvn.center",
-        "waiting.gtvn",
-        "correct.gtvn",
+        ObsStudyStep.CLICK_GTVT_CENTER,
+        ObsStudyStep.DRAW_GTVT,
+        ObsStudyStep.WAITING_GTVT,
+        ObsStudyStep.CORRECT_GTVT,
+        ObsStudyStep.CLICK_GTVN_CENTER,
+        ObsStudyStep.WAITING_GTVN,
+        ObsStudyStep.CORRECT_GTVN,
     ]
 
     # Set up a 2x3 grid of subplots
-    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
-    fig.suptitle("Mean Time Consumption per iDL Step", fontsize=20)
+    fig, axes = plt.subplots(2, 2, figsize=(20, 16))
+    fig.suptitle(
+        "Mean Time Consumption per iDL Step",
+    )
     axes = axes.flatten()
 
     sub_fig_idx = 0
@@ -1402,45 +1418,47 @@ def plot_time_per_step(obs_study_id_list: list):
             # sometimes gtvn corerction time is much lower than gtvt
             # this is caused by user's regret
             gtvt_time = (
-                fig_data["waiting.gtvt"]["value"][-1]
-                + fig_data["correct.gtvt"]["value"][-1]
+                fig_data[ObsStudyStep.WAITING_GTVT]["value"][-1]
+                + fig_data[ObsStudyStep.CORRECT_GTVT]["value"][-1]
             )
             gtvn_time = (
-                fig_data["click.gtvn.center"]["value"][-1]
-                + fig_data["waiting.gtvn"]["value"][-1]
-                + fig_data["correct.gtvn"]["value"][-1]
+                fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"][-1]
+                + fig_data[ObsStudyStep.WAITING_GTVN]["value"][-1]
+                + fig_data[ObsStudyStep.CORRECT_GTVN]["value"][-1]
             )
             if gtvt_time != gtvn_time:
-                fig_data["correct.gtvn"]["value"][-1] = (
+                fig_data[ObsStudyStep.CORRECT_GTVN]["value"][-1] = (
                     gtvt_time
-                    - fig_data["click.gtvn.center"]["value"][-1]
-                    - fig_data["waiting.gtvn"]["value"][-1]
+                    - fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"][-1]
+                    - fig_data[ObsStudyStep.WAITING_GTVN]["value"][-1]
                 )
 
         for idl_step in idl_step_list:
             fig_data[idl_step]["value"] = g.calculate_avg(fig_data[idl_step]["value"])
 
         # add start time
-        fig_data["click.gtvt.center"]["start"] = 0
-        fig_data["draw.gtvt"]["start"] = fig_data["click.gtvt.center"]["value"]
-        fig_data["waiting.gtvt"]["start"] = fig_data["click.gtvn.center"]["start"] = (
-            fig_data["draw.gtvt"]["start"] + fig_data["draw.gtvt"]["value"]
+        fig_data[ObsStudyStep.CLICK_GTVT_CENTER]["start"] = 0
+        fig_data[ObsStudyStep.DRAW_GTVT]["start"] = fig_data[
+            ObsStudyStep.CLICK_GTVT_CENTER
+        ]["value"]
+        fig_data[ObsStudyStep.WAITING_GTVT]["start"] = fig_data[
+            ObsStudyStep.CLICK_GTVN_CENTER
+        ]["start"] = (
+            fig_data[ObsStudyStep.DRAW_GTVT]["start"]
+            + fig_data[ObsStudyStep.DRAW_GTVT]["value"]
         )
-        fig_data["waiting.gtvn"]["start"] = (
-            fig_data["click.gtvn.center"]["start"]
-            + fig_data["click.gtvn.center"]["value"]
+        fig_data[ObsStudyStep.WAITING_GTVN]["start"] = (
+            fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["start"]
+            + fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"]
         )
-        fig_data["correct.gtvt"]["start"] = (
-            fig_data["waiting.gtvt"]["start"] + fig_data["waiting.gtvt"]["value"]
+        fig_data[ObsStudyStep.CORRECT_GTVT]["start"] = (
+            fig_data[ObsStudyStep.WAITING_GTVT]["start"]
+            + fig_data[ObsStudyStep.WAITING_GTVT]["value"]
         )
-        fig_data["correct.gtvn"]["start"] = (
-            fig_data["waiting.gtvn"]["start"] + fig_data["waiting.gtvn"]["value"]
+        fig_data[ObsStudyStep.CORRECT_GTVN]["start"] = (
+            fig_data[ObsStudyStep.WAITING_GTVN]["start"]
+            + fig_data[ObsStudyStep.WAITING_GTVN]["value"]
         )
-        # time_range = (
-        #     fig_data["correct.gtvt"]["start"] + fig_data["correct.gtvt"]["value"]
-        # )
-        # time_range *= 1.1
-        # time_range = np.arange(time_range)
 
         # seconds to minutes
         for idl_step in idl_step_list:
@@ -1456,19 +1474,10 @@ def plot_time_per_step(obs_study_id_list: list):
         total_height = len(idl_step) * (bar_height + step_space)
         y_positions = [
             total_height - (i * (bar_height + step_space))
-            for i in range(len(idl_step_list))
+            for i in range(
+                len(idl_step_list) - 1
+            )  # len-1 because correct.gtvt/gtvn are combined
         ]
-
-        # Creating a DataFrame for easier plotting
-        # df_dict = Dict()
-        # for idl_step in idl_step_list:
-        #     lower = fig_data[idl_step]["start"]
-        #     upper = fig_data[idl_step]["start"] + fig_data[idl_step]["value"]
-        #     df_dict[explain_idl_step(idl_step)] = np.where(
-        #         (time_range >= lower) & (time_range <= upper), 1, 0
-        #     )
-        # df_area = pd.DataFrame(df_dict, index=time_range)
-        # df_area.plot.area(ax=ax, alpha=0.4)
 
         # set title
         for observer in observers_list:
@@ -1479,7 +1488,13 @@ def plot_time_per_step(obs_study_id_list: list):
         )
         ax.set_xlabel("Time (Minutes)")
         ax.set_yticks([y + bar_height / 2 for y in y_positions])
-        ax.set_yticklabels([explain_idl_step(idl_step) for idl_step in idl_step_list])
+        y_labels = []
+        for idl_step in idl_step_list:
+            if idl_step == ObsStudyStep.CORRECT_GTVT:
+                continue
+            else:
+                y_labels.append(__explain_idl_step(idl_step))
+        ax.set_yticklabels(y_labels, rotation=30)
         ax.grid(True)
 
         # Adding bars for each step
@@ -1489,22 +1504,29 @@ def plot_time_per_step(obs_study_id_list: list):
             "tab:green",
             "tab:red",
             "tab:purple",
-            "tab:brown",
-            "tab:pink",
+            "tab:cyan",
         ]
 
+        idx = 0
         for idl_step in idl_step_list:
-            idx = idl_step_list.index(idl_step)
-            lower = fig_data[idl_step]["start"]
-            value = fig_data[idl_step]["value"]
-            ax.broken_barh(
-                [(lower, value)],
-                (y_positions[idx], bar_height),
-                facecolors=colors[idx],
-            )
+            if idl_step == ObsStudyStep.CORRECT_GTVT:
+                continue
+            else:
+                lower = fig_data[idl_step]["start"]
+                value = fig_data[idl_step]["value"]
+                ax.broken_barh(
+                    [(lower, value)],
+                    (y_positions[idx], bar_height),
+                    facecolors=colors[idx],
+                )
+                idx += 1
 
         # next sub plot
         sub_fig_idx += 1
+
+    # turn off axis of the last figure
+    # axes[-1].axis("off")
+    fig.delaxes(axes[-1])
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
@@ -1513,3 +1535,6 @@ def plot_time_per_step(obs_study_id_list: list):
         g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_step.pdf"
     )
     plt.savefig(fig_path, format="pdf")
+
+
+update_font_size()
