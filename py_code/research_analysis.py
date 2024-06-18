@@ -21,16 +21,27 @@ from segment_metric import (
 from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
+COLOR_LIST = [
+    "#40E0D0",  # Turquoise
+    "#808080",  # Gray
+    "#0073E6",  # Blue
+    "#8172B2",
+    "#CCB974",
+]
+
+FONT_SIZE = 18
+TITLE_SIZE = 25
+
 
 def update_font_size():
     plt.rcParams.update(
         {
-            "axes.titlesize": 18,  # Title font size
-            "axes.labelsize": 16,  # X and Y label font size
-            "xtick.labelsize": 14,  # X tick label font size
-            "ytick.labelsize": 14,  # Y tick label font size
-            "legend.fontsize": 16,  # Legend font size
-            "figure.titlesize": 20,  # Figure title font size
+            "axes.titlesize": FONT_SIZE,  # Title font size
+            "axes.labelsize": FONT_SIZE,  # X and Y label font size
+            "xtick.labelsize": FONT_SIZE,  # X tick label font size
+            "ytick.labelsize": FONT_SIZE,  # Y tick label font size
+            "legend.fontsize": FONT_SIZE,  # Legend font size
+            "figure.titlesize": TITLE_SIZE,  # Figure title font size
         }
     )
 
@@ -140,9 +151,10 @@ def calculate_3d_idl_vs_correct(obs_study_id: str):
                 voxel_spacing=g.NII_SPACING,
             )
         else:
-            dsc = 1.0
-            msd = 0.0
-            hd95 = 0.0
+            continue
+            # dsc = 1.0
+            # msd = 0.0
+            # hd95 = 0.0
 
         metrics_dict[patient][Metric.DSC] = dsc
         metrics_dict[patient][Metric.MSD] = msd
@@ -295,35 +307,30 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         "3d_idl_vs_correct_{}.pdf".format(gtv),
     )
 
-    patients_list = ["489", "496", "499", "509", "513", "536", "538"]
     observers_list = ["Jesper", "Kenneth", "Hanna"]
+    patients_list = ["489", "496", "499", "509", "513", "536", "538"]
+    if gtv == "gtvn":
+        patients_list.remove("536")
 
     # Set up a 2x3 grid of subplots
     fig, axes = plt.subplots(3, 2, figsize=(20, 16))
-    if gtv == "gtvt":
-        title_gtv = "GTVt"
-    elif gtv == "gtvn":
-        title_gtv = "GTVn"
-    fig.suptitle(
-        "{} Initial Segmentation vs Final Correction".format(title_gtv),
-    )
+
     axes = axes.flatten()
 
     i = 0
     for metric in tqdm(
         [
+            Metric.APL_PCT,
+            Metric.SDSC,
             Metric.DSC,
             Metric.MSD,
-            Metric.SDSC,
             Metric.HD95,
-            # Metric.APL_VOXEL,
-            Metric.APL_PCT,
         ]
     ):
 
         fig_data = Dict()
         for observer in observers_list:
-            fig_data[observer] = []
+            fig_data[observer] = List()
 
         # loop through observer study train id
         for obs_study_id in obs_study_id_list:
@@ -342,6 +349,7 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
                 if observer in obs_study_id:
                     break
 
+            # add patients' metrics
             for patient in patients_list:
                 fig_data[observer].append(
                     metrics_dict["patient={}".format(patient)][metric]
@@ -358,15 +366,24 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         # Plot bars for each observer
         for observer in observers_list:
             idx = fig_data.key_index(observer)
+            color = COLOR_LIST[idx % len(COLOR_LIST)]
             ax.bar(
                 x=indices + idx * bar_width,  # list
                 height=fig_data[observer],  # list
                 width=bar_width,
                 label="Observer {}".format(observers_list.index(observer) + 1),
+                color=color,
+            )
+
+            # draw average line
+            ax.axhline(
+                g.calculate_avg(fig_data[observer]),
+                color=color,
+                linestyle="--",
+                linewidth=2,
             )
 
         # Configure title and labels
-        # ax.set_title("Initial Segmentation vs Final Correction")
         ax.set_title(explain_metric(metric))
         # ax.set_ylabel(
         #     ylabel=explain_metric(metric),
@@ -389,11 +406,24 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
 
         # Set x-axis ticks to be centered under each group of bars
         ax.set_xticks(indices + bar_width)
-        ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
+        if gtv == "gtvn":
+            ax.set_xticklabels(["1", "2", "3", "4", "5", "7"])
+        elif gtv == "gtvt":
+            ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
 
-        # Add a legend to describe the observers
-        legend = ax.legend(loc="best")  # "upper right")
-        legend.get_frame().set_alpha(0.3)
+        # # Add a legend to describe the observers
+        # if metric == Metric.APL_PCT:
+        #     legend = ax.legend(loc="upper left")
+        # elif metric == Metric.SDSC:
+        #     legend = ax.legend(loc="lower left")
+        # elif metric == Metric.DSC:
+        #     legend = ax.legend(loc="lower left")
+        # elif metric == Metric.MSD:
+        #     legend = ax.legend(loc="upper left")
+        # elif metric == Metric.HD95:
+        #     legend = ax.legend(loc="upper left")
+
+        # legend.get_frame().set_alpha(1.0)
 
         # next sub plot
         i += 1
@@ -402,8 +432,31 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
     # axes[-1].axis("off")
     fig.delaxes(axes[-1])
 
-    # Adjust layout to prevent overlap and save the entire figure as a PDF
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower right",
+        fontsize=FONT_SIZE,
+        bbox_to_anchor=(0.98, 0.03),
+    )
+
+    # title
+    if gtv == "gtvt":
+        title_gtv = "GTVt"
+    elif gtv == "gtvn":
+        title_gtv = "GTVn"
+    fig.suptitle(
+        """"Initial" vs "Corrected" Segmentation - {}""".format(title_gtv),
+        # y=0.95,  # Adjust y for vertical positioning
+    )
+    # # Adjust top to create more space
+    # plt.subplots_adjust(top=0.85)
+
+    # # Adjust layout to prevent overlap and save the entire figure as a PDF
+    # plt.tight_layout(rect=[0, 0, 0.00, 0.95])  # Adjust rect to fit the suptitle
     plt.tight_layout()
+
     # Save the plot as a PDF file in the specified directory
     plt.savefig(fig_path, format="pdf")
 
@@ -814,9 +867,9 @@ def calculate_gtvt_input_variation(obs_study_id: str):
 
 def plot_gtvt_slices_metrics(obs_study_id_list: list):
     target_pairs = [
-        ("idl", "correct"),
+        # ("idl", "correct"),
         ("delineation", "idl"),
-        ("delineation", "correct"),
+        # ("delineation", "correct"),
     ]
 
     for target_1, target_2 in target_pairs:
@@ -832,16 +885,16 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
         if target_1 == "delineation":
             str_1 = "User Input"
         elif target_1 == "idl":
-            str_1 = "Initial Segmentation"
+            str_1 = """"Initial" Segmentation"""
         elif target_1 == "correct":
-            str_1 = "Final Correction"
+            str_1 = """"Corrected" Correction"""
 
         if target_2 == "delineation":
             str_2 = "User Input"
         elif target_2 == "idl":
-            str_2 = "Initial Segmentation"
+            str_2 = """"Initial" Segmentation"""
         elif target_2 == "correct":
-            str_2 = "Final Correction"
+            str_2 = """"Corrected" Correction"""
 
         fig.suptitle(
             "Selected GTVt slices - {} vs {}".format(str_1, str_2),
@@ -1155,6 +1208,11 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
 
 def plot_iov():
     observer_list = List(["Jesper", "Kenneth", "Hanna", "Label"])
+    label_symbol = ["1", "2", "3", "Label"]
+    label_text = ["Observer 1", "Observer 2", "Observer 3", "Clinical Label"]
+    legend_text = "\n".join(
+        [f"{label_symbol[i]} = {label_text[i]}" for i in range(len(label_text))]
+    )
 
     obs_study_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
     for gtv in ["gtvt", "gtvn"]:
@@ -1163,33 +1221,35 @@ def plot_iov():
         elif gtv == "gtvn":
             title_gtv = "GTVn"
 
-        for result_type in tqdm(["idl", "correct"]):
+        for result_type in [
+            # "idl",
+            "correct",
+        ]:
             if result_type == "idl":
-                title_img_name = "Initial Segmentation"
+                title_img_name = """"Initial" Segmentations"""
             elif result_type == "correct":
-                title_img_name = "Final Correction"
+                title_img_name = """"Corrected" Segmentations"""
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(3, 2, figsize=(15, 23))
+            fig, axes = plt.subplots(2, 3, figsize=(20, 13))
             fig.suptitle(
-                "Inter Observer Variation - {} {}".format(title_gtv, title_img_name),
+                "IOV between {} - {}".format(title_img_name, title_gtv),
             )
             # Flattening the axes array for easier iteration
             axes = axes.flatten()
 
             i = 0
             for metric in [
+                Metric.APL_PCT,
+                Metric.SDSC,
                 Metric.DSC,
                 Metric.MSD,
-                Metric.SDSC,
                 Metric.HD95,
-                # Metric.APL_VOXEL,
-                Metric.APL_PCT,
             ]:
-                if metric in [Metric.MSD, Metric.HD95]:
-                    iov_matrix = np.zeros(shape=(4, 4))
-                else:
+                if metric in [Metric.SDSC, Metric.DSC]:
                     iov_matrix = np.ones(shape=(4, 4))
+                else:
+                    iov_matrix = np.zeros(shape=(4, 4))
 
                 for observer_1, observer_2 in observer_list.get_combinations():
                     json_path = os.path.join(
@@ -1201,28 +1261,43 @@ def plot_iov():
 
                     x = observer_list.index(observer_1)
                     y = observer_list.index(observer_2)
-                    iov_matrix[x][y] = data
+                    iov_matrix[x][y] = None
                     iov_matrix[y][x] = data
 
                 # Creating the heatmap with a white-to-blue color gradient
+                if metric in [Metric.SDSC, Metric.DSC, Metric.APL_PCT]:
+                    vmax = 1.0
+                    vmin = 0.0
+                # elif metric ==:
+                #     vmax=0.0
+                #     vmin=0.0
+                else:
+                    vmax = vmin = None
+
                 sns.heatmap(
                     iov_matrix,
                     ax=axes[i],
                     annot=True,
                     cmap="Blues",
                     square=True,
-                    cbar=False,
+                    cbar=True,
+                    vmin=vmin,
+                    vmax=vmax,
+                    annot_kws={"size": FONT_SIZE},
                 )
 
                 subtitle = explain_metric(metric)
                 axes[i].set_title(subtitle)
                 axes[i].set_xticklabels(
-                    ["Observer 1", "Observer 2", "Observer 3", "Label"],
-                    rotation=30,
+                    label_symbol,
+                    # rotation=30,
+                    fontsize=FONT_SIZE,
                 )
                 axes[i].set_yticklabels(
-                    ["Observer 1", "Observer 2", "Observer 3", "Label"],
-                    rotation=30,
+                    label_symbol,
+                    # ["Observer\n1", "Observer\n2", "Observer\n3", "Label"],
+                    # rotation=0,
+                    fontsize=FONT_SIZE,
                 )
 
                 i += 1
@@ -1230,6 +1305,24 @@ def plot_iov():
             # turn off axis of the last figure
             # axes[-1].axis("off")
             fig.delaxes(axes[-1])
+
+            # add legend
+            plt.figtext(
+                0.96,
+                0.05,
+                legend_text,
+                ha="right",
+                va="bottom",
+                fontsize=FONT_SIZE,
+                bbox={
+                    "facecolor": "white",
+                    "alpha": 1.0,
+                    "pad": 5,
+                    "edgecolor": "gray",
+                },
+            )
+
+            plt.tight_layout()
 
             fig_path = os.path.join(
                 obs_study_dir, "iov_{}_{}.pdf".format(gtv, result_type)
@@ -1328,10 +1421,10 @@ def plot_time_per_patient(obs_study_id_list: list):
             height=fig_data[observer],  # list
             width=bar_width,
             label="Observer {}".format(observers_list.index(observer) + 1),
+            color=COLOR_LIST[idx % len(COLOR_LIST)],
         )
 
     # Configure title and labels
-    # ax.set_title("Initial Segmentation vs Final Correction")
     ax.set_xlabel("Patients")
     ax.set_ylabel("Time Used (Minutes)")
     ax.set_title("Time Used by Observers for Each Patient")
