@@ -10,14 +10,9 @@ import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
 from custom_list import List
-from segment_metric import (
-    avg_surface_distance_symmetric,
-    dice,
-    hausdorff_distance,
-    hausdorff_distance_95,
-    surface_dice,
-    surface_distances,
-)
+from segment_metric import (avg_surface_distance_symmetric, dice,
+                            hausdorff_distance, hausdorff_distance_95,
+                            surface_dice, surface_distances)
 from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -25,9 +20,15 @@ COLOR_LIST = [
     "#40E0D0",  # Turquoise
     "#808080",  # Gray
     "#0073E6",  # Blue
-    "#8172B2",
-    "#CCB974",
+    # "#32CD32",  # Lime Green
+    "#2AAE2A",  # Sea Green
+    # "#228B22",  # Deeper Lime Green
+    # "#FF5733",  # Bright Orange
+    # "#FFD700",  # Gold
+    "#595959",  # Dim Gray
+    "#00BFFF",  # Deep Sky Blue
 ]
+
 
 FONT_SIZE = 18
 TITLE_SIZE = 25
@@ -313,7 +314,7 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         patients_list.remove("536")
 
     # Set up a 2x3 grid of subplots
-    fig, axes = plt.subplots(3, 2, figsize=(20, 16))
+    fig, axes = plt.subplots(3, 2, figsize=(20, 17))
 
     axes = axes.flatten()
 
@@ -437,7 +438,6 @@ def plot_3d_idl_vs_correct(obs_study_id_list: list):
         handles,
         labels,
         loc="lower right",
-        fontsize=FONT_SIZE,
         bbox_to_anchor=(0.98, 0.03),
     )
 
@@ -887,17 +887,17 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
         elif target_1 == "idl":
             str_1 = """"Initial" Segmentation"""
         elif target_1 == "correct":
-            str_1 = """"Corrected" Correction"""
+            str_1 = """"Corrected" Segmentation"""
 
         if target_2 == "delineation":
             str_2 = "User Input"
         elif target_2 == "idl":
             str_2 = """"Initial" Segmentation"""
         elif target_2 == "correct":
-            str_2 = """"Corrected" Correction"""
+            str_2 = """"Corrected" Segmentation"""
 
         fig.suptitle(
-            "Selected GTVt slices - {} vs {}".format(str_1, str_2),
+            "{} vs {} (on selected GTVt slices)".format(str_1, str_2),
         )
         axes = axes.flatten()
 
@@ -917,10 +917,13 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
 
                 if "Jesper" in obs_study_id:
                     observer = "Observer 1"
+                    color = COLOR_LIST[0]
                 elif "Kenneth" in obs_study_id:
                     observer = "Observer 2"
+                    color = COLOR_LIST[1]
                 elif "Hanna" in obs_study_id:
                     observer = "Observer 3"
+                    color = COLOR_LIST[2]
 
                 obs_study_dir = os.path.join(
                     g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
@@ -970,11 +973,16 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
                     x=x_list,
                     y=y_list,
                     label=observer,
+                    color=color,
                 )
                 # Plot the regression line
-                ax.plot(x_list, m * x_list + b)
+                ax.plot(
+                    x_list,
+                    m * x_list + b,
+                    color=color,
+                )
 
-            ax.set_title("Anatomical " + explain_metric(metric))
+            ax.set_title(explain_metric(metric))
 
             # ax.set_ylabel(
             #     ylabel=metric.upper(),
@@ -984,11 +992,11 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             #     labelpad=-9,
             # )
             ax.set_xlabel(
-                xlabel="Anatomical Plane Variation (HD 100) of GTVt User Input",
+                xlabel="GTVt Input Inconsistency",
             )
 
             # Add a legend to describe the observers
-            ax.legend()
+            ax.legend(loc="upper left")
 
             # # Ensuring the plot is square
             # ax.set_aspect("equal")
@@ -996,6 +1004,8 @@ def plot_gtvt_slices_metrics(obs_study_id_list: list):
             # next sub fig
             i += 1
 
+        # # Adjust layout to prevent overlap and save the entire figure as a PDF
+        plt.tight_layout()
         # Save the plot as a PDF file in the specified directory
         plt.savefig(fig_path, format="pdf")
 
@@ -1290,14 +1300,10 @@ def plot_iov():
                 axes[i].set_title(subtitle)
                 axes[i].set_xticklabels(
                     label_symbol,
-                    # rotation=30,
-                    fontsize=FONT_SIZE,
                 )
                 axes[i].set_yticklabels(
                     label_symbol,
-                    # ["Observer\n1", "Observer\n2", "Observer\n3", "Label"],
                     # rotation=0,
-                    fontsize=FONT_SIZE,
                 )
 
                 i += 1
@@ -1393,13 +1399,13 @@ def plot_time_per_patient(obs_study_id_list: list):
             # print(total_gtvt_sec, total_gtvn_sec)
             fig_data[observer].append(max(total_gtvt_sec, total_gtvn_sec))
 
-        # calculate avg and mean
-        avg = g.calculate_avg(fig_data[observer])
-        avg = round(avg)
-        median = g.calculate_median(fig_data[observer])
-        median = round(median)
-        fig_data[observer].append(avg)
-        fig_data[observer].append(median)
+        # # calculate avg and mean
+        # avg = g.calculate_avg(fig_data[observer])
+        # avg = round(avg)
+        # median = g.calculate_median(fig_data[observer])
+        # median = round(median)
+        # fig_data[observer].append(avg)
+        # fig_data[observer].append(median)
 
         for i in range(len(fig_data[observer])):
             fig_data[observer][i] = seconds_to_minutes_decimal(fig_data[observer][i])
@@ -1411,27 +1417,36 @@ def plot_time_per_patient(obs_study_id_list: list):
     bar_width = 0.25
 
     # Calculate indices for x-axis where groups of bars will be located
-    indices = np.arange(len(patients_list) + 2)
+    indices = np.arange(len(patients_list))
 
     # Plot bars for each observer
     for observer in observers_list:
         idx = fig_data.key_index(observer)
+        color = COLOR_LIST[idx % len(COLOR_LIST)]
         ax.bar(
             x=indices + idx * bar_width,  # list
             height=fig_data[observer],  # list
             width=bar_width,
             label="Observer {}".format(observers_list.index(observer) + 1),
-            color=COLOR_LIST[idx % len(COLOR_LIST)],
+            color=color,
+        )
+
+        # draw average line
+        ax.axhline(
+            g.calculate_avg(fig_data[observer]),
+            color=color,
+            linestyle="--",
+            linewidth=2,
         )
 
     # Configure title and labels
     ax.set_xlabel("Patients")
-    ax.set_ylabel("Time Used (Minutes)")
-    ax.set_title("Time Used by Observers for Each Patient")
+    ax.set_ylabel("Minutes")
+    ax.set_title("Time Used for Each Patient")
 
     # Set x-axis ticks to be centered under each group of bars
     ax.set_xticks(indices + bar_width)
-    ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7", "Mean", "Median"])
+    ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
 
     # Add a legend to describe the observers
     # ax.legend()
@@ -1478,9 +1493,9 @@ def plot_time_per_step(obs_study_id_list: list):
     ]
 
     # Set up a 2x3 grid of subplots
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16))
+    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
     fig.suptitle(
-        "Mean Time Consumption per iDL Step",
+        "Mean Time Usage per iDL Step",
     )
     axes = axes.flatten()
 
@@ -1579,7 +1594,7 @@ def plot_time_per_step(obs_study_id_list: list):
         ax.set_title(
             "Observer {}".format(observers_list.index(observer) + 1),
         )
-        ax.set_xlabel("Time (Minutes)")
+        ax.set_xlabel("Minutes")
         ax.set_yticks([y + bar_height / 2 for y in y_positions])
         y_labels = []
         for idl_step in idl_step_list:
@@ -1589,16 +1604,6 @@ def plot_time_per_step(obs_study_id_list: list):
                 y_labels.append(__explain_idl_step(idl_step))
         ax.set_yticklabels(y_labels, rotation=30)
         ax.grid(True)
-
-        # Adding bars for each step
-        colors = [
-            "tab:blue",
-            "tab:orange",
-            "tab:green",
-            "tab:red",
-            "tab:purple",
-            "tab:cyan",
-        ]
 
         idx = 0
         for idl_step in idl_step_list:
@@ -1610,7 +1615,7 @@ def plot_time_per_step(obs_study_id_list: list):
                 ax.broken_barh(
                     [(lower, value)],
                     (y_positions[idx], bar_height),
-                    facecolors=colors[idx],
+                    facecolors=COLOR_LIST[idx],
                 )
                 idx += 1
 

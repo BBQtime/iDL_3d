@@ -45,7 +45,7 @@ if 0:
     for obs_study_id in obs_study_id_list:
         calculate_3d_idl_vs_correct(obs_study_id)
 
-if 1:
+if 0:
     gtvn_obs_study_id_list = [
         "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
         "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
