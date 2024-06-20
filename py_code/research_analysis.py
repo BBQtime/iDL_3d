@@ -10,9 +10,14 @@ import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
 from custom_list import List
-from segment_metric import (avg_surface_distance_symmetric, dice,
-                            hausdorff_distance, hausdorff_distance_95,
-                            surface_dice, surface_distances)
+from segment_metric import (
+    avg_surface_distance_symmetric,
+    dice,
+    hausdorff_distance,
+    hausdorff_distance_95,
+    surface_dice,
+    surface_distances,
+)
 from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
@@ -44,6 +49,116 @@ def update_font_size():
             "legend.fontsize": FONT_SIZE,  # Legend font size
             "figure.titlesize": TITLE_SIZE,  # Figure title font size
         }
+    )
+
+
+def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
+    simulation_base_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_simulation")
+    idl_gtvt_dir = os.path.join(simulation_base_dir, idl_gtvt_id)
+    idl_gtvn_dir = os.path.join(simulation_base_dir, idl_gtvn_id)
+
+    metric_dict = Dict()
+    for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+        metric_dict[Stat.AVG][metric_type] = []
+        metric_dict[Stat.MEDIAN][metric_type] = []
+
+    patient_list = List(g.load_json(g.DATASET_SPLIT_JSON_PATH[DatasetVer.AU])["test"])
+    for patient in patient_list:
+        print(patient)
+
+        # load idl pred
+        gtvt_pred = g.binarize_img(
+            g.load_nii(
+                os.path.join(
+                    idl_gtvt_dir,
+                    "patients",
+                    "patient={}".format(patient),
+                    "round=01",
+                    "gtvt_pred.nii.gz",
+                )
+            )
+        )
+        print(
+            "gtvt_pred",
+            gtvt_pred.min(),
+            gtvt_pred.max(),
+            gtvt_pred.sum(),
+            gtvt_pred.shape,
+        )
+
+        gtvn_pred = g.binarize_img(
+            g.load_nii(
+                os.path.join(
+                    idl_gtvn_dir,
+                    "patients",
+                    "patient={}".format(patient),
+                    "round=01",
+                    "gtvn_pred.nii.gz",
+                )
+            )
+        )
+        print(
+            "gtvn_pred",
+            gtvn_pred.min(),
+            gtvn_pred.max(),
+            gtvn_pred.sum(),
+            gtvn_pred.shape,
+        )
+
+        gtvs_pred = np.maximum(gtvt_pred, gtvn_pred)
+        print(
+            "gtvs_pred",
+            gtvs_pred.min(),
+            gtvs_pred.max(),
+            gtvs_pred.sum(),
+            gtvs_pred.shape,
+        )
+
+        # load label
+        gtvs_label = g.load_gtv_labels(
+            dataset_dir=g.DATASET_DIR[DatasetVer.AU], patient=patient
+        )["gtvs"]
+        print(
+            "gtvs_label",
+            gtvs_label.min(),
+            gtvs_label.max(),
+            gtvs_label.sum(),
+            gtvs_label.shape,
+        )
+
+        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+            if metric_type == Metric.DSC:
+                metric_num = dice(
+                    test=gtvs_pred,
+                    reference=gtvs_label,
+                    nan_for_nonexisting=False,
+                )
+            elif metric_type == Metric.MSD:
+                metric_num = avg_surface_distance_symmetric(
+                    test=gtvs_pred,
+                    reference=gtvs_label,
+                    none_for_nonexisting=True,
+                    voxel_spacing=g.NII_SPACING,
+                )
+            elif metric_type == Metric.HD95:
+                metric_num = hausdorff_distance_95(
+                    test=gtvs_pred,
+                    reference=gtvs_label,
+                    none_for_nonexisting=True,
+                    voxel_spacing=g.NII_SPACING,
+                )
+            metric_dict["patient={}".format(patient)][metric_type] = metric_num
+            metric_dict[Stat.AVG][metric_type].append(metric_num)
+            metric_dict[Stat.MEDIAN][metric_type].append(metric_num)
+
+    for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+        avg = g.calculate_avg(metric_dict[Stat.AVG][metric_type])
+        metric_dict[Stat.AVG][metric_type] = avg
+        median = g.calculate_median(metric_dict[Stat.MEDIAN][metric_type])
+        metric_dict[Stat.MEDIAN][metric_type] = median
+
+    g.save_json(
+        metric_dict, os.path.join(simulation_base_dir, "inference_au_gtvs.json")
     )
 
 
@@ -1635,4 +1750,5 @@ def plot_time_per_step(obs_study_id_list: list):
     plt.savefig(fig_path, format="pdf")
 
 
+update_font_size()
 update_font_size()

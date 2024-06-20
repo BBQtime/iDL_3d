@@ -4,6 +4,7 @@ from research_analysis import (
     calculate_3d_idl_vs_correct,
     calculate_gtvt_input_variation,
     calculate_gtvt_slices_metrics,
+    calculate_idl_gtvs_metric,
     calculate_iov,
     create_table_3d_idl_vs_correct,
     create_table_gtvt_slices_metrics,
@@ -30,6 +31,14 @@ if 1:
     g.clear_gpu_cache()
     g.clear_debug_data()
     g.clear_linux_trash()
+
+
+############# calculate idl gtvs simulation metric #############
+if 0:
+    calculate_idl_gtvs_metric(
+        idl_gtvt_id="idl.gtvt_2023.07.21.01.40.28",
+        idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
+    )
 
 
 ############# correction vs idl #############
