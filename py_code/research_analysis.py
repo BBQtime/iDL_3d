@@ -10,27 +10,18 @@ import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
 from custom_list import List
-from segment_metric import (
-    avg_surface_distance_symmetric,
-    dice,
-    hausdorff_distance,
-    hausdorff_distance_95,
-    surface_dice,
-    surface_distances,
-)
+from segment_metric import (avg_surface_distance_symmetric, dice,
+                            hausdorff_distance, hausdorff_distance_95,
+                            surface_dice, surface_distances)
 from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 
 COLOR_LIST = [
-    "#40E0D0",  # Turquoise
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#FFD700",  # Gold
     "#808080",  # Gray
-    "#0073E6",  # Blue
-    # "#32CD32",  # Lime Green
-    "#2AAE2A",  # Sea Green
-    # "#228B22",  # Deeper Lime Green
-    # "#FF5733",  # Bright Orange
-    # "#FFD700",  # Gold
-    "#595959",  # Dim Gray
     "#00BFFF",  # Deep Sky Blue
 ]
 
@@ -50,6 +41,21 @@ def update_font_size():
             "figure.titlesize": TITLE_SIZE,  # Figure title font size
         }
     )
+
+
+def explain_metric(metric: str):
+    if metric == Metric.DSC:
+        return "DSC"
+    elif metric == Metric.MSD:
+        return "Mean Surface Distance"
+    elif metric == Metric.HD95:
+        return "Hausdorff Distance 95"
+    elif metric == Metric.APL_PCT:
+        return "Added Path Length (Normalized)"
+    elif metric == Metric.APL_VOXEL:
+        return "Added Path Length (Voxels)"
+    elif metric == Metric.SDSC:
+        return "Surface DSC (1mm)"
 
 
 def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
@@ -160,21 +166,6 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
     g.save_json(
         metric_dict, os.path.join(simulation_base_dir, "inference_au_gtvs.json")
     )
-
-
-def explain_metric(metric: str):
-    if metric == Metric.DSC:
-        return "DSC"
-    elif metric == Metric.MSD:
-        return "Mean Surface Distance"
-    elif metric == Metric.HD95:
-        return "Hausdorff Distance 95"
-    elif metric == Metric.APL_PCT:
-        return "Added Path Length (Normalized)"
-    elif metric == Metric.APL_VOXEL:
-        return "Added Path Length (Voxels)"
-    elif metric == Metric.SDSC:
-        return "Surface DSC (1mm)"
 
 
 def calculate_3d_idl_vs_correct(obs_study_id: str):
@@ -1719,6 +1710,9 @@ def plot_time_per_step(obs_study_id_list: list):
                 y_labels.append(__explain_idl_step(idl_step))
         ax.set_yticklabels(y_labels, rotation=30)
         ax.grid(True)
+
+        # set limit of x axis
+        ax.set_xlim(-0.5, 20)
 
         idx = 0
         for idl_step in idl_step_list:
