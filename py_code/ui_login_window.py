@@ -151,7 +151,7 @@ class LoginWindow(QtWidgets.QMainWindow):
 
 
 # clear cache
-if 0:
+if 1:
     g.clear_gpu_cache()
     g.clear_debug_data()
     g.clear_linux_trash()
