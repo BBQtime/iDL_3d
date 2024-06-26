@@ -33,100 +33,6 @@ if 1:
     g.clear_linux_trash()
 
 
-############# calculate idl gtvs simulation metric #############
-if 0:
-    calculate_idl_gtvs_metric(
-        idl_gtvt_id="idl.gtvt_2023.07.21.01.40.28",
-        idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
-    )
-
-
-############# correction vs idl #############
-if 0:
-    obs_study_id_list = [
-        "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-        "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
-    ]
-    for obs_study_id in obs_study_id_list:
-        calculate_3d_idl_vs_correct(obs_study_id)
-
-if 1:
-    gtvn_obs_study_id_list = [
-        "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
-    ]
-    gtvt_obs_study_id_list = [
-        "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-        "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-        "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-    ]
-    for obs_study_id_list in [gtvn_obs_study_id_list, gtvt_obs_study_id_list]:
-        plot_3d_idl_vs_correct(obs_study_id_list)
-
-
-############# gtvt anatomical slices #############
-obs_study_id_list = [
-    "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-    "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-    "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-]
-
-if 0:
-    for obs_study_id in obs_study_id_list:
-        calculate_gtvt_slices_metrics(obs_study_id)
-
-if 0:
-    for obs_study_id in obs_study_id_list:
-        calculate_gtvt_input_variation(obs_study_id)
-
-if 1:
-    plot_gtvt_slices_metrics(obs_study_id_list)
-
-
-############# IOV #############
-if 0:
-    gtvt_obs_study_id_list = List(
-        (
-            "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-            "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-            "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-            "label",
-        )
-    )
-    gtvn_obs_study_id_list = List(
-        (
-            "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
-            "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
-            "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
-            "label",
-        )
-    )
-    for obs_study_id_list in [gtvn_obs_study_id_list, gtvt_obs_study_id_list]:
-        for pair in obs_study_id_list.get_combinations(2):
-            calculate_iov(pair[0], pair[1])
-
-if 0:
-    plot_iov()
-
-
-############# Time consumed #############
-obs_study_id_list = [
-    "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
-    "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
-    "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
-]
-if 1:
-    plot_time_per_patient(obs_study_id_list)
-
-if 1:
-    plot_time_per_step(obs_study_id_list)
-
-
 # ############# Baseline #############
 # if 0:
 #     baseline = TrainingBaseline()
@@ -214,6 +120,100 @@ if 1:
 #         patient="106",
 #         debug_mode=1,
 #     )
+
+
+# ############# calculate idl gtvs simulation metric #############
+# if 0:
+#     calculate_idl_gtvs_metric(
+#         idl_gtvt_id="idl.gtvt_2023.07.21.01.40.28",
+#         idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
+#     )
+
+
+# ############# correction vs idl #############
+# if 0:
+#     obs_study_id_list = [
+#         "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+#         "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+#         "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+#         "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
+#         "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
+#         "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
+#     ]
+#     for obs_study_id in obs_study_id_list:
+#         calculate_3d_idl_vs_correct(obs_study_id)
+
+# if 1:
+#     gtvn_obs_study_id_list = [
+#         "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
+#         "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
+#         "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
+#     ]
+#     gtvt_obs_study_id_list = [
+#         "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+#         "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+#         "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+#     ]
+#     for obs_study_id_list in [gtvn_obs_study_id_list, gtvt_obs_study_id_list]:
+#         plot_3d_idl_vs_correct(obs_study_id_list)
+
+
+# ############# gtvt anatomical slices #############
+# obs_study_id_list = [
+#     "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+#     "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+#     "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+# ]
+
+# if 0:
+#     for obs_study_id in obs_study_id_list:
+#         calculate_gtvt_slices_metrics(obs_study_id)
+
+# if 0:
+#     for obs_study_id in obs_study_id_list:
+#         calculate_gtvt_input_variation(obs_study_id)
+
+# if 1:
+#     plot_gtvt_slices_metrics(obs_study_id_list)
+
+
+# ############# IOV #############
+# if 0:
+#     gtvt_obs_study_id_list = List(
+#         (
+#             "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+#             "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+#             "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+#             "label",
+#         )
+#     )
+#     gtvn_obs_study_id_list = List(
+#         (
+#             "idl.gtvn_2024.03.18.09.05.54_Jesper_research",
+#             "idl.gtvn_2024.04.12.12.05.44_Kenneth_research",
+#             "idl.gtvn_2024.04.18.11.04.48_Hanna_research",
+#             "label",
+#         )
+#     )
+#     for obs_study_id_list in [gtvn_obs_study_id_list, gtvt_obs_study_id_list]:
+#         for pair in obs_study_id_list.get_combinations(2):
+#             calculate_iov(pair[0], pair[1])
+
+# if 0:
+#     plot_iov()
+
+
+# ############# Time consumed #############
+# obs_study_id_list = [
+#     "idl.gtvt_2024.03.18.09.05.54_Jesper_research",
+#     "idl.gtvt_2024.04.12.12.05.44_Kenneth_research",
+#     "idl.gtvt_2024.04.18.11.04.48_Hanna_research",
+# ]
+# if 1:
+#     plot_time_per_patient(obs_study_id_list)
+
+# if 1:
+#     plot_time_per_step(obs_study_id_list)
 
 
 print("Done!")
