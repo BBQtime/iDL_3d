@@ -811,7 +811,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # for i in range(len(combox_patients)):
         #     combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        # combox_patients.find_identicals(self._patients.to_list())
         combox_patients = self._patients.to_list()
         combox_patients.sort()
         self.combox["patient"].addItems(combox_patients)

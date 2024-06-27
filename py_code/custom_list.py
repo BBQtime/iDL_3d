@@ -41,10 +41,11 @@ class List(list):
     def copy(self):
         return copy.deepcopy(self)
 
-    def find_identicals(self, other_list: list):
-        identical_items = set(self) & set(other_list)
-        self[:] = List(identical_items)
-        self.sort()
+    def find_overlap(self, other_list: list):
+        overlap = set(self) & set(other_list)
+        overlap = List(overlap)
+        overlap.shuffle()
+        return overlap
 
     def shuffle(self, seed: int = None):
         # sort before shuffle, ensure to get specific results using specific seed
