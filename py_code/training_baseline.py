@@ -769,7 +769,8 @@ class TrainingBaseline(TrainingCore):
             # load labels and calculate metrics (on test set only)
             if dataset_part == DatasetPart.TEST:
                 labels = g.load_gtv_labels(
-                    dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
+                    dataset_ver=dataset_ver,
+                    patient=patient,
                 )
                 self._inference_cross_valid_record_patient_score(
                     patient=patient,

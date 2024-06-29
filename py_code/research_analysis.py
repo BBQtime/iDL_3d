@@ -122,7 +122,8 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
 
         # load label
         gtvs_label = g.load_gtv_labels(
-            dataset_dir=g.DATASET_DIR[DatasetVer.AU], patient=patient
+            dataset_ver=DatasetVer.AU,
+            patient=patient,
         )["gtvs"]
         print(
             "gtvs_label",

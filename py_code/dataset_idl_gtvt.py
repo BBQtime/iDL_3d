@@ -38,7 +38,8 @@ class DataSetIDLGTVt(DatasetCore):
         else:
             self.__origin["label"] = g.load_nii(
                 os.path.join(
-                    g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
+                    g.DATASET_DIR[self._dataset_ver],
+                    "HNCDL_{}_GTVt.nii".format(patient),
                 ),
                 binary=True,
             )
@@ -50,17 +51,25 @@ class DataSetIDLGTVt(DatasetCore):
 
         # load ct/pt/mr1/mr2
         self.__origin[Modal.CT] = g.load_nii(
-            os.path.join(self._dataset_dir, "HNCDL_{}_CT.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_CT.nii".format(patient)
+            )
         )
         if not self._no_pt:
             self.__origin[Modal.PT] = g.load_nii(
-                os.path.join(self._dataset_dir, "HNCDL_{}_PT.nii".format(patient))
+                os.path.join(
+                    g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_PT.nii".format(patient)
+                )
             )
         self.__origin[Modal.MR1] = g.load_nii(
-            os.path.join(self._dataset_dir, "HNCDL_{}_T1dr.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_T1dr.nii".format(patient)
+            )
         )
         self.__origin[Modal.MR2] = g.load_nii(
-            os.path.join(self._dataset_dir, "HNCDL_{}_T2dr.nii".format(patient))
+            os.path.join(
+                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_T2dr.nii".format(patient)
+            )
         )
         # ct windowing
         self.__origin[Modal.CT] = g.windowing_ct(self.__origin[Modal.CT])

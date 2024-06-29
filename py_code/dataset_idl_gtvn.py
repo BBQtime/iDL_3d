@@ -53,7 +53,8 @@ class DataSetIDLGTVn(DatasetCore):
 
         # load label
         self.__origin["label"] = g.load_gtv_labels(
-            dataset_dir=self._dataset_dir, patient=patient
+            dataset_ver=self._dataset_ver,
+            patient=patient,
         )["gtvn"]
 
         # find augment seed
@@ -157,7 +158,7 @@ class DataSetIDLGTVn(DatasetCore):
             multi_modal_list.remove("PT")
         for i in multi_modal_list:
             img_path = os.path.join(
-                self._dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
+                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_{}.nii".format(patient, i)
             )
             img = g.load_nii(img_path)
 

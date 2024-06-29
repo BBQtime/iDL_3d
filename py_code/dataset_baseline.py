@@ -6,6 +6,7 @@ import global_core as g
 import torch
 from custom_dict import Dict
 from dataset_core import DatasetCore
+from str_lib import DatasetVer
 from torch import Tensor
 
 
@@ -26,7 +27,10 @@ class DataSetBaseline(DatasetCore):
 
     def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
         # load origin labels
-        origin = g.load_gtv_labels(dataset_dir=self._dataset_dir, patient=patient)
+        origin = g.load_gtv_labels(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+        )
         tmp = Dict()
         final = Dict()
 
@@ -71,15 +75,30 @@ class DataSetBaseline(DatasetCore):
 
         input_imgs = None
         for i in multi_modal_list:
-            img_path = os.path.join(
-                self._dataset_dir, "HNCDL_{}_{}.nii".format(patient, i)
-            )
+            if (
+                self._dataset_ver == DatasetVer.AU
+                or self._dataset_ver == DatasetVer.OBS_STUDY
+            ):
+                img_path = os.path.join(
+                    g.DATASET_DIR[self._dataset_ver],
+                    "HNCDL_{}_{}.nii".format(patient, i),
+                )
+            elif self._dataset_ver == DatasetVer.MDA:
+                img_path = os.path.join(
+                    g.DATASET_DIR[self._dataset_ver],
+                    patient,
+                    "{}_{}.nii".format(patient, i),
+                )
+            else:
+                g.error_exit("dataset_ver invalid value!")
+
             img = g.load_nii(img_path)
 
             # ct windowing before normalization
             if i == "CT":
                 img = g.windowing_ct(img)
 
+            # preprocess (normalization, augmentation, center alignment, to tensor)
             img = self._preprocess(img, final["seed"])
 
             # concat multi-model img
@@ -95,3 +114,12 @@ class DataSetBaseline(DatasetCore):
     def __getitem__(self, idx: int):
         patient = self.__patients[idx]
         return self.get_item(patient)
+
+
+# baseline_dataset = DataSetBaseline(
+#     patients=["3259451405"],
+#     dataset_ver=DatasetVer.MDA,
+#     no_pt=True,
+#     augment=None,
+# )
+# baseline_dataset.get_item("3259451405")

@@ -74,7 +74,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # dataset and nii spacing
         self.dataset_ver = None
-        self._dataset_dir = None  # au / obs.study / mda
 
         # init score_dict
         self.__scores = Dict()
@@ -800,9 +799,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             g.error_exit("Can't find current patient in testset patients!")
 
-        # set dataset dir and nii spacing
-        self._dataset_dir = g.DATASET_DIR[self.dataset_ver]
-
     def _fill_combox_patient(self):
         # combox_patients = g.get_sub_dirs(
         #     os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
@@ -880,7 +876,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         img_path[Modal.MR2] = "T2dr"
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
-            img_path[i] = os.path.join(self._dataset_dir, img_path[i])
+            img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
             self.img_3d[i] = self._load_3d_img(img_path[i])
 
     # this function is connected to widget, dont set input params to this function
@@ -981,7 +977,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
     # load labels and gtvs gravity center
     def __load_labels(self):
         labels = g.load_gtv_labels(
-            dataset_dir=self._dataset_dir,
+            dataset_ver=self.dataset_ver,
             patient=self._cur_patient,
             nii_load_func=self._load_3d_img,
         )

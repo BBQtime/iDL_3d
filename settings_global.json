@@ -1,10 +1,10 @@
 {
     "cuda.visible.devices": "1",
     "dataset.dir.linux.au": "/mnt/faststorage/alan/Datasets/3D_1mm/AU_dataset/",
-    "dataset.dir.linux.mda": "/mnt/faststorage/alan/Datasets/3D_1mm/MDACC_Trainingset/",
+    "dataset.dir.linux.mda": "/mnt/faststorage/alan/Datasets/3D_1mm/MDA_dataset/",
     "dataset.dir.linux.obs.study": "/mnt/faststorage/alan/Datasets/3D_1mm/Observer_study_dataset/",
     "dataset.dir.windows.au": "E:/Alan/Datasets/3D_1mm/AU_dataset/",
-    "dataset.dir.windows.mda": "E:/Alan/Datasets/3D_1mm/MDACC_Trainingset/",
+    "dataset.dir.windows.mda": "E:/Alan/Datasets/3D_1mm/MDA_dataset/",
     "dataset.dir.windows.obs.study": "E:/Alan/Datasets/3D_1mm/Observer_study_dataset/",
     "dataset.folds": 5,
     "dataset.split.json.au": "dataset_split_au.json",

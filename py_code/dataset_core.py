@@ -4,6 +4,7 @@ import torch
 from custom_dict import Dict
 from data_augment import DataAugmentation
 from numpy import ndarray
+from torch import Tensor
 
 
 class DatasetCore(torch.utils.data.Dataset):
@@ -13,12 +14,12 @@ class DatasetCore(torch.utils.data.Dataset):
         no_pt: bool,
         augment: Dict = None,
     ):
-        self._dataset_dir = g.DATASET_DIR[dataset_ver]
+        self._dataset_ver = dataset_ver
         self._img_shape = g.IMG_SHAPE
         self._no_pt = no_pt
         self._augment = DataAugmentation(param=augment)
 
-    def _preprocess(self, img: ndarray, augment_seed: int):
+    def _preprocess(self, img: ndarray, augment_seed: int) -> Tensor:
         # DO NOT alter origin img
         img = img.copy()
 

@@ -22,7 +22,7 @@ import torch
 from custom_dict import Dict
 from custom_list import List
 from numpy import ndarray
-from str_lib import DatasetVer
+from str_lib import DatasetVer, MdaObs
 from torch import Tensor
 
 
@@ -381,36 +381,91 @@ def save_nii(
 
 # use this function in case there is no gtvn or gtvs nii file
 def load_gtv_labels(
-    dataset_dir: str,
+    dataset_ver: str,
     patient: str,
+    mda_obs: str = None,  # for MDA dataset, has labels from (upto)5 observers. None means random
     nii_load_func=None,  # ui will use this param, with its own nii load function
 ):
+    dataset_dir = DATASET_DIR[dataset_ver]
+
     if nii_load_func is None:
         nii_load_func = load_nii
 
     paths = Dict()
-    for i in ["s", "t", "n"]:
-        paths["gtv{}".format(i)] = os.path.join(
-            dataset_dir, "HNCDL_{}_GTV{}.nii".format(patient, i)
-        )
     labels = Dict()
 
-    # load gtvt
-    labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
+    if dataset_ver == DatasetVer.AU or dataset_ver == DatasetVer.OBS_STUDY:
+        # load path
+        for i in ["s", "t", "n"]:
+            paths["gtv{}".format(i)] = os.path.join(
+                dataset_dir, "HNCDL_{}_GTV{}.nii".format(patient, i)
+            )
 
-    # load gtvn
-    if os.path.exists(paths["gtvn"]):
-        labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
+        # load gtvt (for AU and OBS_STUDY dataset, there is always gtvt label)
+        labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
+
+        # load gtvn
+        if os.path.exists(paths["gtvn"]):
+            labels["gtvn"] = nii_load_func(paths["gtvn"], binary=True)
+        else:
+            labels["gtvn"] = np.zeros_like(labels["gtvt"])
+
+        # load gtvs
+        if os.path.exists(paths["gtvs"]):
+            labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
+        else:
+            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+
+        return labels
+
+    elif dataset_ver == DatasetVer.MDA:
+        # select observer
+        if mda_obs is None:
+            mda_obs_list = [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
+        else:
+            mda_obs_list = [mda_obs]
+
+        while len(mda_obs_list) > 0:
+            tmp_obs = random.choice(mda_obs_list)
+
+            paths["gtvt"] = os.path.join(
+                dataset_dir,
+                patient,
+                "{}_MR_GTV_P_BL_{}dr.nii".format(patient, tmp_obs),
+            )
+            paths["gtvn"] = os.path.join(
+                dataset_dir,
+                patient,
+                "{}_MR_GTV_N_ALL_BL_{}dr.nii".format(patient, tmp_obs),
+            )
+
+            # current observer has no gtvt or gtvn
+            if not os.path.exists(paths["gtvt"]) and not os.path.exists(paths["gtvn"]):
+                mda_obs_list.remove(tmp_obs)
+                continue
+
+            # find both gtvt and gtvn, or one of them
+            else:
+                # (1) load existing label
+                for i in ["gtvt", "gtvn"]:
+                    if os.path.exists(paths[i]):
+                        labels[i] = nii_load_func(paths[i], binary=True)
+
+                # (2) load non-existing label
+                if not os.path.exists(paths["gtvt"]):
+                    labels["gtvt"] = np.zeros_like(labels["gtvn"])
+                if not os.path.exists(paths["gtvn"]):
+                    labels["gtvn"] = np.zeros_like(labels["gtvt"])
+
+                labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+
+                return labels
+
+        # while loop over
+        error_exit("No gtvt or gtvn label found for current patient!")
+
     else:
-        labels["gtvn"] = np.zeros_like(labels["gtvt"])
-
-    # load gtvs
-    if os.path.exists(paths["gtvs"]):
-        labels["gtvs"] = nii_load_func(paths["gtvs"], binary=True)
-    else:
-        labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
-
-    return labels
+        error_exit("dataset_ver invalid value!")
 
 
 # Custom encoder for numpy data types

@@ -383,7 +383,8 @@ class TrainingCore:
 
         # load labels
         labels = g.load_gtv_labels(
-            dataset_dir=g.DATASET_DIR[dataset_ver], patient=patient
+            dataset_ver=dataset_ver,
+            patient=patient,
         )
         # outputs structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
         outputs = self._inference_single_patient_record_labels(labels)
