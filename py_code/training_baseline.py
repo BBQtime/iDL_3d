@@ -10,7 +10,7 @@ from custom_list import List
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from str_lib import DatasetPart, Metric, Stat
+from str_lib import DatasetPart, DatasetVer, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -67,10 +67,13 @@ class TrainingBaseline(TrainingCore):
         # augment percent
         hyper["augment.pct"] = g.clamp_value(hyper["augment.pct"], (0.0, 1.0))
 
+        # dataset version
         self._load_hyper_dataset_version(
             hyper=hyper,
             idl_baseline_id=idl_gtvn_baseline_id,
         )
+        if hyper["dataset.ver"] == DatasetVer.MDA:
+            hyper["no.pt"] = True
 
         # load patients after dataset version is selected
         patients = self._load_patients(
@@ -90,8 +93,19 @@ class TrainingBaseline(TrainingCore):
 
         self._load_hyper_data_loaders(hyper)
 
-        # load cnn before optimizer
-        self._load_hyper_new_cnn(hyper=hyper)
+        # load cnn (before optimizer)
+        if hyper["pretrain.id"] == "" or hyper["pretrain.id"] is None:
+            self._load_hyper_new_cnn(hyper=hyper)
+        else:
+            pretrain_cnn_path = self._find_best_baseline_fold_cnn(hyper["pretrain.id"])
+            pretrain_no_pt = g.load_json(
+                os.path.join(Path(pretrain_cnn_path).parent.parent, "hyper.json")
+            )["no.pt"]
+            if hyper["no.pt"] != pretrain_no_pt:
+                g.error_exit(
+                    "'no.pt' hyper mismatch between existing CNN and transfer learning!"
+                )
+            hyper["cnn"] = self._load_exist_cnn(pretrain_cnn_path)
 
         self._load_hyper_optim_and_scheduler(hyper=hyper)
 

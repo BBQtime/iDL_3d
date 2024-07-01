@@ -153,7 +153,11 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_ver=hyper["dataset.ver"],
         )
 
-        self._load_hyper_dataset_version(hyper, idl_baseline_id=baseline_id)
+        # dataset version
+        self._load_hyper_dataset_version(
+            hyper=hyper,
+            idl_baseline_id=baseline_id,
+        )
 
         # load loss function after super()._load_hyper()
         hyper["loss.func"] = UnifiedFocalLossIDLGTVt(
@@ -744,70 +748,6 @@ class TrainingIDLGTVt(TrainingCore):
             plt.legend()
             plt.savefig(os.path.join(idl_gtvt_dir, "loss.png"))
 
-    def __find_best_baseline_fold_cnn(self, baseline_id: str) -> str:
-        scores = Dict()
-
-        fold_dirs = g.get_sub_dirs(
-            input_dir=os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline"),
-            key_word="fold=",
-            full_path=True,
-        )
-        for fold_dir in fold_dirs:
-            baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
-                "dataset.ver"
-            ]
-
-            fold = Path(fold_dir).name
-            epoch_dir = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
-            epoch_scores = g.load_json(
-                os.path.join(
-                    epoch_dir,
-                    "inference_{}.json".format(baseline_dataset_ver),
-                )
-            )
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                scores[fold][stat] = epoch_scores[stat]
-
-        for stat in [Stat.MEDIAN, Stat.AVG]:
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    # create a tmp list to sort
-                    list_to_sort = List()
-                    # add elements into the list
-                    for epoch in scores.keys():
-                        list_to_sort.append(scores[epoch][stat][gtv][metric])
-                    # sort the list
-                    if metric == Metric.DSC:
-                        list_to_sort.sort(reverse=False)
-                    else:
-                        list_to_sort.sort(reverse=True)
-                    # update value based on the idx in the list
-                    for epoch in scores.keys():
-                        new_value = list_to_sort.index(scores[epoch][stat][gtv][metric])
-                        # if metric == Metric.DSC:
-                        #     new_value *= 2
-                        scores[epoch][stat][gtv][metric] = new_value
-
-        evaluation = Dict()
-        for epoch in scores:
-            evaluation[epoch] = 0
-            for stat in [Stat.AVG, Stat.MEDIAN]:
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        evaluation[epoch] += scores[epoch][stat][gtv][metric]
-
-        best_fold = evaluation.key_with_max_value()
-        best_fold_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, baseline_id, "baseline", best_fold
-        )
-        best_epoch_dir = g.get_sub_dirs(
-            best_fold_dir, key_word="epoch=", full_path=True
-        )[0]
-        best_cnn_path = g.get_sub_files(best_epoch_dir, key_word=".pt", full_path=True)[
-            0
-        ]
-        return best_cnn_path
-
     def simulation(
         self,
         baseline_id: str,
@@ -886,7 +826,7 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
             # best baseline cnn is decided by dataset_part
-            baseline_cnn_path = self.__find_best_baseline_fold_cnn(baseline_id)
+            baseline_cnn_path = self._find_best_baseline_fold_cnn(baseline_id)
 
             patient_list = hyper["patients"][DatasetPart.TEST]
 
@@ -1017,7 +957,7 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
         # best baseline cnn is decided by dataset_part
-        baseline_cnn_path = self.__find_best_baseline_fold_cnn(baseline_id)
+        baseline_cnn_path = self._find_best_baseline_fold_cnn(baseline_id)
 
         self.__reset_cnn(
             hyper=hyper,

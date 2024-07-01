@@ -18,7 +18,7 @@ g.clear_linux_trash()
 
 baseline = TrainingBaseline()
 baseline.new_training(
-    train_remark="mda.new.cnn",
+    train_remark="mda.transfer",
     debug_mode=0,
 )
 # baseline.inference_on_folds(
