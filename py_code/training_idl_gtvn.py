@@ -87,7 +87,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         idl_gtvn_id: str,
         dataset_ver: str,
         patient: str,
-        idl_gtvn_clicks: ndarray = None,  # None means no gtvn click
+        obs_gtvn_clicks: ndarray = None,  # None means no gtvn click
         debug_mode=False,
     ):
         print("")
@@ -167,15 +167,14 @@ class TrainingIDLGTVn(TrainingBaseline):
                 no_pt=no_pt,
                 segment_metrics=segment_metrics,
                 idl_gtvn_baseline_id=baseline_id,
-                idl_gtvn_clicks=idl_gtvn_clicks,
+                obs_gtvn_clicks=obs_gtvn_clicks,  # this is only for obs study
             )
 
             # create folder and save preds of current patient
-            self._inference_on_folds_save_patient_preds(
+            self._inference_all_folds_save_patient_preds(
                 patient=patient,
                 epoch_dir=output_epoch_dir,
                 patient_outputs=patient_outputs,
-                dataset_ver=dataset_ver,
                 dataset_part=DatasetPart.TEST,
             )
 
@@ -257,7 +256,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         # if self._obs_study_progress is not None:
         #     print(self._obs_study_progress.cur_step, self._obs_study_progress.total_step)
 
-    def inference_on_folds(
+    def inference_all_folds(
         self,
         idl_gtvn_id: str,
         dataset_part: str,  # train/test
@@ -265,7 +264,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._inference_on_folds(
+        self._inference_all_folds(
             train_id=idl_gtvn_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
@@ -314,12 +313,11 @@ class TrainingIDLGTVn(TrainingBaseline):
 
         return scores
 
-    def _inference_on_folds_save_patient_preds(
+    def _inference_all_folds_save_patient_preds(
         self,
         patient: str,
         epoch_dir: str,
         patient_outputs: Dict,
-        dataset_ver: str,
         dataset_part: str,
     ):
         if dataset_part == DatasetPart.TRAIN or dataset_part == DatasetPart.VALID:
@@ -360,7 +358,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     spacing=g.NII_SPACING,
                 )
 
-    def _inference_on_folds_record_patient_score(
+    def _inference_all_folds_record_patient_score(
         self, patient: str, patient_outputs: Dict, scores: Dict
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -452,7 +450,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset_ver: str,
         no_pt: bool,
         idl_gtvn_baseline_id: str,
-        idl_gtvn_clicks: ndarray,
+        obs_gtvn_clicks: ndarray,
     ):
         return DataSetIDLGTVn(
             patients=[patient],
@@ -460,25 +458,61 @@ class TrainingIDLGTVn(TrainingBaseline):
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             augment=None,
-            gtvn_clicks=idl_gtvn_clicks,
+            obs_gtvn_clicks=obs_gtvn_clicks,
             random_click=False,
         )
 
-    def _inference_single_patient_record_labels(self, labels: Dict):
-        outputs = Dict()
-        outputs["gtvn"]["label"] = labels["gtvn"]
+    def _inference_single_patient_record_labels(
+        self,
+        outputs: Dict,
+        dataset_item: Dict,
+        mda_obs: str = None,
+    ):
+        labels = dataset_item["labels"][1].cpu().numpy()
+        img_shape = dataset_item["shape"]
+        labels = g.center_align_img(labels, img_shape)
+
+        if mda_obs is None:
+            outputs["gtvn"]["label"] = labels
+        else:
+            outputs["gtvn"]["label"][mda_obs] = labels
         return outputs
 
-    def _inference_single_patient_get_gtvn_clicks(self, item: list):
-        return item[2]
-
-    def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
+    def _inference_single_patient_record_gtvn_clicks(
+        self,
+        outputs: Dict,
+        dataset_item: Dict,
+        mda_obs: str = None,
     ):
-        outputs["gtvn"]["pred"] = preds[1]
+        idl_gtvn_clicks = dataset_item["clicks"]
+        img_shape = dataset_item["shape"]
+        idl_gtvn_clicks = torch.squeeze(idl_gtvn_clicks, dim=0).cpu().numpy()
+        idl_gtvn_clicks = g.center_align_img(idl_gtvn_clicks, img_shape)
+
+        if mda_obs is None:
+            outputs["gtvn"]["clicks"] = idl_gtvn_clicks
+        else:
+            outputs["gtvn"]["clicks"][mda_obs] = idl_gtvn_clicks
+
+    def _inference_single_patient_record_preds(
+        self,
+        outputs: Dict,
+        preds: ndarray,
+        img_shape: tuple,
+    ):
+        # preds: [background, gtvn]
+        outputs["gtvn"]["pred"] = g.center_align_img(preds[1], img_shape)
+
+    def _inference_single_patient_record_gtvn_distance_map(
+        self,
+        outputs: Dict,
+        input_imgs: Tensor,
+        img_shape: tuple,
+    ):
+        # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         input_imgs = torch.squeeze(input_imgs, dim=0).cpu().numpy()
-        outputs["gtvn"]["distance.map"] = input_imgs[0]
-        outputs["gtvn"]["clicks"] = torch.squeeze(idl_gtvn_clicks, dim=0).cpu().numpy()
+        # input_imgs: [distance.map, "CT", "PT", "T1dr", "T2dr"]
+        outputs["gtvn"]["distance.map"] = g.center_align_img(input_imgs[0], img_shape)
 
     def _inference_single_patient_gtvn_post_process(self, outputs: Dict):
         if 0:

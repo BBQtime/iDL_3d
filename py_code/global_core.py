@@ -22,7 +22,7 @@ import torch
 from custom_dict import Dict
 from custom_list import List
 from numpy import ndarray
-from str_lib import DatasetVer, MdaObs
+from str_lib import DatasetVer, ErrMsg, MdaObs
 from torch import Tensor
 
 
@@ -383,7 +383,7 @@ def save_nii(
 def load_gtv_labels(
     dataset_ver: str,
     patient: str,
-    mda_obs: str = None,  # for MDA dataset, has labels from (upto)5 observers. None means random
+    mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
     nii_load_func=None,  # ui will use this param, with its own nii load function
 ):
     dataset_dir = DATASET_DIR[dataset_ver]
@@ -461,11 +461,11 @@ def load_gtv_labels(
 
                 return labels
 
-        # while loop over
-        error_exit("No gtvt or gtvn label found for current patient!")
+        # while loop over, no gtvt or gtvn label found for current patient
+        return None
 
     else:
-        error_exit("dataset_ver invalid value!")
+        error_exit(ErrMsg.DATASET_VER_INVALID)
 
 
 # Custom encoder for numpy data types

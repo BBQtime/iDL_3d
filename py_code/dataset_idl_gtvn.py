@@ -20,13 +20,13 @@ class DataSetIDLGTVn(DatasetCore):
         dataset_ver: str,
         no_pt: bool,
         augment: Dict = None,
-        gtvn_clicks: ndarray = None,
+        obs_gtvn_clicks: ndarray = None,
         random_click: bool = False,
     ):
         super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
         self.__patients = patients
         self.__baseline_id = baseline_id
-        self.__gtvn_clicks = gtvn_clicks
+        self.__gtvn_clicks = obs_gtvn_clicks
         self.__random_click = random_click
 
     # must be overrided
@@ -34,9 +34,30 @@ class DataSetIDLGTVn(DatasetCore):
         return len(self.__patients)
 
     # must be overrided
-    def get_item(self, patient: str) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    def get_item(
+        self,
+        patient: str,
+        mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
+    ) -> Dict:
+
         # origin images dict
         self.__origin = Dict()
+
+        # load label
+        self.__origin["label"] = g.load_gtv_labels(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+            mda_obs=mda_obs,
+        )["gtvn"]
+
+        # no label found, return None
+        if self.__origin["label"] is None:
+            return None
+
+        # item to return
+        item = Dict()
+        # record img shape
+        item["shape"] = self.__origin["label"].shape
 
         # load pred
         self.__origin["pred"] = g.load_nii(
@@ -50,12 +71,6 @@ class DataSetIDLGTVn(DatasetCore):
             ),
             binary=False,
         )
-
-        # load label
-        self.__origin["label"] = g.load_gtv_labels(
-            dataset_ver=self._dataset_ver,
-            patient=patient,
-        )["gtvn"]
 
         # find augment seed
         final = Dict()
@@ -72,12 +87,13 @@ class DataSetIDLGTVn(DatasetCore):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
             for i in ["label", "pred"]:
                 tmp[i] = self._preprocess(
-                    img=self.__origin[i], augment_seed=tmp["seed"]
+                    img=self.__origin[i],
+                    augment_seed=tmp["augment.seed"],
                 )
                 tmp[i] = g.binarize_img(tmp[i])
 
@@ -87,7 +103,7 @@ class DataSetIDLGTVn(DatasetCore):
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
                 # if "final" dict is empty
                 if final == {}:
-                    for i in ["label", "pred", "seed"]:
+                    for i in ["label", "pred", "augment.seed"]:
                         final[i] = tmp[i]
                     if origin_label_pred_sum == 0:
                         break
@@ -95,13 +111,13 @@ class DataSetIDLGTVn(DatasetCore):
                 # keep the seed/label/pred with largest target volume
                 final_label_pred_sum = final["label"].sum() + final["pred"].sum()
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "seed"]:
+                    for i in ["label", "pred", "augment.seed"]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label", "pred", "seed"]:
+                for i in ["label", "pred", "augment.seed"]:
                     final[i] = tmp[i]
                 break
 
@@ -111,10 +127,11 @@ class DataSetIDLGTVn(DatasetCore):
         labels = torch.cat([background, final["label"]], dim=0)
 
         # gtvn_clicks
+        # (1) observer study
         if self.__gtvn_clicks is not None:
             self.__origin["clicks"] = self.__gtvn_clicks
+        # (2) simulation
         else:
-            # simulate click
             self.__origin["clicks"] = np.zeros(
                 self.__origin["label"].shape, dtype=np.float32
             )
@@ -142,11 +159,17 @@ class DataSetIDLGTVn(DatasetCore):
             self.__origin["distance.map"] = np.zeros_like(self.__origin["label"])
 
         input_imgs = None
-        clicks = self._preprocess(self.__origin["clicks"], final["seed"])
+        clicks = self._preprocess(
+            img=self.__origin["clicks"],
+            augment_seed=final["augment.seed"],
+        )
 
         # pred + click
         for i in ["distance.map"]:  # ["pred", "distance.map"]:
-            final[i] = self._preprocess(self.__origin[i], final["seed"])
+            final[i] = self._preprocess(
+                img=self.__origin[i],
+                augment_seed=final["augment.seed"],
+            )
             if input_imgs is None:
                 input_imgs = final[i]
             else:
@@ -166,13 +189,19 @@ class DataSetIDLGTVn(DatasetCore):
             if i == "CT":
                 img = g.windowing_ct(img)
 
-            img = self._preprocess(img, final["seed"])
+            img = self._preprocess(
+                img=img,
+                augment_seed=final["augment.seed"],
+            )
 
             # concat multi-model img
             input_imgs = torch.cat([input_imgs, img], dim=0)
 
-        # None is used as a placeholder to ensure consistent return value formats for each dataset
-        return input_imgs, labels, clicks
+        # return item
+        item["input.imgs"] = input_imgs
+        item["labels"] = labels
+        item["clicks"] = clicks
+        return item
 
     # must be overrided
     # this function is only for training, not for inference

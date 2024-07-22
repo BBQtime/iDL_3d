@@ -6,7 +6,7 @@ import global_core as g
 import torch
 from custom_dict import Dict
 from dataset_core import DatasetCore
-from str_lib import DatasetVer
+from str_lib import DatasetVer, ErrMsg
 from torch import Tensor
 
 
@@ -25,12 +25,27 @@ class DataSetBaseline(DatasetCore):
     def __len__(self):
         return len(self.__patients)
 
-    def get_item(self, patient: str) -> Tuple[Tensor, Tensor]:
-        # load origin labels
+    def get_item(
+        self,
+        patient: str,
+        mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
+    ) -> Dict:
+
+        # load labels and save them into "origin" dict
         origin = g.load_gtv_labels(
             dataset_ver=self._dataset_ver,
             patient=patient,
+            mda_obs=mda_obs,  # if mda_obs is None, there will always return a label.
         )
+        # this will be triggered only when mda_obs's label is not found
+        if origin is None:
+            return None
+
+        # data to return
+        item = Dict()
+        # record img shape
+        item["shape"] = origin["gtvt"].shape
+
         tmp = Dict()
         final = Dict()
 
@@ -39,10 +54,13 @@ class DataSetBaseline(DatasetCore):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            tmp["gtvs"] = self._preprocess(origin["gtvs"], tmp["seed"])
+            tmp["gtvs"] = self._preprocess(
+                img=origin["gtvs"],
+                augment_seed=tmp["augment.seed"],
+            )
             tmp["gtvs"] = g.binarize_img(tmp["gtvs"])
 
             # target volume is not big enough
@@ -50,17 +68,20 @@ class DataSetBaseline(DatasetCore):
                 # keep the largest gtvs and the augment seed
                 if final["gtvs"] == {} or tmp["gtvs"].sum() > final["gtvs"].sum():
                     final["gtvs"] = tmp["gtvs"]
-                    final["seed"] = tmp["seed"]
+                    final["augment.seed"] = tmp["augment.seed"]
                 continue
             # target volume is large enough, break
             else:
                 final["gtvs"] = tmp["gtvs"]
-                final["seed"] = tmp["seed"]
+                final["augment.seed"] = tmp["augment.seed"]
                 break
 
         # preprocess gtvt and gtvn based on final augment seed
         for gtv in ["gtvt", "gtvn"]:
-            final[gtv] = self._preprocess(origin[gtv], final["seed"])
+            final[gtv] = self._preprocess(
+                img=origin[gtv],
+                augment_seed=final["augment.seed"],
+            )
             final[gtv] = g.binarize_img(final[gtv])
 
         # load background
@@ -90,7 +111,7 @@ class DataSetBaseline(DatasetCore):
                     "{}_{}.nii".format(patient, i),
                 )
             else:
-                g.error_exit("dataset_ver invalid value!")
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
             img = g.load_nii(img_path)
 
@@ -99,7 +120,10 @@ class DataSetBaseline(DatasetCore):
                 img = g.windowing_ct(img)
 
             # preprocess (normalization, augmentation, center alignment, to tensor)
-            img = self._preprocess(img, final["seed"])
+            img = self._preprocess(
+                img=img,
+                augment_seed=final["augment.seed"],
+            )
 
             # concat multi-model img
             if input_imgs is None:
@@ -107,7 +131,9 @@ class DataSetBaseline(DatasetCore):
             else:
                 input_imgs = torch.cat([input_imgs, img], dim=0)
 
-        return input_imgs, labels
+        item["input.imgs"] = input_imgs
+        item["labels"] = labels
+        return item
 
     # must be overrided
     # this function is only for training, not for inference

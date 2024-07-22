@@ -10,7 +10,8 @@ from custom_list import List
 from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
-from str_lib import DatasetPart, DatasetVer, Metric, Stat
+from numpy import ndarray
+from str_lib import DatasetPart, DatasetVer, ErrMsg, MdaObs, Metric, Stat
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -220,9 +221,9 @@ class TrainingBaseline(TrainingCore):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def _calculate_loss(self, item: tuple, hyper: Dict):
-        input_imgs = item[0].to(g.DEVICE)
-        labels = item[1].to(g.DEVICE)
+    def _calculate_loss(self, item: Dict, hyper: Dict):
+        input_imgs = item["input.imgs"].to(g.DEVICE)
+        labels = item["labels"].to(g.DEVICE)
         preds = hyper["cnn"](input_imgs)
         loss = hyper["loss.func"](preds, labels)
         return loss
@@ -443,7 +444,7 @@ class TrainingBaseline(TrainingCore):
                 dataset_part_list.append(DatasetPart.TRAIN)
 
             for dataset_part in dataset_part_list:
-                self._inference_on_folds(
+                self._inference_all_folds(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
@@ -463,7 +464,7 @@ class TrainingBaseline(TrainingCore):
                     debug_mode=debug_mode,
                 )
 
-    def inference_on_folds(
+    def inference_all_folds(
         self,
         baseline_id: str,
         dataset_part: str,  # train/valid/test
@@ -471,14 +472,15 @@ class TrainingBaseline(TrainingCore):
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
-        self._inference_on_folds(
+        self._inference_all_folds(
             train_id=baseline_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
 
-    def _inference_on_folds(
+    # this function is shared by baseline and idl.gtvn training
+    def _inference_all_folds(
         self,
         train_id: str,
         dataset_part: str,  # train/valid/test
@@ -492,6 +494,8 @@ class TrainingBaseline(TrainingCore):
         if train_dir is None:
             g.error_exit("'train_id' not found!")
 
+        # this is only for idl.gtvn
+        # regarding baseline, train_id == baseline_id
         baseline_id = Path(train_dir).parent.name
 
         fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
@@ -537,12 +541,7 @@ class TrainingBaseline(TrainingCore):
 
                 # initialize scores dict (valid set only)
                 if dataset_part == DatasetPart.VALID:
-                    epoch_scores = self._inference_init_scores(
-                        baseline_id=baseline_id,
-                        dataset_ver=dataset_ver,
-                        dataset_part=dataset_part,
-                        patients=patients,
-                    )
+                    epoch_scores = Dict()
 
                 # loop through each patient
                 for patient in tqdm(patients[dataset_part]):
@@ -558,20 +557,21 @@ class TrainingBaseline(TrainingCore):
                     )
 
                     # create folder and save preds of current patient
-                    self._inference_on_folds_save_patient_preds(
+                    self._inference_all_folds_save_patient_preds(
                         patient=patient,
                         epoch_dir=epoch_dir,
                         patient_outputs=patient_outputs,
-                        dataset_ver=dataset_ver,
-                        dataset_part=dataset_part,
+                        dataset_part=dataset_part,  # this param is needed for idl.gtvn
                     )
 
-                    # record score of current patient (valid set only)
+                    # record score of current patient
+                    # (on valid set only, the metrics are used to select the best epoch)
                     if dataset_part == DatasetPart.VALID:
-                        self._inference_on_folds_record_patient_score(
+                        self._inference_all_folds_record_patient_score(
                             patient=patient,
                             patient_outputs=patient_outputs,
                             scores=epoch_scores,
+                            dataset_ver=dataset_ver,
                         )
 
                 # all patients under current epoch have been traversed
@@ -581,32 +581,37 @@ class TrainingBaseline(TrainingCore):
                         scores=epoch_scores,
                         save_dir=epoch_dir,
                         dataset_ver=dataset_ver,
+                        dataset_part=dataset_part,
                     )
 
                 continue  # next epoch
 
-    def _inference_init_scores(
-        self,
-        baseline_id: str = None,  # this is for idl.gtvn
-        dataset_ver: str = None,  # this is for idl.gtvn
-        dataset_part: str = None,  # this is for idl.gtvn
-        patients: Dict = None,  # this is for idl.gtvn
-    ) -> Dict:
-        scores = Dict()
-        for stat in [Stat.MEDIAN, Stat.AVG]:
-            for gtv in ["gtvs", "gtvt", "gtvn"]:
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    scores[stat][gtv][metric] = List()
+    # def _inference_init_scores(self, dataset_ver: str, *args, **kwargs) -> Dict:
+    #     scores = Dict()
+    #     for stat in [Stat.MEDIAN, Stat.AVG]:
+    #         for gtv in ["gtvs", "gtvt", "gtvn"]:
+    #             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 
-        return scores
+    #                 if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+    #                     scores[stat][gtv][metric] = List()
 
-    def _inference_on_folds_save_patient_preds(
+    #                 elif dataset_ver == DatasetVer.MDA:
+    #                     for obs in patient_outputs[gtv][metric].keys():
+    #                         scores[stat][gtv][metric][obs].append(
+    #                             patient_outputs[gtv][metric][obs]
+    #                         )
+    #                 else:
+    #                     g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+    #     return scores
+
+    def _inference_all_folds_save_patient_preds(
         self,
         patient: str,
         epoch_dir: str,
         patient_outputs: Dict,
-        dataset_ver: str,
-        dataset_part: str,  # this is for idl.gtvn
+        *args,
+        **kwargs,
     ):
         patient_dir = os.path.join(
             epoch_dir,
@@ -622,38 +627,88 @@ class TrainingBaseline(TrainingCore):
                 spacing=g.NII_SPACING,
             )
 
-    def _inference_on_folds_record_patient_score(
-        self, patient: str, patient_outputs: Dict, scores: Dict
+    def _inference_all_folds_record_patient_score(
+        self,
+        patient: str,
+        patient_outputs: Dict,
+        scores: Dict,
+        dataset_ver: str,
     ):
         for gtv in patient_outputs.keys():
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                # save cur patient score
+                # save cur patient metric
                 scores["patient={}".format(patient)][gtv][metric] = patient_outputs[
                     gtv
                 ][metric]
-                # add scores of current patient into avg and median
-                for stat in [Stat.MEDIAN, Stat.AVG]:
-                    scores[stat][gtv][metric].append(patient_outputs[gtv][metric])
+
+                # add cur patient metric into a list for avg and median calculation
+                # (1) AU / OBS_STUDY / NKI dataset
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                    # initialize a list
+                    if scores[Stat.AVG][gtv][metric] == {}:
+                        scores[Stat.AVG][gtv][metric] = List()
+                    # add current patient metric into the list
+                    scores[Stat.AVG][gtv][metric].append(patient_outputs[gtv][metric])
+
+                # (2) MDA dataset
+                elif dataset_ver == DatasetVer.MDA:
+                    for obs in patient_outputs[gtv][metric].keys():
+                        # initialize a list (for current observer)
+                        if scores[Stat.AVG][gtv][metric][obs] == {}:
+                            scores[Stat.AVG][gtv][metric][obs] = List()
+                        # add current patient metric into the list (current observer)
+                        scores[Stat.AVG][gtv][metric][obs].append(
+                            patient_outputs[gtv][metric][obs]
+                        )
+
+                        # initialize a list (for all observers)
+                        if scores[Stat.AVG][gtv][metric]["overall"] == {}:
+                            scores[Stat.AVG][gtv][metric]["overall"] = List()
+                        # add current patient metric into the list (all observers)
+                        scores[Stat.AVG][gtv][metric]["overall"].append(
+                            patient_outputs[gtv][metric][obs]
+                        )
+
+                else:
+                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
     def _inference_calculate_save_avg_median(
         self,
         scores: Dict,
         save_dir: str,
         dataset_ver: str,
+        dataset_part: str,
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
-                    scores[Stat.MEDIAN][gtv][metric]
-                )
-                scores[Stat.AVG][gtv][metric] = g.calculate_avg(
-                    scores[Stat.AVG][gtv][metric]
-                )
+
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                    scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
+                        scores[Stat.AVG][gtv][metric]
+                    )
+                    scores[Stat.AVG][gtv][metric] = g.calculate_avg(
+                        scores[Stat.AVG][gtv][metric]
+                    )
+
+                elif dataset_ver == DatasetVer.MDA:
+                    # (1) calculate avg / median for each observer
+                    for obs in scores[Stat.AVG][gtv][metric].keys():
+                        scores[Stat.MEDIAN][gtv][metric][obs] = g.calculate_median(
+                            scores[Stat.AVG][gtv][metric][obs]
+                        )
+                        scores[Stat.AVG][gtv][metric][obs] = g.calculate_avg(
+                            scores[Stat.AVG][gtv][metric][obs]
+                        )
+
+                else:
+                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
         # save scores in json
         g.save_json(
             data=scores,
-            path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
+            path=os.path.join(
+                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
+            ),
         )
 
     def inference_cross_valid(
@@ -685,7 +740,7 @@ class TrainingBaseline(TrainingCore):
         if train_dir is None:
             g.error_exit("'train_id' not found!")
 
-        baseline_id = Path(train_dir).parent.name
+        # baseline_id = Path(train_dir).parent.name
 
         fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
@@ -715,12 +770,7 @@ class TrainingBaseline(TrainingCore):
 
         # initialize scores dict
         if dataset_part == DatasetPart.TEST:
-            scores = self._inference_init_scores(
-                baseline_id=baseline_id,
-                dataset_ver=dataset_ver,
-                dataset_part=dataset_part,
-                patients=patients,
-            )
+            scores = Dict()
 
         for patient in tqdm(patients[dataset_part]):
             # initialize preds
@@ -757,6 +807,7 @@ class TrainingBaseline(TrainingCore):
             if preds["gtvt"] is not None:
                 preds["gtvs"] = preds["gtvt"] + preds["gtvn"]
 
+            # calculate avg pred value over all folds
             for gtv in preds.keys():
                 if preds[gtv] is None:
                     preds.pop(gtv)
@@ -767,6 +818,8 @@ class TrainingBaseline(TrainingCore):
             pred_dir = os.path.join(
                 Path(fold_dirs[0]).parent, "patients", "patient={}".format(patient)
             )
+            # preds.keys() = ["gtvt", "gtvn", "gtvs"] for baseline
+            # preds.keys() = ["gtvn"] for idl.gtvn
             if len(preds.keys()) == 1:
                 pred_dir = os.path.join(pred_dir, "round=01")
             g.create_dir(pred_dir)
@@ -782,16 +835,74 @@ class TrainingBaseline(TrainingCore):
 
             # load labels and calculate metrics (on test set only)
             if dataset_part == DatasetPart.TEST:
-                labels = g.load_gtv_labels(
-                    dataset_ver=dataset_ver,
-                    patient=patient,
-                )
+
+                # load labels
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                    labels = g.load_gtv_labels(
+                        dataset_ver=dataset_ver,
+                        patient=patient,
+                    )
+                elif dataset_ver == DatasetVer.MDA:
+                    labels = Dict()
+                    mda_obs_list = List(
+                        [
+                            MdaObs.AAA,
+                            MdaObs.DMEl,
+                            MdaObs.MRA,
+                            MdaObs.SA,
+                            MdaObs.YK,
+                        ]
+                    )
+                    for mda_obs in mda_obs_list.copy():
+                        cur_obs_label = g.load_gtv_labels(
+                            dataset_ver=dataset_ver, patient=patient, mda_obs=mda_obs
+                        )
+                        if cur_obs_label is not None:
+                            labels[mda_obs] = cur_obs_label
+                        else:
+                            # remove observer without label (calculating iov will also use mda_obs_list)
+                            mda_obs_list.remove(mda_obs)
+
+                    # calculate iov of labels (only for mda dataset)
+                    # key: [gtv]->[metric]->["iov"]
+                    # (1) initialize as list (for average calculation)
+                    for gtv in preds.keys():
+                        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                            scores["patient={}".format(patient)][gtv][metric][
+                                "iov"
+                            ] = []
+                    # (2) calculate iov between every 2 observers
+                    for gtv in preds.keys():
+                        for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
+                            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                                iov = segment_metrics[metric](
+                                    labels[mda_osb_1][gtv],
+                                    labels[mda_obs_2][gtv],
+                                )
+                                scores["patient={}".format(patient)][gtv][metric][
+                                    "iov"
+                                ].append(iov)
+                    # (3) calculate avg value
+                    for gtv in preds.keys():
+                        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                            scores["patient={}".format(patient)][gtv][metric]["iov"] = (
+                                g.calculate_avg(
+                                    scores["patient={}".format(patient)][gtv][metric][
+                                        "iov"
+                                    ]
+                                )
+                            )
+                else:
+                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+                # calculate metrics
                 self._inference_cross_valid_record_patient_score(
                     patient=patient,
                     preds=preds,
                     labels=labels,
                     segment_metrics=segment_metrics,
                     scores=scores,
+                    dataset_ver=dataset_ver,
                 )
 
         # all patients have been traversed
@@ -801,6 +912,7 @@ class TrainingBaseline(TrainingCore):
                 scores=scores,
                 save_dir=Path(fold_dirs[0]).parent,
                 dataset_ver=dataset_ver,
+                dataset_part=dataset_part,
             )
 
     def _inference_cross_valid_record_patient_score(
@@ -810,15 +922,45 @@ class TrainingBaseline(TrainingCore):
         labels: Dict,
         segment_metrics: Dict,
         scores: Dict,
+        dataset_ver: str,
     ):
         for gtv in preds.keys():
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                score = segment_metrics[metric](preds[gtv], labels[gtv])
-                # record current score
-                scores["patient={}".format(patient)][gtv][metric] = score
-                # record scores for avg and median score calculation
-                for stat in [Stat.MEDIAN, Stat.AVG]:
-                    scores[stat][gtv][metric].append(score)
+
+                # (1) AU / OBS_STUDY / NKI dataset
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                    score = segment_metrics[metric](preds[gtv], labels[gtv])
+
+                    # save cur patient metric
+                    scores["patient={}".format(patient)][gtv][metric] = score
+
+                    # add cur patient metric into a list for avg and median calculation
+                    if scores[Stat.AVG][gtv][metric] == {}:
+                        scores[Stat.AVG][gtv][metric] = List()
+                    scores[Stat.AVG][gtv][metric].append(score)
+
+                # (2) MDA dataset
+                elif dataset_ver == DatasetVer.MDA:
+                    for obs in labels.keys():
+                        score = segment_metrics[metric](preds[gtv], labels[obs][gtv])
+
+                        # save cur patient metric
+                        scores["patient={}".format(patient)][gtv][metric][obs] = score
+
+                        # initialize a list (for current observer)
+                        if scores[Stat.AVG][gtv][metric][obs] == {}:
+                            scores[Stat.AVG][gtv][metric][obs] = List()
+                        # add current patient metric into the list (current observer)
+                        scores[Stat.AVG][gtv][metric][obs].append(score)
+
+                        # initialize a list (for all observers)
+                        if scores[Stat.AVG][gtv][metric]["overall"] == {}:
+                            scores[Stat.AVG][gtv][metric]["overall"] = List()
+                        # add current patient metric into the list (all observers)
+                        scores[Stat.AVG][gtv][metric]["overall"].append(score)
+
+                else:
+                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
     def remove_non_optimal_epochs(self, baseline_id: str):
         self._is_valid_baseline_id(baseline_id)
@@ -837,8 +979,9 @@ class TrainingBaseline(TrainingCore):
         ]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
-        # this json file is created by "inference_on_folds", only save valid scores
-        inference_json_name = "inference_{}.json".format(dataset_ver)
+        # this json file is created by "inference_all_folds()"
+        # only save validation metrics
+        inference_json_name = "inference_{}_valid.json".format(dataset_ver)
 
         for fold_dir in fold_dirs:
             fold_scores = Dict()
@@ -851,7 +994,10 @@ class TrainingBaseline(TrainingCore):
                 epoch_scores = g.load_json(os.path.join(epoch_dir, inference_json_name))
 
                 self._remove_non_optimal_epochs_record_epoch_scores(
-                    fold_scores=fold_scores, epoch_scores=epoch_scores, epoch=epoch
+                    fold_scores=fold_scores,
+                    epoch_scores=epoch_scores,
+                    epoch=epoch,
+                    dataset_ver=dataset_ver,
                 )
 
             best_epoch = self._remove_non_optimal_epochs_find_best_epoch(
@@ -868,10 +1014,25 @@ class TrainingBaseline(TrainingCore):
                     print("delete: {} {}".format(Path(fold_dir).name, epoch))
 
     def _remove_non_optimal_epochs_record_epoch_scores(
-        self, fold_scores: Dict, epoch_scores: Dict, epoch: str
+        self,
+        fold_scores: Dict,
+        epoch_scores: Dict,
+        epoch: str,
+        dataset_ver: str,
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
-            fold_scores[epoch][stat] = epoch_scores[stat]
+            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                fold_scores[epoch][stat] = epoch_scores[stat]
+
+            elif dataset_ver == DatasetVer.MDA:
+                for gtv in ["gtvs", "gtvt", "gtvn"]:
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                        fold_scores[epoch][stat][gtv][metric] = epoch_scores[stat][gtv][
+                            metric
+                        ]["overall"]
+
+            else:
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
     # a sub function of _remove_non_optimal_epochs()
     def _remove_non_optimal_epochs_find_best_epoch(
@@ -926,15 +1087,40 @@ class TrainingBaseline(TrainingCore):
 
         return evaluation.key_with_max_value()
 
-    def _inference_single_patient_record_labels(self, labels: Dict):
-        outputs = Dict()
+    def _inference_single_patient_record_labels(
+        self,
+        outputs: Dict,
+        dataset_item: Dict,
+        mda_obs: str = None,
+    ):
+        img_shape = dataset_item["shape"]
+
+        labels = Dict()
+        labels["gtvt"] = dataset_item["labels"][1].cpu().numpy()
+        labels["gtvn"] = dataset_item["labels"][2].cpu().numpy()
+
+        for gtv in ["gtvt", "gtvn"]:
+            labels[gtv] = g.center_align_img(labels[gtv], img_shape)
+
+        labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
+
         for gtv in ["gtvt", "gtvn", "gtvs"]:
-            outputs[gtv]["label"] = labels[gtv]
+            if mda_obs is None:
+                outputs[gtv]["label"] = labels[gtv]
+            else:
+                outputs[gtv]["label"][mda_obs] = labels[gtv]
+
         return outputs
 
-    def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
+    def _inference_single_patient_record_preds(
+        self,
+        outputs: Dict,
+        preds: ndarray,
+        img_shape: tuple,
     ):
-        outputs["gtvt"]["pred"] = preds[1]
-        outputs["gtvn"]["pred"] = preds[2]
-        outputs["gtvs"]["pred"] = np.maximum(preds[1], preds[2])
+        # preds: [background, gtvt, gtvn]
+        outputs["gtvt"]["pred"] = g.center_align_img(preds[1], img_shape)
+        outputs["gtvn"]["pred"] = g.center_align_img(preds[2], img_shape)
+        outputs["gtvs"]["pred"] = np.maximum(
+            outputs["gtvt"]["pred"], outputs["gtvn"]["pred"]
+        )

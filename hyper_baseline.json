@@ -15,12 +15,7 @@
     "loss.delta": 0.5,
     "loss.gamma": 0.5,
     "loss.weight": 0.5,
-    "lr": [
-        0.0001,
-        5e-05,
-        2e-05,
-        1e-05
-    ],
+    "lr": 0.0001,
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
     "lr.min": 1e-05,

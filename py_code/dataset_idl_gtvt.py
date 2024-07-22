@@ -233,12 +233,13 @@ class DataSetIDLGTVt(DatasetCore):
             # make sure same group use the same augment_seed
             # !!! use python random, DO NOT use np.random !!!
             # np.random + dataloader will cause multi-processing problem
-            tmp["seed"] = random.randint(0, 2**16)
+            tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
             for i in ["label", "pred"]:
                 tmp[i] = self._preprocess(
-                    img=self.__origin[i], augment_seed=tmp["seed"]
+                    img=self.__origin[i],
+                    augment_seed=tmp["augment.seed"],
                 )
                 tmp[i] = g.binarize_img(tmp[i])
 
@@ -248,7 +249,7 @@ class DataSetIDLGTVt(DatasetCore):
             if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
                 # if "final" dict is empty
                 if final == {}:
-                    for i in ["label", "pred", "seed"]:
+                    for i in ["label", "pred", "augment.seed"]:
                         final[i] = tmp[i]
                     if origin_label_pred_sum == 0:
                         break
@@ -256,13 +257,13 @@ class DataSetIDLGTVt(DatasetCore):
                 # keep the seed/label/pred with largest target volume
                 final_label_pred_sum = final["label"].sum() + final["pred"].sum()
                 if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "seed"]:
+                    for i in ["label", "pred", "augment.seed"]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label", "pred", "seed"]:
+                for i in ["label", "pred", "augment.seed"]:
                     final[i] = tmp[i]
                 break
 
@@ -277,7 +278,10 @@ class DataSetIDLGTVt(DatasetCore):
         if self._no_pt:
             multi_modal_list.remove(Modal.PT)
         for i in multi_modal_list:
-            img = self._preprocess(self.__origin[i], final["seed"])
+            img = self._preprocess(
+                img=self.__origin[i],
+                augment_seed=final["augment.seed"],
+            )
 
             # concat multi-model img
             if input_imgs is None:
@@ -288,7 +292,7 @@ class DataSetIDLGTVt(DatasetCore):
         # weight map
         weight_map = self._preprocess(
             img=self.__origin["weight.map"],
-            augment_seed=final["seed"],
+            augment_seed=final["augment.seed"],
             normalize=False,
             clip_up_limit=self.__origin["weight.map"].max(),
         )

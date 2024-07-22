@@ -1,3 +1,7 @@
+class ErrMsg:
+    DATASET_VER_INVALID = "dataset_ver invalid value!"
+
+
 class SelectScenario:
     LARGEST = "largest"
     GRAVITY_CENTER = "gravity.center"

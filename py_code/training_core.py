@@ -12,7 +12,7 @@ from custom_list import List
 from dataset_baseline import DataSetBaseline
 from numpy import ndarray
 from segment_metric import SegmentationMetric
-from str_lib import DatasetPart, DatasetVer, Metric, Stat
+from str_lib import DatasetPart, DatasetVer, ErrMsg, MdaObs, Metric, Stat
 from torch import Tensor, optim
 from torch.nn import DataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -369,35 +369,72 @@ class TrainingCore:
         no_pt: str,
         segment_metrics: Dict = None,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
-        idl_gtvn_clicks: ndarray = None,  # only for idl.gtvn
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
+        obs_gtvn_clicks: ndarray = None,  # only for observer study
     ) -> Dict:
+
+        # outputs structure:
+        # [gtv]->["dsc/msd/hd95/label/pred/clicks/distance.map"]
+        # for MDA dataset:
+        # [gtv]->["label/clicks/distance.map"]->["observer1/2/3"]
+        # [gtv]->["dsc/msd/hd95"]->["observer1/2/3/iov"]
+        outputs = Dict()
+
         # load dataset
         dataset = self._inference_single_patient_load_dataset(
             patient=patient,
             dataset_ver=dataset_ver,
             no_pt=no_pt,
-            idl_gtvn_baseline_id=idl_gtvn_baseline_id,
-            idl_gtvn_clicks=idl_gtvn_clicks,
+            idl_gtvn_baseline_id=idl_gtvn_baseline_id,  # only for idl.gtvn
+            obs_gtvn_clicks=obs_gtvn_clicks,  # only for observer study gtvn
         )
 
-        # load labels
-        labels = g.load_gtv_labels(
-            dataset_ver=dataset_ver,
-            patient=patient,
-        )
-        # outputs structure: ["gtvs/gtvt/gtvn"]["label/pred/clicks/distance.map"]
-        outputs = self._inference_single_patient_record_labels(labels)
+        # create observer list
+        if dataset_ver == DatasetVer.MDA:
+            mda_obs_list = List(
+                [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
+            )
+        elif dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+            mda_obs_list = [None]
+        else:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
-        # get items from dataset
-        item = dataset.get_item(patient)
-        input_imgs = item[0]
-        labels = item[1]
-        idl_gtvn_clicks = self._inference_single_patient_get_gtvn_clicks(item)
+        input_imgs = None
+        img_shape = None
 
-        # add "batch" (c/d/h/w -> b/c/d/h/w)
-        input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
-        labels = torch.unsqueeze(labels.to(g.DEVICE), dim=0)
+        # loop through observer list
+        for mda_obs in mda_obs_list.copy():
+            # get items from dataset
+            # augment was set to None when creating dataset,
+            # so there is no data augmentation in get_item() function
+            dataset_item = dataset.get_item(patient=patient, mda_obs=mda_obs)
+            if dataset_item is None:
+                mda_obs_list.remove(mda_obs)
+                continue
+
+            # get input images
+            if input_imgs is None:
+                input_imgs = dataset_item["input.imgs"]
+                # add "batch" (c/d/h/w -> b/c/d/h/w)
+                input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+
+            # get img shape
+            if img_shape is None:
+                img_shape = dataset_item["shape"]
+
+            # record labels of current observer into outputs dict
+            self._inference_single_patient_record_labels(
+                outputs=outputs,
+                dataset_item=dataset_item,
+                mda_obs=mda_obs,
+            )
+
+            # record gtvn clicks of current observer into outputs dict
+            self._inference_single_patient_record_gtvn_clicks(
+                outputs=outputs,
+                dataset_item=dataset_item,
+                mda_obs=mda_obs,
+            )
 
         # idl progress INFERENCE_LOAD_IMG
         if self._obs_study_progress is not None:
@@ -406,50 +443,84 @@ class TrainingCore:
             )
             self._obs_study_progress.emit_signal()
 
-        # get predictions from cnn
+        # get prediction from cnn
         cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
             preds = cnn.forward(input_imgs)
         # squeeze "batch" (b/c/d/h/w -> c/d/h/w)
         preds = torch.squeeze(preds, dim=0).cpu().numpy()
 
-        # idl progress INFERENCE_FORWARD
+        # observer study progress INFERENCE_FORWARD
         if self._obs_study_progress is not None:
             self._obs_study_progress.cur_step += (
                 self._obs_study_progress.step.INFERENCE_FORWARD
             )
             self._obs_study_progress.emit_signal()
 
-        # record img into outputs
-        self._inference_single_patient_record_outputs(
+        # record preds into outputs
+        self._inference_single_patient_record_preds(
             outputs=outputs,
             preds=preds,
-            input_imgs=input_imgs,
-            idl_gtvn_clicks=idl_gtvn_clicks,
+            img_shape=img_shape,
         )
 
-        # pad and crop all imgs to original size
-        for gtv in outputs.keys():
-            for i in outputs[gtv].keys():
-                outputs[gtv][i] = g.center_align_img(
-                    outputs[gtv][i], outputs[gtv]["label"].shape
-                )
+        # record gtvn distance map into outputs
+        self._inference_single_patient_record_gtvn_distance_map(
+            outputs=outputs,
+            input_imgs=input_imgs,
+            img_shape=img_shape,
+        )
 
-        # post processing (after pad and crop, before calculate scores)
+        # post processing (before calculate metric)
+        # remove connected_components has no overlap with delineated slices
         self._inference_single_patient_gtvt_post_process(
             outputs=outputs,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
+
         self._inference_single_patient_gtvn_post_process(outputs)
 
-        # calculate scores of current patient
+        # calculate metrics
         if dataset_part != DatasetPart.TRAIN and self._obs_study_progress is None:
             for gtv in outputs.keys():
+                # mda_obs_list = outputs[gtv]["label"].keys()
+                for mda_obs in mda_obs_list:
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                        if mda_obs is None:
+                            outputs[gtv][metric] = segment_metrics[metric](
+                                outputs[gtv]["pred"],
+                                outputs[gtv]["label"],
+                            )
+                        else:
+                            outputs[gtv][metric][mda_obs] = segment_metrics[metric](
+                                outputs[gtv]["pred"],
+                                outputs[gtv]["label"][mda_obs],
+                            )
+
+        # calculate iov of labels (only for mda dataset)
+        if dataset_ver == DatasetVer.MDA and self._obs_study_progress is None:
+            # [gtv]->[metric]->["iov"]
+            # (1) initialize as list (for average calculation)
+            for gtv in outputs.keys():
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    outputs[gtv][metric] = segment_metrics[metric](
-                        outputs[gtv]["pred"],
-                        outputs[gtv]["label"],
+                    outputs[gtv][metric]["iov"] = []
+            # (2) calculate iov between every 2 observers
+            for gtv in outputs.keys():
+                mda_obs_list = outputs[gtv]["label"].keys()
+                for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                        iov = segment_metrics[metric](
+                            outputs[gtv]["label"][mda_osb_1],
+                            outputs[gtv]["label"][mda_obs_2],
+                        )
+                        outputs[gtv][metric]["iov"].append(iov)
+            # (3) calculate avg value
+            for gtv in outputs.keys():
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                    outputs[gtv][metric]["iov"] = g.calculate_avg(
+                        outputs[gtv][metric]["iov"]
                     )
+
         return outputs
 
     def _inference_single_patient_load_dataset(
@@ -457,8 +528,8 @@ class TrainingCore:
         patient: str,
         dataset_ver: str,
         no_pt: bool,
-        idl_gtvn_baseline_id: str = None,
-        idl_gtvn_clicks: ndarray = None,
+        *args,
+        **kwargs,
     ):
         return DataSetBaseline(
             patients=[patient],
@@ -467,23 +538,22 @@ class TrainingCore:
             augment=None,
         )
 
-    def _inference_single_patient_record_labels(self, labels: Dict, outputs: Dict):
+    def _inference_single_patient_record_labels(self, *args, **kwargs):
         pass
 
-    def _inference_single_patient_get_gtvn_clicks(self, item: list):
-        return None
-
-    def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
-    ):
+    def _inference_single_patient_record_gtvn_clicks(self, *args, **kwargs):
         pass
 
-    def _inference_single_patient_gtvn_post_process(self, outputs: Dict):
+    def _inference_single_patient_record_preds(self, *args, **kwargs):
         pass
 
-    def _inference_single_patient_gtvt_post_process(
-        self, outputs: Dict, idl_gtvt_label_masked_by_selected_slices: ndarray
-    ):
+    def _inference_single_patient_record_gtvn_distance_map(self, *args, **kwargs):
+        pass
+
+    def _inference_single_patient_gtvn_post_process(self, *args, **kwargs):
+        pass
+
+    def _inference_single_patient_gtvt_post_process(self, *args, **kwargs):
         pass
 
     # make this function protected, idl will use it

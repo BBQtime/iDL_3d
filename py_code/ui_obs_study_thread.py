@@ -66,7 +66,7 @@ class ObsStudyGTVnThread(ObsStudyThread):
             idl_gtvn_id=self.__idl_gtvn_id,
             dataset_ver=self.__dataset_ver,
             patient=self.__patient,
-            idl_gtvn_clicks=self.__idl_gtvn_clicks,
+            obs_gtvn_clicks=self.__idl_gtvn_clicks,
             debug_mode=self.__debug_mode,
         )
         self._hide_progress_widgets()

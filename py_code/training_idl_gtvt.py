@@ -1142,18 +1142,36 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_ver=dataset_ver,
         )
 
-    def _inference_single_patient_record_labels(self, labels: Dict):
-        outputs = Dict()
-        outputs["gtvt"]["label"] = labels["gtvt"]
+    def _inference_single_patient_record_labels(
+        self,
+        outputs: Dict,
+        dataset_item: Dict,
+        mda_obs: str = None,
+    ):
+        labels = dataset_item["labels"][1].cpu().numpy()
+        img_shape = dataset_item["shape"]
+        labels = g.center_align_img(labels, img_shape)
+
+        if mda_obs is None:
+            outputs["gtvt"]["label"] = labels
+        else:
+            outputs["gtvt"]["label"][mda_obs] = labels
         return outputs
 
-    def _inference_single_patient_record_outputs(
-        self, outputs: Dict, preds: Dict, input_imgs: Tensor, idl_gtvn_clicks: Tensor
+    def _inference_single_patient_record_preds(
+        self,
+        outputs: Dict,
+        preds: ndarray,
+        img_shape: tuple,
     ):
-        outputs["gtvt"]["pred"] = preds[1]
+        # preds: [background, gtvt]
+        outputs["gtvt"]["pred"] = g.center_align_img(preds[1], img_shape)
 
+    # remove connected_components has no overlap with delineated slices
     def _inference_single_patient_gtvt_post_process(
-        self, outputs: Dict, idl_gtvt_label_masked_by_selected_slices: ndarray
+        self,
+        outputs: Dict,
+        idl_gtvt_label_masked_by_selected_slices: ndarray,
     ):
         if idl_gtvt_label_masked_by_selected_slices is not None:
             cc_list = g.get_connected_components(outputs["gtvt"]["pred"])
