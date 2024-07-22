@@ -20,5 +20,8 @@
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
     "no.pt": true,
-    "pretrain.id": "baseline_simulation_no.pt"
+    "pretrain.id": [
+        "baseline_simulation_no.pt",
+        ""
+    ]
 }

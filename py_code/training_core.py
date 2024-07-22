@@ -60,8 +60,8 @@ class TrainingCore:
                 if "fold." in key_name:
                     fold_count += 1
 
-            if fold_count != g.DATASET_FOLDS:
-                dataset_split = self.__split_dataset()
+            if fold_count != g.DATASET_FOLDS[dataset_ver]:
+                dataset_split = self.__kfolds_split(dataset_ver)
 
             # test set
             patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
@@ -244,9 +244,10 @@ class TrainingCore:
         for key, value in hyper.items():
             print(key + ":", value)
 
-    # split dataset and save result into json file
-    def __split_dataset(self) -> Dict:
-        dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH)
+    # split dataset into k folds and save dict into json file
+    # this function keep test set unchanged
+    def __kfolds_split(self, dataset_ver: str) -> Dict:
+        dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
         train_patients = List()
 
         for key_name in dataset_split.keys():
@@ -256,9 +257,9 @@ class TrainingCore:
 
         random.shuffle(train_patients)
 
-        fold_len = round(len(train_patients) / g.DATASET_FOLDS)
-        for fold in range(1, g.DATASET_FOLDS + 1):
-            if fold == g.DATASET_FOLDS:
+        fold_len = round(len(train_patients) / g.DATASET_FOLDS[dataset_ver])
+        for fold in range(1, g.DATASET_FOLDS[dataset_ver] + 1):
+            if fold == g.DATASET_FOLDS[dataset_ver]:
                 dataset_split["fold.{}".format(fold)] = train_patients.to_str()
             else:
                 dataset_split["fold.{}".format(fold)] = train_patients[
@@ -266,7 +267,7 @@ class TrainingCore:
                 ].to_str()
                 train_patients = train_patients[fold_len:]
 
-        g.save_json(dataset_split, g.DATASET_SPLIT_JSON_PATH)
+        g.save_json(dataset_split, g.DATASET_SPLIT_JSON_PATH[dataset_ver])
         return dataset_split
 
     def _save_cnn(self, hyper: Dict, save_path: str):

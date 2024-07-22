@@ -821,8 +821,18 @@ for __i in ["baseline", "idl.gtvt", "idl.gtvn"]:
         PROJ_DIR, __settings["hyper.json.{}".format(__i)]
     )
 
-DATASET_FOLDS = __settings["dataset.folds"]
+
+DATASET_FOLDS = Dict()
+for __i in [
+    DatasetVer.AU,
+    DatasetVer.OBS_STUDY,
+    DatasetVer.MDA,
+]:
+    DATASET_FOLDS[__i] = __settings["dataset.folds.{}".format(__i)]
+
+
 TRAIN_RESULTS_DIR = os.path.join(PROJ_DIR, __settings["train.results.dir"])
+
 
 if is_linux():
     FONT_STYLE = "font-size: {}pt;".format(10)

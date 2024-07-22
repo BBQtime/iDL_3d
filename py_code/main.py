@@ -18,22 +18,24 @@ g.clear_linux_trash()
 
 baseline = TrainingBaseline()
 baseline.new_training(
-    train_remark="mda.transfer",
-    debug_mode=1,
+    train_remark="mda",
+    debug_mode=0,
 )
-# baseline.inference_all_folds(
-#     baseline_id="baseline_2024.06.28.12.56.57_mda.new.cnn",
-#     dataset_part=DatasetPart.VALID,
-#     dataset_ver=DatasetVer.MDA,
-# )
+baseline.inference_all_folds(
+    baseline_id="baseline_simulation_no.pt",
+    dataset_part=DatasetPart.TEST,
+    dataset_ver=DatasetVer.MDA,
+    debug_mode=0,
+)
 # baseline.remove_non_optimal_epochs(
 #     baseline_id="baseline_2024.06.28.12.56.57_mda.new.cnn",
 # )
-# baseline.inference_cross_valid(
-#     baseline_id="baseline_2024.06.28.12.56.57_mda.new.cnn",
-#     dataset_part=DatasetPart.TEST,
-#     dataset_ver=DatasetVer.MDA,
-# )
+baseline.inference_cross_valid(
+    baseline_id="baseline_simulation_no.pt",
+    dataset_part=DatasetPart.TEST,
+    dataset_ver=DatasetVer.MDA,
+    debug_mode=0,
+)
 
 
 # idl_gtvt = TrainingIDLGTVt()

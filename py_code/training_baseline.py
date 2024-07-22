@@ -23,7 +23,11 @@ class TrainingBaseline(TrainingCore):
         super().__init__()
 
     def _load_hyper(
-        self, hyper: Dict, fold: int, idl_gtvn_baseline_id: str, debug_mode: bool
+        self,
+        hyper: Dict,
+        fold: int,
+        idl_gtvn_baseline_id: str,
+        debug_mode: bool,
     ):
         # shared by baseline/idl.gtvn/idl.gtvt
         super()._load_hyper(hyper)
@@ -68,11 +72,7 @@ class TrainingBaseline(TrainingCore):
         # augment percent
         hyper["augment.pct"] = g.clamp_value(hyper["augment.pct"], (0.0, 1.0))
 
-        # dataset version
-        self._load_hyper_dataset_version(
-            hyper=hyper,
-            idl_baseline_id=idl_gtvn_baseline_id,
-        )
+        # MDA dataset has no PET images
         if hyper["dataset.ver"] == DatasetVer.MDA:
             hyper["no.pt"] = True
 
@@ -319,16 +319,26 @@ class TrainingBaseline(TrainingCore):
                         break
 
     def _training_all_folds(
-        self, hyper: Dict, train_dir: str, idl_gtvn_baseline_id: str, debug_mode: bool
+        self,
+        hyper: Dict,
+        train_dir: str,
+        idl_gtvn_baseline_id: str,
+        debug_mode: bool,
     ):
         g.create_dir(train_dir)
 
+        # check dataset version (before number of folds are comfirmed)
+        self._load_hyper_dataset_version(
+            hyper=hyper,
+            idl_baseline_id=idl_gtvn_baseline_id,
+        )
+
         # cross validation
         fold = int(hyper["fold"])
-        fold = g.clamp_value(fold, (0, g.DATASET_FOLDS))
+        fold = g.clamp_value(fold, (0, g.DATASET_FOLDS[hyper["dataset.ver"]]))
         # fold=0 will activate cross validation
         if fold == 0:
-            fold_list = List(range(1, g.DATASET_FOLDS + 1))
+            fold_list = List(range(1, g.DATASET_FOLDS[hyper["dataset.ver"]] + 1))
         else:
             fold_list = [fold]
 
@@ -979,8 +989,9 @@ class TrainingBaseline(TrainingCore):
         ]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
 
-        # this json file is created by "inference_all_folds()"
-        # only save validation metrics
+        # this "inference_{}_valid.json" file:
+        # (1) is created by "inference_all_folds()"
+        # (2) only saves validation metrics
         inference_json_name = "inference_{}_valid.json".format(dataset_ver)
 
         for fold_dir in fold_dirs:
