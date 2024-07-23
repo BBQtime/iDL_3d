@@ -90,21 +90,23 @@ class DataSetBaseline(DatasetCore):
         labels = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
 
         # load multi-modal imgs
-        multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
-        if self._no_pt:
-            multi_modal_list.remove("PT")
+        if self._dataset_ver == DatasetVer.NKI:
+            multi_modal_list = ["CT", "PTdr", "T1dr", "T2dr"]
+            if self._no_pt:
+                multi_modal_list.remove("PTdr")
+        else:
+            multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
+            if self._no_pt:
+                multi_modal_list.remove("PT")
 
         input_imgs = None
         for i in multi_modal_list:
-            if (
-                self._dataset_ver == DatasetVer.AU
-                or self._dataset_ver == DatasetVer.OBS_STUDY
-            ):
+            if self._dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                 img_path = os.path.join(
                     g.DATASET_DIR[self._dataset_ver],
                     "HNCDL_{}_{}.nii".format(patient, i),
                 )
-            elif self._dataset_ver == DatasetVer.MDA:
+            elif self._dataset_ver in [DatasetVer.MDA, DatasetVer.NKI]:
                 img_path = os.path.join(
                     g.DATASET_DIR[self._dataset_ver],
                     patient,

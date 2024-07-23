@@ -1,5 +1,10 @@
-The original dataset did not include gtvn.nii for the following patients
+The following patients has no GTVn label 
+
+(1)AU dataset:
 257,192,311,276,323,168,220,175,174,194,229,327,309,204,315,152,239,261,138
 
-This issue has been resolved by generating empty gtvn.nii files for each of these patients.
+(2)NKI dataset:
+NKI_220,NKI_240,NKI_244,NKI_246,NKI_250,NKI_276,NKI_288,NKI_289,NKI_306,NKI_325,NKI_334
+
+This issue has been resolved by generating empty ndarray in g.load_gtv_labels() function.
 It is recommended to keep a list of these patients for future reference.

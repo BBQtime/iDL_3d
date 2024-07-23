@@ -1,0 +1,4 @@
+The following patients has no GTVt preds
+
+(1)OBS_STUDY dataset:
+462, 499

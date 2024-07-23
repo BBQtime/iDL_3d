@@ -51,6 +51,7 @@ class DatasetVer:
     AU = "au"
     OBS_STUDY = "obs.study"
     MDA = "mda"
+    NKI = "nki"
 
 
 class MdaObs:

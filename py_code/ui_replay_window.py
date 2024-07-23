@@ -796,6 +796,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.dataset_ver = DatasetVer.OBS_STUDY
         elif self._cur_patient in self._patients[DatasetVer.MDA]:
             self.dataset_ver = DatasetVer.MDA
+        elif self._cur_patient in self._patients[DatasetVer.NKI]:
+            self.dataset_ver = DatasetVer.NKI
         else:
             g.error_exit("Can't find current patient in testset patients!")
 

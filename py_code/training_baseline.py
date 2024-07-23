@@ -596,25 +596,6 @@ class TrainingBaseline(TrainingCore):
 
                 continue  # next epoch
 
-    # def _inference_init_scores(self, dataset_ver: str, *args, **kwargs) -> Dict:
-    #     scores = Dict()
-    #     for stat in [Stat.MEDIAN, Stat.AVG]:
-    #         for gtv in ["gtvs", "gtvt", "gtvn"]:
-    #             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-
-    #                 if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
-    #                     scores[stat][gtv][metric] = List()
-
-    #                 elif dataset_ver == DatasetVer.MDA:
-    #                     for obs in patient_outputs[gtv][metric].keys():
-    #                         scores[stat][gtv][metric][obs].append(
-    #                             patient_outputs[gtv][metric][obs]
-    #                         )
-    #                 else:
-    #                     g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-    #     return scores
-
     def _inference_all_folds_save_patient_preds(
         self,
         patient: str,
@@ -653,7 +634,7 @@ class TrainingBaseline(TrainingCore):
 
                 # add cur patient metric into a list for avg and median calculation
                 # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
                     # initialize a list
                     if scores[Stat.AVG][gtv][metric] == {}:
                         scores[Stat.AVG][gtv][metric] = List()
@@ -692,7 +673,7 @@ class TrainingBaseline(TrainingCore):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
                     scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
                         scores[Stat.AVG][gtv][metric]
                     )
@@ -847,7 +828,7 @@ class TrainingBaseline(TrainingCore):
             if dataset_part == DatasetPart.TEST:
 
                 # load labels
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
                     labels = g.load_gtv_labels(
                         dataset_ver=dataset_ver,
                         patient=patient,
@@ -938,7 +919,7 @@ class TrainingBaseline(TrainingCore):
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 
                 # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
                     score = segment_metrics[metric](preds[gtv], labels[gtv])
 
                     # save cur patient metric
@@ -1032,7 +1013,7 @@ class TrainingBaseline(TrainingCore):
         dataset_ver: str,
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
-            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
                 fold_scores[epoch][stat] = epoch_scores[stat]
 
             elif dataset_ver == DatasetVer.MDA:

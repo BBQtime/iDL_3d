@@ -395,7 +395,7 @@ class TrainingCore:
             mda_obs_list = List(
                 [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
             )
-        elif dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+        elif dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
             mda_obs_list = [None]
         else:
             g.error_exit(ErrMsg.DATASET_VER_INVALID)
@@ -577,8 +577,9 @@ class TrainingCore:
 
             if origin_dataset_ver not in [
                 DatasetVer.AU,
-                DatasetVer.MDA,
                 DatasetVer.OBS_STUDY,
+                DatasetVer.MDA,
+                DatasetVer.NKI,
             ]:
                 g.error_exit(
                     "Invalid 'origin_dataset_ver' value: {}!".format(origin_dataset_ver)
@@ -590,10 +591,17 @@ class TrainingCore:
                     "as 'origin_dataset_ver' is 'MDA'!"
                 )
 
+            elif origin_dataset_ver == DatasetVer.NKI and dataset_ver != DatasetVer.NKI:
+                g.error_exit(
+                    "'dataset_ver' is restricted to 'NKI' only, "
+                    "as 'origin_dataset_ver' is 'NKI'!"
+                )
+
         elif dataset_ver not in [
             DatasetVer.AU,
-            DatasetVer.MDA,
             DatasetVer.OBS_STUDY,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
         ]:
             g.error_exit("Invalid 'dataset_ver' value: {}!".format(dataset_ver))
 
