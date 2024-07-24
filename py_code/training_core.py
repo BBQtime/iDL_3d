@@ -633,7 +633,7 @@ class TrainingCore:
             epoch_scores = g.load_json(
                 os.path.join(
                     epoch_dir,
-                    "inference_{}.json".format(baseline_dataset_ver),
+                    "inference_{}_valid.json".format(baseline_dataset_ver),
                 )
             )
             for stat in [Stat.MEDIAN, Stat.AVG]:

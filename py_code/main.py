@@ -4,8 +4,11 @@ from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
 
-# screen cmd:
+# (1) linux cmd:
 # /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main.py
+
+# (2) windows cmd
+# C:\Users\a.wei\AppData\Local\anaconda3\envs\py\py39\python.exe E:\Alan\iDL_3d\py_code\main.py
 
 # copy from linux to windows:
 # scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/train_results/
@@ -18,22 +21,22 @@ g.clear_linux_trash()
 
 baseline = TrainingBaseline()
 baseline.new_training(
-    train_remark="nki",
-    debug_mode=1,
+    train_remark="nki_transfer",
+    debug_mode=0,
 )
 # baseline.inference_all_folds(
-#     baseline_id="baseline_simulation_no.pt",
+#     baseline_id="baseline_au",
 #     dataset_part=DatasetPart.TEST,
-#     dataset_ver=DatasetVer.MDA,
+#     dataset_ver=DatasetVer.NKI,
 #     debug_mode=0,
 # )
 # baseline.remove_non_optimal_epochs(
 #     baseline_id="baseline_2024.06.28.12.56.57_mda.new.cnn",
 # )
 # baseline.inference_cross_valid(
-#     baseline_id="baseline_simulation_no.pt",
+#     baseline_id="baseline_au",
 #     dataset_part=DatasetPart.TEST,
-#     dataset_ver=DatasetVer.MDA,
+#     dataset_ver=DatasetVer.NKI,
 #     debug_mode=0,
 # )
 

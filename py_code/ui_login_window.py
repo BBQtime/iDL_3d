@@ -4,6 +4,7 @@ import sys
 import global_core as g
 import qdarktheme
 from custom_dict import Dict
+from custom_list import List
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QApplication
@@ -114,7 +115,12 @@ class LoginWindow(QtWidgets.QMainWindow):
             key_word = user_name  # ""
         else:
             key_word = user_name
-        train_id_list = g.get_sub_dirs(input_dir=baseline_dir, key_word=key_word)
+
+        if os.path.exists(baseline_dir):
+            train_id_list = g.get_sub_dirs(input_dir=baseline_dir, key_word=key_word)
+        # for NKI pc, there is no observer study folder
+        else:
+            train_id_list = List()
 
         # add train results into combobox
         for train_id in train_id_list:

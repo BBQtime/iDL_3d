@@ -2190,7 +2190,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
-        self._load_dataset_dir()
+        self._load_dataset_ver()
 
         # load multi-modal imgs only, no labels
         self._load_multi_modal_imgs()

@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
 from scipy.ndimage import measurements
-from str_lib import DatasetPart, DatasetVer, DisplayMode, Metric, Modal, Plane
+from str_lib import DatasetPart, DatasetVer, DisplayMode, ErrMsg, Metric, Modal, Plane
 from superqt import QCollapsible
 from ui_custom_combox import CustomComboBox
 from ui_img_frame import ImgFrame
@@ -34,9 +34,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # load test set patients of all datasets
         self._patients = Dict()
         for i in [
-            # DatasetVer.AU,
+            DatasetVer.AU,
             DatasetVer.OBS_STUDY,
-            # DatasetVer.MDA,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
         ]:
             dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[DatasetPart.TEST])
@@ -72,8 +73,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._idl_id[i] = "baseline"
             self._idl_round[i] = "round=00"
 
-        # dataset and nii spacing
+        # dataset version
         self.dataset_ver = None
+        self.__baseline_dataset_ver = None
 
         # init score_dict
         self.__scores = Dict()
@@ -235,11 +237,16 @@ class ReplayWindow(QtWidgets.QMainWindow):
         )
         self.combox["baseline"].addItems(baseline_id_list)
 
-        # set observer study baseline id as default
+        # set default baseline id
+        obs_study_baseline_id = None
         for baseline_id in baseline_id_list:
             if "obs.study" in baseline_id:
                 obs_study_baseline_id = baseline_id
-        self.combox["baseline"].setCurrentText(obs_study_baseline_id)
+        if obs_study_baseline_id is not None:
+            # set observer study baseline id as default
+            self.combox["baseline"].setCurrentText(obs_study_baseline_id)
+        else:
+            self.combox["baseline"].setCurrentText(baseline_id_list[0])
 
         # arrow buttons
         self._arrow_btn = Dict()
@@ -781,17 +788,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
             content_list.append(combox.itemText(i))
         return content_list
 
-    def _load_dataset_dir(self):
-        # load slice thickness from baseline hyper
+    def __load_baseline_dataset_ver(self):
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
         fold_dir = g.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
-        baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
+        self.__baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
             "dataset.ver"
         ]
 
-        # set dataset dir based on current patient
+    def _load_dataset_ver(self):
+        # set dataset version based on current patient
         if self._cur_patient in self._patients[DatasetVer.AU]:
-            self.dataset_ver = baseline_dataset_ver
+            self.dataset_ver = self.__baseline_dataset_ver
         elif self._cur_patient in self._patients[DatasetVer.OBS_STUDY]:
             self.dataset_ver = DatasetVer.OBS_STUDY
         elif self._cur_patient in self._patients[DatasetVer.MDA]:
@@ -802,14 +809,23 @@ class ReplayWindow(QtWidgets.QMainWindow):
             g.error_exit("Can't find current patient in testset patients!")
 
     def _fill_combox_patient(self):
-        # combox_patients = g.get_sub_dirs(
-        #     os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients")
-        # )
-        # # from "patient=123" to "123"
-        # for i in range(len(combox_patients)):
-        #     combox_patients[i] = combox_patients[i][len("patient=") :]
+        self.__load_baseline_dataset_ver()
+        # (1) dataset_ver=au, show patients from all dataset_ver
+        if self.__baseline_dataset_ver == DatasetVer.AU:
+            # get all patients under "patients" dir
+            combox_patients = g.get_sub_dirs(
+                os.path.join(
+                    g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline", "patients"
+                )
+            )
+            # from "patient=123" to "123"
+            for i in range(len(combox_patients)):
+                combox_patients[i] = combox_patients[i][len("patient=") :]
 
-        combox_patients = self._patients.to_list()
+        # (2) for other dataset_ver, only show patients under this dataset_ver
+        else:
+            combox_patients = self._patients[self.__baseline_dataset_ver]
+
         combox_patients.sort()
         self.combox["patient"].addItems(combox_patients)
         self.combox["patient"].setEnabled(True)
@@ -873,12 +889,27 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def _load_multi_modal_imgs(self):
         img_path = Dict()
         img_path[Modal.CT] = "CT"
-        img_path[Modal.PT] = "PT"
+        if self.dataset_ver == DatasetVer.NKI:
+            img_path[Modal.PT] = "PTdr"
+        else:
+            img_path[Modal.PT] = "PT"
         img_path[Modal.MR1] = "T1dr"
         img_path[Modal.MR2] = "T2dr"
+
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
-            img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
-            img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
+            if self.dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
+                img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
+
+            elif self.dataset_ver in [DatasetVer.MDA, DatasetVer.NKI]:
+                img_path[i] = "{}_{}.nii".format(self._cur_patient, img_path[i])
+                img_path[i] = os.path.join(
+                    g.DATASET_DIR[self.dataset_ver], self._cur_patient, img_path[i]
+                )
+
+            else:
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
             self.img_3d[i] = self._load_3d_img(img_path[i])
 
     # this function is connected to widget, dont set input params to this function
@@ -899,7 +930,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # run these after patient combox current text is set up
         self._enable_arrow_btns("patient")
-        self._load_dataset_dir()
+        self._load_dataset_ver()
 
         # reset comboboxes
         for i in ["idl.gtvt", "idl.gtvn"]:
@@ -1150,7 +1181,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 "baseline",
-                "inference_{}.json".format(self.dataset_ver),
+                "inference_{}_test.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = g.load_json(gtvn_score_path)
@@ -1165,7 +1196,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
                 self._idl_id[gtv],
-                "inference_{}.json".format(self.dataset_ver),
+                "inference_{}_test.json".format(self.dataset_ver),
             )
             if os.path.exists(gtvn_score_path):
                 gtvn_score = g.load_json(gtvn_score_path)
@@ -1352,8 +1383,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # place top contour at the end of the list
             # click > correction > delineation > pred > label
             seg_name_list = [
-                # "gtvn.label",
-                # "gtvt.label",
+                "gtvn.label",
+                "gtvt.label",
                 "gtvn.pred.final",
                 "gtvt.pred.final",
                 "gtvn.pred",
