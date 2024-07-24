@@ -8,7 +8,7 @@ from training_idl_gtvt import TrainingIDLGTVt
 # /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main.py
 
 # (2) windows cmd
-# C:\Users\a.wei\AppData\Local\anaconda3\envs\py\py39\python.exe E:\Alan\iDL_3d\py_code\main.py
+# cmd /C "C:\Users\a.wei\AppData\Local\anaconda3\envs\py39\python.exe E:\Alan\iDL_3d\py_code\main.py"
 
 # copy from linux to windows:
 # scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/train_results/
