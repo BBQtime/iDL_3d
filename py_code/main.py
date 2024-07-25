@@ -37,11 +37,12 @@ g.clear_linux_trash()
 # )
 
 
-# idl_gtvt = TrainingIDLGTVt()
-# idl_gtvt.simulation(
-#     baseline_id="baseline_au_no.pt",
-#     debug_mode=1,
-# )
+idl_gtvt = TrainingIDLGTVt()
+idl_gtvt.simulation(
+    baseline_id="baseline_au",
+    train_remark="",
+    debug_mode=0,
+)
 # idl_gtvt.inference(
 #     idl_gtvt_id="idl.gtvt_2023.07.21.01.40.28",
 #     dataset_part=DatasetPart.TEST,

@@ -1,5 +1,6 @@
 import math
 import os
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -126,6 +127,7 @@ class TrainingIDLGTVt(TrainingCore):
             SelectScenario.USER_CLICK,
             SelectScenario.LARGEST,
             SelectScenario.GRAVITY_CENTER,
+            SelectScenario.BIAS_GRAVITY_CENTER,
             SelectScenario.EQUAL_DIVIDE,
         ]:
             hyper["select.scenario"] = SelectScenario.RANDOM
@@ -229,8 +231,47 @@ class TrainingIDLGTVt(TrainingCore):
             ),
             binary=True,
         )
-        # label_center: (d,h,w)
-        label_center = measurements.center_of_mass(label)
+        if label.max() == 0:
+            g.error_exit("label is empty!")
+
+        # get gravity center of label
+        if (
+            hyper["select.scenario"]
+            in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
+            and cur_round == 1
+        ):
+            # label_center: (d,h,w)
+            d, h, w = measurements.center_of_mass(label)
+            # float to int
+            label_center = (round(d), round(h), round(w))
+
+            # simulate biased gravity center
+            if hyper["select.scenario"] == SelectScenario.BIAS_GRAVITY_CENTER:
+                while 1:
+                    # add random bias
+                    random_bias = (
+                        random.randint(-5, 5),
+                        random.randint(-5, 5),
+                        random.randint(-5, 5),
+                    )
+                    d, h, w = label_center
+                    label_center = (
+                        d + random_bias[0],
+                        h + random_bias[1],
+                        w + random_bias[2],
+                    )
+
+                    # check if biased label center is inside label
+                    d, h, w = label_center
+                    if (
+                        0 <= d < label.shape[0]
+                        and 0 <= h < label.shape[1]
+                        and 0 <= w < label.shape[2]
+                        and label[d, h, w] > 0
+                    ):
+                        break
+                    else:
+                        continue
 
         # select slices through each plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -272,15 +313,17 @@ class TrainingIDLGTVt(TrainingCore):
 
             # "gravity.center", round = 1
             elif (
-                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
+                hyper["select.scenario"]
+                in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
                 and cur_round == 1
             ):
+                d, h, w = label_center
                 if plane == Plane.TRANSVERSE:
-                    new_round_slices[plane].append(round(label_center[0]))
+                    new_round_slices[plane].append(d)
                 elif plane == Plane.CORONAL:
-                    new_round_slices[plane].append(round(label_center[1]))
+                    new_round_slices[plane].append(h)
                 elif plane == Plane.SAGITTAL:
-                    new_round_slices[plane].append(round(label_center[2]))
+                    new_round_slices[plane].append(w)
 
             # "equal.divide", round = 1
             elif (
@@ -302,9 +345,10 @@ class TrainingIDLGTVt(TrainingCore):
                 new_round_slices[plane] = candidates.keys()
                 new_round_slices[plane].shuffle()
 
-            # narrow new_round_slices based on select.step
+            # make sure number of new_round_slices is no more than select.step
             if (
-                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
+                hyper["select.scenario"]
+                in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
                 and cur_round == 1
             ):
                 new_slices_num = 1
@@ -915,7 +959,7 @@ class TrainingIDLGTVt(TrainingCore):
         if os.path.exists(selected_slices_path):
             hyper["select.scenario"] = SelectScenario.USER_CLICK
         # this happens only when debugging,
-        # when obs_study() is called directly instead of called by a qthread
+        # when obs_study() is called directly (instead of called by a qthread)
         # in this case, simulate user click using gravity center
         else:
             hyper["select.scenario"] = SelectScenario.GRAVITY_CENTER
