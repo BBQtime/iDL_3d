@@ -822,6 +822,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             for i in range(len(combox_patients)):
                 combox_patients[i] = combox_patients[i][len("patient=") :]
 
+            combox_patients = combox_patients.find_overlap(self._patients.to_list())
+
         # (2) for other dataset_ver, only show patients under this dataset_ver
         else:
             combox_patients = self._patients[self.__baseline_dataset_ver]
@@ -864,13 +866,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def _load_3d_img(self, path: str, binary: bool = False):
         img = g.load_nii(path, binary=False)
 
-        # ct windowing before normalization
+        # windowing before normalization
         if "CT" in path:
             img = g.windowing_ct(img)
         elif "PT" in path or "T1dr" in path or "T2dr" in path:
             img = g.windowing_img(img)
 
-        # normalization
+        # normalization after windowing
         img = g.normalize_img(img)
 
         # binarize img after normalization

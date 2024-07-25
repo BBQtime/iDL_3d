@@ -87,54 +87,30 @@ class DataSetBaseline(DatasetCore):
         # load background
         background = 1 - torch.maximum(final["gtvt"], final["gtvn"])
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
+        item["labels"] = torch.cat([background, final["gtvt"], final["gtvn"]], dim=0)
 
-        # load multi-modal imgs
-        if self._dataset_ver == DatasetVer.NKI:
-            multi_modal_list = ["CT", "PTdr", "T1dr", "T2dr"]
-            if self._no_pt:
-                multi_modal_list.remove("PTdr")
-        else:
-            multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
-            if self._no_pt:
-                multi_modal_list.remove("PT")
-
-        input_imgs = None
-        for i in multi_modal_list:
-            if self._dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
-                img_path = os.path.join(
-                    g.DATASET_DIR[self._dataset_ver],
-                    "HNCDL_{}_{}.nii".format(patient, i),
-                )
-            elif self._dataset_ver in [DatasetVer.MDA, DatasetVer.NKI]:
-                img_path = os.path.join(
-                    g.DATASET_DIR[self._dataset_ver],
-                    patient,
-                    "{}_{}.nii".format(patient, i),
-                )
-            else:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-            img = g.load_nii(img_path)
-
-            # ct windowing before normalization
-            if i == "CT":
-                img = g.windowing_ct(img)
-
+        # load input imgs
+        item["input.imgs"] = None
+        multi_modal_imgs = self._load_multi_modal_imgs(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+            no_pt=self._no_pt,
+        )
+        for i in multi_modal_imgs.keys():
             # preprocess (normalization, augmentation, center alignment, to tensor)
-            img = self._preprocess(
-                img=img,
+            multi_modal_imgs[i] = self._preprocess(
+                img=multi_modal_imgs[i],
                 augment_seed=final["augment.seed"],
             )
 
             # concat multi-model img
-            if input_imgs is None:
-                input_imgs = img
+            if item["input.imgs"] is None:
+                item["input.imgs"] = multi_modal_imgs[i]
             else:
-                input_imgs = torch.cat([input_imgs, img], dim=0)
+                item["input.imgs"] = torch.cat(
+                    [item["input.imgs"], multi_modal_imgs[i]], dim=0
+                )
 
-        item["input.imgs"] = input_imgs
-        item["labels"] = labels
         return item
 
     # must be overrided

@@ -5,10 +5,10 @@
     "augment.pct": 0.8,
     "batch.size": 1,
     "cnn": "unet.slim",
-    "dataset.ver": "nki",
+    "dataset.ver": "au",
     "dropout": 0.3,
-    "early.stop.epochs": 10,
-    "epochs": 100,
+    "early.stop.epochs": 30,
+    "epochs": 500,
     "fold": 1,
     "keep.best.cnn.num": 5,
     "loss.asym": true,
@@ -19,6 +19,6 @@
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
-    "no.pt": false,
-    "pretrain.id": "baseline_au"
+    "no.pt": true,
+    "pretrain.id": ""
 }

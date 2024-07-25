@@ -19,11 +19,11 @@ g.clear_debug_data()
 g.clear_linux_trash()
 
 
-baseline = TrainingBaseline()
-baseline.new_training(
-    train_remark="nki_transfer",
-    debug_mode=0,
-)
+# baseline = TrainingBaseline()
+# baseline.new_training(
+#     train_remark="",
+#     debug_mode=1,
+# )
 # baseline.inference_all_folds(
 #     baseline_id="baseline_au",
 #     dataset_part=DatasetPart.TEST,
