@@ -446,14 +446,8 @@ class TrainingBaseline(TrainingCore):
             )
 
             # inference
-            dataset_part_list = [DatasetPart.VALID, DatasetPart.TEST]
-
-            # if baseline, save pred of training set
-            # (in baseline training, idl_gtvn_baseline_id == None)
-            if idl_gtvn_baseline_id is None:
-                dataset_part_list.append(DatasetPart.TRAIN)
-
-            for dataset_part in dataset_part_list:
+            # (1) inference on all folds
+            for dataset_part in [DatasetPart.VALID, DatasetPart.TEST]:
                 self._inference_all_folds(
                     train_id=train_id,
                     dataset_ver=hyper["dataset.ver"],
@@ -461,24 +455,21 @@ class TrainingBaseline(TrainingCore):
                     debug_mode=debug_mode,
                 )
 
-            # remove non-optimal epochs after inference
+            # (2) remove non-optimal epochs after inference
             self._remove_non_optimal_epochs(train_id)
 
-            # cross validation evaluation after non optimal epochs removed
-            dataset_part_list.remove(DatasetPart.VALID)
-            for dataset_part in dataset_part_list:
-                self._inference_cross_valid(
-                    train_id=train_id,
-                    dataset_ver=hyper["dataset.ver"],
-                    dataset_part=dataset_part,
-                    debug_mode=debug_mode,
-                )
+            # (3) cross validation evaluation after non optimal epochs removed
+            self._inference_cross_valid(
+                train_id=train_id,
+                dataset_ver=hyper["dataset.ver"],
+                debug_mode=debug_mode,
+            )
 
     def inference_all_folds(
         self,
         baseline_id: str,
-        dataset_part: str,  # train/valid/test
-        dataset_ver: str = None,  # au/mda
+        dataset_part: str,  # only valid or test
+        dataset_ver: str = None,
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
@@ -493,8 +484,8 @@ class TrainingBaseline(TrainingCore):
     def _inference_all_folds(
         self,
         train_id: str,
-        dataset_part: str,  # train/valid/test
-        dataset_ver: str = None,  # au/mda
+        dataset_part: str,  # only valid or test
+        dataset_ver: str = None,
         debug_mode: bool = False,
     ):
         print("")
@@ -512,18 +503,32 @@ class TrainingBaseline(TrainingCore):
 
         hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
-        training_dataset_ver = hyper["dataset.ver"]
 
+        # dataset version
+        training_dataset_ver = hyper["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        self._is_valid_dataset_part(dataset_part)
         print("dataset version: {}".format(dataset_ver))
+
+        # dataset part
+        if dataset_ver == training_dataset_ver:
+            if dataset_part not in [
+                DatasetPart.VALID,
+                DatasetPart.TEST,
+            ]:
+                g.error_exit(ErrMsg.DATASET_PART_INVALID)
+        else:
+            if dataset_part != DatasetPart.TEST:
+                g.error_exit(ErrMsg.DATASET_PART_INVALID)
         print("dataset part: {}".format(dataset_part))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        if dataset_part == DatasetPart.VALID:
+            segment_metrics = self._load_segment_metrics()
+        else:
+            segment_metrics = None
 
         # loop through fold dirs
         for fold_dir in fold_dirs:
@@ -555,7 +560,12 @@ class TrainingBaseline(TrainingCore):
 
                 # loop through each patient
                 for patient in tqdm(patients[dataset_part]):
-                    # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
+                    # (1)outputs structure for sigle-observer datasets:
+                    # [gtv]->["dsc/msd/hd95/label/pred/clicks/distance.map"]
+
+                    # (2)outputs structure for MDA dataset:
+                    # [gtv]->["label/clicks/distance.map"]->["observer1/2/3"]
+                    # [gtv]->["dsc/msd/hd95"]->["observer1/2/3/iov"]
                     patient_outputs = self._inference_single_patient(
                         patient=patient,
                         cnn=cnn,
@@ -567,12 +577,13 @@ class TrainingBaseline(TrainingCore):
                     )
 
                     # create folder and save preds of current patient
-                    self._inference_all_folds_save_patient_preds(
-                        patient=patient,
-                        epoch_dir=epoch_dir,
-                        patient_outputs=patient_outputs,
-                        dataset_part=dataset_part,  # this param is needed for idl.gtvn
-                    )
+                    if dataset_part == DatasetPart.TEST:
+                        self._inference_all_folds_save_patient_preds(
+                            patient=patient,
+                            epoch_dir=epoch_dir,
+                            patient_outputs=patient_outputs,
+                            dataset_part=dataset_part,  # this param is needed for idl.gtvn
+                        )
 
                     # record score of current patient
                     # (on valid set only, the metrics are used to select the best epoch)
@@ -705,14 +716,12 @@ class TrainingBaseline(TrainingCore):
     def inference_cross_valid(
         self,
         baseline_id: str,
-        dataset_part: str,  # train/test
         dataset_ver: str = None,  # au/mda
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._inference_cross_valid(
             train_id=baseline_id,
-            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
@@ -720,8 +729,7 @@ class TrainingBaseline(TrainingCore):
     def _inference_cross_valid(
         self,
         train_id: str,
-        dataset_part: str,  # train/test
-        dataset_ver: str = None,  # au/mda
+        dataset_ver: str = None,
         debug_mode: bool = False,
     ):
         print("")
@@ -731,22 +739,17 @@ class TrainingBaseline(TrainingCore):
         if train_dir is None:
             g.error_exit("'train_id' not found!")
 
-        # baseline_id = Path(train_dir).parent.name
-
         fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
-        training_dataset_ver = hyper["dataset.ver"]
 
+        # dataset ver
+        training_dataset_ver = hyper["dataset.ver"]
         dataset_ver = self._is_valid_dataset_version(
             dataset_ver=dataset_ver,
             origin_dataset_ver=training_dataset_ver,
         )
-        if dataset_part == DatasetPart.VALID:
-            g.error_exit("Set dataset_part to 'train' instead of 'valid'!")
-        self._is_valid_dataset_part(dataset_part)
         print("dataset version: {}".format(dataset_ver))
-        print("dataset part: {}".format(dataset_part))
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics()
@@ -757,13 +760,12 @@ class TrainingBaseline(TrainingCore):
         patients = self._load_patients(
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
-        )
+        )[DatasetPart.TEST]
 
         # initialize scores dict
-        if dataset_part == DatasetPart.TEST:
-            scores = Dict()
+        scores = Dict()
 
-        for patient in tqdm(patients[dataset_part]):
+        for patient in tqdm(patients):
             # initialize preds
             preds = Dict()
             for gtv in ["gtvs", "gtvt", "gtvn"]:
@@ -824,87 +826,80 @@ class TrainingBaseline(TrainingCore):
                         spacing=g.NII_SPACING,
                     )
 
-            # load labels and calculate metrics (on test set only)
-            if dataset_part == DatasetPart.TEST:
-
-                # load labels
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
-                    labels = g.load_gtv_labels(
-                        dataset_ver=dataset_ver,
-                        patient=patient,
+            # calculate metrics
+            # load labels
+            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+                labels = g.load_gtv_labels(
+                    dataset_ver=dataset_ver,
+                    patient=patient,
+                )
+            elif dataset_ver == DatasetVer.MDA:
+                labels = Dict()
+                mda_obs_list = List(
+                    [
+                        MdaObs.AAA,
+                        MdaObs.DMEl,
+                        MdaObs.MRA,
+                        MdaObs.SA,
+                        MdaObs.YK,
+                    ]
+                )
+                for mda_obs in mda_obs_list.copy():
+                    cur_obs_label = g.load_gtv_labels(
+                        dataset_ver=dataset_ver, patient=patient, mda_obs=mda_obs
                     )
-                elif dataset_ver == DatasetVer.MDA:
-                    labels = Dict()
-                    mda_obs_list = List(
-                        [
-                            MdaObs.AAA,
-                            MdaObs.DMEl,
-                            MdaObs.MRA,
-                            MdaObs.SA,
-                            MdaObs.YK,
-                        ]
-                    )
-                    for mda_obs in mda_obs_list.copy():
-                        cur_obs_label = g.load_gtv_labels(
-                            dataset_ver=dataset_ver, patient=patient, mda_obs=mda_obs
-                        )
-                        if cur_obs_label is not None:
-                            labels[mda_obs] = cur_obs_label
-                        else:
-                            # remove observer without label (calculating iov will also use mda_obs_list)
-                            mda_obs_list.remove(mda_obs)
+                    if cur_obs_label is not None:
+                        labels[mda_obs] = cur_obs_label
+                    else:
+                        # remove observer without label (calculating iov will also use mda_obs_list)
+                        mda_obs_list.remove(mda_obs)
 
-                    # calculate iov of labels (only for mda dataset)
-                    # key: [gtv]->[metric]->["iov"]
-                    # (1) initialize as list (for average calculation)
-                    for gtv in preds.keys():
+                # calculate iov of labels (only for mda dataset)
+                # key: [gtv]->[metric]->["iov"]
+                # (1) initialize as list (for average calculation)
+                for gtv in preds.keys():
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                        scores["patient={}".format(patient)][gtv][metric]["iov"] = []
+                # (2) calculate iov between every 2 observers
+                for gtv in preds.keys():
+                    for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
                         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                            iov = segment_metrics[metric](
+                                labels[mda_osb_1][gtv],
+                                labels[mda_obs_2][gtv],
+                            )
                             scores["patient={}".format(patient)][gtv][metric][
                                 "iov"
-                            ] = []
-                    # (2) calculate iov between every 2 observers
-                    for gtv in preds.keys():
-                        for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
-                            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                                iov = segment_metrics[metric](
-                                    labels[mda_osb_1][gtv],
-                                    labels[mda_obs_2][gtv],
-                                )
-                                scores["patient={}".format(patient)][gtv][metric][
-                                    "iov"
-                                ].append(iov)
-                    # (3) calculate avg value
-                    for gtv in preds.keys():
-                        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                            scores["patient={}".format(patient)][gtv][metric]["iov"] = (
-                                g.calculate_avg(
-                                    scores["patient={}".format(patient)][gtv][metric][
-                                        "iov"
-                                    ]
-                                )
+                            ].append(iov)
+                # (3) calculate avg value
+                for gtv in preds.keys():
+                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                        scores["patient={}".format(patient)][gtv][metric]["iov"] = (
+                            g.calculate_avg(
+                                scores["patient={}".format(patient)][gtv][metric]["iov"]
                             )
-                else:
-                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
+                        )
+            else:
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
-                # calculate metrics
-                self._inference_cross_valid_record_patient_score(
-                    patient=patient,
-                    preds=preds,
-                    labels=labels,
-                    segment_metrics=segment_metrics,
-                    scores=scores,
-                    dataset_ver=dataset_ver,
-                )
+            # calculate metrics
+            self._inference_cross_valid_record_patient_score(
+                patient=patient,
+                preds=preds,
+                labels=labels,
+                segment_metrics=segment_metrics,
+                scores=scores,
+                dataset_ver=dataset_ver,
+            )
 
         # all patients have been traversed
-        # calculate avg and median score (on test set only)
-        if dataset_part == DatasetPart.TEST:
-            self._inference_calculate_save_avg_median(
-                scores=scores,
-                save_dir=Path(fold_dirs[0]).parent,
-                dataset_ver=dataset_ver,
-                dataset_part=dataset_part,
-            )
+        # calculate avg and median score
+        self._inference_calculate_save_avg_median(
+            scores=scores,
+            save_dir=Path(fold_dirs[0]).parent,
+            dataset_ver=dataset_ver,
+            dataset_part=DatasetPart.TEST,
+        )
 
     def _inference_cross_valid_record_patient_score(
         self,

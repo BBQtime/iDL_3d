@@ -537,14 +537,14 @@ class TrainingIDLGTVt(TrainingCore):
                     hyper["cnn"].freeze_top()
 
             # here, labels only have 2 channels: background and gtvt, No gtvn
-            for input_imgs, labels, weight_map in idl_gtvt_loader:
+            for item in idl_gtvt_loader:
                 # zero grad at the begining of each mini-batch
                 hyper["optim"].zero_grad()
-                input_imgs = input_imgs.to(g.DEVICE)
-                labels = labels.to(g.DEVICE)
-                weight_map = weight_map.to(g.DEVICE)
-                preds = hyper["cnn"](input_imgs)
-                loss = hyper["loss.func"](preds, labels, weight_map)
+                item["input.imgs"] = item["input.imgs"].to(g.DEVICE)
+                item["labels"] = item["labels"].to(g.DEVICE)
+                item["weight.map"] = item["weight.map"].to(g.DEVICE)
+                preds = hyper["cnn"](item["input.imgs"])
+                loss = hyper["loss.func"](preds, item["labels"], item["weight.map"])
                 loss.backward()  # get grad (must after: optim.zero_grad())
                 hyper["optim"].step()  # update param
                 iter_loss += loss.item()
@@ -643,13 +643,13 @@ class TrainingIDLGTVt(TrainingCore):
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
-                "inference_{}.json".format(hyper["dataset.ver"]),
+                "inference_{}_test.json".format(hyper["dataset.ver"]),
             )
         )
         idl_gtvt_score = g.load_json(
             os.path.join(
                 idl_gtvt_dir,
-                "inference_{}.json".format(hyper["dataset.ver"]),
+                "inference_{}_test.json".format(hyper["dataset.ver"]),
             )
         )
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -660,7 +660,7 @@ class TrainingIDLGTVt(TrainingCore):
             idl_gtvt_score,
             os.path.join(
                 idl_gtvt_dir,
-                "inference_{}.json".format(hyper["dataset.ver"]),
+                "inference_{}_test.json".format(hyper["dataset.ver"]),
             ),
         )
 
@@ -821,7 +821,7 @@ class TrainingIDLGTVt(TrainingCore):
                 Dict(),
                 os.path.join(
                     idl_gtvt_dir,
-                    "inference_{}.json".format(hyper["dataset.ver"]),
+                    "inference_{}_test.json".format(hyper["dataset.ver"]),
                 ),
             )
 
@@ -1040,7 +1040,7 @@ class TrainingIDLGTVt(TrainingCore):
         dataset_ver: str,
     ):
         score_json_path = os.path.join(
-            idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
+            idl_gtvt_dir, "inference_{}_test.json".format(dataset_ver)
         )
         scores = g.load_json(score_json_path)
         all_patient_scores = Dict()
@@ -1098,11 +1098,11 @@ class TrainingIDLGTVt(TrainingCore):
             os.path.join(
                 Path(idl_gtvt_dir).parent,
                 "baseline",
-                "inference_{}.json".format(dataset_ver),
+                "inference_{}_test.json".format(dataset_ver),
             )
         )
         idl_gtvt_score_path = os.path.join(
-            idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
+            idl_gtvt_dir, "inference_{}_test.json".format(dataset_ver)
         )
         if os.path.exists(idl_gtvt_score_path):
             idl_gtvt_score = g.load_json(idl_gtvt_score_path)
@@ -1181,7 +1181,3 @@ class TrainingIDLGTVt(TrainingCore):
                     outputs["gtvt"]["pred"] = np.maximum(
                         outputs["gtvt"]["pred"], cur_cc
                     )
-
-    def _is_valid_dataset_part(self, dataset_part: str):
-        if dataset_part != DatasetPart.TEST:
-            g.error_exit("'dataset_part' must be 'TEST'!")

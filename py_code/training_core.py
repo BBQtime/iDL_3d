@@ -374,9 +374,10 @@ class TrainingCore:
         obs_gtvn_clicks: ndarray = None,  # only for observer study
     ) -> Dict:
 
-        # outputs structure:
+        # (1)outputs structure for sigle-observer datasets:
         # [gtv]->["dsc/msd/hd95/label/pred/clicks/distance.map"]
-        # for MDA dataset:
+
+        # (2)outputs structure for MDA dataset:
         # [gtv]->["label/clicks/distance.map"]->["observer1/2/3"]
         # [gtv]->["dsc/msd/hd95"]->["observer1/2/3/iov"]
         outputs = Dict()
@@ -444,7 +445,7 @@ class TrainingCore:
             )
             self._obs_study_progress.emit_signal()
 
-        # get prediction from cnn
+        # get pred using inputs and cnn
         cnn.eval()  # disable dropout / batch nomalize
         with torch.no_grad():
             preds = cnn.forward(input_imgs)
@@ -482,7 +483,7 @@ class TrainingCore:
         self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate metrics
-        if dataset_part != DatasetPart.TRAIN and self._obs_study_progress is None:
+        if segment_metrics is not None and self._obs_study_progress is None:
             for gtv in outputs.keys():
                 # mda_obs_list = outputs[gtv]["label"].keys()
                 for mda_obs in mda_obs_list:
@@ -497,30 +498,6 @@ class TrainingCore:
                                 outputs[gtv]["pred"],
                                 outputs[gtv]["label"][mda_obs],
                             )
-
-        # calculate iov of labels (only for mda dataset)
-        if dataset_ver == DatasetVer.MDA and self._obs_study_progress is None:
-            # [gtv]->[metric]->["iov"]
-            # (1) initialize as list (for average calculation)
-            for gtv in outputs.keys():
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    outputs[gtv][metric]["iov"] = []
-            # (2) calculate iov between every 2 observers
-            for gtv in outputs.keys():
-                mda_obs_list = outputs[gtv]["label"].keys()
-                for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        iov = segment_metrics[metric](
-                            outputs[gtv]["label"][mda_osb_1],
-                            outputs[gtv]["label"][mda_obs_2],
-                        )
-                        outputs[gtv][metric]["iov"].append(iov)
-            # (3) calculate avg value
-            for gtv in outputs.keys():
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    outputs[gtv][metric]["iov"] = g.calculate_avg(
-                        outputs[gtv][metric]["iov"]
-                    )
 
         return outputs
 
@@ -581,21 +558,13 @@ class TrainingCore:
                 DatasetVer.MDA,
                 DatasetVer.NKI,
             ]:
-                g.error_exit(
-                    "Invalid 'origin_dataset_ver' value: {}!".format(origin_dataset_ver)
-                )
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
             elif origin_dataset_ver == DatasetVer.MDA and dataset_ver != DatasetVer.MDA:
-                g.error_exit(
-                    "'dataset_ver' is restricted to 'MDA' only, "
-                    "as 'origin_dataset_ver' is 'MDA'!"
-                )
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
             elif origin_dataset_ver == DatasetVer.NKI and dataset_ver != DatasetVer.NKI:
-                g.error_exit(
-                    "'dataset_ver' is restricted to 'NKI' only, "
-                    "as 'origin_dataset_ver' is 'NKI'!"
-                )
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
         elif dataset_ver not in [
             DatasetVer.AU,
@@ -603,17 +572,9 @@ class TrainingCore:
             DatasetVer.MDA,
             DatasetVer.NKI,
         ]:
-            g.error_exit("Invalid 'dataset_ver' value: {}!".format(dataset_ver))
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
         return dataset_ver
-
-    def _is_valid_dataset_part(self, dataset_part: str):
-        if dataset_part not in [
-            DatasetPart.TRAIN,
-            DatasetPart.VALID,
-            DatasetPart.TEST,
-        ]:
-            g.error_exit("'dataset_part' must be one of 'TRAIN/VALID/TEST'!")
 
     def _find_best_baseline_fold_cnn(self, baseline_id: str) -> str:
         scores = Dict()

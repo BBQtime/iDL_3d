@@ -58,7 +58,7 @@ class DatasetCore(torch.utils.data.Dataset):
 
             multi_modal_imgs[i] = g.load_nii(img_path[i])
 
-            # windowing
+            # ct windowing
             if i == Modal.CT:
                 multi_modal_imgs[i] = g.windowing_ct(multi_modal_imgs[i])
 

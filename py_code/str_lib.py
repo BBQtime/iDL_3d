@@ -1,5 +1,6 @@
 class ErrMsg:
-    DATASET_VER_INVALID = "dataset_ver invalid value!"
+    DATASET_VER_INVALID = "Value of dataset_ver is invalid!"
+    DATASET_PART_INVALID = "Value of dataset_part is invalid!"
 
 
 class SelectScenario:

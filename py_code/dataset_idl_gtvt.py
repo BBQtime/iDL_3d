@@ -49,30 +49,14 @@ class DataSetIDLGTVt(DatasetCore):
             os.path.join(pred_dir, "gtvt_pred.nii.gz"), binary=True
         )
 
-        # load ct/pt/mr1/mr2
-        self.__origin[Modal.CT] = g.load_nii(
-            os.path.join(
-                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_CT.nii".format(patient)
-            )
+        # load multi modal imgs
+        multi_modal_imgs = self._load_multi_modal_imgs(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+            no_pt=self._no_pt,
         )
-        if not self._no_pt:
-            self.__origin[Modal.PT] = g.load_nii(
-                os.path.join(
-                    g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_PT.nii".format(patient)
-                )
-            )
-        self.__origin[Modal.MR1] = g.load_nii(
-            os.path.join(
-                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_T1dr.nii".format(patient)
-            )
-        )
-        self.__origin[Modal.MR2] = g.load_nii(
-            os.path.join(
-                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_T2dr.nii".format(patient)
-            )
-        )
-        # ct windowing
-        self.__origin[Modal.CT] = g.windowing_ct(self.__origin[Modal.CT])
+        for i in multi_modal_imgs.keys():
+            self.__origin[i] = multi_modal_imgs[i]
 
         # load weight map
         self.__origin["weight.map"], selected_slices_mask = self.__load_weight_map(
@@ -221,6 +205,11 @@ class DataSetIDLGTVt(DatasetCore):
 
     # must be overrided
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor, Tensor]:
+        # data to return
+        item = Dict()
+        # record img shape
+        item["shape"] = self.__origin["label"].shape
+
         final = Dict()
         tmp = Dict()
 
@@ -270,10 +259,10 @@ class DataSetIDLGTVt(DatasetCore):
         # background
         background = 1 - final["label"]
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["label"]], dim=0)
+        item["labels"] = torch.cat([background, final["label"]], dim=0)
 
         # load multi-modal imgs
-        input_imgs = None
+        item["input.imgs"] = None
         multi_modal_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
         if self._no_pt:
             multi_modal_list.remove(Modal.PT)
@@ -284,17 +273,17 @@ class DataSetIDLGTVt(DatasetCore):
             )
 
             # concat multi-model img
-            if input_imgs is None:
-                input_imgs = img
+            if item["input.imgs"] is None:
+                item["input.imgs"] = img
             else:
-                input_imgs = torch.cat([input_imgs, img], dim=0)
+                item["input.imgs"] = torch.cat([item["input.imgs"], img], dim=0)
 
         # weight map
-        weight_map = self._preprocess(
+        item["weight.map"] = self._preprocess(
             img=self.__origin["weight.map"],
             augment_seed=final["augment.seed"],
             normalize=False,
             clip_up_limit=self.__origin["weight.map"].max(),
         )
 
-        return input_imgs, labels, weight_map
+        return item  # input_imgs, labels, weight_map
