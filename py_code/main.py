@@ -15,15 +15,15 @@ from training_idl_gtvt import TrainingIDLGTVt
 
 
 g.clear_gpu_cache()
-g.clear_debug_data()
 g.clear_linux_trash()
+g.clear_debug_data()
 
 
-baseline = TrainingBaseline()
-baseline.new_training(
-    train_remark="",
-    debug_mode=1,
-)
+# baseline = TrainingBaseline()
+# baseline.new_training(
+#     train_remark="",
+#     debug_mode=1,
+# )
 # baseline.inference_all_folds(
 #     baseline_id="baseline_au_no.pt",
 #     dataset_part=DatasetPart.VALID,
@@ -37,12 +37,17 @@ baseline.new_training(
 # )
 
 
-# idl_gtvt = TrainingIDLGTVt()
-# idl_gtvt.simulation(
-#     baseline_id="baseline_au",
-#     train_remark="",
-#     debug_mode=0,
-# )
+idl_gtvt = TrainingIDLGTVt()
+for baseline_id in [
+    "baseline_au",
+    "baseline_nki_transfer",
+    "baseline_nki_new",
+]:
+    idl_gtvt.simulation(
+        baseline_id=baseline_id,
+        dataset_ver=DatasetVer.NKI,
+        debug_mode=0,
+    )
 # idl_gtvt.inference(
 #     idl_gtvt_id="",
 #     debug_mode=0,

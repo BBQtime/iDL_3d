@@ -225,12 +225,10 @@ class TrainingIDLGTVt(TrainingCore):
         patient = Path(patient_dir).name
         patient = patient[len("patient=") :]
 
-        label = g.load_nii(
-            os.path.join(
-                g.DATASET_DIR[hyper["dataset.ver"]], "HNCDL_{}_GTVt.nii".format(patient)
-            ),
-            binary=True,
-        )
+        label = g.load_gtv_labels(
+            dataset_ver=hyper["dataset.ver"],
+            patient=patient,
+        )["gtvt"]
         if label.max() == 0:
             g.error_exit("label is empty!")
 
@@ -371,12 +369,10 @@ class TrainingIDLGTVt(TrainingCore):
         # change "patient=123" into "123"
         patient = patient[len("patient=") :]
 
-        label = g.load_nii(
-            os.path.join(
-                g.DATASET_DIR[dataset_ver], "HNCDL_{}_GTVt.nii".format(patient)
-            ),
-            binary=True,
-        )
+        label = g.load_gtv_labels(
+            dataset_ver=dataset_ver,
+            patient=patient,
+        )["gtvt"]
 
         selected_slices = g.load_json(os.path.join(patient_dir, "selected_slices.json"))
 
@@ -812,8 +808,17 @@ class TrainingIDLGTVt(TrainingCore):
             baseline_dir, key_word="fold=", full_path=True
         )
         baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
-        no_pt = baseline_hyper["no.pt"]
-        no_mr = baseline_hyper["no.mr"]
+
+        if baseline_hyper["no.pt"] is True:
+            no_pt = True
+        else:
+            no_pt = False
+
+        if baseline_hyper["no.mr"] is True:
+            no_mr = True
+        else:
+            no_mr = False
+
         baseline_dataset_ver = baseline_hyper["dataset.ver"]
 
         # check dataset version and dataset part
@@ -930,8 +935,16 @@ class TrainingIDLGTVt(TrainingCore):
             baseline_dir, key_word="fold=", full_path=True
         )
         baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
-        no_pt = baseline_hyper["no.pt"]
-        no_mr = baseline_hyper["no.mr"]
+
+        if baseline_hyper["no.pt"] is True:
+            no_pt = True
+        else:
+            no_pt = False
+
+        if baseline_hyper["no.mr"] is True:
+            no_mr = True
+        else:
+            no_mr = False
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics()

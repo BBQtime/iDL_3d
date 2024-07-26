@@ -42,13 +42,10 @@ class DataSetIDLGTVt(DatasetCore):
             self.__origin["label"] = g.load_nii(delineation_path, binary=True)
         # simulation
         else:
-            self.__origin["label"] = g.load_nii(
-                os.path.join(
-                    g.DATASET_DIR[self._dataset_ver],
-                    "HNCDL_{}_GTVt.nii".format(patient),
-                ),
-                binary=True,
-            )
+            self.__origin["label"] = g.load_gtv_labels(
+                dataset_ver=self._dataset_ver,
+                patient=patient,
+            )["gtvt"]
 
         # load pred
         self.__origin["pred"] = g.load_nii(

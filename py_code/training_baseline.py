@@ -870,7 +870,9 @@ class TrainingBaseline(TrainingCore):
                 )
                 for mda_obs in mda_obs_list.copy():
                     cur_obs_label = g.load_gtv_labels(
-                        dataset_ver=dataset_ver, patient=patient, mda_obs=mda_obs
+                        dataset_ver=dataset_ver,
+                        patient=patient,
+                        mda_obs=mda_obs,
                     )
                     if cur_obs_label is not None:
                         labels[mda_obs] = cur_obs_label
