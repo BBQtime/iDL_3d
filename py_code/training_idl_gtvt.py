@@ -445,7 +445,6 @@ class TrainingIDLGTVt(TrainingCore):
             patient=patient[len("patient=") :],
             cnn=cnn,
             dataset_ver=dataset_ver,
-            dataset_part=DatasetPart.TEST,
             no_pt=no_pt,
             segment_metrics=segment_metrics,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
@@ -455,7 +454,7 @@ class TrainingIDLGTVt(TrainingCore):
         if self._obs_study_progress is None:
             idl_gtvt_dir = Path(round_dir).parent.parent.parent
             score_json_path = os.path.join(
-                idl_gtvt_dir, "inference_{}.json".format(dataset_ver)
+                idl_gtvt_dir, "inference_{}_test.json".format(dataset_ver)
             )
             if os.path.exists(score_json_path):
                 score = g.load_json(score_json_path)

@@ -366,7 +366,6 @@ class TrainingCore:
         patient: str,
         cnn,
         dataset_ver: str,
-        dataset_part: str,
         no_pt: str,
         segment_metrics: Dict = None,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn

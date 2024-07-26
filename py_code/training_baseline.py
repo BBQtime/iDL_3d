@@ -570,7 +570,6 @@ class TrainingBaseline(TrainingCore):
                         patient=patient,
                         cnn=cnn,
                         dataset_ver=dataset_ver,
-                        dataset_part=dataset_part,
                         no_pt=no_pt,
                         segment_metrics=segment_metrics,
                         idl_gtvn_baseline_id=baseline_id,

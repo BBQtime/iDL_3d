@@ -163,7 +163,6 @@ class TrainingIDLGTVn(TrainingBaseline):
                 patient=patient,
                 cnn=cnn,
                 dataset_ver=dataset_ver,
-                dataset_part=DatasetPart.TEST,
                 no_pt=no_pt,
                 segment_metrics=segment_metrics,
                 idl_gtvn_baseline_id=baseline_id,
@@ -293,7 +292,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                     g.TRAIN_RESULTS_DIR,
                     baseline_id,
                     "baseline",
-                    "inference_{}.json".format(dataset_ver),
+                    "inference_{}_test.json".format(dataset_ver),
                 )
             )
 
@@ -387,7 +386,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         # save scores in json
         g.save_json(
             data=scores,
-            path=os.path.join(save_dir, "inference_{}.json".format(dataset_ver)),
+            path=os.path.join(save_dir, "inference_{}_test.json".format(dataset_ver)),
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):

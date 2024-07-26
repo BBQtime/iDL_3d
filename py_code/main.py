@@ -44,8 +44,8 @@ idl_gtvt.simulation(
     debug_mode=0,
 )
 # idl_gtvt.inference(
-#     idl_gtvt_id="idl.gtvt_2023.07.21.01.40.28",
-#     dataset_part=DatasetPart.TEST,
+#     idl_gtvt_id="",
+#     debug_mode=0,
 # )
 # idl_gtvt.obs_study(
 #     idl_gtvt_id="idl.gtvt_" + g.DELETE_FLAG,
