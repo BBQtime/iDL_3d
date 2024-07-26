@@ -366,7 +366,8 @@ class TrainingCore:
         patient: str,
         cnn,
         dataset_ver: str,
-        no_pt: str,
+        no_pt: bool,
+        no_mr: bool,
         segment_metrics: Dict = None,
         idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
@@ -386,6 +387,7 @@ class TrainingCore:
             patient=patient,
             dataset_ver=dataset_ver,
             no_pt=no_pt,
+            no_mr=no_mr,
             idl_gtvn_baseline_id=idl_gtvn_baseline_id,  # only for idl.gtvn
             obs_gtvn_clicks=obs_gtvn_clicks,  # only for observer study gtvn
         )
@@ -395,7 +397,12 @@ class TrainingCore:
             mda_obs_list = List(
                 [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
             )
-        elif dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+        elif dataset_ver in [
+            DatasetVer.AU,
+            DatasetVer.OBS_STUDY,
+            DatasetVer.NKI,
+            DatasetVer.HECKTOR,
+        ]:
             mda_obs_list = [None]
         else:
             g.error_exit(ErrMsg.DATASET_VER_INVALID)
@@ -505,6 +512,7 @@ class TrainingCore:
         patient: str,
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         *args,
         **kwargs,
     ):
@@ -512,6 +520,7 @@ class TrainingCore:
             patients=[patient],
             dataset_ver=dataset_ver,
             no_pt=no_pt,
+            no_mr=no_mr,
             augment=None,
         )
 
@@ -556,6 +565,7 @@ class TrainingCore:
                 DatasetVer.OBS_STUDY,
                 DatasetVer.MDA,
                 DatasetVer.NKI,
+                DatasetVer.HECKTOR,
             ]:
                 g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
@@ -565,11 +575,18 @@ class TrainingCore:
             elif origin_dataset_ver == DatasetVer.NKI and dataset_ver != DatasetVer.NKI:
                 g.error_exit(ErrMsg.DATASET_VER_INVALID)
 
+            elif (
+                origin_dataset_ver == DatasetVer.HECKTOR
+                and dataset_ver != DatasetVer.HECKTOR
+            ):
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
         elif dataset_ver not in [
             DatasetVer.AU,
             DatasetVer.OBS_STUDY,
             DatasetVer.MDA,
             DatasetVer.NKI,
+            DatasetVer.HECKTOR,
         ]:
             g.error_exit(ErrMsg.DATASET_VER_INVALID)
 

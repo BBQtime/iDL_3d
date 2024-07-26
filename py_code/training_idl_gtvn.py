@@ -68,6 +68,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 baseline_id=idl_gtvn_baseline_id,
                 dataset_ver=hyper["dataset.ver"],
                 no_pt=hyper["no.pt"],
+                no_mr=hyper["no.mr"],
                 augment=augment,
                 random_click=False,
             )
@@ -109,6 +110,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         )
         hyper = g.load_json(os.path.join(cnn_fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
+        no_mr = hyper["no.mr"]
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics()
@@ -164,6 +166,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 cnn=cnn,
                 dataset_ver=dataset_ver,
                 no_pt=no_pt,
+                no_mr=no_mr,
                 segment_metrics=segment_metrics,
                 idl_gtvn_baseline_id=baseline_id,
                 obs_gtvn_clicks=obs_gtvn_clicks,  # this is only for obs study
@@ -448,6 +451,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         patient: str,
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         idl_gtvn_baseline_id: str,
         obs_gtvn_clicks: ndarray,
     ):
@@ -456,6 +460,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             baseline_id=idl_gtvn_baseline_id,
             dataset_ver=dataset_ver,
             no_pt=no_pt,
+            no_mr=no_mr,
             augment=None,
             obs_gtvn_clicks=obs_gtvn_clicks,
             random_click=False,

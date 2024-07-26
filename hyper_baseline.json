@@ -5,7 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 1,
     "cnn": "unet.slim",
-    "dataset.ver": "au",
+    "dataset.ver": "hecktor",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 500,
@@ -19,6 +19,7 @@
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
-    "no.pt": true,
+    "no.mr": true,
+    "no.pt": false,
     "pretrain.id": ""
 }

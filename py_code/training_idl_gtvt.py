@@ -426,7 +426,8 @@ class TrainingIDLGTVt(TrainingCore):
         round_dir: str,
         cnn,
         dataset_ver: str,
-        no_pt: str,
+        no_pt: bool,
+        no_mr: bool,
         segment_metrics: Dict = None,
     ):
         cur_round = Path(round_dir).name
@@ -446,6 +447,7 @@ class TrainingIDLGTVt(TrainingCore):
             cnn=cnn,
             dataset_ver=dataset_ver,
             no_pt=no_pt,
+            no_mr=no_mr,
             segment_metrics=segment_metrics,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
@@ -535,6 +537,7 @@ class TrainingIDLGTVt(TrainingCore):
             delineation_path=delineation_path,  # delineation_path=None for simulation
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
+            no_mr=hyper["no.mr"],
             augment=augment,
             weight=weight,
         )
@@ -648,6 +651,7 @@ class TrainingIDLGTVt(TrainingCore):
             cnn=hyper["cnn"],
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
+            no_mr=hyper["no.mr"],
             segment_metrics=segment_metrics,
         )
 
@@ -809,6 +813,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
         baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
         no_pt = baseline_hyper["no.pt"]
+        no_mr = baseline_hyper["no.mr"]
         baseline_dataset_ver = baseline_hyper["dataset.ver"]
 
         # check dataset version and dataset part
@@ -826,8 +831,9 @@ class TrainingIDLGTVt(TrainingCore):
         for hyper in hyper_series:
             hyper["dataset.ver"] = dataset_ver
 
-            # idl.gtvt doesnt have "no.pt" hyperparam, copy it from baseline
+            # idl.gtvt doesnt have "no.pt" or "no.mr" hyperparam, copy them from baseline
             hyper["no.pt"] = no_pt
+            hyper["no.mr"] = no_mr
 
             idl_gtvt_id = "idl.gtvt_" + self._init_train_id(
                 hyper=hyper,
@@ -925,6 +931,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
         baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
         no_pt = baseline_hyper["no.pt"]
+        no_mr = baseline_hyper["no.mr"]
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics()
@@ -943,8 +950,9 @@ class TrainingIDLGTVt(TrainingCore):
         hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
         hyper = hyper_series[0]
 
-        # idl.gtvt doesnt have "no.pt" hyperparam, copy it from baseline
+        # idl.gtvt doesnt have "no.pt" or "no.mr" hyperparam, copy them from baseline
         hyper["no.pt"] = no_pt
+        hyper["no.mr"] = no_mr
 
         # change dataset version to input param
         hyper["dataset.ver"] = dataset_ver
@@ -1123,6 +1131,7 @@ class TrainingIDLGTVt(TrainingCore):
         hyper = g.load_json(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
         no_pt = hyper["no.pt"]
+        no_mr = hyper["no.mr"]
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
         print("dataset version: {}".format(dataset_ver))
 
@@ -1177,6 +1186,7 @@ class TrainingIDLGTVt(TrainingCore):
                     cnn=cnn,
                     dataset_ver=dataset_ver,
                     no_pt=no_pt,
+                    no_mr=no_mr,
                     segment_metrics=segment_metrics,
                 )
 

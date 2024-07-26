@@ -19,11 +19,17 @@ class DataSetIDLGTVn(DatasetCore):
         baseline_id: str,
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         augment: Dict = None,
         obs_gtvn_clicks: ndarray = None,
         random_click: bool = False,
     ):
-        super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
+        super().__init__(
+            dataset_ver=dataset_ver,
+            no_pt=no_pt,
+            no_mr=no_mr,
+            augment=augment,
+        )
         self.__patients = patients
         self.__baseline_id = baseline_id
         self.__gtvn_clicks = obs_gtvn_clicks
@@ -124,7 +130,7 @@ class DataSetIDLGTVn(DatasetCore):
         # background
         background = 1 - final["label"]
         # !!! background FIRST !!!
-        labels = torch.cat([background, final["label"]], dim=0)
+        item["labels"] = torch.cat([background, final["label"]], dim=0)
 
         # gtvn_clicks
         # (1) observer study
@@ -158,8 +164,8 @@ class DataSetIDLGTVn(DatasetCore):
         else:
             self.__origin["distance.map"] = np.zeros_like(self.__origin["label"])
 
-        input_imgs = None
-        clicks = self._preprocess(
+        item["input.imgs"] = None
+        item["clicks"] = self._preprocess(
             img=self.__origin["clicks"],
             augment_seed=final["augment.seed"],
         )
@@ -170,37 +176,30 @@ class DataSetIDLGTVn(DatasetCore):
                 img=self.__origin[i],
                 augment_seed=final["augment.seed"],
             )
-            if input_imgs is None:
-                input_imgs = final[i]
+            if item["input.imgs"] is None:
+                item["input.imgs"] = final[i]
             else:
-                input_imgs = torch.cat([input_imgs, final[i]], dim=0)
+                item["input.imgs"] = torch.cat([item["input.imgs"], final[i]], dim=0)
 
         # load multi-modal imgs
-        multi_modal_list = ["CT", "PT", "T1dr", "T2dr"]
-        if self._no_pt:
-            multi_modal_list.remove("PT")
-        for i in multi_modal_list:
-            img_path = os.path.join(
-                g.DATASET_DIR[self._dataset_ver], "HNCDL_{}_{}.nii".format(patient, i)
-            )
-            img = g.load_nii(img_path)
-
-            # ct windowing before normalization
-            if i == "CT":
-                img = g.windowing_ct(img)
-
-            img = self._preprocess(
-                img=img,
+        multi_modal_imgs = self._load_multi_modal_imgs(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+            no_pt=self._no_pt,
+            no_mr=self._no_mr,
+        )
+        for i in multi_modal_imgs.keys():
+            multi_modal_imgs[i] = self._preprocess(
+                img=multi_modal_imgs[i],
                 augment_seed=final["augment.seed"],
             )
 
             # concat multi-model img
-            input_imgs = torch.cat([input_imgs, img], dim=0)
+            item["input.imgs"] = torch.cat(
+                [item["input.imgs"], multi_modal_imgs[i]], dim=0
+            )
 
         # return item
-        item["input.imgs"] = input_imgs
-        item["labels"] = labels
-        item["clicks"] = clicks
         return item
 
     # must be overrided

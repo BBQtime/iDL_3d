@@ -54,6 +54,7 @@ class DatasetVer:
     OBS_STUDY = "obs.study"
     MDA = "mda"
     NKI = "nki"
+    HECKTOR = "hecktor"
 
 
 class MdaObs:

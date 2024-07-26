@@ -394,17 +394,28 @@ def load_gtv_labels(
     paths = Dict()
     labels = Dict()
 
-    if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+    if dataset_ver in [
+        DatasetVer.AU,
+        DatasetVer.OBS_STUDY,
+        DatasetVer.NKI,
+        DatasetVer.HECKTOR,
+    ]:
         # load path
         for i in ["s", "t", "n"]:
             if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                 paths["gtv{}".format(i)] = os.path.join(
                     dataset_dir, "HNCDL_{}_GTV{}.nii".format(patient, i)
                 )
-            else:
+            elif dataset_ver == DatasetVer.NKI:
                 paths["gtv{}".format(i)] = os.path.join(
                     dataset_dir, patient, "{}_GTV{}.nii".format(patient, i)
                 )
+            elif dataset_ver == DatasetVer.HECKTOR:
+                paths["gtv{}".format(i)] = os.path.join(
+                    dataset_dir, "{}_GTV{}.nii".format(patient, i)
+                )
+            else:
+                error_exit(ErrMsg.DATASET_VER_INVALID)
 
         # load gtvt (for AU and OBS_STUDY dataset, there is always gtvt label)
         labels["gtvt"] = nii_load_func(paths["gtvt"], binary=True)
@@ -794,6 +805,7 @@ for __i in [
     DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
+    DatasetVer.HECKTOR,
 ]:
     DATASET_DIR[__i] = __settings[
         "dataset.dir.{}.{}".format("linux" if is_linux() else "windows", __i)
@@ -817,6 +829,7 @@ for __i in [
     DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
+    DatasetVer.HECKTOR,
 ]:
     DATASET_SPLIT_JSON_PATH[__i] = os.path.join(
         PROJ_DIR, __settings["dataset.split.json.{}".format(__i)]
@@ -835,6 +848,7 @@ for __i in [
     DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
+    DatasetVer.HECKTOR,
 ]:
     DATASET_FOLDS[__i] = __settings["dataset.folds.{}".format(__i)]
 

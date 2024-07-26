@@ -15,11 +15,13 @@ class DatasetCore(torch.utils.data.Dataset):
         self,
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         augment: Dict = None,
     ):
         self._dataset_ver = dataset_ver
         self._img_shape = g.IMG_SHAPE
         self._no_pt = no_pt
+        self._no_mr = no_mr
         self._augment = DataAugmentation(param=augment)
 
     def _load_multi_modal_imgs(
@@ -27,6 +29,7 @@ class DatasetCore(torch.utils.data.Dataset):
         dataset_ver: str,
         patient: str,
         no_pt: bool,
+        no_mr: bool,
     ):
         img_path = Dict()
         img_path[Modal.CT] = "CT"
@@ -42,6 +45,8 @@ class DatasetCore(torch.utils.data.Dataset):
         for i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
             if i == Modal.PT and no_pt:
                 continue
+            elif i in [Modal.MR1, Modal.MR2] and no_mr:
+                continue
 
             if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                 img_path[i] = "HNCDL_{}_{}.nii".format(patient, img_path[i])
@@ -52,6 +57,10 @@ class DatasetCore(torch.utils.data.Dataset):
                 img_path[i] = os.path.join(
                     g.DATASET_DIR[dataset_ver], patient, img_path[i]
                 )
+
+            elif dataset_ver == DatasetVer.HECKTOR:
+                img_path[i] = "{}_{}.nii".format(patient, img_path[i])
+                img_path[i] = os.path.join(g.DATASET_DIR[dataset_ver], img_path[i])
 
             else:
                 g.error_exit(ErrMsg.DATASET_VER_INVALID)

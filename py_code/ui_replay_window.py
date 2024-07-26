@@ -38,6 +38,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             DatasetVer.OBS_STUDY,
             DatasetVer.MDA,
             DatasetVer.NKI,
+            DatasetVer.HECKTOR,
         ]:
             dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[i])
             self._patients[i] = List(dataset_split[DatasetPart.TEST])
@@ -805,6 +806,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.dataset_ver = DatasetVer.MDA
         elif self._cur_patient in self._patients[DatasetVer.NKI]:
             self.dataset_ver = DatasetVer.NKI
+        elif self._cur_patient in self._patients[DatasetVer.HECKTOR]:
+            self.dataset_ver = DatasetVer.HECKTOR
         else:
             g.error_exit("Can't find current patient in testset patients!")
 
@@ -908,6 +911,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 img_path[i] = os.path.join(
                     g.DATASET_DIR[self.dataset_ver], self._cur_patient, img_path[i]
                 )
+
+            elif self.dataset_ver == DatasetVer.HECKTOR:
+                img_path[i] = "{}_{}.nii".format(self._cur_patient, img_path[i])
+                img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
 
             else:
                 g.error_exit(ErrMsg.DATASET_VER_INVALID)

@@ -16,9 +16,15 @@ class DataSetBaseline(DatasetCore):
         patients: list,
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         augment: Dict = None,
     ):
-        super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
+        super().__init__(
+            dataset_ver=dataset_ver,
+            no_pt=no_pt,
+            no_mr=no_mr,
+            augment=augment,
+        )
         self.__patients = patients
 
     # must be overrided
@@ -95,6 +101,7 @@ class DataSetBaseline(DatasetCore):
             dataset_ver=self._dataset_ver,
             patient=patient,
             no_pt=self._no_pt,
+            no_mr=self._no_mr,
         )
         for i in multi_modal_imgs.keys():
             # preprocess (normalization, augmentation, center alignment, to tensor)

@@ -22,10 +22,16 @@ class DataSetIDLGTVt(DatasetCore):
         delineation_path: str,  # this is only for observer study
         dataset_ver: str,
         no_pt: bool,
+        no_mr: bool,
         augment: Dict,
         weight: Dict,
     ):
-        super().__init__(dataset_ver=dataset_ver, no_pt=no_pt, augment=augment)
+        super().__init__(
+            dataset_ver=dataset_ver,
+            no_pt=no_pt,
+            no_mr=no_mr,
+            augment=augment,
+        )
         self.__augment_times = augment["augment.times"]
 
         # origin images
@@ -54,6 +60,7 @@ class DataSetIDLGTVt(DatasetCore):
             dataset_ver=self._dataset_ver,
             patient=patient,
             no_pt=self._no_pt,
+            no_mr=self._no_mr,
         )
         for i in multi_modal_imgs.keys():
             self.__origin[i] = multi_modal_imgs[i]
@@ -261,22 +268,21 @@ class DataSetIDLGTVt(DatasetCore):
         # !!! background FIRST !!!
         item["labels"] = torch.cat([background, final["label"]], dim=0)
 
-        # load multi-modal imgs
+        # preprocess and concat multi-modal imgs
         item["input.imgs"] = None
-        multi_modal_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
-        if self._no_pt:
-            multi_modal_list.remove(Modal.PT)
-        for i in multi_modal_list:
-            img = self._preprocess(
-                img=self.__origin[i],
-                augment_seed=final["augment.seed"],
-            )
 
-            # concat multi-model img
-            if item["input.imgs"] is None:
-                item["input.imgs"] = img
-            else:
-                item["input.imgs"] = torch.cat([item["input.imgs"], img], dim=0)
+        for i in self.__origin.keys():
+            if i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                img = self._preprocess(
+                    img=self.__origin[i],
+                    augment_seed=final["augment.seed"],
+                )
+
+                # concat multi-model img
+                if item["input.imgs"] is None:
+                    item["input.imgs"] = img
+                else:
+                    item["input.imgs"] = torch.cat([item["input.imgs"], img], dim=0)
 
         # weight map
         item["weight.map"] = self._preprocess(

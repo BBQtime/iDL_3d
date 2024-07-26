@@ -72,9 +72,12 @@ class TrainingBaseline(TrainingCore):
         # augment percent
         hyper["augment.pct"] = g.clamp_value(hyper["augment.pct"], (0.0, 1.0))
 
-        # MDA dataset has no PET images
+        # MDA dataset has no PET imgs
         if hyper["dataset.ver"] == DatasetVer.MDA:
             hyper["no.pt"] = True
+        # HECKTOR dataset has no MR imgs
+        elif hyper["dataset.ver"] == DatasetVer.HECKTOR:
+            hyper["no.mr"] = True
 
         # load patients after dataset version is selected
         patients = self._load_patients(
@@ -95,8 +98,10 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_data_loaders(hyper)
 
         # load cnn (before optimizer)
+        # (1) normal training
         if hyper["pretrain.id"] == "" or hyper["pretrain.id"] is None:
             self._load_hyper_new_cnn(hyper=hyper)
+        # (2) transfer learning
         else:
             pretrain_cnn_path = self._find_best_baseline_fold_cnn(hyper["pretrain.id"])
             pretrain_no_pt = g.load_json(
@@ -113,6 +118,8 @@ class TrainingBaseline(TrainingCore):
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
         if hyper["no.pt"]:
             in_chan -= 1
+        if hyper["no.mr"]:
+            in_chan -= 2
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
@@ -139,6 +146,7 @@ class TrainingBaseline(TrainingCore):
                 patients=hyper["{}.patients".format(i)],
                 dataset_ver=hyper["dataset.ver"],
                 no_pt=hyper["no.pt"],
+                no_mr=hyper["no.mr"],
                 augment=augment,
             )
 
@@ -503,6 +511,7 @@ class TrainingBaseline(TrainingCore):
 
         hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
+        no_mr = hyper["no.mr"]
 
         # dataset version
         training_dataset_ver = hyper["dataset.ver"]
@@ -571,6 +580,7 @@ class TrainingBaseline(TrainingCore):
                         cnn=cnn,
                         dataset_ver=dataset_ver,
                         no_pt=no_pt,
+                        no_mr=no_mr,
                         segment_metrics=segment_metrics,
                         idl_gtvn_baseline_id=baseline_id,
                     )
@@ -644,7 +654,12 @@ class TrainingBaseline(TrainingCore):
 
                 # add cur patient metric into a list for avg and median calculation
                 # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+                if dataset_ver in [
+                    DatasetVer.AU,
+                    DatasetVer.OBS_STUDY,
+                    DatasetVer.NKI,
+                    DatasetVer.HECKTOR,
+                ]:
                     # initialize a list
                     if scores[Stat.AVG][gtv][metric] == {}:
                         scores[Stat.AVG][gtv][metric] = List()
@@ -683,7 +698,12 @@ class TrainingBaseline(TrainingCore):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+                if dataset_ver in [
+                    DatasetVer.AU,
+                    DatasetVer.OBS_STUDY,
+                    DatasetVer.NKI,
+                    DatasetVer.HECKTOR,
+                ]:
                     scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
                         scores[Stat.AVG][gtv][metric]
                     )
@@ -827,7 +847,12 @@ class TrainingBaseline(TrainingCore):
 
             # calculate metrics
             # load labels
-            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+            if dataset_ver in [
+                DatasetVer.AU,
+                DatasetVer.OBS_STUDY,
+                DatasetVer.NKI,
+                DatasetVer.HECKTOR,
+            ]:
                 labels = g.load_gtv_labels(
                     dataset_ver=dataset_ver,
                     patient=patient,
@@ -913,7 +938,12 @@ class TrainingBaseline(TrainingCore):
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
 
                 # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+                if dataset_ver in [
+                    DatasetVer.AU,
+                    DatasetVer.OBS_STUDY,
+                    DatasetVer.NKI,
+                    DatasetVer.HECKTOR,
+                ]:
                     score = segment_metrics[metric](preds[gtv], labels[gtv])
 
                     # save cur patient metric
@@ -1007,7 +1037,12 @@ class TrainingBaseline(TrainingCore):
         dataset_ver: str,
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
-            if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY, DatasetVer.NKI]:
+            if dataset_ver in [
+                DatasetVer.AU,
+                DatasetVer.OBS_STUDY,
+                DatasetVer.NKI,
+                DatasetVer.HECKTOR,
+            ]:
                 fold_scores[epoch][stat] = epoch_scores[stat]
 
             elif dataset_ver == DatasetVer.MDA:
