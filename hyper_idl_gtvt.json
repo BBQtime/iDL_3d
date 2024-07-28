@@ -18,12 +18,8 @@
     "lr.min": 1e-06,
     "lr.reset": true,
     "select.scenario": [
-        "gravity.center",
         "bias.gravity.center",
-        "bias.gravity.center",
-        "bias.gravity.center",
-        "bias.gravity.center",
-        "bias.gravity.center"
+        "gravity.center"
     ],
     "select.step.coronal": "1",
     "select.step.sagittal": "1",

@@ -238,35 +238,46 @@ class TrainingIDLGTVt(TrainingCore):
             in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
             and cur_round == 1
         ):
-            # label_center: (d,h,w)
             d, h, w = measurements.center_of_mass(label)
             # float to int
-            label_center = (round(d), round(h), round(w))
+            gravity_center = (round(d), round(h), round(w))
+
+            if hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER:
+                gtvt_click = gravity_center
 
             # simulate biased gravity center
-            if hyper["select.scenario"] == SelectScenario.BIAS_GRAVITY_CENTER:
+            elif hyper["select.scenario"] == SelectScenario.BIAS_GRAVITY_CENTER:
+
+                while_counter = 0
                 while 1:
+                    while_counter += 1
+                    # cant find biased gravity center after 50 times attempts
+                    # use gravity center instead
+                    if while_counter >= 50:
+                        print("bias gravity center - while counter: ", while_counter)
+                        gtvt_click = gravity_center
+                        break
+
                     # add random bias
                     random_bias = (
                         random.randint(-5, 5),
                         random.randint(-5, 5),
                         random.randint(-5, 5),
                     )
-                    d, h, w = label_center
-                    label_center = (
-                        d + random_bias[0],
-                        h + random_bias[1],
-                        w + random_bias[2],
-                    )
+                    d, h, w = gravity_center
+                    d += random_bias[0]
+                    h += random_bias[1]
+                    w += random_bias[2]
 
                     # check if biased label center is inside label
-                    d, h, w = label_center
                     if (
                         0 <= d < label.shape[0]
                         and 0 <= h < label.shape[1]
                         and 0 <= w < label.shape[2]
                         and label[d, h, w] > 0
                     ):
+                        print("bias gravity center - while counter: ", while_counter)
+                        gtvt_click = (d, h, w)
                         break
                     else:
                         continue
@@ -315,7 +326,7 @@ class TrainingIDLGTVt(TrainingCore):
                 in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
                 and cur_round == 1
             ):
-                d, h, w = label_center
+                d, h, w = gtvt_click
                 if plane == Plane.TRANSVERSE:
                     new_round_slices[plane].append(d)
                 elif plane == Plane.CORONAL:
@@ -883,6 +894,8 @@ class TrainingIDLGTVt(TrainingCore):
             baseline_cnn_path = self._find_best_baseline_fold_cnn(baseline_id)
 
             patient_list = hyper["patients"][DatasetPart.TEST]
+            # if 1:
+            #     patient_list = ["NKI_273"]
 
             # loop through each patient
             for patient in patient_list:
