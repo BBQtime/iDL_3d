@@ -412,7 +412,7 @@ def load_gtv_labels(
                 )
             elif dataset_ver == DatasetVer.HECKTOR:
                 paths["gtv{}".format(i)] = os.path.join(
-                    dataset_dir, "{}_GTV{}.nii".format(patient, i)
+                    dataset_dir, "{}_GTV{}.nii.gz".format(patient, i)
                 )
             else:
                 error_exit(ErrMsg.DATASET_VER_INVALID)

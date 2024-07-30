@@ -59,7 +59,7 @@ class DatasetCore(torch.utils.data.Dataset):
                 )
 
             elif dataset_ver == DatasetVer.HECKTOR:
-                img_path[i] = "{}_{}.nii".format(patient, img_path[i])
+                img_path[i] = "{}_{}.nii.gz".format(patient, img_path[i])
                 img_path[i] = os.path.join(g.DATASET_DIR[dataset_ver], img_path[i])
 
             else:

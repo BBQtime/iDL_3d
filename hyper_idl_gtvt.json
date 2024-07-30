@@ -19,7 +19,15 @@
     "lr.reset": true,
     "select.scenario": [
         "bias.gravity.center",
-        "gravity.center"
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center",
+        "bias.gravity.center"
     ],
     "select.step.coronal": "1",
     "select.step.sagittal": "1",

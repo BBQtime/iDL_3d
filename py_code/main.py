@@ -38,16 +38,12 @@ g.clear_debug_data()
 
 
 idl_gtvt = TrainingIDLGTVt()
-for baseline_id in [
-    "baseline_au",
-    "baseline_nki_transfer",
-    "baseline_nki_new",
-]:
-    idl_gtvt.simulation(
-        baseline_id=baseline_id,
-        dataset_ver=DatasetVer.NKI,
-        debug_mode=0,
-    )
+idl_gtvt.simulation(
+    baseline_id="baseline_au",
+    dataset_ver=DatasetVer.AU,
+    train_remark="bias.gravity.center",
+    debug_mode=0,
+)
 # idl_gtvt.inference(
 #     idl_gtvt_id="",
 #     debug_mode=0,

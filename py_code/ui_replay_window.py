@@ -11,7 +11,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
 from scipy.ndimage import measurements
-from str_lib import DatasetPart, DatasetVer, DisplayMode, ErrMsg, Metric, Modal, Plane
+from str_lib import (DatasetPart, DatasetVer, DisplayMode, ErrMsg, Metric,
+                     Modal, Plane)
 from superqt import QCollapsible
 from ui_custom_combox import CustomComboBox
 from ui_img_frame import ImgFrame
@@ -913,7 +914,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 )
 
             elif self.dataset_ver == DatasetVer.HECKTOR:
-                img_path[i] = "{}_{}.nii".format(self._cur_patient, img_path[i])
+                img_path[i] = "{}_{}.nii.gz".format(self._cur_patient, img_path[i])
                 img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
 
             else:
