@@ -1,7 +1,7 @@
 import os
 import random
-from typing import Tuple
 
+import GeodisTK
 import global_core as g
 import numpy as np
 import torch
@@ -9,17 +9,17 @@ from custom_dict import Dict
 from dataset_core import DatasetCore
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt, measurements
-from torch import Tensor
+from str_lib import DatasetVer, Modal
 
 
 class DataSetIDLGTVn(DatasetCore):
     def __init__(
         self,
         patients: list,
-        baseline_id: str,
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
+        geodesic_distance: bool,
         augment: Dict = None,
         obs_gtvn_clicks: ndarray = None,
         random_click: bool = False,
@@ -31,7 +31,7 @@ class DataSetIDLGTVn(DatasetCore):
             augment=augment,
         )
         self.__patients = patients
-        self.__baseline_id = baseline_id
+        self.__geodesic_distance = geodesic_distance
         self.__gtvn_clicks = obs_gtvn_clicks
         self.__random_click = random_click
 
@@ -65,28 +65,11 @@ class DataSetIDLGTVn(DatasetCore):
         # record img shape
         item["shape"] = self.__origin["label"].shape
 
-        # load pred
-        self.__origin["pred"] = g.load_nii(
-            os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self.__baseline_id,
-                "baseline",
-                "patients",
-                "patient={}".format(patient),
-                "gtvn_pred.nii.gz",
-            ),
-            binary=False,
-        )
-
         # find augment seed
         final = Dict()
         tmp = Dict()
 
-        # origin_pred needs to be binarized (without changing original img)
-        # otherwise origin_label_pred_sum is too high
-        origin_label_pred_sum = (
-            self.__origin["label"].sum() + g.binarize_img(self.__origin["pred"]).sum()
-        )
+        origin_label_sum = self.__origin["label"].sum()
 
         # loop until target volume is big enough
         for k in range(50):
@@ -96,34 +79,32 @@ class DataSetIDLGTVn(DatasetCore):
             tmp["augment.seed"] = random.randint(0, 2**16)
 
             # load gtvs
-            for i in ["label", "pred"]:
-                tmp[i] = self._preprocess(
-                    img=self.__origin[i],
-                    augment_seed=tmp["augment.seed"],
-                )
-                tmp[i] = g.binarize_img(tmp[i])
+            tmp["label"] = self._preprocess(
+                img=self.__origin["label"],
+                augment_seed=tmp["augment.seed"],
+            )
+            tmp["label"] = g.binarize_img(tmp["label"])
 
-            tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
+            tmp_label_sum = tmp["label"].sum()
 
             # target volume is not large enough
-            if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
+            if tmp_label_sum < origin_label_sum * 0.999:
                 # if "final" dict is empty
                 if final == {}:
-                    for i in ["label", "pred", "augment.seed"]:
+                    for i in ["label", "augment.seed"]:
                         final[i] = tmp[i]
-                    if origin_label_pred_sum == 0:
+                    if origin_label_sum == 0:
                         break
 
                 # keep the seed/label/pred with largest target volume
-                final_label_pred_sum = final["label"].sum() + final["pred"].sum()
-                if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "augment.seed"]:
+                if tmp_label_sum > final["label"].sum():
+                    for i in ["label", "augment.seed"]:
                         final[i] = tmp[i]
                 continue
 
             # target volume is large enough, break
             else:
-                for i in ["label", "pred", "augment.seed"]:
+                for i in ["label", "augment.seed"]:
                     final[i] = tmp[i]
                 break
 
@@ -131,6 +112,16 @@ class DataSetIDLGTVn(DatasetCore):
         background = 1 - final["label"]
         # !!! background FIRST !!!
         item["labels"] = torch.cat([background, final["label"]], dim=0)
+
+        # load multi modal imgs
+        multi_modal_imgs = self._load_multi_modal_imgs(
+            dataset_ver=self._dataset_ver,
+            patient=patient,
+            no_pt=self._no_pt,
+            no_mr=self._no_mr,
+        )
+        for i in multi_modal_imgs.keys():
+            self.__origin[i] = multi_modal_imgs[i]
 
         # gtvn_clicks
         # (1) observer study
@@ -155,12 +146,58 @@ class DataSetIDLGTVn(DatasetCore):
                         pos[i] = round(pos[i])
                 self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
 
+        if 0:
+            g.save_nii(
+                self.__origin["clicks"],
+                os.path.join(g.DEBUG_DIR, "gtvn_clicks.nii.gz"),
+            )
+
         # generate distance map based on clicks
         if np.sum(self.__origin["label"]) > 0:
-            self.__origin["distance.map"] = distance_transform_edt(
-                np.logical_not(self.__origin["clicks"])
-            ).astype(np.float32)
-            self.__origin["distance.map"] = np.exp(-0.1 * self.__origin["distance.map"])
+
+            # (1) geodesic distance map
+            if self.__geodesic_distance:
+                # Get 3D geodesic disntance by raser scanning.
+                # I: input image array, can have multiple channels, with shape [D, H, W] or [D, H, W, C]
+                # Type should be np.float32.
+                # S: binary image where non-zero pixels are used as seeds, with shape [D, H, W]
+                # Type should be np.uint8.
+                # spacing: a tuple of float numbers for pixel spacing along D, H and W dimensions respectively.
+                # lamb: weighting betwween 0.0 and 1.0
+                #     if lamb==0.0, return spatial euclidean distance without considering gradient
+                #     if lamb==1.0, the distance is based on gradient only without using spatial distance
+                # iter: number of iteration for raster scanning.
+                self.__origin["distance.map"] = GeodisTK.geodesic3d_raster_scan(
+                    g.normalize_img(self.__origin[Modal.CT]),
+                    self.__origin["clicks"].astype(np.uint8),
+                    (g.NII_SPACING[2], g.NII_SPACING[1], g.NII_SPACING[0]),
+                    1.0,  # lamb: weighting betwween 0.0 and 1.0
+                    4,  # iter: number of iteration for raster scanning.
+                )
+
+                if 0:
+                    g.save_nii(
+                        self.__origin["distance.map"],
+                        os.path.join(g.DEBUG_DIR, "geodesic_distance_map.nii.gz"),
+                    )
+
+            # (2) weighted Euclidean distance map
+            else:
+                self.__origin["distance.map"] = distance_transform_edt(
+                    np.logical_not(self.__origin["clicks"])
+                ).astype(np.float32)
+                self.__origin["distance.map"] = np.exp(
+                    -0.1 * self.__origin["distance.map"]
+                )
+
+                if 0:
+                    g.save_nii(
+                        self.__origin["distance.map"],
+                        os.path.join(
+                            g.DEBUG_DIR, "weighted_euclidean_distance_map.nii.gz"
+                        ),
+                    )
+
         else:
             self.__origin["distance.map"] = np.zeros_like(self.__origin["label"])
 
@@ -171,7 +208,7 @@ class DataSetIDLGTVn(DatasetCore):
         )
 
         # pred + click
-        for i in ["distance.map"]:  # ["pred", "distance.map"]:
+        for i in ["distance.map"]:
             final[i] = self._preprocess(
                 img=self.__origin[i],
                 augment_seed=final["augment.seed"],
@@ -181,23 +218,16 @@ class DataSetIDLGTVn(DatasetCore):
             else:
                 item["input.imgs"] = torch.cat([item["input.imgs"], final[i]], dim=0)
 
-        # load multi-modal imgs
-        multi_modal_imgs = self._load_multi_modal_imgs(
-            dataset_ver=self._dataset_ver,
-            patient=patient,
-            no_pt=self._no_pt,
-            no_mr=self._no_mr,
-        )
-        for i in multi_modal_imgs.keys():
-            multi_modal_imgs[i] = self._preprocess(
-                img=multi_modal_imgs[i],
-                augment_seed=final["augment.seed"],
-            )
+        # concatenate imput images
+        for i in self.__origin.keys():
+            if i in [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]:
+                img = self._preprocess(
+                    img=self.__origin[i],
+                    augment_seed=final["augment.seed"],
+                )
 
-            # concat multi-model img
-            item["input.imgs"] = torch.cat(
-                [item["input.imgs"], multi_modal_imgs[i]], dim=0
-            )
+                # concat multi-model img
+                item["input.imgs"] = torch.cat([item["input.imgs"], img], dim=0)
 
         # return item
         return item
@@ -207,3 +237,14 @@ class DataSetIDLGTVn(DatasetCore):
     def __getitem__(self, idx: int):
         patient = self.__patients[idx]
         return self.get_item(patient)
+
+
+# idl_gtvn_dataset = DataSetIDLGTVn(
+#     patients=["106"],
+#     dataset_ver=DatasetVer.AU,
+#     no_pt=False,
+#     no_mr=False,
+#     geodesic_distance=False,
+#     augment=None,
+# )
+# idl_gtvn_dataset.get_item("106")

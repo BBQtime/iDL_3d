@@ -369,8 +369,8 @@ class TrainingCore:
         no_pt: bool,
         no_mr: bool,
         segment_metrics: Dict = None,
-        idl_gtvn_baseline_id: str = None,  # only for idl.gtvn
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
+        idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
         obs_gtvn_clicks: ndarray = None,  # only for observer study
     ) -> Dict:
 
@@ -388,7 +388,7 @@ class TrainingCore:
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             no_mr=no_mr,
-            idl_gtvn_baseline_id=idl_gtvn_baseline_id,  # only for idl.gtvn
+            idl_gtvn_geodesic_distance=idl_gtvn_geodesic_distance,
             obs_gtvn_clicks=obs_gtvn_clicks,  # only for observer study gtvn
         )
 
@@ -592,16 +592,23 @@ class TrainingCore:
 
         return dataset_ver
 
-    def _find_best_baseline_fold_cnn(self, baseline_id: str) -> str:
+    def _find_best_cnn_in_folds(self, train_id: str) -> str:
+        if not train_id.startswith("baseline_") and not train_id.startswith(
+            "idl.gtvn_"
+        ):
+            g.error_exit("must be a baseline or idl.gtvn id")
+
         scores = Dict()
 
+        train_dir = self._find_train_dir(train_id)
+
         fold_dirs = g.get_sub_dirs(
-            input_dir=os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, "baseline"),
+            input_dir=train_dir,
             key_word="fold=",
             full_path=True,
         )
         for fold_dir in fold_dirs:
-            baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
+            dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
                 "dataset.ver"
             ]
 
@@ -610,7 +617,7 @@ class TrainingCore:
             epoch_scores = g.load_json(
                 os.path.join(
                     epoch_dir,
-                    "inference_{}_valid.json".format(baseline_dataset_ver),
+                    "inference_{}_valid.json".format(dataset_ver),
                 )
             )
             for stat in [Stat.MEDIAN, Stat.AVG]:
@@ -645,11 +652,8 @@ class TrainingCore:
                         evaluation[epoch] += scores[epoch][stat][gtv][metric]
 
         best_fold = evaluation.key_with_max_value()
-        best_fold_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, baseline_id, "baseline", best_fold
-        )
         best_epoch_dir = g.get_sub_dirs(
-            best_fold_dir, key_word="epoch=", full_path=True
+            os.path.join(train_dir, best_fold), key_word="epoch=", full_path=True
         )[0]
         best_cnn_path = g.get_sub_files(best_epoch_dir, key_word=".pt", full_path=True)[
             0

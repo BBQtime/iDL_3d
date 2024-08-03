@@ -51,7 +51,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
-    def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str):
+    def _load_hyper_data_sets(self, hyper: Dict):
         # load train/valid/test datasets
         for i in [DatasetPart.TRAIN, DatasetPart.VALID]:
             # only use data augmentation on training set
@@ -65,10 +65,10 @@ class TrainingIDLGTVn(TrainingBaseline):
                 augment = None
             hyper["{}.set".format(i)] = DataSetIDLGTVn(
                 patients=hyper["{}.patients".format(i)],
-                baseline_id=idl_gtvn_baseline_id,
                 dataset_ver=hyper["dataset.ver"],
                 no_pt=hyper["no.pt"],
                 no_mr=hyper["no.mr"],
+                geodesic_distance=hyper["geodesic.distance"],
                 augment=augment,
                 random_click=False,
             )
@@ -111,6 +111,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         hyper = g.load_json(os.path.join(cnn_fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
         no_mr = hyper["no.mr"]
+        geodesic_distance = bool(hyper["geodesic.distance"])
 
         # load segmentation metrics
         segment_metrics = self._load_segment_metrics()
@@ -168,7 +169,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 no_pt=no_pt,
                 no_mr=no_mr,
                 segment_metrics=segment_metrics,
-                idl_gtvn_baseline_id=baseline_id,
+                idl_gtvn_geodesic_distance=geodesic_distance,
                 obs_gtvn_clicks=obs_gtvn_clicks,  # this is only for obs study
             )
 
@@ -361,22 +362,29 @@ class TrainingIDLGTVn(TrainingBaseline):
                 )
 
     def _inference_all_folds_record_patient_score(
-        self, patient: str, patient_outputs: Dict, scores: Dict
+        self,
+        patient: str,
+        patient_outputs: Dict,
+        scores: Dict,
+        *args,
+        **kwargs,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             # save cur patient score
             scores["patient={}".format(patient)][metric]["round=01"] = patient_outputs[
                 "gtvn"
             ][metric]
-            # add scores of current patient into median(list)
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                scores[stat][metric]["round=01"].append(patient_outputs["gtvn"][metric])
+            if scores[Stat.AVG][metric]["round=01"] == {}:
+                scores[Stat.AVG][metric]["round=01"] = List()
+            # record metric of current patient for avg and median calculation
+            scores[Stat.AVG][metric]["round=01"].append(patient_outputs["gtvn"][metric])
 
     def _inference_calculate_save_avg_median(
         self,
         scores: Dict,
         save_dir: str,
         dataset_ver: str,
+        dataset_part: str,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
@@ -389,7 +397,9 @@ class TrainingIDLGTVn(TrainingBaseline):
         # save scores in json
         g.save_json(
             data=scores,
-            path=os.path.join(save_dir, "inference_{}_test.json".format(dataset_ver)),
+            path=os.path.join(
+                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
+            ),
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):
@@ -401,7 +411,12 @@ class TrainingIDLGTVn(TrainingBaseline):
         self._remove_non_optimal_epochs(idl_gtvn_id)
 
     def _remove_non_optimal_epochs_record_epoch_scores(
-        self, fold_scores: Dict, epoch_scores: Dict, epoch: str
+        self,
+        fold_scores: Dict,
+        epoch_scores: Dict,
+        epoch: str,
+        *args,
+        **kwargs,
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -437,14 +452,17 @@ class TrainingIDLGTVn(TrainingBaseline):
         labels: Dict,
         segment_metrics: Dict,
         scores: Dict,
+        *args,
+        **kwargs,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             score = segment_metrics[metric](preds["gtvn"], labels["gtvn"])
             # record current score
             scores["patient={}".format(patient)][metric]["round=01"] = score
             # record scores for avg and median score calculation
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                scores[stat][metric]["round=01"].append(score)
+            if scores[Stat.AVG][metric]["round=01"] == {}:
+                scores[Stat.AVG][metric]["round=01"] = List()
+            scores[Stat.AVG][metric]["round=01"].append(score)
 
     def _inference_single_patient_load_dataset(
         self,
@@ -452,15 +470,15 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
-        idl_gtvn_baseline_id: str,
+        idl_gtvn_geodesic_distance: bool,
         obs_gtvn_clicks: ndarray,
     ):
         return DataSetIDLGTVn(
             patients=[patient],
-            baseline_id=idl_gtvn_baseline_id,
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             no_mr=no_mr,
+            geodesic_distance=idl_gtvn_geodesic_distance,
             augment=None,
             obs_gtvn_clicks=obs_gtvn_clicks,
             random_click=False,

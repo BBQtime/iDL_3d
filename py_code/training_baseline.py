@@ -26,7 +26,6 @@ class TrainingBaseline(TrainingCore):
         self,
         hyper: Dict,
         fold: int,
-        idl_gtvn_baseline_id: str,
         debug_mode: bool,
     ):
         # shared by baseline/idl.gtvn/idl.gtvt
@@ -79,6 +78,12 @@ class TrainingBaseline(TrainingCore):
         elif hyper["dataset.ver"] == DatasetVer.HECKTOR:
             hyper["no.mr"] = True
 
+        # use geodesic distance or not
+        if hyper["geodesic.distance"] == {}:
+            hyper.pop("geodesic.distance")
+        else:
+            hyper["geodesic.distance"] = bool(hyper["geodesic.distance"])
+
         # load patients after dataset version is selected
         patients = self._load_patients(
             dataset_ver=hyper["dataset.ver"],
@@ -91,19 +96,22 @@ class TrainingBaseline(TrainingCore):
         self._load_hyper_loss_func(hyper)
 
         # load datasets before load dataloaders
-        self._load_hyper_data_sets(
-            hyper=hyper, idl_gtvn_baseline_id=idl_gtvn_baseline_id
-        )
+        self._load_hyper_data_sets(hyper)
 
         self._load_hyper_data_loaders(hyper)
 
         # load cnn (before optimizer)
         # (1) normal training
-        if hyper["pretrain.id"] == "" or hyper["pretrain.id"] is None:
+        if (
+            hyper["pretrain.id"] == ""
+            or hyper["pretrain.id"] is None
+            or hyper["pretrain.id"] == {}
+        ):
+            hyper["pretrain.id"] = None
             self._load_hyper_new_cnn(hyper=hyper)
         # (2) transfer learning
         else:
-            pretrain_cnn_path = self._find_best_baseline_fold_cnn(hyper["pretrain.id"])
+            pretrain_cnn_path = self._find_best_cnn_in_folds(hyper["pretrain.id"])
             pretrain_no_pt = g.load_json(
                 os.path.join(Path(pretrain_cnn_path).parent.parent, "hyper.json")
             )["no.pt"]
@@ -130,7 +138,7 @@ class TrainingBaseline(TrainingCore):
             gamma=hyper["loss.gamma"],
         ).to(g.DEVICE)
 
-    def _load_hyper_data_sets(self, hyper: Dict, idl_gtvn_baseline_id: str = None):
+    def _load_hyper_data_sets(self, hyper: Dict):
         # load train/valid/test datasets
         for i in [DatasetPart.TRAIN, DatasetPart.VALID]:
             # only use data augmentation on training set
@@ -364,7 +372,6 @@ class TrainingBaseline(TrainingCore):
             self._load_hyper(
                 hyper=hyper,
                 fold=fold,
-                idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 debug_mode=debug_mode,
             )
             print("")
@@ -503,15 +510,16 @@ class TrainingBaseline(TrainingCore):
         if train_dir is None:
             g.error_exit("'train_id' not found!")
 
-        # this is only for idl.gtvn
-        # regarding baseline, train_id == baseline_id
-        baseline_id = Path(train_dir).parent.name
-
         fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
         hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
         no_pt = hyper["no.pt"]
         no_mr = hyper["no.mr"]
+        if hyper["geodesic.distance"] == {}:
+            geodesic_distance = False
+            hyper.pop("geodesic.distance")
+        else:
+            geodesic_distance = bool(hyper["geodesic.distance"])
 
         # dataset version
         training_dataset_ver = hyper["dataset.ver"]
@@ -582,7 +590,7 @@ class TrainingBaseline(TrainingCore):
                         no_pt=no_pt,
                         no_mr=no_mr,
                         segment_metrics=segment_metrics,
-                        idl_gtvn_baseline_id=baseline_id,
+                        idl_gtvn_geodesic_distance=geodesic_distance,
                     )
 
                     # create folder and save preds of current patient

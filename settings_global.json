@@ -1,5 +1,5 @@
 {
-    "cuda.visible.devices": "0",
+    "cuda.visible.devices": "1",
     "dataset.dir.linux.au": "/mnt/faststorage/alan/Datasets/3D_1mm/AU_dataset/",
     "dataset.dir.linux.hecktor": null,
     "dataset.dir.linux.mda": "/mnt/faststorage/alan/Datasets/3D_1mm/MDA_dataset/",

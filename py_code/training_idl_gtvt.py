@@ -891,7 +891,7 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
             # best baseline cnn is decided by dataset_part
-            baseline_cnn_path = self._find_best_baseline_fold_cnn(baseline_id)
+            baseline_cnn_path = self._find_best_cnn_in_folds(baseline_id)
 
             patient_list = hyper["patients"][DatasetPart.TEST]
             # if 1:
@@ -1034,7 +1034,7 @@ class TrainingIDLGTVt(TrainingCore):
             )
 
         # best baseline cnn is decided by dataset_part
-        baseline_cnn_path = self._find_best_baseline_fold_cnn(baseline_id)
+        baseline_cnn_path = self._find_best_cnn_in_folds(baseline_id)
 
         self.__reset_cnn(
             hyper=hyper,
