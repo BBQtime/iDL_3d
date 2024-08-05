@@ -5,7 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 1,
     "cnn": "unet.slim",
-    "dataset.ver": "hecktor",
+    "dataset.ver": "au",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 500,

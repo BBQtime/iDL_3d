@@ -589,7 +589,7 @@ def surface_dice(test: ndarray, reference: ndarray, tolerance: float = 1.0):
 
 
 # only for inference
-class SegmentationMetric(nn.Module):
+class MetricFunction(nn.Module):
     def __init__(
         self,
         metric: str,  # dsc/msd/hd95

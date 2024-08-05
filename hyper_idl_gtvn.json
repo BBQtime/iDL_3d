@@ -10,10 +10,7 @@
     "early.stop.epochs": 30,
     "epochs": 200,
     "fold": 1,
-    "geodesic.distance": [
-        true,
-        false
-    ],
+    "geodesic.distance": false,
     "keep.best.cnn.num": 5,
     "loss.asym": true,
     "loss.delta": 0.5,

@@ -435,7 +435,7 @@ class TrainingIDLGTVt(TrainingCore):
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
-        segment_metrics: Dict = None,
+        metric_funcs: Dict = None,
     ):
         cur_round = Path(round_dir).name
 
@@ -455,7 +455,7 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             no_mr=no_mr,
-            segment_metrics=segment_metrics,
+            metric_funcs=metric_funcs,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
         )
 
@@ -483,7 +483,7 @@ class TrainingIDLGTVt(TrainingCore):
         round_dir: str,
         hyper: Dict,
         selected_slices: Dict,
-        segment_metrics: Dict = None,
+        metric_funcs: Dict = None,
     ):
         g.create_dir(round_dir)
 
@@ -659,7 +659,7 @@ class TrainingIDLGTVt(TrainingCore):
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
             no_mr=hyper["no.mr"],
-            segment_metrics=segment_metrics,
+            metric_funcs=metric_funcs,
         )
 
         # save time spent
@@ -679,7 +679,7 @@ class TrainingIDLGTVt(TrainingCore):
         patient: str,
         idl_gtvt_dir: str,
         hyper: Dict,
-        segment_metrics: Dict = None,
+        metric_funcs: Dict = None,
     ):
         print("")
         print("patient:", patient)
@@ -749,7 +749,7 @@ class TrainingIDLGTVt(TrainingCore):
                 round_dir=round_dir,
                 hyper=hyper,
                 selected_slices=selected_slices,
-                segment_metrics=segment_metrics,
+                metric_funcs=metric_funcs,
             )
 
             if cur_round == max_round:
@@ -839,7 +839,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        metric_funcs = self._load_metric_funcs()
 
         # load hyper
         hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
@@ -908,7 +908,7 @@ class TrainingIDLGTVt(TrainingCore):
                     patient=patient,
                     idl_gtvt_dir=idl_gtvt_dir,
                     hyper=hyper,
-                    segment_metrics=segment_metrics,
+                    metric_funcs=metric_funcs,
                 )
 
                 # calculate and save avg and median scores
@@ -960,7 +960,7 @@ class TrainingIDLGTVt(TrainingCore):
             no_mr = False
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        metric_funcs = self._load_metric_funcs()
 
         # create idl result dir
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
@@ -1070,7 +1070,7 @@ class TrainingIDLGTVt(TrainingCore):
             round_dir=os.path.join(patient_dir, "round=01"),
             hyper=hyper,
             selected_slices=selected_slices,
-            segment_metrics=segment_metrics,
+            metric_funcs=metric_funcs,
         )
 
         # draw avg loss of all trained patients
@@ -1162,7 +1162,7 @@ class TrainingIDLGTVt(TrainingCore):
         print("dataset version: {}".format(dataset_ver))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        metric_funcs = self._load_metric_funcs()
 
         # get all patients
         patients = self._load_patients(
@@ -1213,7 +1213,7 @@ class TrainingIDLGTVt(TrainingCore):
                     dataset_ver=dataset_ver,
                     no_pt=no_pt,
                     no_mr=no_mr,
-                    segment_metrics=segment_metrics,
+                    metric_funcs=metric_funcs,
                 )
 
         self._inference_calculate_save_avg_median(

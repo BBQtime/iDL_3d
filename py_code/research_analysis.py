@@ -10,9 +10,14 @@ import seaborn as sns
 from added_path_len import APL
 from custom_dict import Dict
 from custom_list import List
-from segment_metric import (avg_surface_distance_symmetric, dice,
-                            hausdorff_distance, hausdorff_distance_95,
-                            surface_dice, surface_distances)
+from metric_func import (
+    avg_surface_distance_symmetric,
+    dice,
+    hausdorff_distance,
+    hausdorff_distance_95,
+    surface_dice,
+    surface_distances,
+)
 from str_lib import DatasetVer, Metric, ObsStudyStep, Plane, Stat
 from tqdm import tqdm
 

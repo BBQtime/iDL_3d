@@ -74,7 +74,7 @@ class TrainingBaseline(TrainingCore):
         # MDA dataset has no PET imgs
         if hyper["dataset.ver"] == DatasetVer.MDA:
             hyper["no.pt"] = True
-        # HECKTOR dataset has no MR imgs
+        # HECKTOR dataset has no MR-T1 and MR-T2 imgs
         elif hyper["dataset.ver"] == DatasetVer.HECKTOR:
             hyper["no.mr"] = True
 
@@ -543,9 +543,10 @@ class TrainingBaseline(TrainingCore):
 
         # load segmentation metrics
         if dataset_part == DatasetPart.VALID:
-            segment_metrics = self._load_segment_metrics()
+            metric_funcs = self._load_metric_funcs()
+        # no need to load segmentation metrics
         else:
-            segment_metrics = None
+            metric_funcs = None
 
         # loop through fold dirs
         for fold_dir in fold_dirs:
@@ -589,7 +590,7 @@ class TrainingBaseline(TrainingCore):
                         dataset_ver=dataset_ver,
                         no_pt=no_pt,
                         no_mr=no_mr,
-                        segment_metrics=segment_metrics,
+                        metric_funcs=metric_funcs,
                         idl_gtvn_geodesic_distance=geodesic_distance,
                     )
 
@@ -783,7 +784,7 @@ class TrainingBaseline(TrainingCore):
         print("dataset version: {}".format(dataset_ver))
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        metric_funcs = self._load_metric_funcs()
 
         # create folder in train_dir to save cross_valid preds
         g.create_dir(os.path.join(Path(fold_dirs[0]).parent, "patients"))
@@ -906,7 +907,7 @@ class TrainingBaseline(TrainingCore):
                 for gtv in preds.keys():
                     for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
                         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                            iov = segment_metrics[metric](
+                            iov = metric_funcs[metric](
                                 labels[mda_osb_1][gtv],
                                 labels[mda_obs_2][gtv],
                             )
@@ -929,7 +930,7 @@ class TrainingBaseline(TrainingCore):
                 patient=patient,
                 preds=preds,
                 labels=labels,
-                segment_metrics=segment_metrics,
+                metric_funcs=metric_funcs,
                 scores=scores,
                 dataset_ver=dataset_ver,
             )
@@ -948,7 +949,7 @@ class TrainingBaseline(TrainingCore):
         patient: str,
         preds: Dict,
         labels: Dict,
-        segment_metrics: Dict,
+        metric_funcs: Dict,
         scores: Dict,
         dataset_ver: str,
     ):
@@ -962,7 +963,7 @@ class TrainingBaseline(TrainingCore):
                     DatasetVer.NKI,
                     DatasetVer.HECKTOR,
                 ]:
-                    score = segment_metrics[metric](preds[gtv], labels[gtv])
+                    score = metric_funcs[metric](preds[gtv], labels[gtv])
 
                     # save cur patient metric
                     scores["patient={}".format(patient)][gtv][metric] = score
@@ -975,7 +976,7 @@ class TrainingBaseline(TrainingCore):
                 # (2) MDA dataset
                 elif dataset_ver == DatasetVer.MDA:
                     for obs in labels.keys():
-                        score = segment_metrics[metric](preds[gtv], labels[obs][gtv])
+                        score = metric_funcs[metric](preds[gtv], labels[obs][gtv])
 
                         # save cur patient metric
                         scores["patient={}".format(patient)][gtv][metric][obs] = score

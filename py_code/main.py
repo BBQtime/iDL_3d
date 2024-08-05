@@ -25,10 +25,10 @@ g.clear_debug_data()
 #     debug_mode=1,
 # )
 # baseline.inference_all_folds(
-#     baseline_id="baseline_au_no.pt",
+#     baseline_id="baseline_mda.new",
 #     dataset_part=DatasetPart.VALID,
-#     dataset_ver=DatasetVer.AU,
-#     debug_mode=0,
+#     # dataset_ver=DatasetVer.MDA,
+#     debug_mode=1,
 # )
 # baseline.inference_cross_valid(
 #     baseline_id="baseline_au_no.pt",
@@ -42,7 +42,7 @@ g.clear_debug_data()
 #     baseline_id="baseline_au",
 #     dataset_ver=DatasetVer.AU,
 #     # train_remark="bias.gravity.center",
-#     debug_mode=0,
+#     debug_mode=1,
 # )
 # idl_gtvt.inference(
 #     idl_gtvt_id="",
@@ -59,7 +59,7 @@ g.clear_debug_data()
 # idl_gtvn = TrainingIDLGTVn()
 # idl_gtvn.new_training(
 #     baseline_id="baseline_au",
-#     debug_mode=0,
+#     debug_mode=1,
 # )
 # idl_gtvn.inference_all_folds(
 #     idl_gtvn_id="idl.gtvn_2024.08.03.02.02.22_euclidean.distance",

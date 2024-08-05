@@ -114,7 +114,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         geodesic_distance = bool(hyper["geodesic.distance"])
 
         # load segmentation metrics
-        segment_metrics = self._load_segment_metrics()
+        metric_funcs = self._load_metric_funcs()
 
         # idl progress init
         if self._obs_study_progress is not None:
@@ -168,7 +168,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 dataset_ver=dataset_ver,
                 no_pt=no_pt,
                 no_mr=no_mr,
-                segment_metrics=segment_metrics,
+                metric_funcs=metric_funcs,
                 idl_gtvn_geodesic_distance=geodesic_distance,
                 obs_gtvn_clicks=obs_gtvn_clicks,  # this is only for obs study
             )
@@ -448,13 +448,13 @@ class TrainingIDLGTVn(TrainingBaseline):
         patient: str,
         preds: Dict,
         labels: Dict,
-        segment_metrics: Dict,
+        metric_funcs: Dict,
         scores: Dict,
         *args,
         **kwargs,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            score = segment_metrics[metric](preds["gtvn"], labels["gtvn"])
+            score = metric_funcs[metric](preds["gtvn"], labels["gtvn"])
             # record current score
             scores["patient={}".format(patient)][metric]["round=01"] = score
             # record scores for avg and median score calculation

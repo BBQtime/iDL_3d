@@ -10,8 +10,8 @@ import torch
 from custom_dict import Dict
 from custom_list import List
 from dataset_baseline import DataSetBaseline
+from metric_func import MetricFunction
 from numpy import ndarray
-from segment_metric import SegmentationMetric
 from str_lib import DatasetPart, DatasetVer, ErrMsg, MdaObs, Metric, Stat
 from torch import Tensor, optim
 from torch.nn import DataParallel
@@ -109,15 +109,15 @@ class TrainingCore:
         cnn = cnn.to(g.DEVICE)
         return cnn
 
-    def _load_segment_metrics(self) -> Dict:
-        segment_metrics = Dict()
+    def _load_metric_funcs(self) -> Dict:
+        metric_funcs = Dict()
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            segment_metrics[metric] = SegmentationMetric(metric)
+            metric_funcs[metric] = MetricFunction(metric)
             # following line will cause bug, cant figure out why:
             # if g.used_gpu_count() > 1:
-            #     segment_metrics[metric] = DataParallel(segment_metrics[metric])
-            segment_metrics[metric] = segment_metrics[metric].to(g.DEVICE)
-        return segment_metrics
+            #     metric_funcs[metric] = DataParallel(metric_funcs[metric])
+            metric_funcs[metric] = metric_funcs[metric].to(g.DEVICE)
+        return metric_funcs
 
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
         # baseline
@@ -368,7 +368,7 @@ class TrainingCore:
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
-        segment_metrics: Dict = None,
+        metric_funcs: Dict = None,
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
         idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
         obs_gtvn_clicks: ndarray = None,  # only for observer study
@@ -489,18 +489,18 @@ class TrainingCore:
         self._inference_single_patient_gtvn_post_process(outputs)
 
         # calculate metrics
-        if segment_metrics is not None and self._obs_study_progress is None:
+        if metric_funcs is not None and self._obs_study_progress is None:
             for gtv in outputs.keys():
                 # mda_obs_list = outputs[gtv]["label"].keys()
                 for mda_obs in mda_obs_list:
                     for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                         if mda_obs is None:
-                            outputs[gtv][metric] = segment_metrics[metric](
+                            outputs[gtv][metric] = metric_funcs[metric](
                                 outputs[gtv]["pred"],
                                 outputs[gtv]["label"],
                             )
                         else:
-                            outputs[gtv][metric][mda_obs] = segment_metrics[metric](
+                            outputs[gtv][metric][mda_obs] = metric_funcs[metric](
                                 outputs[gtv]["pred"],
                                 outputs[gtv]["label"][mda_obs],
                             )
