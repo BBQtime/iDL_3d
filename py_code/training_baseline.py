@@ -753,6 +753,10 @@ class TrainingBaseline(TrainingCore):
             debug_mode=debug_mode,
         )
 
+    def _inference_cross_valid_init_scores(self, *args, **kwargs):
+        scores = Dict()
+        return scores
+
     def _inference_cross_valid(
         self,
         train_id: str,
@@ -790,7 +794,11 @@ class TrainingBaseline(TrainingCore):
         )[DatasetPart.TEST]
 
         # initialize scores dict
-        scores = Dict()
+        scores = self._inference_cross_valid_init_scores(
+            idl_gtvn_dir=train_dir,
+            dataset_ver=dataset_ver,
+            patients=patients,
+        )
 
         for patient in tqdm(patients):
             # initialize preds

@@ -4,6 +4,11 @@ from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
 
+g.clear_gpu_cache()
+g.clear_linux_trash()
+g.clear_debug_data()
+
+
 # (1) linux cmd:
 # /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main.py
 
@@ -12,11 +17,6 @@ from training_idl_gtvt import TrainingIDLGTVt
 
 # copy from linux to windows:
 # scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/train_results/
-
-
-g.clear_gpu_cache()
-g.clear_linux_trash()
-g.clear_debug_data()
 
 
 # baseline = TrainingBaseline()
@@ -56,21 +56,18 @@ g.clear_debug_data()
 # )
 
 
-idl_gtvn = TrainingIDLGTVn()
-idl_gtvn.new_training(
-    baseline_id="baseline_au",
-    debug_mode=0,
-)
-# idl_gtvn.inference_all_folds(
-#     idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
-#     dataset_part=DatasetPart.TEST,
-#     dataset_ver=DatasetVer.AU,
+# idl_gtvn = TrainingIDLGTVn()
+# idl_gtvn.new_training(
+#     baseline_id="baseline_au",
+#     debug_mode=0,
 # )
-# idl_gtvn.remove_non_optimal_epochs(
-#     idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
+# idl_gtvn.inference_all_folds(
+#     idl_gtvn_id="idl.gtvn_2024.08.03.02.02.22_euclidean.distance",
+#     dataset_ver=DatasetVer.AU,
+#     dataset_part=DatasetPart.VALID,
 # )
 # idl_gtvn.inference_cross_valid(
-#     idl_gtvn_id="idl.gtvn_2023.07.06.21.43.53",
+#     idl_gtvn_id="idl.gtvn_2024.08.03.02.02.22_geodesic.distance",
 #     dataset_ver=DatasetVer.AU,
 # )
 # idl_gtvn.obs_study(

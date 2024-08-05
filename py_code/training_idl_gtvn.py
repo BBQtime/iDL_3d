@@ -262,8 +262,8 @@ class TrainingIDLGTVn(TrainingBaseline):
     def inference_all_folds(
         self,
         idl_gtvn_id: str,
-        dataset_part: str,  # train/test
-        dataset_ver: str = None,  # au/mda
+        dataset_part: str,
+        dataset_ver: str = None,
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
@@ -274,45 +274,40 @@ class TrainingIDLGTVn(TrainingBaseline):
             debug_mode=debug_mode,
         )
 
-    def _inference_init_scores(
+    def _inference_cross_valid_init_scores(
         self,
-        baseline_id: str,
+        idl_gtvn_dir: str,
         dataset_ver: str,
-        dataset_part: str,
-        patients: Dict,
+        patients: List,
     ) -> Dict:
+
         scores = Dict()
 
-        # init round 01
+        # init metrics of round 01
         for stat in [Stat.MEDIAN, Stat.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 scores[stat][metric]["round=01"] = List()
 
-        # only load baseline scores of test set, because there is no validation scores
-        if DatasetPart.TEST in dataset_part:
-            # load baseline scores
-            baseline_scores = g.load_json(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    baseline_id,
-                    "baseline",
-                    "inference_{}_test.json".format(dataset_ver),
-                )
+        # load baseline metrics on testset
+        baseline_scores = g.load_json(
+            os.path.join(
+                Path(idl_gtvn_dir).parent,
+                "baseline",
+                "inference_{}_test.json".format(dataset_ver),
             )
+        )
 
-            # copy baseline gtvn scores of each patient
-            for patient in patients[dataset_part]:
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    scores["patient={}".format(patient)][metric]["round=00"] = (
-                        baseline_scores["patient={}".format(patient)]["gtvn"][metric]
-                    )
+        # copy baseline gtvn scores of each patient
+        for patient in patients:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                scores["patient={}".format(patient)][metric]["round=00"] = (
+                    baseline_scores["patient={}".format(patient)]["gtvn"][metric]
+                )
 
-            # also copy baseline median and avg gtvn scores
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    scores[stat][metric]["round=00"] = baseline_scores[stat]["gtvn"][
-                        metric
-                    ]
+        # also copy baseline median and avg gtvn scores
+        for stat in [Stat.MEDIAN, Stat.AVG]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                scores[stat][metric]["round=00"] = baseline_scores[stat]["gtvn"][metric]
 
         return scores
 
@@ -371,13 +366,13 @@ class TrainingIDLGTVn(TrainingBaseline):
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             # save cur patient score
-            scores["patient={}".format(patient)][metric]["round=01"] = patient_outputs[
-                "gtvn"
-            ][metric]
-            if scores[Stat.AVG][metric]["round=01"] == {}:
-                scores[Stat.AVG][metric]["round=01"] = List()
+            scores["patient={}".format(patient)][metric] = patient_outputs["gtvn"][
+                metric
+            ]
+            if scores[Stat.AVG][metric] == {}:
+                scores[Stat.AVG][metric] = List()
             # record metric of current patient for avg and median calculation
-            scores[Stat.AVG][metric]["round=01"].append(patient_outputs["gtvn"][metric])
+            scores[Stat.AVG][metric].append(patient_outputs["gtvn"][metric])
 
     def _inference_calculate_save_avg_median(
         self,
@@ -387,12 +382,18 @@ class TrainingIDLGTVn(TrainingBaseline):
         dataset_part: str,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
-                scores[Stat.MEDIAN][metric]["round=01"]
-            )
-            scores[Stat.AVG][metric]["round=01"] = g.calculate_avg(
-                scores[Stat.AVG][metric]["round=01"]
-            )
+            if dataset_part == DatasetPart.VALID:
+                scores[Stat.MEDIAN][metric] = g.calculate_median(
+                    scores[Stat.AVG][metric]
+                )
+                scores[Stat.AVG][metric] = g.calculate_avg(scores[Stat.AVG][metric])
+            elif dataset_part == DatasetPart.TEST:
+                scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
+                    scores[Stat.AVG][metric]["round=01"]
+                )
+                scores[Stat.AVG][metric]["round=01"] = g.calculate_avg(
+                    scores[Stat.AVG][metric]["round=01"]
+                )
 
         # save scores in json
         g.save_json(
@@ -420,9 +421,7 @@ class TrainingIDLGTVn(TrainingBaseline):
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                fold_scores[epoch][stat][metric] = epoch_scores[stat][metric][
-                    "round=01"
-                ]
+                fold_scores[epoch][stat][metric] = epoch_scores[stat][metric]
 
     def _remove_non_optimal_epochs_find_best_epoch(
         self, scores: Dict, gtv_list: list = ["gtvn"]
@@ -440,7 +439,6 @@ class TrainingIDLGTVn(TrainingBaseline):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
         self._inference_cross_valid(
             train_id=idl_gtvn_id,
-            dataset_part=DatasetPart.TEST,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
         )
