@@ -5,7 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 2,
     "cnn": "unet.slim",
-    "dataset.ver": "au",
+    "dataset.ver": "mda",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 200,

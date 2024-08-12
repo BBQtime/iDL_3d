@@ -10,7 +10,7 @@ from dataset_idl_gtvn import DataSetIDLGTVn
 from loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
-from str_lib import DatasetPart, Metric, Stat
+from str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
 from torch import Tensor
 from training_baseline import TrainingBaseline
 from training_core import ObsStudyProgress
@@ -178,7 +178,6 @@ class TrainingIDLGTVn(TrainingBaseline):
                 patient=patient,
                 epoch_dir=output_epoch_dir,
                 patient_outputs=patient_outputs,
-                dataset_part=DatasetPart.TEST,
             )
 
             # idl progress INFERENCE_SAVE_PRED
@@ -316,11 +315,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         patient: str,
         epoch_dir: str,
         patient_outputs: Dict,
-        dataset_part: str,
     ):
-        if dataset_part == DatasetPart.TRAIN or dataset_part == DatasetPart.VALID:
-            return
-
         epoch_patient_dir = os.path.join(
             epoch_dir,
             "patients",
@@ -343,6 +338,7 @@ class TrainingIDLGTVn(TrainingBaseline):
             save_path=os.path.join(epoch_patient_dir, "gtvn_pred.nii.gz"),
             spacing=g.NII_SPACING,
         )
+
         # save distance map and clicks
         for i in ["distance.map", "clicks"]:
             save_path = os.path.join(
@@ -361,32 +357,37 @@ class TrainingIDLGTVn(TrainingBaseline):
         patient: str,
         patient_outputs: Dict,
         scores: Dict,
-        *args,
-        **kwargs,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            # save cur patient score
+            # save cur patient metric
             scores["patient={}".format(patient)][metric] = patient_outputs["gtvn"][
                 metric
             ]
+            # add cur patient metric into a list for avg and median calculation
+            # initialize a list
             if scores[Stat.AVG][metric] == {}:
                 scores[Stat.AVG][metric] = List()
-            # record metric of current patient for avg and median calculation
+            # add current patient metric into the list
             scores[Stat.AVG][metric].append(patient_outputs["gtvn"][metric])
 
-    def _inference_calculate_save_avg_median(
+    def _inference_calculate_avg_median_save_json(
         self,
         scores: Dict,
         save_dir: str,
         dataset_ver: str,
         dataset_part: str,
+        mda_obs: str = None,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+
+            # for validation set, no baseline metric, no need to add key "round=01"
             if dataset_part == DatasetPart.VALID:
                 scores[Stat.MEDIAN][metric] = g.calculate_median(
                     scores[Stat.AVG][metric]
                 )
                 scores[Stat.AVG][metric] = g.calculate_avg(scores[Stat.AVG][metric])
+
+            # for test set, add key "round=01" to compare with baseline metric
             elif dataset_part == DatasetPart.TEST:
                 scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
                     scores[Stat.AVG][metric]["round=01"]
@@ -396,32 +397,30 @@ class TrainingIDLGTVn(TrainingBaseline):
                 )
 
         # save scores in json
+        if mda_obs is None:
+            json_name = "inference_{}_{}.json".format(dataset_ver, dataset_part)
+        else:
+            json_name = "inference_{}_{}_{}.json".format(
+                dataset_ver, dataset_part, mda_obs
+            )
         g.save_json(
             data=scores,
-            path=os.path.join(
-                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
-            ),
+            path=os.path.join(save_dir, json_name),
         )
 
     def __is_valid_idl_gtvn_id(self, idl_gtvn_id: str):
         if not idl_gtvn_id.startswith("idl.gtvn_"):
             g.error_exit("'idl_gtvn_id' must start with 'idl.gtvn_'!")
 
-    def remove_non_optimal_epochs(self, idl_gtvn_id: str):
-        self.__is_valid_idl_gtvn_id(idl_gtvn_id)
-        self._remove_non_optimal_epochs(idl_gtvn_id)
-
     def _remove_non_optimal_epochs_record_epoch_scores(
         self,
         fold_scores: Dict,
         epoch_scores: Dict,
         epoch: str,
-        *args,
-        **kwargs,
     ):
+
         for stat in [Stat.MEDIAN, Stat.AVG]:
-            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                fold_scores[epoch][stat][metric] = epoch_scores[stat][metric]
+            fold_scores[epoch][stat] = epoch_scores[stat]
 
     def _remove_non_optimal_epochs_find_best_epoch(
         self, scores: Dict, gtv_list: list = ["gtvn"]
@@ -434,12 +433,14 @@ class TrainingIDLGTVn(TrainingBaseline):
         self,
         idl_gtvn_id: str,
         dataset_ver: str = None,  # au/mda
+        mda_obs: str = None,
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
         self._inference_cross_valid(
             train_id=idl_gtvn_id,
             dataset_ver=dataset_ver,
+            mda_obs=mda_obs,
             debug_mode=debug_mode,
         )
 
@@ -450,8 +451,6 @@ class TrainingIDLGTVn(TrainingBaseline):
         labels: Dict,
         metric_funcs: Dict,
         scores: Dict,
-        *args,
-        **kwargs,
     ):
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             score = metric_funcs[metric](preds["gtvn"], labels["gtvn"])
@@ -486,33 +485,26 @@ class TrainingIDLGTVn(TrainingBaseline):
         self,
         outputs: Dict,
         dataset_item: Dict,
-        mda_obs: str = None,
     ):
         labels = dataset_item["labels"][1].cpu().numpy()
         img_shape = dataset_item["shape"]
         labels = g.center_align_img(labels, img_shape)
 
-        if mda_obs is None:
-            outputs["gtvn"]["label"] = labels
-        else:
-            outputs["gtvn"]["label"][mda_obs] = labels
+        outputs["gtvn"]["label"] = labels
+
         return outputs
 
     def _inference_single_patient_record_gtvn_clicks(
         self,
         outputs: Dict,
         dataset_item: Dict,
-        mda_obs: str = None,
     ):
         idl_gtvn_clicks = dataset_item["clicks"]
         img_shape = dataset_item["shape"]
         idl_gtvn_clicks = torch.squeeze(idl_gtvn_clicks, dim=0).cpu().numpy()
         idl_gtvn_clicks = g.center_align_img(idl_gtvn_clicks, img_shape)
 
-        if mda_obs is None:
-            outputs["gtvn"]["clicks"] = idl_gtvn_clicks
-        else:
-            outputs["gtvn"]["clicks"][mda_obs] = idl_gtvn_clicks
+        outputs["gtvn"]["clicks"] = idl_gtvn_clicks
 
     def _inference_single_patient_record_preds(
         self,

@@ -559,7 +559,7 @@ class TrainingBaseline(TrainingCore):
                 dataset_ver=dataset_ver,
                 fold=fold,
                 debug_mode=debug_mode,
-            )
+            )[dataset_part]
 
             # loop through epoch dirs
             for epoch_dir in g.get_sub_dirs(
@@ -577,7 +577,7 @@ class TrainingBaseline(TrainingCore):
                     epoch_scores = Dict()
 
                 # loop through each patient
-                for patient in tqdm(patients[dataset_part]):
+                for patient in tqdm(patients):
                     # (1)outputs structure for sigle-observer datasets:
                     # [gtv]->["dsc/msd/hd95/label/pred/clicks/distance.map"]
 
@@ -593,6 +593,8 @@ class TrainingBaseline(TrainingCore):
                         metric_funcs=metric_funcs,
                         idl_gtvn_geodesic_distance=geodesic_distance,
                     )
+                    if patient_outputs is None:
+                        continue
 
                     # create folder and save preds of current patient
                     if dataset_part == DatasetPart.TEST:
@@ -600,7 +602,6 @@ class TrainingBaseline(TrainingCore):
                             patient=patient,
                             epoch_dir=epoch_dir,
                             patient_outputs=patient_outputs,
-                            dataset_part=dataset_part,  # this param is needed for idl.gtvn
                         )
 
                     # record score of current patient
@@ -610,18 +611,20 @@ class TrainingBaseline(TrainingCore):
                             patient=patient,
                             patient_outputs=patient_outputs,
                             scores=epoch_scores,
-                            dataset_ver=dataset_ver,
                         )
 
                 # all patients under current epoch have been traversed
                 # calculate median and avg score of current epoch
                 if dataset_part == DatasetPart.VALID:
-                    self._inference_calculate_save_avg_median(
-                        scores=epoch_scores,
-                        save_dir=epoch_dir,
-                        dataset_ver=dataset_ver,
-                        dataset_part=dataset_part,
-                    )
+                    if len(epoch_scores) <= 0:
+                        print("no label from current observer!")
+                    else:
+                        self._inference_calculate_avg_median_save_json(
+                            scores=epoch_scores,
+                            save_dir=epoch_dir,
+                            dataset_ver=dataset_ver,
+                            dataset_part=dataset_part,
+                        )
 
                 continue  # next epoch
 
@@ -630,8 +633,6 @@ class TrainingBaseline(TrainingCore):
         patient: str,
         epoch_dir: str,
         patient_outputs: Dict,
-        *args,
-        **kwargs,
     ):
         patient_dir = os.path.join(
             epoch_dir,
@@ -652,7 +653,6 @@ class TrainingBaseline(TrainingCore):
         patient: str,
         patient_outputs: Dict,
         scores: Dict,
-        dataset_ver: str,
     ):
         for gtv in patient_outputs.keys():
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
@@ -660,97 +660,54 @@ class TrainingBaseline(TrainingCore):
                 scores["patient={}".format(patient)][gtv][metric] = patient_outputs[
                     gtv
                 ][metric]
-
                 # add cur patient metric into a list for avg and median calculation
-                # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [
-                    DatasetVer.AU,
-                    DatasetVer.OBS_STUDY,
-                    DatasetVer.NKI,
-                    DatasetVer.HECKTOR,
-                ]:
-                    # initialize a list
-                    if scores[Stat.AVG][gtv][metric] == {}:
-                        scores[Stat.AVG][gtv][metric] = List()
-                    # add current patient metric into the list
-                    scores[Stat.AVG][gtv][metric].append(patient_outputs[gtv][metric])
+                # initialize a list
+                if scores[Stat.AVG][gtv][metric] == {}:
+                    scores[Stat.AVG][gtv][metric] = List()
+                # add current patient metric into the list
+                scores[Stat.AVG][gtv][metric].append(patient_outputs[gtv][metric])
 
-                # (2) MDA dataset
-                elif dataset_ver == DatasetVer.MDA:
-                    for obs in patient_outputs[gtv][metric].keys():
-                        # initialize a list (for current observer)
-                        if scores[Stat.AVG][gtv][metric][obs] == {}:
-                            scores[Stat.AVG][gtv][metric][obs] = List()
-                        # add current patient metric into the list (current observer)
-                        scores[Stat.AVG][gtv][metric][obs].append(
-                            patient_outputs[gtv][metric][obs]
-                        )
-
-                        # initialize a list (for all observers)
-                        if scores[Stat.AVG][gtv][metric]["overall"] == {}:
-                            scores[Stat.AVG][gtv][metric]["overall"] = List()
-                        # add current patient metric into the list (all observers)
-                        scores[Stat.AVG][gtv][metric]["overall"].append(
-                            patient_outputs[gtv][metric][obs]
-                        )
-
-                else:
-                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-    def _inference_calculate_save_avg_median(
+    def _inference_calculate_avg_median_save_json(
         self,
         scores: Dict,
         save_dir: str,
         dataset_ver: str,
         dataset_part: str,
+        mda_obs: str = None,
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-
-                if dataset_ver in [
-                    DatasetVer.AU,
-                    DatasetVer.OBS_STUDY,
-                    DatasetVer.NKI,
-                    DatasetVer.HECKTOR,
-                ]:
-                    scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
-                        scores[Stat.AVG][gtv][metric]
-                    )
-                    scores[Stat.AVG][gtv][metric] = g.calculate_avg(
-                        scores[Stat.AVG][gtv][metric]
-                    )
-
-                elif dataset_ver == DatasetVer.MDA:
-                    # (1) calculate avg / median for each observer
-                    for obs in scores[Stat.AVG][gtv][metric].keys():
-                        scores[Stat.MEDIAN][gtv][metric][obs] = g.calculate_median(
-                            scores[Stat.AVG][gtv][metric][obs]
-                        )
-                        scores[Stat.AVG][gtv][metric][obs] = g.calculate_avg(
-                            scores[Stat.AVG][gtv][metric][obs]
-                        )
-
-                else:
-                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
+                scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
+                    scores[Stat.AVG][gtv][metric]
+                )
+                scores[Stat.AVG][gtv][metric] = g.calculate_avg(
+                    scores[Stat.AVG][gtv][metric]
+                )
 
         # save scores in json
+        if mda_obs is None:
+            json_name = "inference_{}_{}.json".format(dataset_ver, dataset_part)
+        else:
+            json_name = "inference_{}_{}_{}.json".format(
+                dataset_ver, dataset_part, mda_obs
+            )
         g.save_json(
             data=scores,
-            path=os.path.join(
-                save_dir, "inference_{}_{}.json".format(dataset_ver, dataset_part)
-            ),
+            path=os.path.join(save_dir, json_name),
         )
 
     def inference_cross_valid(
         self,
         baseline_id: str,
         dataset_ver: str = None,  # au/mda
+        mda_obs: str = None,
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._inference_cross_valid(
             train_id=baseline_id,
             dataset_ver=dataset_ver,
+            mda_obs=mda_obs,
             debug_mode=debug_mode,
         )
 
@@ -762,6 +719,7 @@ class TrainingBaseline(TrainingCore):
         self,
         train_id: str,
         dataset_ver: str = None,
+        mda_obs: str = None,
         debug_mode: bool = False,
     ):
         print("")
@@ -794,6 +752,14 @@ class TrainingBaseline(TrainingCore):
             debug_mode=debug_mode,
         )[DatasetPart.TEST]
 
+        # mda observer filter
+        if dataset_ver != DatasetVer.MDA:
+            mda_obs = None
+        if mda_obs is not None:
+            for patient in patients.copy():
+                if mda_obs not in patient:
+                    patients.remove(patient)
+
         # initialize scores dict
         scores = self._inference_cross_valid_init_scores(
             idl_gtvn_dir=train_dir,
@@ -811,7 +777,7 @@ class TrainingBaseline(TrainingCore):
                 # find epoch dir
                 epoch_dirs = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)
                 if len(epoch_dirs) > 1:
-                    self.remove_non_optimal_epochs(train_id)
+                    self._remove_non_optimal_epochs(train_id)
                     epoch_dir = g.get_sub_dirs(
                         fold_dir, key_word="epoch=", full_path=True
                     )[0]
@@ -863,67 +829,10 @@ class TrainingBaseline(TrainingCore):
                     )
 
             # calculate metrics
-            # load labels
-            if dataset_ver in [
-                DatasetVer.AU,
-                DatasetVer.OBS_STUDY,
-                DatasetVer.NKI,
-                DatasetVer.HECKTOR,
-            ]:
-                labels = g.load_gtv_labels(
-                    dataset_ver=dataset_ver,
-                    patient=patient,
-                )
-            elif dataset_ver == DatasetVer.MDA:
-                labels = Dict()
-                mda_obs_list = List(
-                    [
-                        MdaObs.AAA,
-                        MdaObs.DMEl,
-                        MdaObs.MRA,
-                        MdaObs.SA,
-                        MdaObs.YK,
-                    ]
-                )
-                for mda_obs in mda_obs_list.copy():
-                    cur_obs_label = g.load_gtv_labels(
-                        dataset_ver=dataset_ver,
-                        patient=patient,
-                        mda_obs=mda_obs,
-                    )
-                    if cur_obs_label is not None:
-                        labels[mda_obs] = cur_obs_label
-                    else:
-                        # remove observer without label (calculating iov will also use mda_obs_list)
-                        mda_obs_list.remove(mda_obs)
-
-                # calculate iov of labels (only for mda dataset)
-                # key: [gtv]->[metric]->["iov"]
-                # (1) initialize as list (for average calculation)
-                for gtv in preds.keys():
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        scores["patient={}".format(patient)][gtv][metric]["iov"] = []
-                # (2) calculate iov between every 2 observers
-                for gtv in preds.keys():
-                    for mda_osb_1, mda_obs_2 in mda_obs_list.get_combinations(2):
-                        for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                            iov = metric_funcs[metric](
-                                labels[mda_osb_1][gtv],
-                                labels[mda_obs_2][gtv],
-                            )
-                            scores["patient={}".format(patient)][gtv][metric][
-                                "iov"
-                            ].append(iov)
-                # (3) calculate avg value
-                for gtv in preds.keys():
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        scores["patient={}".format(patient)][gtv][metric]["iov"] = (
-                            g.calculate_avg(
-                                scores["patient={}".format(patient)][gtv][metric]["iov"]
-                            )
-                        )
-            else:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
+            labels = g.load_gtv_labels(
+                dataset_ver=dataset_ver,
+                patient=patient,
+            )
 
             # calculate metrics
             self._inference_cross_valid_record_patient_score(
@@ -932,16 +841,16 @@ class TrainingBaseline(TrainingCore):
                 labels=labels,
                 metric_funcs=metric_funcs,
                 scores=scores,
-                dataset_ver=dataset_ver,
             )
 
         # all patients have been traversed
         # calculate avg and median score
-        self._inference_calculate_save_avg_median(
+        self._inference_calculate_avg_median_save_json(
             scores=scores,
             save_dir=Path(fold_dirs[0]).parent,
             dataset_ver=dataset_ver,
             dataset_part=DatasetPart.TEST,
+            mda_obs=mda_obs,
         )
 
     def _inference_cross_valid_record_patient_score(
@@ -951,54 +860,18 @@ class TrainingBaseline(TrainingCore):
         labels: Dict,
         metric_funcs: Dict,
         scores: Dict,
-        dataset_ver: str,
     ):
         for gtv in preds.keys():
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                score = metric_funcs[metric](preds[gtv], labels[gtv])
 
-                # (1) AU / OBS_STUDY / NKI dataset
-                if dataset_ver in [
-                    DatasetVer.AU,
-                    DatasetVer.OBS_STUDY,
-                    DatasetVer.NKI,
-                    DatasetVer.HECKTOR,
-                ]:
-                    score = metric_funcs[metric](preds[gtv], labels[gtv])
+                # save cur patient metric
+                scores["patient={}".format(patient)][gtv][metric] = score
 
-                    # save cur patient metric
-                    scores["patient={}".format(patient)][gtv][metric] = score
-
-                    # add cur patient metric into a list for avg and median calculation
-                    if scores[Stat.AVG][gtv][metric] == {}:
-                        scores[Stat.AVG][gtv][metric] = List()
-                    scores[Stat.AVG][gtv][metric].append(score)
-
-                # (2) MDA dataset
-                elif dataset_ver == DatasetVer.MDA:
-                    for obs in labels.keys():
-                        score = metric_funcs[metric](preds[gtv], labels[obs][gtv])
-
-                        # save cur patient metric
-                        scores["patient={}".format(patient)][gtv][metric][obs] = score
-
-                        # initialize a list (for current observer)
-                        if scores[Stat.AVG][gtv][metric][obs] == {}:
-                            scores[Stat.AVG][gtv][metric][obs] = List()
-                        # add current patient metric into the list (current observer)
-                        scores[Stat.AVG][gtv][metric][obs].append(score)
-
-                        # initialize a list (for all observers)
-                        if scores[Stat.AVG][gtv][metric]["overall"] == {}:
-                            scores[Stat.AVG][gtv][metric]["overall"] = List()
-                        # add current patient metric into the list (all observers)
-                        scores[Stat.AVG][gtv][metric]["overall"].append(score)
-
-                else:
-                    g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-    def remove_non_optimal_epochs(self, baseline_id: str):
-        self._is_valid_baseline_id(baseline_id)
-        self._remove_non_optimal_epochs(baseline_id)
+                # add cur patient metric into a list for avg and median calculation
+                if scores[Stat.AVG][gtv][metric] == {}:
+                    scores[Stat.AVG][gtv][metric] = List()
+                scores[Stat.AVG][gtv][metric].append(score)
 
     def _remove_non_optimal_epochs(self, train_id: str):
         print("")
@@ -1032,7 +905,6 @@ class TrainingBaseline(TrainingCore):
                     fold_scores=fold_scores,
                     epoch_scores=epoch_scores,
                     epoch=epoch,
-                    dataset_ver=dataset_ver,
                 )
 
             best_epoch = self._remove_non_optimal_epochs_find_best_epoch(
@@ -1053,26 +925,9 @@ class TrainingBaseline(TrainingCore):
         fold_scores: Dict,
         epoch_scores: Dict,
         epoch: str,
-        dataset_ver: str,
     ):
         for stat in [Stat.MEDIAN, Stat.AVG]:
-            if dataset_ver in [
-                DatasetVer.AU,
-                DatasetVer.OBS_STUDY,
-                DatasetVer.NKI,
-                DatasetVer.HECKTOR,
-            ]:
-                fold_scores[epoch][stat] = epoch_scores[stat]
-
-            elif dataset_ver == DatasetVer.MDA:
-                for gtv in ["gtvs", "gtvt", "gtvn"]:
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        fold_scores[epoch][stat][gtv][metric] = epoch_scores[stat][gtv][
-                            metric
-                        ]["overall"]
-
-            else:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
+            fold_scores[epoch][stat] = epoch_scores[stat]
 
     # a sub function of _remove_non_optimal_epochs()
     def _remove_non_optimal_epochs_find_best_epoch(
@@ -1131,7 +986,6 @@ class TrainingBaseline(TrainingCore):
         self,
         outputs: Dict,
         dataset_item: Dict,
-        mda_obs: str = None,
     ):
         img_shape = dataset_item["shape"]
 
@@ -1145,10 +999,7 @@ class TrainingBaseline(TrainingCore):
         labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
 
         for gtv in ["gtvt", "gtvn", "gtvs"]:
-            if mda_obs is None:
-                outputs[gtv]["label"] = labels[gtv]
-            else:
-                outputs[gtv]["label"][mda_obs] = labels[gtv]
+            outputs[gtv]["label"] = labels[gtv]
 
         return outputs
 

@@ -12,6 +12,7 @@ import sys
 import unicodedata
 import warnings
 from datetime import datetime
+from pathlib import Path
 from typing import Union
 
 import cc3d
@@ -24,6 +25,7 @@ from custom_list import List
 from numpy import ndarray
 from str_lib import DatasetVer, ErrMsg, MdaObs
 from torch import Tensor
+from tqdm import tqdm
 
 
 def error_exit(err_msg: str = ""):
@@ -379,11 +381,103 @@ def save_nii(
     return save_path
 
 
+# update mda dataset structure
+# from patient_1/label_1,2,3
+# to patient_1_label_1, patient_1_label_2, patient_1_label_3
+def mda_dataset_preprocess():
+    old_dataset_dir = DATASET_DIR[DatasetVer.MDA]
+    old_dataset_dir = Path(old_dataset_dir).parent
+    old_dataset_dir = os.path.join(old_dataset_dir, "MDA_dataset_origin")
+
+    new_dataset_dir = DATASET_DIR[DatasetVer.MDA]
+    create_dir(new_dataset_dir)
+
+    mda_obs_list = [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
+
+    old_dataset_split = load_json(DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
+    new_dataset_split = Dict()
+
+    for i in old_dataset_split.keys():
+        new_dataset_split[i] = List()
+
+        for old_patient_name in tqdm(List(old_dataset_split[i])):
+            old_patient_dir = os.path.join(old_dataset_dir, old_patient_name)
+
+            for mda_obs in mda_obs_list:
+
+                old_ct_path = os.path.join(
+                    old_patient_dir,
+                    "{}_CT.nii".format(old_patient_name),
+                )
+                old_mr1_path = os.path.join(
+                    old_patient_dir,
+                    "{}_T1dr.nii".format(old_patient_name),
+                )
+                old_mr2_path = os.path.join(
+                    old_patient_dir,
+                    "{}_T2dr.nii".format(old_patient_name),
+                )
+
+                old_gtvt_path = os.path.join(
+                    old_patient_dir,
+                    "{}_MR_GTV_P_BL_{}dr.nii".format(old_patient_name, mda_obs),
+                )
+
+                old_gtvn_path = os.path.join(
+                    old_patient_dir,
+                    "{}_MR_GTV_N_ALL_BL_{}dr.nii".format(old_patient_name, mda_obs),
+                )
+
+                # current observer has neither gtvt nor gtvn
+                if not os.path.exists(old_gtvt_path) and not os.path.exists(
+                    old_gtvn_path
+                ):
+                    continue
+
+                else:
+                    new_patient_name = old_patient_name + "_" + mda_obs
+
+                    # (1)add into split json
+                    new_dataset_split[i].append(new_patient_name)
+
+                    # (2)copy files
+                    new_patient_dir = os.path.join(new_dataset_dir, new_patient_name)
+                    create_dir(new_patient_dir)
+
+                    if os.path.exists(old_gtvt_path):
+                        shutil.copy(
+                            old_gtvt_path,
+                            os.path.join(new_patient_dir, "GTVt.nii"),
+                        )
+                    if os.path.exists(old_gtvn_path):
+                        shutil.copy(
+                            old_gtvn_path,
+                            os.path.join(new_patient_dir, "GTVn.nii"),
+                        )
+
+                    shutil.copy(
+                        old_ct_path,
+                        os.path.join(new_patient_dir, "CT.nii"),
+                    )
+                    shutil.copy(
+                        old_mr1_path,
+                        os.path.join(new_patient_dir, "T1dr.nii"),
+                    )
+                    shutil.copy(
+                        old_mr2_path,
+                        os.path.join(new_patient_dir, "T2dr.nii"),
+                    )
+
+        # list to str
+        new_dataset_split[i] = new_dataset_split[i].to_str()
+
+    save_json(new_dataset_split, DATASET_SPLIT_JSON_PATH[DatasetVer.MDA])
+
+
 # use this function in case there is no gtvn or gtvs nii file
 def load_gtv_labels(
     dataset_ver: str,
     patient: str,
-    mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
     nii_load_func=None,  # ui will use this param, with its own nii load function
 ):
     dataset_dir = DATASET_DIR[dataset_ver]
@@ -435,50 +529,29 @@ def load_gtv_labels(
         return labels
 
     elif dataset_ver == DatasetVer.MDA:
-        # select observer
-        if mda_obs is None:
-            mda_obs_list = [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
+        paths["gtvt"] = os.path.join(dataset_dir, patient, "GTVt.nii")
+        paths["gtvn"] = os.path.join(dataset_dir, patient, "GTVn.nii")
+
+        # current observer has neight gtvt nor gtvn
+        if not os.path.exists(paths["gtvt"]) and not os.path.exists(paths["gtvn"]):
+            error_exit("current MDA patient has neither GTVt nor GTVn!")
+
+        # find both gtvt and gtvn, or one of them
         else:
-            mda_obs_list = [mda_obs]
+            # (1) load existing label
+            for i in ["gtvt", "gtvn"]:
+                if os.path.exists(paths[i]):
+                    labels[i] = nii_load_func(paths[i], binary=True)
 
-        while len(mda_obs_list) > 0:
-            tmp_obs = random.choice(mda_obs_list)
+            # (2) load non-existing label
+            if not os.path.exists(paths["gtvt"]):
+                labels["gtvt"] = np.zeros_like(labels["gtvn"])
+            if not os.path.exists(paths["gtvn"]):
+                labels["gtvn"] = np.zeros_like(labels["gtvt"])
 
-            paths["gtvt"] = os.path.join(
-                dataset_dir,
-                patient,
-                "{}_MR_GTV_P_BL_{}dr.nii".format(patient, tmp_obs),
-            )
-            paths["gtvn"] = os.path.join(
-                dataset_dir,
-                patient,
-                "{}_MR_GTV_N_ALL_BL_{}dr.nii".format(patient, tmp_obs),
-            )
+            labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
 
-            # current observer has no gtvt or gtvn
-            if not os.path.exists(paths["gtvt"]) and not os.path.exists(paths["gtvn"]):
-                mda_obs_list.remove(tmp_obs)
-                continue
-
-            # find both gtvt and gtvn, or one of them
-            else:
-                # (1) load existing label
-                for i in ["gtvt", "gtvn"]:
-                    if os.path.exists(paths[i]):
-                        labels[i] = nii_load_func(paths[i], binary=True)
-
-                # (2) load non-existing label
-                if not os.path.exists(paths["gtvt"]):
-                    labels["gtvt"] = np.zeros_like(labels["gtvn"])
-                if not os.path.exists(paths["gtvn"]):
-                    labels["gtvn"] = np.zeros_like(labels["gtvt"])
-
-                labels["gtvs"] = np.maximum(labels["gtvt"], labels["gtvn"])
-
-                return labels
-
-        # while loop over, no gtvt or gtvn label found for current patient
-        return None
+            return labels
 
     else:
         error_exit(ErrMsg.DATASET_VER_INVALID)

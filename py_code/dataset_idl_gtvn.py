@@ -40,11 +40,7 @@ class DataSetIDLGTVn(DatasetCore):
         return len(self.__patients)
 
     # must be overrided
-    def get_item(
-        self,
-        patient: str,
-        mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
-    ) -> Dict:
+    def get_item(self, patient: str) -> Dict:
 
         # origin images dict
         self.__origin = Dict()
@@ -53,12 +49,7 @@ class DataSetIDLGTVn(DatasetCore):
         self.__origin["label"] = g.load_gtv_labels(
             dataset_ver=self._dataset_ver,
             patient=patient,
-            mda_obs=mda_obs,
         )["gtvn"]
-
-        # no label found, return None
-        if self.__origin["label"] is None:
-            return None
 
         # item to return
         item = Dict()

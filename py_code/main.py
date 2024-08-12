@@ -1,5 +1,5 @@
 import global_core as g
-from str_lib import DatasetPart, DatasetVer
+from str_lib import DatasetPart, DatasetVer, MdaObs
 from training_baseline import TrainingBaseline
 from training_idl_gtvn import TrainingIDLGTVn
 from training_idl_gtvt import TrainingIDLGTVt
@@ -19,21 +19,22 @@ g.clear_debug_data()
 # scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/train_results/
 
 
-# baseline = TrainingBaseline()
+baseline = TrainingBaseline()
 # baseline.new_training(
-#     train_remark="",
+#     train_remark="mda",
 #     debug_mode=1,
 # )
 # baseline.inference_all_folds(
-#     baseline_id="baseline_mda.new",
+#     baseline_id="baseline_2024.08.13.00.34.55_delete.flag_mda",
 #     dataset_part=DatasetPart.VALID,
-#     # dataset_ver=DatasetVer.MDA,
+#     dataset_ver=DatasetVer.MDA,
 #     debug_mode=1,
 # )
 # baseline.inference_cross_valid(
-#     baseline_id="baseline_au_no.pt",
-#     dataset_ver=DatasetVer.AU,
-#     debug_mode=0,
+#     baseline_id="baseline_2024.08.13.00.34.55_delete.flag_mda",
+#     dataset_ver=DatasetVer.MDA,
+#     mda_obs=MdaObs.DMEl,
+#     debug_mode=1,
 # )
 
 
@@ -58,16 +59,17 @@ g.clear_debug_data()
 
 # idl_gtvn = TrainingIDLGTVn()
 # idl_gtvn.new_training(
-#     baseline_id="baseline_au",
-#     debug_mode=1,
+#     baseline_id="baseline_mda.new",
+#     debug_mode=0,
 # )
 # idl_gtvn.inference_all_folds(
-#     idl_gtvn_id="idl.gtvn_2024.08.03.02.02.22_euclidean.distance",
-#     dataset_ver=DatasetVer.AU,
+#     idl_gtvn_id="idl.gtvn_2024.08.07.00.18.10",
+#     dataset_ver=DatasetVer.MDA,
 #     dataset_part=DatasetPart.VALID,
+#     debug_mode=1,
 # )
 # idl_gtvn.inference_cross_valid(
-#     idl_gtvn_id="idl.gtvn_2024.08.03.02.02.22_geodesic.distance",
+#     idl_gtvn_id="idl.gtvn_2024.08.06.19.50.14_delete.flag",
 #     dataset_ver=DatasetVer.AU,
 # )
 # idl_gtvn.obs_study(

@@ -3,7 +3,7 @@
     "augment.methods": "elastic,rotate,flip.lr,flip.ud",
     "augment.min": 2,
     "augment.pct": 0.8,
-    "batch.size": 1,
+    "batch.size": 2,
     "cnn": "unet.slim",
     "dataset.ver": "au",
     "dropout": 0.3,
@@ -19,7 +19,7 @@
     "lr.decay.factor": 0.5,
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
-    "no.mr": true,
+    "no.mr": false,
     "no.pt": false,
     "pretrain.id": ""
 }

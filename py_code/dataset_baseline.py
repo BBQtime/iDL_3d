@@ -31,21 +31,13 @@ class DataSetBaseline(DatasetCore):
     def __len__(self):
         return len(self.__patients)
 
-    def get_item(
-        self,
-        patient: str,
-        mda_obs: str = None,  # for MDA dataset, has multiple observers. None means random (for training)
-    ) -> Dict:
+    def get_item(self, patient: str) -> Dict:
 
         # load labels and save them into "origin" dict
         origin = g.load_gtv_labels(
             dataset_ver=self._dataset_ver,
             patient=patient,
-            mda_obs=mda_obs,  # if mda_obs is None, there will always return a label.
         )
-        # this will be triggered only when mda_obs's label is not found
-        if origin is None:
-            return None
 
         # data to return
         item = Dict()

@@ -392,57 +392,44 @@ class TrainingCore:
             obs_gtvn_clicks=obs_gtvn_clicks,  # only for observer study gtvn
         )
 
-        # create observer list
-        if dataset_ver == DatasetVer.MDA:
-            mda_obs_list = List(
-                [MdaObs.AAA, MdaObs.DMEl, MdaObs.MRA, MdaObs.SA, MdaObs.YK]
-            )
-        elif dataset_ver in [
-            DatasetVer.AU,
-            DatasetVer.OBS_STUDY,
-            DatasetVer.NKI,
-            DatasetVer.HECKTOR,
-        ]:
-            mda_obs_list = [None]
-        else:
-            g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
         input_imgs = None
         img_shape = None
 
-        # loop through observer list
-        for mda_obs in mda_obs_list.copy():
-            # get items from dataset
-            # augment was set to None when creating dataset,
-            # so there is no data augmentation in get_item() function
-            dataset_item = dataset.get_item(patient=patient, mda_obs=mda_obs)
-            if dataset_item is None:
-                mda_obs_list.remove(mda_obs)
-                continue
+        # get items from dataset
+        # augment was set to None when creating dataset,
+        # so there is no data augmentation in get_item() function
+        dataset_item = dataset.get_item(patient)
+        if dataset_item is None:
+            return None
 
-            # get input images
-            if input_imgs is None:
-                input_imgs = dataset_item["input.imgs"]
-                # add "batch" (c/d/h/w -> b/c/d/h/w)
-                input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+        # get input images
+        if input_imgs is None:
+            input_imgs = dataset_item["input.imgs"]
+            # add "batch" (c/d/h/w -> b/c/d/h/w)
+            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
 
-            # get img shape
-            if img_shape is None:
-                img_shape = dataset_item["shape"]
+        # get img shape
+        if img_shape is None:
+            img_shape = dataset_item["shape"]
 
-            # record labels of current observer into outputs dict
-            self._inference_single_patient_record_labels(
-                outputs=outputs,
-                dataset_item=dataset_item,
-                mda_obs=mda_obs,
-            )
+        # record labels of current observer into outputs dict
+        self._inference_single_patient_record_labels(
+            outputs=outputs,
+            dataset_item=dataset_item,
+        )
 
-            # record gtvn clicks of current observer into outputs dict
-            self._inference_single_patient_record_gtvn_clicks(
-                outputs=outputs,
-                dataset_item=dataset_item,
-                mda_obs=mda_obs,
-            )
+        # record gtvn clicks of current observer into outputs dict
+        self._inference_single_patient_record_gtvn_clicks(
+            outputs=outputs,
+            dataset_item=dataset_item,
+        )
+
+        # record gtvn distance map into outputs
+        self._inference_single_patient_record_gtvn_distance_map(
+            outputs=outputs,
+            input_imgs=input_imgs,
+            img_shape=img_shape,
+        )
 
         # idl progress INFERENCE_LOAD_IMG
         if self._obs_study_progress is not None:
@@ -472,13 +459,6 @@ class TrainingCore:
             img_shape=img_shape,
         )
 
-        # record gtvn distance map into outputs
-        self._inference_single_patient_record_gtvn_distance_map(
-            outputs=outputs,
-            input_imgs=input_imgs,
-            img_shape=img_shape,
-        )
-
         # post processing (before calculate metric)
         # remove connected_components has no overlap with delineated slices
         self._inference_single_patient_gtvt_post_process(
@@ -491,19 +471,11 @@ class TrainingCore:
         # calculate metrics
         if metric_funcs is not None and self._obs_study_progress is None:
             for gtv in outputs.keys():
-                # mda_obs_list = outputs[gtv]["label"].keys()
-                for mda_obs in mda_obs_list:
-                    for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        if mda_obs is None:
-                            outputs[gtv][metric] = metric_funcs[metric](
-                                outputs[gtv]["pred"],
-                                outputs[gtv]["label"],
-                            )
-                        else:
-                            outputs[gtv][metric][mda_obs] = metric_funcs[metric](
-                                outputs[gtv]["pred"],
-                                outputs[gtv]["label"][mda_obs],
-                            )
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                    outputs[gtv][metric] = metric_funcs[metric](
+                        outputs[gtv]["pred"],
+                        outputs[gtv]["label"],
+                    )
 
         return outputs
 

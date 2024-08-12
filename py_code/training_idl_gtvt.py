@@ -912,7 +912,7 @@ class TrainingIDLGTVt(TrainingCore):
                 )
 
                 # calculate and save avg and median scores
-                self._inference_calculate_save_avg_median(
+                self._inference_calculate_avg_median_save_json(
                     idl_gtvt_dir,
                     dataset_ver=hyper["dataset.ver"],
                 )
@@ -1092,7 +1092,7 @@ class TrainingIDLGTVt(TrainingCore):
         # if self._obs_study_progress is not None:
         #     print(self._obs_study_progress.cur_step, self._obs_study_progress.total_step)
 
-    def inference_calculate_save_avg_median(self, idl_gtvt_id: str):
+    def inference_calculate_avg_median_save_json(self, idl_gtvt_id: str):
         print("")
         print("calculate and save avg and median score: {}".format(idl_gtvt_id))
 
@@ -1106,12 +1106,12 @@ class TrainingIDLGTVt(TrainingCore):
         dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
         print("dataset version: {}".format(dataset_ver))
 
-        self._inference_calculate_save_avg_median(
+        self._inference_calculate_avg_median_save_json(
             idl_gtvt_dir=idl_gtvt_dir,
             dataset_ver=dataset_ver,
         )
 
-    def _inference_calculate_save_avg_median(
+    def _inference_calculate_avg_median_save_json(
         self,
         idl_gtvt_dir: str,
         dataset_ver: str,
@@ -1216,7 +1216,7 @@ class TrainingIDLGTVt(TrainingCore):
                     metric_funcs=metric_funcs,
                 )
 
-        self._inference_calculate_save_avg_median(
+        self._inference_calculate_avg_median_save_json(
             idl_gtvt_dir=idl_gtvt_dir,
             dataset_ver=dataset_ver,
         )
@@ -1225,16 +1225,12 @@ class TrainingIDLGTVt(TrainingCore):
         self,
         outputs: Dict,
         dataset_item: Dict,
-        mda_obs: str = None,
     ):
         labels = dataset_item["labels"][1].cpu().numpy()
         img_shape = dataset_item["shape"]
         labels = g.center_align_img(labels, img_shape)
 
-        if mda_obs is None:
-            outputs["gtvt"]["label"] = labels
-        else:
-            outputs["gtvt"]["label"][mda_obs] = labels
+        outputs["gtvt"]["label"] = labels
         return outputs
 
     def _inference_single_patient_record_preds(
