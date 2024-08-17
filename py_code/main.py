@@ -21,21 +21,27 @@ g.clear_debug_data()
 
 baseline = TrainingBaseline()
 # baseline.new_training(
-#     train_remark="mda",
-#     debug_mode=1,
+#     train_remark="au_fold.1",
+#     debug_mode=0,
 # )
-# baseline.inference_all_folds(
-#     baseline_id="baseline_2024.08.13.00.34.55_delete.flag_mda",
-#     dataset_part=DatasetPart.VALID,
-#     dataset_ver=DatasetVer.MDA,
-#     debug_mode=1,
-# )
-# baseline.inference_cross_valid(
-#     baseline_id="baseline_2024.08.13.00.34.55_delete.flag_mda",
-#     dataset_ver=DatasetVer.MDA,
-#     mda_obs=MdaObs.DMEl,
-#     debug_mode=1,
-# )
+baseline.inference_all_folds(
+    baseline_id="baseline_mda.new",
+    dataset_part=DatasetPart.VALID,
+    dataset_ver=DatasetVer.MDA,
+    debug_mode=0,
+)
+baseline.inference_all_folds(
+    baseline_id="baseline_mda.new",
+    dataset_part=DatasetPart.TEST,
+    dataset_ver=DatasetVer.MDA,
+    debug_mode=0,
+)
+baseline.inference_cross_valid(
+    baseline_id="baseline_mda.new",
+    dataset_ver=DatasetVer.MDA,
+    # mda_obs=None,
+    debug_mode=0,
+)
 
 
 # idl_gtvt = TrainingIDLGTVt()

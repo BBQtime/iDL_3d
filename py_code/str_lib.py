@@ -69,6 +69,7 @@ class DatasetPart:
     TRAIN = "train"
     VALID = "valid"
     TEST = "test"
+    # EXT_TEST = "ext.test"
 
 
 class DisplayMode:

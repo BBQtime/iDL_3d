@@ -118,15 +118,10 @@ def dice(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty and reference_empty:
-        return 1.0
-    elif test_empty or test_full or reference_empty or reference_full:
-        if nan_for_nonexisting:
-            return float("NaN")
-        else:
-            return 0.0
-
-    return float(2.0 * tp / (2 * tp + fp + fn))
+    if reference_empty or reference_full:
+        return None if nan_for_nonexisting else 0.0
+    else:
+        return float(2.0 * tp / (2 * tp + fp + fn))
 
 
 def jaccard(
@@ -403,22 +398,20 @@ def hausdorff_distance(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty or test_full or reference_empty or reference_full:
-        if nan_for_nonexisting:
-            return float("NaN")
-        else:
-            return 0
-
-    test, reference = confusion_matrix.test, confusion_matrix.reference
-
-    return hd(test, reference, voxel_spacing, connectivity)
+    if reference_empty or reference_full:
+        return None if nan_for_nonexisting else 0.0
+    elif test_empty:
+        return None if nan_for_nonexisting else 0.0
+    else:
+        test, reference = confusion_matrix.test, confusion_matrix.reference
+        return hd(test, reference, voxel_spacing, connectivity)
 
 
 def hausdorff_distance_95(
     test=None,
     reference=None,
     confusion_matrix=None,
-    none_for_nonexisting=True,
+    nan_for_nonexisting=True,
     voxel_spacing=None,
     connectivity=1,
     **kwargs
@@ -433,17 +426,13 @@ def hausdorff_distance_95(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty and reference_empty:
-        return 0.0
-    elif test_empty or test_full or reference_empty or reference_full:
-        if none_for_nonexisting:
-            return None
-        else:
-            return 0.0
-
-    test, reference = confusion_matrix.test, confusion_matrix.reference
-
-    return hd95(test, reference, voxel_spacing, connectivity)
+    if reference_empty or reference_full:
+        return None if nan_for_nonexisting else 0.0
+    elif test_empty:
+        return None if nan_for_nonexisting else 0.0
+    else:
+        test, reference = confusion_matrix.test, confusion_matrix.reference
+        return hd95(test, reference, voxel_spacing, connectivity)
 
 
 def avg_surface_distance(
@@ -465,22 +454,20 @@ def avg_surface_distance(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty or test_full or reference_empty or reference_full:
-        if nan_for_nonexisting:
-            return float("NaN")
-        else:
-            return 0
-
-    test, reference = confusion_matrix.test, confusion_matrix.reference
-
-    return asd(test, reference, voxel_spacing, connectivity)
+    if reference_empty or reference_full:
+        return None if nan_for_nonexisting else 0.0
+    elif test_empty:
+        return None if nan_for_nonexisting else 0.0
+    else:
+        test, reference = confusion_matrix.test, confusion_matrix.reference
+        return asd(test, reference, voxel_spacing, connectivity)
 
 
 def avg_surface_distance_symmetric(
     test=None,
     reference=None,
     confusion_matrix=None,
-    none_for_nonexisting=True,
+    nan_for_nonexisting=True,
     voxel_spacing=None,
     connectivity=1,
     **kwargs
@@ -495,17 +482,13 @@ def avg_surface_distance_symmetric(
         reference_full,
     ) = confusion_matrix.get_existence()
 
-    if test_empty and reference_empty:
-        return 0.0
-    elif test_empty or test_full or reference_empty or reference_full:
-        if none_for_nonexisting:
-            return None
-        else:
-            return 0.0
-
-    test, reference = confusion_matrix.test, confusion_matrix.reference
-
-    return assd(test, reference, voxel_spacing, connectivity)
+    if reference_empty or reference_full:
+        return None if nan_for_nonexisting else 0.0
+    elif test_empty:
+        return None if nan_for_nonexisting else 0.0
+    else:
+        test, reference = confusion_matrix.test, confusion_matrix.reference
+        return assd(test, reference, voxel_spacing, connectivity)
 
 
 ALL_METRICS = {
@@ -627,14 +610,14 @@ class MetricFunction(nn.Module):
             return dice(
                 test=preds,
                 reference=labels,
-                nan_for_nonexisting=False,
+                nan_for_nonexisting=True,
             )
 
         elif self.__metric == Metric.MSD:
             return avg_surface_distance_symmetric(
                 test=preds,
                 reference=labels,
-                none_for_nonexisting=True,
+                nan_for_nonexisting=True,
                 voxel_spacing=g.NII_SPACING,
             )
 
@@ -642,6 +625,6 @@ class MetricFunction(nn.Module):
             return hausdorff_distance_95(
                 test=preds,
                 reference=labels,
-                none_for_nonexisting=True,
+                nan_for_nonexisting=True,
                 voxel_spacing=g.NII_SPACING,
             )
