@@ -414,12 +414,8 @@ class TrainingBaseline(TrainingCore):
             # save hyper after training
             self._save_hyper(hyper, hyper_save_path)
 
-            # only train 2 folds in debug mode
-            if (
-                debug_mode
-                and len(fold_list) > 1
-                and fold_list.index(hyper["fold"]) == 1
-            ):
+            # train at most 2 folds in debug mode
+            if debug_mode and len(fold_list) > 1 and fold_list.index(fold) == 1:
                 break
 
             # reset hyper before next fold
