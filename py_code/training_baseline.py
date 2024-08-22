@@ -11,8 +11,8 @@ from dataset_baseline import DataSetBaseline
 from loss_func import UnifiedFocalLoss
 from matplotlib import pyplot as plt
 from numpy import ndarray
-from str_lib import DatasetPart, DatasetVer, ErrMsg, MdaObs, Metric, Stat
-from torch import Tensor
+from str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from training_core import TrainingCore
@@ -249,6 +249,7 @@ class TrainingBaseline(TrainingCore):
         loss_json_path = os.path.join(fold_dir, "loss.json")
         lr_json_path = os.path.join(fold_dir, "lr.json")
         patience = 0
+        scaler = GradScaler()
 
         for epoch in range(1, hyper["epochs"] + 1):
             print("")
@@ -258,15 +259,27 @@ class TrainingBaseline(TrainingCore):
             train_loss = 0
             batch_count = 0
 
-            # training
+            # Training loop
             for item in tqdm(hyper["train.loader"]):
-                # zero grad at the begining of each mini-batch
+                # Zero grad at the beginning of each mini-batch
                 hyper["optim"].zero_grad()
-                loss = self._calculate_loss(item=item, hyper=hyper)
-                loss.backward()  # get grad (must after: optim.zero_grad())
-                hyper["optim"].step()  # update param
+
+                # Mixed precision training
+                with autocast():
+                    loss = self._calculate_loss(item=item, hyper=hyper)
+
+                # Backpropagation and optimization step
+                # Get grad (must be after: optim.zero_grad())
+                scaler.scale(loss).backward()
+                # Update parameters
+                scaler.step(hyper["optim"])
+                scaler.update()
+
+                # Accumulate training loss
                 train_loss += loss.item()
                 batch_count += 1
+
+            # Calculate average training loss
             train_loss /= batch_count
 
             # validation
@@ -276,9 +289,12 @@ class TrainingBaseline(TrainingCore):
             hyper["cnn"].eval()
             with torch.no_grad():
                 for item in tqdm(hyper["valid.loader"]):
-                    loss = self._calculate_loss(item=item, hyper=hyper)
+                    with autocast():
+                        loss = self._calculate_loss(item=item, hyper=hyper)
+
                     valid_loss += loss.item()
                     batch_count += 1
+
             valid_loss /= batch_count
             hyper["scheduler"].step(valid_loss)
 

@@ -4,10 +4,8 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")
 import global_core as g
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from custom_dict import Dict
@@ -18,10 +16,12 @@ from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
 from scipy.ndimage import measurements
 from str_lib import DatasetPart, Metric, Plane, SelectScenario, Stat
-from torch import Tensor
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from training_core import ObsStudyProgress, TrainingCore
+
+matplotlib.use("Agg")
 
 
 class ObsStudyGTVtProgress(ObsStudyProgress):
@@ -575,6 +575,8 @@ class TrainingIDLGTVt(TrainingCore):
         else:
             iter_range = tqdm(range(hyper["iter"]))
 
+        scaler = GradScaler()
+
         # iter loop through iterations
         for cur_iter in iter_range:
             hyper["cnn"].train()
@@ -597,9 +599,18 @@ class TrainingIDLGTVt(TrainingCore):
                 item["labels"] = item["labels"].to(g.DEVICE)
                 item["weight.map"] = item["weight.map"].to(g.DEVICE)
                 preds = hyper["cnn"](item["input.imgs"])
-                loss = hyper["loss.func"](preds, item["labels"], item["weight.map"])
-                loss.backward()  # get grad (must after: optim.zero_grad())
-                hyper["optim"].step()  # update param
+
+                with autocast():
+                    loss = hyper["loss.func"](preds, item["labels"], item["weight.map"])
+
+                # Backpropagation and optimization step
+                # Get grad (must be after: optim.zero_grad())
+                scaler.scale(loss).backward()
+                # Update parameters
+                scaler.step(hyper["optim"])
+                scaler.update()
+
+                # Accumulate training loss
                 iter_loss += loss.item()
                 batch_count += 1
 
@@ -618,8 +629,9 @@ class TrainingIDLGTVt(TrainingCore):
                         self._obs_study_progress.emit_signal()
 
             # cur iter finished
-            # update scheduler
+            # Calculate average training loss
             iter_loss /= batch_count
+            # update scheduler
             hyper["scheduler"].step(iter_loss)
 
             # record loss
@@ -894,8 +906,6 @@ class TrainingIDLGTVt(TrainingCore):
             baseline_cnn_path = self._find_best_cnn_in_folds(baseline_id)
 
             patient_list = hyper["patients"][DatasetPart.TEST]
-            # if 1:
-            #     patient_list = ["NKI_273"]
 
             # loop through each patient
             for patient in patient_list:

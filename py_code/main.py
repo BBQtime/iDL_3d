@@ -20,28 +20,34 @@ g.clear_debug_data()
 
 
 baseline = TrainingBaseline()
-# baseline.new_training(
-#     train_remark="au_fold.1",
-#     debug_mode=0,
-# )
-baseline.inference_all_folds(
-    baseline_id="baseline_mda.new",
-    dataset_part=DatasetPart.VALID,
-    dataset_ver=DatasetVer.MDA,
+baseline.new_training(
+    train_remark="mda.transfer",
     debug_mode=0,
 )
-baseline.inference_all_folds(
-    baseline_id="baseline_mda.new",
-    dataset_part=DatasetPart.TEST,
-    dataset_ver=DatasetVer.MDA,
-    debug_mode=0,
-)
-baseline.inference_cross_valid(
-    baseline_id="baseline_mda.new",
-    dataset_ver=DatasetVer.MDA,
-    # mda_obs=None,
-    debug_mode=0,
-)
+# for baseline_id, dataset_ver in [
+#     ("baseline_au", DatasetVer.AU),
+#     ("baseline_au_no.pt", DatasetVer.AU),
+#     ("baseline_au_no.pt", DatasetVer.MDA),
+#     ("baseline_mda.new", DatasetVer.MDA),
+# ]:
+#     baseline.inference_all_folds(
+#         baseline_id=baseline_id,
+#         dataset_part=DatasetPart.VALID,
+#         dataset_ver=dataset_ver,
+#         # debug_mode=0,
+#     )
+#     baseline.inference_all_folds(
+#         baseline_id=baseline_id,
+#         dataset_part=DatasetPart.TEST,
+#         dataset_ver=dataset_ver,
+#         # debug_mode=0,
+#     )
+#     baseline.inference_cross_valid(
+#         baseline_id=baseline_id,
+#         dataset_ver=dataset_ver,
+#         # mda_obs=None,
+#         # debug_mode=0,
+#     )
 
 
 # idl_gtvt = TrainingIDLGTVt()
@@ -49,7 +55,7 @@ baseline.inference_cross_valid(
 #     baseline_id="baseline_au",
 #     dataset_ver=DatasetVer.AU,
 #     # train_remark="bias.gravity.center",
-#     debug_mode=1,
+#     debug_mode=0,
 # )
 # idl_gtvt.inference(
 #     idl_gtvt_id="",

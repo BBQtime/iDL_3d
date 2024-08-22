@@ -116,15 +116,12 @@ def __is_valid_for_avg_median_calculation(origin_data: Union[list, dict, tuple])
 
 def calculate_median(origin_data: Union[list, dict, tuple]) -> float:
     data_list = __is_valid_for_avg_median_calculation(origin_data)
-    data_list = [i if i is not None else math.nan for i in data_list]
+    # remove non-number in the list
+    data_list = [i for i in data_list if is_number(i)]
     if len(data_list) == 0:
         return None
     else:
-        answer = statistics.median(data_list)
-        if math.isnan(answer):
-            return None
-        else:
-            return answer
+        return statistics.median(data_list)
 
 
 def calculate_avg(origin_data: Union[list, dict, tuple]) -> float:
