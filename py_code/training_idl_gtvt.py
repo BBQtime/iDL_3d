@@ -149,16 +149,16 @@ class TrainingIDLGTVt(TrainingCore):
             hyper["weight.prev.round.decay"], (0.0, 1.0)
         )
 
+        # load dataset version
+        self._load_hyper_dataset_version(
+            hyper=hyper,
+            idl_baseline_id=baseline_id,
+        )
+
         # load patients, value of fold doesn't matter
         hyper["patients"] = self._load_patients(
             debug_mode=debug_mode,
             dataset_ver=hyper["dataset.ver"],
-        )
-
-        # dataset version
-        self._load_hyper_dataset_version(
-            hyper=hyper,
-            idl_baseline_id=baseline_id,
         )
 
         # load loss function after super()._load_hyper()
@@ -817,38 +817,20 @@ class TrainingIDLGTVt(TrainingCore):
     def simulation(
         self,
         baseline_id: str,
-        dataset_ver: str = None,
         train_remark: str = None,
         debug_mode: bool = False,
     ):
-        # load baseline data
+        # load baseline hyper
         self._is_valid_baseline_id(baseline_id)
         baseline_dir = self._find_train_dir(baseline_id)
         if baseline_dir is None:
             g.error_exit("Can not find 'baseline_id'!")
-
         baseline_fold_dirs = g.get_sub_dirs(
             baseline_dir, key_word="fold=", full_path=True
         )
         baseline_hyper = g.load_json(os.path.join(baseline_fold_dirs[0], "hyper.json"))
-
-        if baseline_hyper["no.pt"] is True:
-            no_pt = True
-        else:
-            no_pt = False
-
-        if baseline_hyper["no.mr"] is True:
-            no_mr = True
-        else:
-            no_mr = False
-
-        baseline_dataset_ver = baseline_hyper["dataset.ver"]
-
-        # check dataset version and dataset part
-        dataset_ver = self._is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            origin_dataset_ver=baseline_dataset_ver,
-        )
+        baseline_no_pt = True if baseline_hyper["no.pt"] else False
+        baseline_no_mr = True if baseline_hyper["no.mr"] else False
 
         # load segmentation metrics
         metric_funcs = self._load_metric_funcs()
@@ -857,11 +839,9 @@ class TrainingIDLGTVt(TrainingCore):
         hyper_series = self._load_hyper_series_from_json(g.HYPER_JSON_PATH["idl.gtvt"])
 
         for hyper in hyper_series:
-            hyper["dataset.ver"] = dataset_ver
-
             # idl.gtvt doesnt have "no.pt" or "no.mr" hyperparam, copy them from baseline
-            hyper["no.pt"] = no_pt
-            hyper["no.mr"] = no_mr
+            hyper["no.pt"] = baseline_no_pt
+            hyper["no.mr"] = baseline_no_mr
 
             idl_gtvt_id = "idl.gtvt_" + self._init_train_id(
                 hyper=hyper,

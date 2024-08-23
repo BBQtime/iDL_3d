@@ -125,7 +125,6 @@ class TrainingCore:
             hyper["dataset.ver"] = self._is_valid_dataset_version(
                 dataset_ver=hyper["dataset.ver"]
             )
-
         # idl
         else:
             baseline_dir = os.path.join(
