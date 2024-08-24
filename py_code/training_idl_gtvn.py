@@ -535,3 +535,66 @@ class TrainingIDLGTVn(TrainingBaseline):
                     outputs["gtvn"]["pred"] = np.maximum(
                         outputs["gtvn"]["pred"], cur_cc
                     )
+
+    def _find_best_cnn_in_folds(self, idl_gtvn_id: str) -> str:
+        self.__is_valid_idl_gtvn_id(idl_gtvn_id)
+
+        scores = Dict()
+
+        idl_gtvn_dir = self._find_train_dir(idl_gtvn_id)
+
+        fold_dirs = g.get_sub_dirs(
+            input_dir=idl_gtvn_dir,
+            key_word="fold=",
+            full_path=True,
+        )
+        for fold_dir in fold_dirs:
+            dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
+                "dataset.ver"
+            ]
+
+            fold = Path(fold_dir).name
+            epoch_dir = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)[0]
+            epoch_scores = g.load_json(
+                os.path.join(
+                    epoch_dir,
+                    "inference_{}_valid.json".format(dataset_ver),
+                )
+            )
+            for stat in [Stat.MEDIAN, Stat.AVG]:
+                scores[fold][stat] = epoch_scores[stat]
+
+        for stat in [Stat.MEDIAN, Stat.AVG]:
+            for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                # create a tmp list to sort
+                list_to_sort = List()
+                # add elements into the list
+                for epoch in scores.keys():
+                    list_to_sort.append(scores[epoch][stat][metric])
+                # sort the list
+                if metric == Metric.DSC:
+                    list_to_sort.sort(reverse=False)
+                else:
+                    list_to_sort.sort(reverse=True)
+                # update value based on the idx in the list
+                for epoch in scores.keys():
+                    new_value = list_to_sort.index(scores[epoch][stat][metric])
+                    # if metric == Metric.DSC:
+                    #     new_value *= 2
+                    scores[epoch][stat][metric] = new_value
+
+        evaluation = Dict()
+        for epoch in scores:
+            evaluation[epoch] = 0
+            for stat in [Stat.AVG, Stat.MEDIAN]:
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                    evaluation[epoch] += scores[epoch][stat][metric]
+
+        best_fold = evaluation.key_with_max_value()
+        best_epoch_dir = g.get_sub_dirs(
+            os.path.join(idl_gtvn_dir, best_fold), key_word="epoch=", full_path=True
+        )[0]
+        best_cnn_path = g.get_sub_files(best_epoch_dir, key_word=".pt", full_path=True)[
+            0
+        ]
+        return best_cnn_path

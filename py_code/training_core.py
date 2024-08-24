@@ -563,18 +563,15 @@ class TrainingCore:
 
         return dataset_ver
 
-    def _find_best_cnn_in_folds(self, train_id: str) -> str:
-        if not train_id.startswith("baseline_") and not train_id.startswith(
-            "idl.gtvn_"
-        ):
-            g.error_exit("must be a baseline or idl.gtvn id")
+    def _find_best_cnn_in_folds(self, baseline_id: str) -> str:
+        self._is_valid_baseline_id(baseline_id)
 
         scores = Dict()
 
-        train_dir = self._find_train_dir(train_id)
+        baseline_dir = self._find_train_dir(baseline_id)
 
         fold_dirs = g.get_sub_dirs(
-            input_dir=train_dir,
+            input_dir=baseline_dir,
             key_word="fold=",
             full_path=True,
         )
@@ -624,7 +621,7 @@ class TrainingCore:
 
         best_fold = evaluation.key_with_max_value()
         best_epoch_dir = g.get_sub_dirs(
-            os.path.join(train_dir, best_fold), key_word="epoch=", full_path=True
+            os.path.join(baseline_dir, best_fold), key_word="epoch=", full_path=True
         )[0]
         best_cnn_path = g.get_sub_files(best_epoch_dir, key_word=".pt", full_path=True)[
             0

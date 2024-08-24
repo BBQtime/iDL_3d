@@ -22,8 +22,8 @@ if __name__ == "__main__":
 
     # baseline = TrainingBaseline()
     # baseline.new_training(
-    #     train_remark="mda.transfer",
-    #     debug_mode=0,
+    #     # train_remark="mda.transfer",
+    #     debug_mode=1,
     # )
     # for baseline_id, dataset_ver in [
     #     ("baseline_mda.new", DatasetVer.MDA),
@@ -47,28 +47,28 @@ if __name__ == "__main__":
     #         # debug_mode=0,
     #     )
 
-    # idl_gtvn = TrainingIDLGTVn()
-    # idl_gtvn.new_training(
-    #     baseline_id="baseline_au_no.pt",
-    #     train_remark="au",
-    #     debug_mode=0,
-    # )
+    idl_gtvn = TrainingIDLGTVn()
+    idl_gtvn.new_training(
+        baseline_id="baseline_mda.new",
+        train_remark="mda.new",
+        debug_mode=0,
+    )
     # idl_gtvn.inference_all_folds(
-    #     idl_gtvn_id="idl.gtvn_au",
-    #     dataset_ver=DatasetVer.AU,
+    #     idl_gtvn_id="idl.gtvn_au_no.pt",
+    #     dataset_ver=DatasetVer.MDA,
     #     dataset_part=DatasetPart.VALID,
     #     # debug_mode=0,
     # )
     # idl_gtvn.inference_all_folds(
-    #     idl_gtvn_id="idl.gtvn_au",
-    #     dataset_ver=DatasetVer.AU,
+    #     idl_gtvn_id="idl.gtvn_au_no.pt",
+    #     dataset_ver=DatasetVer.MDA,
     #     dataset_part=DatasetPart.TEST,
-    #     # debug_mode=0,
+    #     debug_mode=0,
     # )
     # idl_gtvn.inference_cross_valid(
-    #     idl_gtvn_id="idl.gtvn_au",
-    #     dataset_ver=DatasetVer.AU,
-    #     # debug_mode=0,
+    #     idl_gtvn_id="idl.gtvn_au_no.pt",
+    #     dataset_ver=DatasetVer.MDA,
+    #     debug_mode=0,
     # )
     # idl_gtvn.obs_study(
     #     idl_gtvn_id="idl.gtvn_" + g.DELETE_FLAG,
@@ -77,13 +77,15 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
 
-    idl_gtvt = TrainingIDLGTVt()
-    for baseline_id in ["baseline_au"]:
-        idl_gtvt.simulation(
-            baseline_id=baseline_id,
-            train_remark="au",
-            debug_mode=0,
-        )
+    # idl_gtvt = TrainingIDLGTVt()
+    # for baseline_id in [
+    #     "baseline_au_no.pt",
+    # ]:
+    #     idl_gtvt.simulation(
+    #         baseline_id=baseline_id,
+    #         train_remark=baseline_id[len("baseline_") :],
+    #         debug_mode=1,
+    #     )
     # idl_gtvt.inference(
     #     idl_gtvt_id="",
     #     debug_mode=0,

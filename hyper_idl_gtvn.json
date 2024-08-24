@@ -5,7 +5,7 @@
     "augment.pct": 0.8,
     "batch.size": 2,
     "cnn": "unet.slim",
-    "dataset.ver": "au",
+    "dataset.ver": "mda",
     "dropout": 0.3,
     "early.stop.epochs": 30,
     "epochs": 200,
@@ -21,5 +21,6 @@
     "lr.decay.patience": 10,
     "lr.min": 1e-05,
     "no.mr": false,
-    "no.pt": true
+    "no.pt": true,
+    "pretrain.id": ""
 }
