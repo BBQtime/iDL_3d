@@ -51,7 +51,6 @@ class TrainingCore:
 
         if dataset_ver == DatasetVer.OBS_STUDY:
             patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
-            return patients
 
         else:
             # calculate fold count
@@ -59,10 +58,8 @@ class TrainingCore:
             for key_name in dataset_split.keys():
                 if "fold." in key_name:
                     fold_count += 1
-
             if fold_count != g.DATASET_FOLDS[dataset_ver]:
                 dataset_split = self.__kfolds_split(dataset_ver)
-
             # test set
             patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
             # valid set
@@ -73,13 +70,13 @@ class TrainingCore:
                 if "fold." in key_name and key_name != "fold.{}".format(fold):
                     patients[DatasetPart.TRAIN] += List(dataset_split[key_name])
 
-            if debug_mode:
-                for key_name in patients.keys():
-                    # keep 2 patients to test median score calculation
-                    # keep 1 patient for faster debugging
-                    patients[key_name] = patients[key_name][:2]
+        if debug_mode:
+            for dataset_part in patients.keys():
+                # keep 2 patients to test median score calculation
+                # keep 1 patient for faster debugging
+                patients[dataset_part] = patients[dataset_part][:2]
 
-            return patients
+        return patients
 
     # if float64 needed, use: "cnn.to(torch.double)"
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
