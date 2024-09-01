@@ -67,8 +67,21 @@ class DataSetIDLGTVt(DatasetCore):
             selected_slices, weight
         )
 
-        # combine pred(un-selected slices) and label(selected slices)
+        # only keep the selected slices in label
         self.__origin["label"] *= selected_slices_mask
+
+        # g.save_nii(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_DIR, "debug", "masked.label.nii.gz"),
+        # )
+
+        # combine baseline pred(un-selected slices) with label(selected slices)
+        self.__origin["label"] += self.__origin["pred"] * (1 - selected_slices_mask)
+
+        # g.save_nii(
+        #     self.__origin["label"],
+        #     os.path.join(g.PROJ_DIR, "debug", "masked.label+pred.nii.gz"),
+        # )
 
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # selected slice mask
