@@ -4,7 +4,7 @@
     "augment.min": 2,
     "augment.times": 4,
     "batch.size": 1,
-    "dataset.ver": "mda",
+    "dataset.ver": "au.ext",
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,

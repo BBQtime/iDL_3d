@@ -52,6 +52,12 @@ class DatasetCore(torch.utils.data.Dataset):
                 img_path[i] = "HNCDL_{}_{}.nii".format(patient, img_path[i])
                 img_path[i] = os.path.join(g.DATASET_DIR[dataset_ver], img_path[i])
 
+            elif dataset_ver == DatasetVer.AU_EXT:
+                img_path[i] = "HNCDL_{}_{}.nii".format(patient, img_path[i])
+                img_path[i] = os.path.join(
+                    g.DATASET_DIR[dataset_ver], "HNCDL_{}".format(patient), img_path[i]
+                )
+
             elif dataset_ver == DatasetVer.MDA:
                 img_path[i] = os.path.join(
                     g.DATASET_DIR[dataset_ver], patient, img_path[i]

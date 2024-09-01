@@ -35,6 +35,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._patients = Dict()
         for i in [
             DatasetVer.AU,
+            DatasetVer.AU_EXT,
             DatasetVer.OBS_STUDY,
             DatasetVer.MDA,
             DatasetVer.NKI,
@@ -800,6 +801,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # set dataset version based on current patient
         if self._cur_patient in self._patients[DatasetVer.AU]:
             self.dataset_ver = self.__baseline_dataset_ver
+        elif self._cur_patient in self._patients[DatasetVer.AU_EXT]:
+            self.dataset_ver = DatasetVer.AU_EXT
         elif self._cur_patient in self._patients[DatasetVer.OBS_STUDY]:
             self.dataset_ver = DatasetVer.OBS_STUDY
         elif self._cur_patient in self._patients[DatasetVer.MDA]:
@@ -905,6 +908,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
             if self.dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                 img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
                 img_path[i] = os.path.join(g.DATASET_DIR[self.dataset_ver], img_path[i])
+
+            elif self.dataset_ver == DatasetVer.AU_EXT:
+                img_path[i] = "HNCDL_{}_{}.nii".format(self._cur_patient, img_path[i])
+                img_path[i] = os.path.join(
+                    g.DATASET_DIR[self.dataset_ver],
+                    "HNCDL_{}".format(self._cur_patient),
+                    img_path[i],
+                )
 
             elif self.dataset_ver == DatasetVer.MDA:
                 img_path[i] = os.path.join(

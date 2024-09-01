@@ -51,6 +51,7 @@ class ObsStudyStep:
 
 class DatasetVer:
     AU = "au"
+    AU_EXT = "au.ext"
     OBS_STUDY = "obs.study"
     MDA = "mda"
     NKI = "nki"

@@ -487,6 +487,7 @@ def load_gtv_labels(
 
     if dataset_ver in [
         DatasetVer.AU,
+        DatasetVer.AU_EXT,
         DatasetVer.OBS_STUDY,
         DatasetVer.NKI,
         DatasetVer.HECKTOR,
@@ -496,6 +497,12 @@ def load_gtv_labels(
             if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                 paths["gtv{}".format(i)] = os.path.join(
                     dataset_dir, "HNCDL_{}_GTV{}.nii".format(patient, i)
+                )
+            elif dataset_ver == DatasetVer.AU_EXT:
+                paths["gtv{}".format(i)] = os.path.join(
+                    dataset_dir,
+                    "HNCDL_{}".format(patient),
+                    "HNCDL_{}_GTV{}.nii".format(patient, i),
                 )
             elif dataset_ver == DatasetVer.NKI:
                 paths["gtv{}".format(i)] = os.path.join(
@@ -872,13 +879,14 @@ DATASET_DIR = Dict()
 
 for __i in [
     DatasetVer.AU,
+    DatasetVer.AU_EXT,
     DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
     DatasetVer.HECKTOR,
 ]:
     DATASET_DIR[__i] = __settings[
-        "dataset.dir.{}.{}".format("linux" if is_linux() else "windows", __i)
+        "dataset.dir.{}.{}".format(__i, "linux" if is_linux() else "windows")
     ]
 
 # window doesn't support pytorch multi-thread
@@ -896,6 +904,7 @@ NII_SPACING = tuple(float(k) for k in NII_SPACING)
 DATASET_SPLIT_JSON_PATH = Dict()
 for __i in [
     DatasetVer.AU,
+    DatasetVer.AU_EXT,
     DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
@@ -915,7 +924,6 @@ for __i in ["baseline", "idl.gtvt", "idl.gtvn"]:
 DATASET_FOLDS = Dict()
 for __i in [
     DatasetVer.AU,
-    DatasetVer.OBS_STUDY,
     DatasetVer.MDA,
     DatasetVer.NKI,
     DatasetVer.HECKTOR,

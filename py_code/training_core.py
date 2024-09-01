@@ -49,7 +49,7 @@ class TrainingCore:
         patients = Dict()
         dataset_split = g.load_json(g.DATASET_SPLIT_JSON_PATH[dataset_ver])
 
-        if dataset_ver == DatasetVer.OBS_STUDY:
+        if dataset_ver in [DatasetVer.AU_EXT, DatasetVer.OBS_STUDY]:
             patients[DatasetPart.TEST] = List(dataset_split[DatasetPart.TEST])
 
         else:
@@ -521,8 +521,11 @@ class TrainingCore:
     def _is_valid_dataset_version(
         self,
         dataset_ver,
-        origin_dataset_ver=None,  # this is for inference and idl
+        origin_dataset_ver=None,
     ):
+        # origin_dataset_ver represent "baseline dataset version" in iDL
+        # or represent "training dataset version" in inference
+
         if origin_dataset_ver is not None:
             # copy origin_dataset_ver if dataset_ver is None
             if dataset_ver is None:
@@ -530,7 +533,6 @@ class TrainingCore:
 
             if origin_dataset_ver not in [
                 DatasetVer.AU,
-                DatasetVer.OBS_STUDY,
                 DatasetVer.MDA,
                 DatasetVer.NKI,
                 DatasetVer.HECKTOR,
@@ -551,6 +553,7 @@ class TrainingCore:
 
         elif dataset_ver not in [
             DatasetVer.AU,
+            DatasetVer.AU_EXT,
             DatasetVer.OBS_STUDY,
             DatasetVer.MDA,
             DatasetVer.NKI,
