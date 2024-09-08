@@ -1,4 +1,12 @@
-py_code/__pycache__/
-debug/
 train_results/
+debug/
 py_code/debug.py
+py_code/__pycache__/
+py_code/global_utils/__pycache__/
+py_code/loss_utils/__pycache__/
+py_code/dataset_utils/__pycache__/
+py_code/metric_utils/__pycache__/
+py_code/training_utils/__pycache__/
+py_code/ui_utils/__pycache__/
+py_code/research_utils/__pycache__/
+

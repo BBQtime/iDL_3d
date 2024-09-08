@@ -1,0 +1,116 @@
+import os
+
+import global_utils.global_core as g
+from global_utils.str_lib import DisplayMode, ObsStudyStep, Plane
+from PyQt5.QtCore import QPoint, Qt
+from PyQt5.QtGui import QMouseEvent, QPixmap
+from PyQt5.QtWidgets import QLabel, QWidget
+
+
+class DragCross(QWidget):
+    def __init__(self, parent, cross_id: tuple):
+        super().__init__(parent)
+        self.cross_id = cross_id
+
+        # value of CROSS_SIZE must be the power of 2
+        self.CROSS_SIZE = 24 if g.is_linux() else 36
+        self.SELECTED_CROSS_ICON_PATH = os.path.join(
+            g.PROJ_DIR, "icons", "cross_select.png"
+        )
+        self.UNSELECTED_CROSS_ICON_PATH = os.path.join(
+            g.PROJ_DIR, "icons", "cross_default.png"
+        )
+
+        self.setFixedSize(self.CROSS_SIZE, self.CROSS_SIZE)
+
+        self.setMouseTracking(True)
+
+        self.selected = False
+        self.dragging = False
+        self.offset = None
+
+        self.png_label = QLabel(self)
+        # remove border
+        self.png_label.setStyleSheet("border: 0;")
+        self.png_label.setGeometry(0, 0, self.CROSS_SIZE, self.CROSS_SIZE)
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.window().select_cross(self.cross_id)
+            self.window().set_crosses_dragging_state(
+                img_frame=self.parent(), dragging=True
+            )
+            self.window().set_crosses_dragging_offset(
+                img_frame=self.parent(), pos=event.pos()
+            )
+            self.window().remove_3d_pos_of_selected_cross(self)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.dragging:
+            new_pos = self.mapToParent(event.pos() - self.offset)
+            self.window().move_cross(img_frame=self.parent(), pos=new_pos)
+
+    def __get_pos_in_3d(self):
+        x = self.pos().x() + round(self.CROSS_SIZE / 2)
+        y = self.pos().y() + round(self.CROSS_SIZE / 2)
+        return self.parent().get_pos_in_3d(QPoint(x, y))
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.LeftButton:
+            self.window().set_crosses_dragging_state(
+                img_frame=self.parent(), dragging=False
+            )
+            # update cross_id (3d position)
+            pos_3d = self.__get_pos_in_3d()
+            if pos_3d is None:
+                return
+            self.window().update_cross_id(
+                cross=self,
+                old_cross_id=self.cross_id,
+                new_cross_id=pos_3d,
+            )
+            # add cross id (3d position) into main window
+            if self.window().obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+                self.window().gtvt_click_pos_3d = self.cross_id
+            elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+                self.window().gtvn_clicks_pos_3d.append(self.cross_id)
+
+            # refresh data and img after cross id updated
+            # update slice id to jump to clicked slices
+            self.window().reset_cur_slice_id()
+            if self.window().display_mode() == DisplayMode.PLANE_FIXED:
+                # (1) refresh other img_frames from scratch
+                frame_name_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
+                frame_name_list.remove(self.parent().plane)
+                for i in frame_name_list:
+                    self.window().refresh_imgs(frame_name=i)
+                    self.window().refresh_crosses(frame_name=i)
+                # (2) on current img frame, only refresh anatomical lines
+                self.window().refresh_imgs(
+                    frame_name=self.parent().plane,
+                    reload_origin_rgb=False,
+                    reload_zoomed_rgb=False,
+                    reload_contours=False,
+                )
+                # select cross
+                self.window().select_cross(self.cross_id)
+
+    def select(self, selected: bool):
+        self.selected = selected
+        if selected:
+            self.load_png(self.SELECTED_CROSS_ICON_PATH)
+            # set focus, otherwise key_delete/key_backspace wont work
+            self.setFocus()
+        else:
+            self.load_png(self.UNSELECTED_CROSS_ICON_PATH)
+
+    def load_png(self, png_path: str):
+        if os.path.exists(png_path):
+            pixmap = QPixmap(png_path)
+            pixmap = pixmap.scaled(
+                self.CROSS_SIZE,
+                self.CROSS_SIZE,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+            self.png_label.setPixmap(pixmap)

@@ -1,0 +1,11 @@
+1.The background weight in the weight map should not be set to 0.
+
+2.Using focal loss alone will bring poor results.
+
+3.A weight map is required for better performance.
+
+4.Voxel-wised tversky loss + weight map is not effective.
+
+5.Elastic augmentation is effective.
+
+6.The optimal weigiht.distance.step is 3.
