@@ -1,8 +1,9 @@
 import global_utils.global_core as g
+from dataset_utils import longaxis
 from global_utils.str_lib import DatasetPart, DatasetVer
-from training_utils.training_baseline import TrainingBaseline
-from training_utils.training_idl_gtvn import TrainingIDLGTVn
-from training_utils.training_idl_gtvt import TrainingIDLGTVt
+from training_utils.baseline_training import BaselineTraining
+from training_utils.idl_gtvn_training import IDLGTVnTraining
+from training_utils.idl_gtvt_training import IDLGTVtTraining
 
 # (1) linux cmd:
 # /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main_training.py
@@ -15,21 +16,23 @@ from training_utils.training_idl_gtvt import TrainingIDLGTVt
 
 
 if __name__ == "__main__":
-
     g.clear_gpu_cache()
     g.clear_linux_trash()
     g.clear_debug_data()
 
-    # baseline = TrainingBaseline()
+    longaxis.run(DatasetVer.AU_EXT)
+    longaxis.run(DatasetVer.MDA)
+
+    # baseline = BaselineTraining()
     # baseline.new_training(
     #     # train_remark="mda.transfer",
     #     debug_mode=1,
     # )
     # for baseline_id, dataset_ver in [
-    #     ("baseline_au_no.pt", DatasetVer.AU_EXT),
-    #     ("baseline_au", DatasetVer.AU_EXT),
+    # ("baseline_au_no.pt", DatasetVer.AU_EXT),
+    # ("baseline_au", DatasetVer.AU_EXT),
     # ]:
-    #     debug_mode = 0
+    # debug_mode = 1
     # baseline.inference_all_folds(
     #     baseline_id=baseline_id,
     #     dataset_part=DatasetPart.VALID,
@@ -48,17 +51,23 @@ if __name__ == "__main__":
     #     debug_mode=debug_mode,
     # )
 
-    # idl_gtvn = TrainingIDLGTVn()
+    # idl_gtvn = IDLGTVnTraining()
+    # for baseline_id in [
+    # "baseline_au",
+    # "baseline_au_no.pt",
+    # "baseline_mda.transfer",
+    # ]:
+    # debug_mode = 1
     # idl_gtvn.new_training(
-    #     baseline_id="baseline_au",
-    #     train_remark="nki.transfer",
-    #     debug_mode=1,
+    #     baseline_id=baseline_id,
+    #     # train_remark="",
+    #     debug_mode=debug_mode,
     # )
     # for idl_gtvn_id, dataset_ver in [
-    #     ("idl.gtvn_au_no.pt", DatasetVer.AU_EXT),
-    #     ("idl.gtvn_au", DatasetVer.AU_EXT),
+    # ("idl.gtvn_au_no.pt", DatasetVer.AU_EXT),
+    # ("idl.gtvn_au", DatasetVer.AU_EXT),
     # ]:
-    #     debug_mode = 0
+    # debug_mode = 1
     # idl_gtvn.inference_all_folds(
     #     idl_gtvn_id=idl_gtvn_id,
     #     dataset_ver=dataset_ver,
@@ -83,15 +92,17 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
 
-    # idl_gtvt = TrainingIDLGTVt()
+    # idl_gtvt = IDLGTVtTraining()
     # for baseline_id in [
-    #     "baseline_au",
+    #     # "baseline_au",
+    #     # "baseline_au_no.pt",
+    #     # "baseline_mda.new",
     # ]:
-    #     idl_gtvt.simulation(
-    #         baseline_id=baseline_id,
-    #         # train_remark="au.ext_bug.fixed",
-    #         debug_mode=1,
-    #     )
+    # idl_gtvt.simulation(
+    #     baseline_id=baseline_id,
+    #     # train_remark="au.ext_bug.fixed",
+    #     debug_mode=1,
+    # )
     # idl_gtvt.inference(
     #     idl_gtvt_id="idl.gtvt_obs.study_bug",
     #     debug_mode=0,

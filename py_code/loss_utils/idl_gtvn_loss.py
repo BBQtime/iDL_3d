@@ -1,9 +1,9 @@
 from global_utils.custom_dict import Dict
-from loss_utils.loss_func_core import UnifiedFocalLoss
+from loss_utils.unified_focal_loss import UnifiedFocalLoss
 from torch import Tensor
 
 
-class UnifiedFocalLossIDLGTVn(UnifiedFocalLoss):
+class IDLGTVnLoss(UnifiedFocalLoss):
     def _split_channels(self, input_imgs: Tensor) -> Dict:
         # dimension: [batch, channel, depth, height, width]
         output_imgs = Dict()

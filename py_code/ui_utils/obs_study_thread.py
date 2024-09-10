@@ -2,8 +2,8 @@ import global_utils.global_core as g
 from numpy import ndarray
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
-from training_utils.training_idl_gtvn import TrainingIDLGTVn
-from training_utils.training_idl_gtvt import TrainingIDLGTVt
+from training_utils.idl_gtvn_training import IDLGTVnTraining
+from training_utils.idl_gtvt_training import IDLGTVtTraining
 
 
 class ObsStudyThread(QThread):
@@ -61,8 +61,8 @@ class ObsStudyGTVnThread(ObsStudyThread):
     def run(self):
         self._show_progress_widgets()
         self.is_running = True
-        training_idl_gtvn = TrainingIDLGTVn(self.progress_signal)
-        training_idl_gtvn.obs_study(
+        idl_gtvn_training = IDLGTVnTraining(self.progress_signal)
+        idl_gtvn_training.obs_study(
             idl_gtvn_id=self.__idl_gtvn_id,
             dataset_ver=self.__dataset_ver,
             patient=self.__patient,
@@ -93,8 +93,8 @@ class ObsStudyGTVtThread(ObsStudyThread):
     def run(self):
         self._show_progress_widgets()
         self.is_running = True
-        training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
-        training_idl_gtvt.obs_study(
+        idl_gtvt_training = IDLGTVtTraining(self.progress_signal)
+        idl_gtvt_training.obs_study(
             idl_gtvt_id=self.__idl_gtvt_id,
             dataset_ver=self.__dataset_ver,
             patient=self.__patient,

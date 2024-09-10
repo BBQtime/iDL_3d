@@ -6,7 +6,7 @@ from dataset_utils.dataset_core import DatasetCore
 from global_utils.custom_dict import Dict
 
 
-class DataSetBaseline(DatasetCore):
+class BaselineDataSet(DatasetCore):
     def __init__(
         self,
         patients: list,
@@ -115,7 +115,7 @@ class DataSetBaseline(DatasetCore):
         return self.get_item(patient)
 
 
-# baseline_dataset = DataSetBaseline(
+# baseline_dataset = BaselineDataSet(
 #     patients=["3259451405"],
 #     dataset_ver=DatasetVer.MDA,
 #     no_pt=True,

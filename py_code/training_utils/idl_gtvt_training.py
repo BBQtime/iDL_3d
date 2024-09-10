@@ -8,11 +8,19 @@ import global_utils.global_core as g
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from dataset_utils.dataset_idl_gtvt import DataSetIDLGTVt
+from dataset_utils.idl_gtvt_dataset import IDLGTVtDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, Metric, Plane, SelectScenario, Stat
-from loss_utils.loss_func_idl_gtvt import UnifiedFocalLossIDLGTVt
+from global_utils.str_lib import (
+    DatasetPart,
+    DatasetVer,
+    ErrMsg,
+    Metric,
+    Plane,
+    SelectScenario,
+    Stat,
+)
+from loss_utils.idl_gtvt_loss import IDLGTVtLoss
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
 from scipy.ndimage import measurements
@@ -24,7 +32,7 @@ from training_utils.training_core import ObsStudyProgress, TrainingCore
 matplotlib.use("Agg")
 
 
-class ObsStudyGTVtProgress(ObsStudyProgress):
+class GTVtObsStudyProgress(ObsStudyProgress):
     class ProgressStep:
         INIT_CNN = 1
         INIT_DATALOADER = 2
@@ -38,11 +46,11 @@ class ObsStudyGTVtProgress(ObsStudyProgress):
         self.step = self.ProgressStep()
 
 
-class TrainingIDLGTVt(TrainingCore):
+class IDLGTVtTraining(TrainingCore):
     def __init__(self, idl_progress_signal: pyqtSignal = None):
         super().__init__()
         if idl_progress_signal is not None:
-            self._obs_study_progress = ObsStudyGTVtProgress()
+            self._obs_study_progress = GTVtObsStudyProgress()
             self._obs_study_progress.progress_signal = idl_progress_signal
         else:
             self._obs_study_progress = None
@@ -162,7 +170,7 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # load loss function after super()._load_hyper()
-        hyper["loss.func"] = UnifiedFocalLossIDLGTVt(
+        hyper["loss.func"] = IDLGTVtLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
@@ -537,7 +545,7 @@ class TrainingIDLGTVt(TrainingCore):
         weight["weight.prev.round.decay"] = hyper["weight.prev.round.decay"]
         weight["weight.selected.slice"] = hyper["weight.selected.slice"]
 
-        dataset_idl_gtvt = DataSetIDLGTVt(
+        idl_gtvt_dataset = IDLGTVtDataSet(
             patient=patient,
             selected_slices=selected_slices,
             pred_dir=pred_dir,
@@ -550,11 +558,11 @@ class TrainingIDLGTVt(TrainingCore):
         )
 
         # optimize batch size (before create dataloader)
-        self._optimize_batch_size(dataset=dataset_idl_gtvt, hyper=hyper)
+        self._optimize_batch_size(dataset=idl_gtvt_dataset, hyper=hyper)
 
         # idl gtvt dataloader
         idl_gtvt_loader = DataLoader(
-            dataset=dataset_idl_gtvt,
+            dataset=idl_gtvt_dataset,
             batch_size=hyper["batch.size.actual"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,
@@ -1093,7 +1101,7 @@ class TrainingIDLGTVt(TrainingCore):
 
         hyper = g.load_json(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
-        dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
+        self._is_valid_dataset_ver(dataset_ver)
         print("dataset version: {}".format(dataset_ver))
 
         self._inference_calculate_avg_median_save_json(
@@ -1146,10 +1154,12 @@ class TrainingIDLGTVt(TrainingCore):
         # load dataset version
         hyper = g.load_json(os.path.join(idl_gtvt_dir, "hyper.json"))
         dataset_ver = hyper["dataset.ver"]
+        self._is_valid_dataset_ver(dataset_ver)
+        print("dataset version: {}".format(dataset_ver))
+
+        # load no_pt and no_mr
         no_pt = hyper["no.pt"]
         no_mr = hyper["no.mr"]
-        dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
-        print("dataset version: {}".format(dataset_ver))
 
         # load segmentation metrics
         metric_funcs = self._load_metric_funcs()
@@ -1246,3 +1256,33 @@ class TrainingIDLGTVt(TrainingCore):
                     outputs["gtvt"]["pred"] = np.maximum(
                         outputs["gtvt"]["pred"], cur_cc
                     )
+
+    def _is_valid_idl_dataset_ver(
+        self,
+        hyper: Dict,
+        baseline_dataset_ver: str,
+    ):
+        # baseline trained with or without pt
+        if not hyper["no.pt"] and hyper["dataset.ver"] == DatasetVer.MDA:
+            g.error_exit("idl.gtvt on mda requires a baseline trained without pet.")
+
+        # baseline trained with or without mr
+        if not hyper["no.mr"] and hyper["dataset.ver"] == DatasetVer.HECKTOR:
+            g.error_exit("idl.gtvt on hecktor requires a baseline trained without mr.")
+
+        if baseline_dataset_ver not in [
+            DatasetVer.AU,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
+            DatasetVer.HECKTOR,
+        ]:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+        # baseline trained on AU dataset
+        elif baseline_dataset_ver == DatasetVer.AU:
+            self._is_valid_dataset_ver(hyper["dataset.ver"])
+
+        # baseline trained on other datasets
+        else:
+            if hyper["dataset.ver"] != baseline_dataset_ver:
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)

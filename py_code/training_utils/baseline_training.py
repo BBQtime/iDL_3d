@@ -5,11 +5,11 @@ from pathlib import Path
 import global_utils.global_core as g
 import numpy as np
 import torch
-from dataset_utils.dataset_baseline import DataSetBaseline
+from dataset_utils.baseline_dataset import BaselineDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
 from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
-from loss_utils.loss_func_core import UnifiedFocalLoss
+from loss_utils.unified_focal_loss import UnifiedFocalLoss
 from matplotlib import pyplot as plt
 from numpy import ndarray
 from torch.cuda.amp import GradScaler, autocast
@@ -18,13 +18,14 @@ from tqdm import tqdm
 from training_utils.training_core import TrainingCore
 
 
-class TrainingBaseline(TrainingCore):
+class BaselineTraining(TrainingCore):
     def __init__(self):
         super().__init__()
 
     def _load_hyper(
         self,
         hyper: Dict,
+        idl_gtvn_baseline_id: str,
         fold: int,
         debug_mode: bool,
     ):
@@ -71,12 +72,10 @@ class TrainingBaseline(TrainingCore):
         # augment percent
         hyper["augment.pct"] = g.clamp_value(hyper["augment.pct"], (0.0, 1.0))
 
-        # MDA dataset has no PET imgs
-        if hyper["dataset.ver"] == DatasetVer.MDA:
-            hyper["no.pt"] = True
-        # HECKTOR dataset has no MR-T1 and MR-T2 imgs
-        elif hyper["dataset.ver"] == DatasetVer.HECKTOR:
-            hyper["no.mr"] = True
+        self._load_hyper_no_pt_mr(
+            hyper=hyper,
+            idl_gtvn_baseline_id=idl_gtvn_baseline_id,
+        )
 
         # use geodesic distance or not
         if hyper["geodesic.distance"] == {}:
@@ -112,16 +111,46 @@ class TrainingBaseline(TrainingCore):
         # (2) transfer learning
         else:
             pretrain_cnn_path = self._find_best_cnn_in_folds(hyper["pretrain.id"])
-            pretrain_no_pt = g.load_json(
+            pretrain_hyper = g.load_json(
                 os.path.join(Path(pretrain_cnn_path).parent.parent, "hyper.json")
-            )["no.pt"]
+            )
+            pretrain_no_pt = True if pretrain_hyper["no.pt"] else False
             if hyper["no.pt"] != pretrain_no_pt:
                 g.error_exit(
                     "'no.pt' hyper mismatch between existing CNN and transfer learning!"
                 )
+            pretrain_no_mr = True if pretrain_hyper["no.mr"] else False
+            if hyper["no.mr"] != pretrain_no_mr:
+                g.error_exit(
+                    "'no.mr' hyper mismatch between existing CNN and transfer learning!"
+                )
             hyper["cnn"] = self._load_exist_cnn(pretrain_cnn_path)
 
         self._load_hyper_optim_and_scheduler(hyper=hyper)
+
+    def _load_hyper_no_pt_mr(self, hyper: Dict, idl_gtvn_baseline_id: str):
+        # MDA dataset has no PET imgs
+        if hyper["dataset.ver"] == DatasetVer.MDA:
+            hyper["no.pt"] = True
+        # HECKTOR dataset has no MR-T1 and MR-T2 imgs
+        elif hyper["dataset.ver"] == DatasetVer.HECKTOR:
+            hyper["no.mr"] = True
+
+        # idl gtvn
+        if idl_gtvn_baseline_id is not None:
+            baseline_dir = self._find_train_dir(idl_gtvn_baseline_id)
+            baseline_fold_dirs = g.get_sub_dirs(
+                baseline_dir, key_word="fold=", full_path=True
+            )
+            baseline_hyper = g.load_json(
+                os.path.join(baseline_fold_dirs[0], "hyper.json")
+            )
+            baseline_no_pt = True if baseline_hyper["no.pt"] else False
+            if hyper["no.pt"] != baseline_no_pt:
+                g.error_exit("'no.pt' hyper mismatch between idl.gtvn and baseline!")
+            baseline_no_mr = True if baseline_hyper["no.mr"] else False
+            if hyper["no.mr"] != baseline_no_mr:
+                g.error_exit("'no.mr' hyper mismatch between idl.gtvn and baseline!")
 
     def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3):
         if hyper["no.pt"]:
@@ -150,7 +179,7 @@ class TrainingBaseline(TrainingCore):
                 augment["augment.max"] = hyper["augment.max"]
             else:
                 augment = None
-            hyper["{}.set".format(i)] = DataSetBaseline(
+            hyper["{}.set".format(i)] = BaselineDataSet(
                 patients=hyper["{}.patients".format(i)],
                 dataset_ver=hyper["dataset.ver"],
                 no_pt=hyper["no.pt"],
@@ -206,7 +235,7 @@ class TrainingBaseline(TrainingCore):
         simple_hyper = self._simplify_hyper(hyper)
         g.save_json(data=simple_hyper, path=json_path)
 
-    # protected function, TrainingIDLGTVn will inherit it
+    # protected function, IDLGTVnTraining will inherit it
     def _plot_lr_fig(self, lr_json_path: str):
         plt.figure().clear()
 
@@ -219,7 +248,7 @@ class TrainingBaseline(TrainingCore):
         plt.legend()
         plt.savefig(lr_json_path[:-4] + "png")
 
-    # protected function, TrainingIDLGTVn will inherit it
+    # protected function, IDLGTVnTraining will inherit it
     def _plot_loss_fig(self, loss_json_path: str):
         loss_dict = g.load_json(loss_json_path)
         train_loss = List()
@@ -387,6 +416,7 @@ class TrainingBaseline(TrainingCore):
             # load and print hyperparams
             self._load_hyper(
                 hyper=hyper,
+                idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 fold=fold,
                 debug_mode=debug_mode,
             )
@@ -524,30 +554,45 @@ class TrainingBaseline(TrainingCore):
 
         fold_dirs = g.get_sub_dirs(train_dir, key_word="fold=", full_path=True)
 
+        # load hyper json
         hyper = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))
-        no_pt = hyper["no.pt"]
-        no_mr = hyper["no.mr"]
+
+        # use geodesic.distance or not
+        # (1) for baseline or for legacy hyper.json that doesn't have "geodesic.distance"
         if hyper["geodesic.distance"] == {}:
             geodesic_distance = False
             hyper.pop("geodesic.distance")
+        # (2) for idl.gtvn
         else:
             geodesic_distance = bool(hyper["geodesic.distance"])
 
+        # cnn trained with or without pt
+        no_pt = hyper["no.pt"]
+        if not no_pt and dataset_ver == DatasetVer.MDA:
+            g.error_exit("inference on mda requires a cnn trained without pet.")
+
+        # cnn trained with or without mr
+        no_mr = hyper["no.mr"]
+        if not no_mr and dataset_ver == DatasetVer.HECKTOR:
+            g.error_exit("inference on hecktor requires a cnn trained without mr.")
+
         # dataset version
         training_dataset_ver = hyper["dataset.ver"]
-        dataset_ver = self._is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            origin_dataset_ver=training_dataset_ver,
+        dataset_ver = self.__is_valid_inference_dataset_ver(
+            inference_dataset_ver=dataset_ver,
+            training_dataset_ver=training_dataset_ver,
         )
         print("dataset version: {}".format(dataset_ver))
 
         # dataset part
+        # (1) inference on training dataset
         if dataset_ver == training_dataset_ver:
             if dataset_part not in [
                 DatasetPart.VALID,
                 DatasetPart.TEST,
             ]:
                 g.error_exit(ErrMsg.DATASET_PART_INVALID)
+        # (2) inference on other dataset
         else:
             if dataset_part != DatasetPart.TEST:
                 g.error_exit(ErrMsg.DATASET_PART_INVALID)
@@ -747,9 +792,9 @@ class TrainingBaseline(TrainingCore):
 
         # dataset ver
         training_dataset_ver = hyper["dataset.ver"]
-        dataset_ver = self._is_valid_dataset_version(
-            dataset_ver=dataset_ver,
-            origin_dataset_ver=training_dataset_ver,
+        dataset_ver = self.__is_valid_inference_dataset_ver(
+            inference_dataset_ver=dataset_ver,
+            training_dataset_ver=training_dataset_ver,
         )
         print("dataset version: {}".format(dataset_ver))
 
@@ -896,7 +941,7 @@ class TrainingBaseline(TrainingCore):
         dataset_ver = g.load_json(os.path.join(fold_dirs[0], "hyper.json"))[
             "dataset.ver"
         ]
-        dataset_ver = self._is_valid_dataset_version(dataset_ver=dataset_ver)
+        self._is_valid_dataset_ver(dataset_ver)
 
         # this "inference_{}_valid.json" file:
         # (1) is created by "inference_all_folds()"
@@ -1027,3 +1072,31 @@ class TrainingBaseline(TrainingCore):
         outputs["gtvs"]["pred"] = np.maximum(
             outputs["gtvt"]["pred"], outputs["gtvn"]["pred"]
         )
+
+    def __is_valid_inference_dataset_ver(
+        self,
+        inference_dataset_ver: str,
+        training_dataset_ver: str,
+    ):
+        if training_dataset_ver not in [
+            DatasetVer.AU,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
+            DatasetVer.HECKTOR,
+        ]:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+        # copy from training_dataset_ver if inference_dataset_ver is None
+        if inference_dataset_ver is None:
+            inference_dataset_ver = training_dataset_ver
+
+        # on AU dataset
+        if training_dataset_ver == DatasetVer.AU:
+            self._is_valid_dataset_ver(inference_dataset_ver)
+        # on other dataset
+        else:
+            # make sure inference_dataset_ver = training_dataset_ver
+            if inference_dataset_ver != training_dataset_ver:
+                g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+        return inference_dataset_ver

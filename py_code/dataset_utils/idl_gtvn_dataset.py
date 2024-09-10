@@ -12,7 +12,7 @@ from numpy import ndarray
 from scipy.ndimage import distance_transform_edt, measurements
 
 
-class DataSetIDLGTVn(DatasetCore):
+class IDLGTVnDataSet(DatasetCore):
     def __init__(
         self,
         patients: list,
@@ -232,7 +232,7 @@ class DataSetIDLGTVn(DatasetCore):
         return self.get_item(patient)
 
 
-# idl_gtvn_dataset = DataSetIDLGTVn(
+# idl_gtvn_dataset = IDLGTVnDataSet(
 #     patients=["106"],
 #     dataset_ver=DatasetVer.AU,
 #     no_pt=False,

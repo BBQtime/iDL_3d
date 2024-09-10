@@ -13,7 +13,7 @@ from scipy.ndimage import distance_transform_edt
 from torch import Tensor
 
 
-class DataSetIDLGTVt(DatasetCore):
+class IDLGTVtDataSet(DatasetCore):
     def __init__(
         self,
         patient: str,

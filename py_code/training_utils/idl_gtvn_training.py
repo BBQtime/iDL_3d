@@ -4,19 +4,19 @@ from pathlib import Path
 import global_utils.global_core as g
 import numpy as np
 import torch
-from dataset_utils.dataset_idl_gtvn import DataSetIDLGTVn
+from dataset_utils.idl_gtvn_dataset import IDLGTVnDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, Metric, Stat
-from loss_utils.loss_func_idl_gtvn import UnifiedFocalLossIDLGTVn
+from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
+from loss_utils.idl_gtvn_loss import IDLGTVnLoss
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
 from torch import Tensor
-from training_utils.training_baseline import TrainingBaseline
+from training_utils.baseline_training import BaselineTraining
 from training_utils.training_core import ObsStudyProgress
 
 
-class ObsStudyGTVnProgress(ObsStudyProgress):
+class GTVnObsStudyProgress(ObsStudyProgress):
     class ProgressStep:
         INFERENCE_INIT = 1
         INFERENCE_LOAD_IMG = 3
@@ -29,11 +29,11 @@ class ObsStudyGTVnProgress(ObsStudyProgress):
         self.step = self.ProgressStep()
 
 
-class TrainingIDLGTVn(TrainingBaseline):
+class IDLGTVnTraining(BaselineTraining):
     def __init__(self, idl_progress_signal: pyqtSignal = None):
         super().__init__()
         if idl_progress_signal is not None:
-            self._obs_study_progress = ObsStudyGTVnProgress()
+            self._obs_study_progress = GTVnObsStudyProgress()
             self._obs_study_progress.progress_signal = idl_progress_signal
         else:
             self._obs_study_progress = None
@@ -44,7 +44,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan)
 
     def _load_hyper_loss_func(self, hyper: Dict):
-        hyper["loss.func"] = UnifiedFocalLossIDLGTVn(
+        hyper["loss.func"] = IDLGTVnLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
@@ -63,7 +63,7 @@ class TrainingIDLGTVn(TrainingBaseline):
                 augment["augment.max"] = hyper["augment.max"]
             else:
                 augment = None
-            hyper["{}.set".format(i)] = DataSetIDLGTVn(
+            hyper["{}.set".format(i)] = IDLGTVnDataSet(
                 patients=hyper["{}.patients".format(i)],
                 dataset_ver=hyper["dataset.ver"],
                 no_pt=hyper["no.pt"],
@@ -470,7 +470,7 @@ class TrainingIDLGTVn(TrainingBaseline):
         idl_gtvn_geodesic_distance: bool,
         obs_gtvn_clicks: ndarray,
     ):
-        return DataSetIDLGTVn(
+        return IDLGTVnDataSet(
             patients=[patient],
             dataset_ver=dataset_ver,
             no_pt=no_pt,
@@ -598,3 +598,19 @@ class TrainingIDLGTVn(TrainingBaseline):
             0
         ]
         return best_cnn_path
+
+    def _is_valid_idl_dataset_ver(
+        self,
+        hyper: Dict,
+        baseline_dataset_ver: str,
+    ):
+        if baseline_dataset_ver not in [
+            DatasetVer.AU,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
+            DatasetVer.HECKTOR,
+        ]:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+        if hyper["dataset.ver"] != baseline_dataset_ver:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)

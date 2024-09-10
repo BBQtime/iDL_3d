@@ -7,7 +7,7 @@ from pathlib import Path
 
 import global_utils.global_core as g
 import torch
-from dataset_utils.dataset_baseline import DataSetBaseline
+from dataset_utils.baseline_dataset import BaselineDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
 from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
@@ -119,9 +119,7 @@ class TrainingCore:
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
         # baseline
         if idl_baseline_id is None:
-            hyper["dataset.ver"] = self._is_valid_dataset_version(
-                dataset_ver=hyper["dataset.ver"]
-            )
+            self._is_valid_dataset_ver(hyper["dataset.ver"])
         # idl
         else:
             baseline_dir = os.path.join(
@@ -133,9 +131,10 @@ class TrainingCore:
             baseline_dataset_ver = g.load_json(
                 os.path.join(baseline_fold_dir, "hyper.json")
             )["dataset.ver"]
-            hyper["dataset.ver"] = self._is_valid_dataset_version(
-                dataset_ver=hyper["dataset.ver"],
-                origin_dataset_ver=baseline_dataset_ver,
+
+            self._is_valid_idl_dataset_ver(
+                hyper=hyper,
+                baseline_dataset_ver=baseline_dataset_ver,
             )
 
     def _load_hyper(self, hyper: Dict) -> None:
@@ -484,7 +483,7 @@ class TrainingCore:
         *args,
         **kwargs,
     ):
-        return DataSetBaseline(
+        return BaselineDataSet(
             patients=[patient],
             dataset_ver=dataset_ver,
             no_pt=no_pt,
@@ -517,51 +516,6 @@ class TrainingCore:
 
         if not os.path.exists(os.path.join(g.TRAIN_RESULTS_DIR, baseline_id)):
             g.error_exit("'baseline_id' does not exist!")
-
-    def _is_valid_dataset_version(
-        self,
-        dataset_ver,
-        origin_dataset_ver=None,
-    ):
-        # origin_dataset_ver represent "baseline dataset version" in iDL
-        # or represent "training dataset version" in inference
-
-        if origin_dataset_ver is not None:
-            # copy origin_dataset_ver if dataset_ver is None
-            if dataset_ver is None:
-                dataset_ver = origin_dataset_ver
-
-            if origin_dataset_ver not in [
-                DatasetVer.AU,
-                DatasetVer.MDA,
-                DatasetVer.NKI,
-                DatasetVer.HECKTOR,
-            ]:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-            elif origin_dataset_ver == DatasetVer.MDA and dataset_ver != DatasetVer.MDA:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-            elif origin_dataset_ver == DatasetVer.NKI and dataset_ver != DatasetVer.NKI:
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-            elif (
-                origin_dataset_ver == DatasetVer.HECKTOR
-                and dataset_ver != DatasetVer.HECKTOR
-            ):
-                g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-        elif dataset_ver not in [
-            DatasetVer.AU,
-            DatasetVer.AU_EXT,
-            DatasetVer.OBS_STUDY,
-            DatasetVer.MDA,
-            DatasetVer.NKI,
-            DatasetVer.HECKTOR,
-        ]:
-            g.error_exit(ErrMsg.DATASET_VER_INVALID)
-
-        return dataset_ver
 
     def _find_best_cnn_in_folds(self, baseline_id: str) -> str:
         self._is_valid_baseline_id(baseline_id)
@@ -627,3 +581,21 @@ class TrainingCore:
             0
         ]
         return best_cnn_path
+
+    def _is_valid_dataset_ver(self, dataset_ver: str):
+        if dataset_ver not in [
+            DatasetVer.AU,
+            DatasetVer.AU_EXT,
+            DatasetVer.OBS_STUDY,
+            DatasetVer.MDA,
+            DatasetVer.NKI,
+            DatasetVer.HECKTOR,
+        ]:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+    def _is_valid_idl_dataset_ver(
+        self,
+        hyper: Dict,
+        baseline_dataset_ver: str,
+    ):
+        pass

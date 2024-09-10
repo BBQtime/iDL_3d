@@ -1,12 +1,16 @@
 import fnmatch
 import os
+from pathlib import Path
 
 import cc3d
+import global_utils.global_core as g
 import numpy as np
 import SimpleITK as sitk
+from global_utils.str_lib import DatasetVer
 from scipy.ndimage import center_of_mass
 from scipy.spatial import distance
 from sklearn.decomposition import PCA
+from tqdm import tqdm
 
 
 def binarize_img(img, threshold=0.5):
@@ -101,33 +105,45 @@ def process_connected_components_pca(img, diameter_threshold):
     return gravity_centers
 
 
-folder = r"E:\Jasper\HECKTOR_2022\data"
-matching_files = []
-pattern = "*_GTVn.nii.gz"
-# Example usage:
-diameter_threshold = 30  # Adjust this threshold based on your requirements
-outdir = r"E:\Jasper\HECKTOR_2022\data"
+def run(dataset_ver: str):
+    diameter_threshold = 30  # Adjust this threshold based on your requirements
 
-# Walk through directory
-for dirpath, _, filenames in os.walk(folder):
-    for filename in fnmatch.filter(filenames, pattern):
-        matching_files.append(os.path.join(dirpath, filename))
+    dataset_dir = g.DATASET_DIR[dataset_ver]
+    if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+        gtvn_path_list = g.get_sub_files(
+            dataset_dir, key_word="_GTVn.nii", full_path=True
+        )
+    elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+        gtvn_path_list = []
+        patient_dir_list = g.get_sub_dirs(dataset_dir, full_path=True)
+        for patient_dir in patient_dir_list:
+            gtvn_path = g.get_sub_files(
+                patient_dir, key_word="GTVn.nii", full_path=True
+            )
+            if len(gtvn_path) > 0:
+                gtvn_path_list.append(gtvn_path[0])
+            else:
+                print(Path(patient_dir).name, " has no GTVn")
+    else:
+        g.error_exit("dataset error")
 
-for file in matching_files:
-    print(file)
-    img = sitk.ReadImage(file)
-    spacing = img.GetSpacing()
-    origin = img.GetOrigin()
-    imgarray = sitk.GetArrayFromImage(img)
-    gravity_centers = process_connected_components_pca(imgarray, diameter_threshold)
-    print(f"number of gcs> {np.sum(gravity_centers)}")
-    itk_img = sitk.GetImageFromArray(gravity_centers)
-    itk_img.SetSpacing(spacing)
-    itk_img.SetOrigin(origin)
-    filename = os.path.basename(file)
+    for gtvn_path in tqdm(gtvn_path_list):
+        print(gtvn_path)
+        img = sitk.ReadImage(gtvn_path)
+        spacing = img.GetSpacing()
+        origin = img.GetOrigin()
+        imgarray = sitk.GetArrayFromImage(img)
+        gravity_centers = process_connected_components_pca(imgarray, diameter_threshold)
+        print(f"number of gcs> {np.sum(gravity_centers)}")
+        itk_img = sitk.GetImageFromArray(gravity_centers)
+        itk_img.SetSpacing(spacing)
+        itk_img.SetOrigin(origin)
 
-    # outfile = os.path.join(outdir, filename)
-    # sitk.WriteImage(img, outfile)
-    filename = filename.replace(".nii.gz", "_clicks.nii.gz")
-    outfile = os.path.join(outdir, filename)
-    sitk.WriteImage(itk_img, outfile)
+        # save clicks
+        gtvn_nii_name = Path(gtvn_path).name
+        if gtvn_nii_name.endswith("GTVn.nii"):
+            gtvn_nii_name = gtvn_nii_name.replace("GTVn.nii", "GTVn_clicks.nii.gz")
+        elif gtvn_nii_name.endswith("GTVn.nii.gz"):
+            gtvn_nii_name = gtvn_nii_name.replace("GTVn.nii.gz", "GTVn_clicks.nii.gz")
+        gtvn_click_path = os.path.join(Path(gtvn_path).parent, gtvn_nii_name)
+        sitk.WriteImage(itk_img, gtvn_click_path)
