@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from dataset_utils.dataset_core import DatasetCore
 from global_utils.custom_dict import Dict
-from global_utils.str_lib import Modal
+from global_utils.str_lib import DatasetVer, ErrMsg, Modal
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt, measurements
 
@@ -32,12 +32,61 @@ class IDLGTVnDataSet(DatasetCore):
         )
         self.__patients = patients
         self.__geodesic_distance = geodesic_distance
-        self.__gtvn_clicks = obs_gtvn_clicks
+        self.__obs_gtvn_clicks = obs_gtvn_clicks
         self.__random_click = random_click
 
     # must be overrided
     def __len__(self):
         return len(self.__patients)
+
+    def __load_gtvn_clicks(
+        self,
+        dataset_ver: str,
+        patient: str,
+        img_shape: tuple,  # if no gtvn/gtvn_clicks, create an empty img of this shape
+    ):
+        dataset_dir = g.DATASET_DIR[dataset_ver]
+
+        if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+            gtvn_clicks_path = os.path.join(
+                dataset_dir,
+                "HNCDL_{}_GTVn_clicks.nii.gz".format(patient),
+            )
+
+        elif dataset_ver == DatasetVer.AU_EXT:
+            gtvn_clicks_path = os.path.join(
+                dataset_dir,
+                "HNCDL_{}".format(patient),
+                "HNCDL_{}_GTVn_clicks.nii.gz".format(patient),
+            )
+
+        elif dataset_ver == DatasetVer.NKI:
+            gtvn_clicks_path = os.path.join(
+                dataset_dir,
+                patient,
+                "{}_GTVn_clicks.nii.gz".format(patient),
+            )
+
+        elif dataset_ver == DatasetVer.HECKTOR:
+            gtvn_clicks_path = os.path.join(
+                dataset_dir,
+                "{}_GTVn_clicks.nii.gz.gz".format(patient),
+            )
+
+        elif dataset_ver == DatasetVer.MDA:
+            gtvn_clicks_path = os.path.join(
+                dataset_dir,
+                patient,
+                "GTVn_clicks.nii.gz",
+            )
+
+        else:
+            g.error_exit(ErrMsg.DATASET_VER_INVALID)
+
+        if os.path.exists(gtvn_clicks_path):
+            return g.load_nii(gtvn_clicks_path, binary=True)
+        else:
+            return np.zeros(img_shape, dtype=np.float32)
 
     # must be overrided
     def get_item(self, patient: str) -> Dict:
@@ -114,28 +163,33 @@ class IDLGTVnDataSet(DatasetCore):
         for i in multi_modal_imgs.keys():
             self.__origin[i] = multi_modal_imgs[i]
 
-        # gtvn_clicks
-        # (1) observer study
-        if self.__gtvn_clicks is not None:
-            self.__origin["clicks"] = self.__gtvn_clicks
-        # (2) simulation
+        # (1) gtvn_clicks - observer study
+        if self.__obs_gtvn_clicks is not None:
+            self.__origin["clicks"] = self.__obs_gtvn_clicks
+
+        # (2) gtvn_clicks - simulation
         else:
-            self.__origin["clicks"] = np.zeros(
-                self.__origin["label"].shape, dtype=np.float32
+            self.__origin["clicks"] = self.__load_gtvn_clicks(
+                dataset_ver=self._dataset_ver,
+                patient=patient,
+                img_shape=item["shape"],
             )
-            # loop through each connected components
-            # cc_count = 1
-            for cur_gtvn_cc in g.get_connected_components(self.__origin["label"]):
-                if self.__random_click:
-                    # random point (d,h,w)
-                    pos = g.get_random_nonzero_pos(cur_gtvn_cc)
-                else:
-                    # gravity center: (d,h,w)
-                    pos = list(measurements.center_of_mass(cur_gtvn_cc))
-                    # float to int
-                    for i in range(len(pos)):
-                        pos[i] = round(pos[i])
-                self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
+            # self.__origin["clicks"] = np.zeros(
+            #     self.__origin["label"].shape, dtype=np.float32
+            # )
+            # # loop through each connected components
+            # # cc_count = 1
+            # for cur_gtvn_cc in g.get_connected_components(self.__origin["label"]):
+            #     if self.__random_click:
+            #         # random point (d,h,w)
+            #         pos = g.get_random_nonzero_pos(cur_gtvn_cc)
+            #     else:
+            #         # gravity center: (d,h,w)
+            #         pos = list(measurements.center_of_mass(cur_gtvn_cc))
+            #         # float to int
+            #         for i in range(len(pos)):
+            #             pos[i] = round(pos[i])
+            #     self.__origin["clicks"][pos[0]][pos[1]][pos[2]] = 1
 
         if 0:
             g.save_nii(

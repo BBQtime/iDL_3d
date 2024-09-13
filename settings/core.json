@@ -1,5 +1,5 @@
 {
-    "cuda.visible.devices": "0,1",
+    "cuda.visible.devices": "0",
     "dataset.dir": {
         "au": {
             "linux": "/mnt/faststorage/alan/Datasets/3D_1mm/AU_dataset/",

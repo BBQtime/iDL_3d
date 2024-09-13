@@ -1,5 +1,5 @@
 import global_utils.global_core as g
-from dataset_utils import longaxis
+from dataset_utils import label_preprocess
 from global_utils.str_lib import DatasetPart, DatasetVer
 from training_utils.baseline_training import BaselineTraining
 from training_utils.idl_gtvn_training import IDLGTVnTraining
@@ -16,12 +16,23 @@ from training_utils.idl_gtvt_training import IDLGTVtTraining
 
 
 if __name__ == "__main__":
-    g.clear_gpu_cache()
-    g.clear_linux_trash()
-    g.clear_debug_data()
+    # g.clear_gpu_cache()
+    # g.clear_linux_trash()
+    # g.clear_debug_data()
 
-    longaxis.run(DatasetVer.AU_EXT)
-    longaxis.run(DatasetVer.MDA)
+    for dataset_ver in [
+        # DatasetVer.AU,
+        # DatasetVer.AU_EXT,
+        # DatasetVer.OBS_STUDY,
+        DatasetVer.MDA,
+    ]:
+        for fregment_threshold in [2, 5, 10]:
+            label_preprocess.remove_label_fregments(
+                dataset_ver=dataset_ver,
+                fregment_threshold=fregment_threshold,
+            )
+    # label_preprocess.run(DatasetVer.AU_EXT)
+    # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.OBS_STUDY)
 
     # baseline = BaselineTraining()
     # baseline.new_training(
@@ -53,16 +64,15 @@ if __name__ == "__main__":
 
     # idl_gtvn = IDLGTVnTraining()
     # for baseline_id in [
-    # "baseline_au",
-    # "baseline_au_no.pt",
-    # "baseline_mda.transfer",
+    #     "baseline_au",
+    #     # "baseline_au_no.pt",
+    #     # "baseline_mda.transfer",
     # ]:
-    # debug_mode = 1
-    # idl_gtvn.new_training(
-    #     baseline_id=baseline_id,
-    #     # train_remark="",
-    #     debug_mode=debug_mode,
-    # )
+    #     idl_gtvn.new_training(
+    #         baseline_id=baseline_id,
+    #         train_remark="au_multi.clicks",
+    #         debug_mode=0,
+    #     )
     # for idl_gtvn_id, dataset_ver in [
     # ("idl.gtvn_au_no.pt", DatasetVer.AU_EXT),
     # ("idl.gtvn_au", DatasetVer.AU_EXT),
