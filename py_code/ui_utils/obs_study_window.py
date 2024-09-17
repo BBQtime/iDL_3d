@@ -2069,7 +2069,7 @@ class ObsStudyWindow(ReplayWindow):
         self._fill_combox_patient()
         self.combox["patient"].setCurrentIndex(-1)  # show nothing
 
-    def _add_instruction_on_top_left(self, qimg: QtGui.QImage):
+    def _display_instruction_on_top_left(self, qimg: QtGui.QImage):
         left = self._get_text_pos_left()[0]
         top = self._get_text_pos_top()
 
@@ -2127,10 +2127,10 @@ class ObsStudyWindow(ReplayWindow):
                 )
 
     # rewrite this function (do nothing)
-    def _add_score_on_top_left(self, qimg: QtGui.QImage):
+    def _display_score_on_top_left(self, qimg: QtGui.QImage):
         pass
 
-    def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+    def _display_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
         left = self._get_text_pos_left()
         bottom = self._get_text_pos_bottom(qimg)
 

@@ -18,6 +18,7 @@ from global_utils.str_lib import (
 )
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import QMessageBox
 from scipy.ndimage import measurements
 from superqt import QCollapsible
@@ -112,7 +113,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._zoomed_rgb[i] = None
             self._contoured_rgb[i] = None
 
-        self.__clear_gtvt_selected_slices_3d()
+        # initialize here not in obs_study_window, because refresh_img function will need it
+        self.gtvt_click_pos_3d = None
 
     def _add_border(self, input_widget: QtWidgets.QWidget):
         random_name = g.generate_random_str()
@@ -1074,11 +1076,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
-    def __clear_gtvt_selected_slices_3d(self):
-        self.__gtvt_selected_slices_3d = Dict()
-        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-            self.__gtvt_selected_slices_3d[plane] = List()
-
     # _load_idl_gtvt_data and _load_idl_gtvn_data will share this function
     def _load_idl_gtv_data(
         self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True
@@ -1124,8 +1121,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
             if gtv == "gtvt":
                 for i in ["click", "delineation", "correction"]:
                     self.img_3d["gtvt.{}".format(i)] = None
-                self.__clear_gtvt_selected_slices_3d()
-                # self.__refresh_gtvt_selected_slices_2d()
             # clear idl.gtvn data
             elif gtv == "gtvn":
                 for i in ["clicks", "correction"]:
@@ -1148,7 +1143,6 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
             # load gtvt data
             if gtv == "gtvt":
-                # load gtvt nii
                 for i in ["click", "delineation", "correction", "correction.mask"]:
                     nii_path = os.path.join(
                         cur_round_dir, "gtvt_{}.nii.gz".format(i.replace(".", "_"))
@@ -1159,36 +1153,35 @@ class ReplayWindow(QtWidgets.QMainWindow):
                         )
                     else:
                         self.img_3d["gtvt.{}".format(i)] = None
-                # load gtvt selected slices (3d)
-                selected_slices_json_path = os.path.join(
-                    cur_patient_dir,
-                    "selected_slices.json",
-                )
-                if (
-                    not os.path.exists(selected_slices_json_path)
-                    or self._idl_round["gtvt"] == "round=00"
-                ):
-                    self.__clear_gtvt_selected_slices_3d()
-                else:
-                    self.__gtvt_selected_slices_3d = g.load_json(
-                        selected_slices_json_path
-                    )
-                    for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                        selected_slices_list = List()
-                        for round_num in self.__gtvt_selected_slices_3d[plane]:
-                            selected_slices_list += List(
-                                self.__gtvt_selected_slices_3d[plane][round_num]
-                            )
-                            if (round_num) == self._idl_round["gtvt"]:
-                                break
-                        # str to int
-                        for i in range(len(selected_slices_list)):
-                            selected_slices_list[i] = int(selected_slices_list[i])
-                        self.__gtvt_selected_slices_3d[plane] = selected_slices_list
+                # # load gtvt selected slices (3d)
+                # selected_slices_json_path = os.path.join(
+                #     cur_patient_dir,
+                #     "selected_slices.json",
+                # )
+                # if (
+                #     not os.path.exists(selected_slices_json_path)
+                #     or self._idl_round["gtvt"] == "round=00"
+                # ):
+                #     self.__clear_gtvt_center()
+                # else:
+                #     self._gtvt_selected_slices_3d = g.load_json(
+                #         selected_slices_json_path
+                #     )
+                #     for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                #         selected_slices_list = List()
+                #         for round_num in self._gtvt_selected_slices_3d[plane]:
+                #             selected_slices_list += List(
+                #                 self._gtvt_selected_slices_3d[plane][round_num]
+                #             )
+                #             if (round_num) == self._idl_round["gtvt"]:
+                #                 break
+                #         # str to int
+                #         for i in range(len(selected_slices_list)):
+                #             selected_slices_list[i] = int(selected_slices_list[i])
+                #         self._gtvt_selected_slices_3d[plane] = selected_slices_list
 
             # load gtvn data
             elif gtv == "gtvn":
-                # load gtvn nii
                 for i in ["clicks", "correction", "correction.mask"]:
                     nii_path = os.path.join(
                         cur_round_dir, "gtvn_{}.nii.gz".format(i.replace(".", "_"))
@@ -1391,7 +1384,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         self._origin_rgb[frame_name] = origin_rgb
 
-    def __refresh_imgs_add_contours(self, frame_name: str):
+    def __refresh_imgs_display_contours(self, frame_name: str):
         # make sure contoured_rgb is not None,
         # because sometime there is not contour to draw
         self._contoured_rgb[frame_name] = self._zoomed_rgb[frame_name].copy()
@@ -1621,9 +1614,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 black = QtGui.QColor(0, 0, 0)
                 qimg.fill(black)
 
-                # add msg on qimg: "please select a patient"
+                # display msg on qimg: "please select a patient"
                 if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-                    self._add_instruction_on_top_left(qimg)
+                    self._display_instruction_on_top_left(qimg)
 
                 self.img_frame[frame_name].set_background(qimg)
                 self.img_frame[frame_name].update()
@@ -1647,7 +1640,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self.__refresh_imgs_load_zoomed_rgb(frame_name)
 
             if reload_contours or self._contoured_rgb[frame_name] is None:
-                self.__refresh_imgs_add_contours(frame_name)
+                self.__refresh_imgs_display_contours(frame_name)
 
             # resize and fit img qlabel
             final_rgb = self.__refresh_imgs_fill_img_frame(
@@ -1675,46 +1668,220 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
 
             # after qimage created:
-            # add short lines to show the other 2 anatomical planes (PLANE_FIXED mode only)
+            # display short lines to show the other 2 anatomical planes (PLANE_FIXED mode only)
             if frame_name in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                self.__add_anatomical_lines(frame_name=frame_name, qimg=qimg)
+                self.__display_anatomical_dash_lines(frame_name=frame_name, qimg=qimg)
 
-            # add text on top left
+            # display GTVt delineation of the other 2 anatomical planes
+            self.__display_gtvt_delineation_of_other_planes(
+                frame_name=frame_name, qimg=qimg
+            )
+
+            # display text on top left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.CT:
-                self._add_score_on_top_left(qimg)
-                self._add_instruction_on_top_left(qimg)
+                self._display_score_on_top_left(qimg)
+                self._display_instruction_on_top_left(qimg)
 
-            # add contour description on bottom left
+            # display contour description on bottom left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.MR1:
-                self._add_contour_description_on_bottom_left(qimg)
+                self._display_contour_description_on_bottom_left(qimg)
 
-            # add slice number on bottom right
-            self.__add_slice_id_on_bottom_right(frame_name=frame_name, qimg=qimg)
+            # display slice number on bottom right
+            self.__display_slice_id_on_bottom_right(frame_name=frame_name, qimg=qimg)
 
             # set background and refresh
             self.img_frame[frame_name].set_background(qimg)
             self.img_frame[frame_name].update()
 
-    def __add_anatomical_lines(self, frame_name: str, qimg: QtGui.QImage):
+    def __get_line_start_end(self, binary_line):
+        non_zero_indices = np.nonzero(binary_line)[0]
+        if len(non_zero_indices) > 0:  # Check if there is any non-zero value
+            start = non_zero_indices[0]  # First occurrence of non-zero
+            end = non_zero_indices[-1]  # Last occurrence of non-zero
+            return start, end
+        return None, None
+
+    def __display_gtvt_delineation_of_other_planes(
+        self, frame_name: str, qimg: QtGui.QImage
+    ):
+        img_frame = self.img_frame[frame_name]
+        plane = img_frame.plane
+
+        if self.gtvt_click_pos_3d is None:
+            return
+
+        gtvt_delineation = self.img_3d["gtvt.delineation"]
+
+        transverse_id, coronal_id, sagittal_id = self.gtvt_click_pos_3d
+
+        # load data of current slice
+        if plane == Plane.TRANSVERSE:
+            transverse_id = self.cur_slice_id[Plane.TRANSVERSE]
+            line_h = gtvt_delineation[transverse_id, coronal_id, :]
+            line_v = gtvt_delineation[transverse_id, :, sagittal_id]
+
+        elif plane == Plane.CORONAL:
+            coronal_id = self.cur_slice_id[Plane.CORONAL]
+            line_h = gtvt_delineation[transverse_id, coronal_id, :]
+            line_v = gtvt_delineation[:, coronal_id, sagittal_id]
+
+        elif plane == Plane.SAGITTAL:
+            sagittal_id = self.cur_slice_id[Plane.SAGITTAL]
+            line_h = gtvt_delineation[transverse_id, :, sagittal_id]
+            line_v = gtvt_delineation[:, coronal_id, sagittal_id]
+
+        line_h = line_h.astype(np.uint8)
+        line_v = line_v.astype(np.uint8)
+
+        h_start_x, h_end_x = self.__get_line_start_end(line_h)
+        v_start_y, v_end_y = self.__get_line_start_end(line_v)
+
+        if plane == Plane.TRANSVERSE:
+            h_start_y = h_end_y = coronal_id
+            v_start_x = v_end_x = sagittal_id
+        elif plane == Plane.CORONAL:
+            h_start_y = h_end_y = transverse_id
+            v_start_x = v_end_x = sagittal_id
+        elif plane == Plane.SAGITTAL:
+            h_start_y = h_end_y = transverse_id
+            v_start_x = v_end_x = coronal_id
+
+        img_shape_3d = self.img_3d[Modal.CT].shape
+
+        if plane == Plane.TRANSVERSE:
+            img_2d_width = img_shape_3d[2]
+            img_2d_height = img_shape_3d[1]
+
+        elif plane == Plane.CORONAL:
+            img_2d_width = img_shape_3d[2]
+            img_2d_height = img_shape_3d[0]
+
+        elif plane == Plane.SAGITTAL:
+            img_2d_width = img_shape_3d[1]
+            img_2d_height = img_shape_3d[0]
+
+        h_start_x, h_end_x, v_start_x, v_end_x = [
+            (i / img_2d_width if i is not None else None)
+            for i in (h_start_x, h_end_x, v_start_x, v_end_x)
+        ]
+        h_start_y, h_end_y, v_start_y, v_end_y = [
+            (i / img_2d_height if i is not None else None)
+            for i in (h_start_y, h_end_y, v_start_y, v_end_y)
+        ]
+
+        # find location on img_frame
+        center_x_pct, center_y_pct = img_frame.img_center_pct
+        zoomed_h, zoomed_w = self.get_zoomed_rgb_shape(frame_name)
+
+        h_start_x, h_end_x, v_start_x, v_end_x = [
+            (
+                round(img_frame.width() // 2 - (center_x_pct - i) * zoomed_w)
+                if i is not None
+                else None
+            )
+            for i in (h_start_x, h_end_x, v_start_x, v_end_x)
+        ]
+        h_start_y, h_end_y, v_start_y, v_end_y = [
+            (
+                round(img_frame.height() // 2 - (center_y_pct - i) * zoomed_h)
+                if i is not None
+                else None
+            )
+            for i in (h_start_y, h_end_y, v_start_y, v_end_y)
+        ]
+
+        # define painter outside of for loop
+        painter = QPainter(qimg)
+        line_width = 2
+        line_len = 6
+
+        line_pos_list = []
+
+        if None not in (h_start_x, h_start_y, h_end_x, h_end_y):
+            # t shape - start point
+            line_pos_list.append(
+                (h_start_x, h_start_y, h_start_x + line_len, h_start_y)
+            )
+            line_pos_list.append(
+                (
+                    h_start_x,
+                    h_start_y - round(line_len / 2),
+                    h_start_x,
+                    h_start_y + round(line_len / 2),
+                )
+            )
+            # t shape - end point
+            line_pos_list.append((h_end_x, h_end_y, h_end_x - line_len, h_end_y))
+            line_pos_list.append(
+                (
+                    h_end_x,
+                    h_end_y - round(line_len / 2),
+                    h_end_x,
+                    h_end_y + round(line_len / 2),
+                )
+            )
+
+        if None not in (v_start_x, v_start_y, v_end_x, v_end_y):
+            # t shape - start point
+            line_pos_list.append(
+                (v_start_x, v_start_y, v_start_x, v_start_y + line_len)
+            )
+            line_pos_list.append(
+                (
+                    v_start_x - round(line_len / 2),
+                    v_start_y,
+                    v_start_x + round(line_len / 2),
+                    v_start_y,
+                )
+            )
+            # t shape - end point
+            line_pos_list.append((v_end_x, v_end_y, v_end_x, v_end_y - line_len))
+            line_pos_list.append(
+                (
+                    v_end_x - round(line_len / 2),
+                    v_end_y,
+                    v_end_x + round(line_len / 2),
+                    v_end_y,
+                )
+            )
+
+        for line_pos in line_pos_list:
+            # draw black border of the line
+            border_pen = QPen(Qt.black)
+            # Width includes the border and the line itself
+            border_pen.setWidth(line_width + 2)
+            painter.setPen(border_pen)
+            painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
+
+            # draw line
+            pen = QtGui.QPen(QtGui.QColor(*self.color["magenta"]))
+            pen.setWidth(line_width)
+            painter.setPen(pen)
+            painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
+
+        # Finalize the drawing
+        painter.end()
+
+    def __display_anatomical_dash_lines(self, frame_name: str, qimg: QtGui.QImage):
         line_len = 30
         line_width = 2
 
         img_frame = self.img_frame[frame_name]
         plane = img_frame.plane
-        img_shape_3d = self.img_3d[Modal.CT]
+        img_shape_3d = self.img_3d[Modal.CT].shape
 
         # find percentage location in 3d image
         if plane == Plane.TRANSVERSE:
-            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d.shape[2]
-            y_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d.shape[1]
+            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d[2]
+            y_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d[1]
 
         elif plane == Plane.CORONAL:
-            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d.shape[2]
-            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d.shape[0]
+            x_pct = self.cur_slice_id[Plane.SAGITTAL] / img_shape_3d[2]
+            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d[0]
 
         elif plane == Plane.SAGITTAL:
-            x_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d.shape[1]
-            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d.shape[0]
+            x_pct = self.cur_slice_id[Plane.CORONAL] / img_shape_3d[1]
+            y_pct = self.cur_slice_id[Plane.TRANSVERSE] / img_shape_3d[0]
 
         # find location on img_frame
         center_x_pct, center_y_pct = img_frame.img_center_pct
@@ -1772,7 +1939,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # Finalize the drawing
         painter.end()
 
-    def __add_slice_id_on_bottom_right(self, frame_name: str, qimg: QtGui.QImage):
+    def __display_slice_id_on_bottom_right(self, frame_name: str, qimg: QtGui.QImage):
         if self.img_3d[Modal.CT] is None:
             return
 
@@ -1822,7 +1989,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             buttom - step * 2,
         ]
 
-    def _add_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+    def _display_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
         left = self._get_text_pos_left()
         bottom = self._get_text_pos_bottom(qimg)
 
@@ -1895,10 +2062,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
             color=self.color["gtvn.correction"],
         )
 
-    def _add_instruction_on_top_left(self, qimg: QtGui.QImage):
+    def _display_instruction_on_top_left(self, qimg: QtGui.QImage):
         pass
 
-    def _add_score_on_top_left(self, qimg: QtGui.QImage):
+    def _display_score_on_top_left(self, qimg: QtGui.QImage):
         top = self._get_text_pos_top()
 
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
