@@ -1711,6 +1711,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             return
 
         gtvt_delineation = self.img_3d["gtvt.delineation"]
+        if gtvt_delineation is None:
+            return
 
         transverse_id, coronal_id, sagittal_id = self.gtvt_click_pos_3d
 
@@ -1797,11 +1799,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         line_pos_list = []
 
+        t_shape = False
+
         if None not in (h_start_x, h_start_y, h_end_x, h_end_y):
             # t shape - start point
-            line_pos_list.append(
-                (h_start_x, h_start_y, h_start_x + line_len, h_start_y)
-            )
+            if t_shape:
+                line_pos_list.append(
+                    (h_start_x, h_start_y, h_start_x + line_len, h_start_y)
+                )
             line_pos_list.append(
                 (
                     h_start_x,
@@ -1811,7 +1816,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 )
             )
             # t shape - end point
-            line_pos_list.append((h_end_x, h_end_y, h_end_x - line_len, h_end_y))
+            if t_shape:
+                line_pos_list.append((h_end_x, h_end_y, h_end_x - line_len, h_end_y))
             line_pos_list.append(
                 (
                     h_end_x,
@@ -1823,9 +1829,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         if None not in (v_start_x, v_start_y, v_end_x, v_end_y):
             # t shape - start point
-            line_pos_list.append(
-                (v_start_x, v_start_y, v_start_x, v_start_y + line_len)
-            )
+            if t_shape:
+                line_pos_list.append(
+                    (v_start_x, v_start_y, v_start_x, v_start_y + line_len)
+                )
             line_pos_list.append(
                 (
                     v_start_x - round(line_len / 2),
@@ -1835,7 +1842,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 )
             )
             # t shape - end point
-            line_pos_list.append((v_end_x, v_end_y, v_end_x, v_end_y - line_len))
+            if t_shape:
+                line_pos_list.append((v_end_x, v_end_y, v_end_x, v_end_y - line_len))
             line_pos_list.append(
                 (
                     v_end_x - round(line_len / 2),

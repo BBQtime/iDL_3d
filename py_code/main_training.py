@@ -16,21 +16,21 @@ from training_utils.idl_gtvt_training import IDLGTVtTraining
 
 
 if __name__ == "__main__":
-    # g.clear_gpu_cache()
-    # g.clear_linux_trash()
-    # g.clear_debug_data()
+    g.clear_gpu_cache()
+    g.clear_linux_trash()
+    g.clear_debug_data()
 
-    for dataset_ver in [
-        # DatasetVer.AU,
-        # DatasetVer.AU_EXT,
-        # DatasetVer.OBS_STUDY,
-        DatasetVer.MDA,
-    ]:
-        for fregment_threshold in [2, 5, 10]:
-            label_preprocess.remove_label_fregments(
-                dataset_ver=dataset_ver,
-                fregment_threshold=fregment_threshold,
-            )
+    # for dataset_ver in [
+    #     DatasetVer.AU,
+    #     DatasetVer.AU_EXT,
+    #     DatasetVer.OBS_STUDY,
+    #     DatasetVer.MDA,
+    # ]:
+    #     for fregment_threshold in [2, 5, 10]:
+    #         label_preprocess.remove_label_fregments(
+    #             dataset_ver=dataset_ver,
+    #             fregment_threshold=fregment_threshold,
+    #         )
     # label_preprocess.run(DatasetVer.AU_EXT)
     # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.OBS_STUDY)
 
@@ -40,61 +40,63 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
     # for baseline_id, dataset_ver in [
-    # ("baseline_au_no.pt", DatasetVer.AU_EXT),
-    # ("baseline_au", DatasetVer.AU_EXT),
+    #     # ("baseline_au_no.pt", DatasetVer.AU_EXT),
+    #     # ("baseline_au", DatasetVer.AU_EXT),
     # ]:
-    # debug_mode = 1
-    # baseline.inference_all_folds(
-    #     baseline_id=baseline_id,
-    #     dataset_part=DatasetPart.VALID,
-    #     dataset_ver=dataset_ver,
-    #     debug_mode=debug_mode,
-    # )
-    # baseline.inference_all_folds(
-    #     baseline_id=baseline_id,
-    #     dataset_part=DatasetPart.TEST,
-    #     dataset_ver=dataset_ver,
-    #     debug_mode=debug_mode,
-    # )
-    # baseline.inference_cross_valid(
-    #     baseline_id=baseline_id,
-    #     dataset_ver=dataset_ver,
-    #     debug_mode=debug_mode,
-    # )
-
-    # idl_gtvn = IDLGTVnTraining()
-    # for baseline_id in [
-    #     "baseline_au",
-    #     # "baseline_au_no.pt",
-    #     # "baseline_mda.transfer",
-    # ]:
-    #     idl_gtvn.new_training(
+    #     debug_mode = 0
+    #     # baseline.inference_all_folds(
+    #     #     baseline_id=baseline_id,
+    #     #     dataset_part=DatasetPart.VALID,
+    #     #     dataset_ver=dataset_ver,
+    #     #     debug_mode=debug_mode,
+    #     # )
+    #     baseline.inference_all_folds(
     #         baseline_id=baseline_id,
-    #         train_remark="au_multi.clicks",
-    #         debug_mode=0,
+    #         dataset_part=DatasetPart.TEST,
+    #         dataset_ver=dataset_ver,
+    #         debug_mode=debug_mode,
     #     )
+    #     baseline.inference_cross_valid(
+    #         baseline_id=baseline_id,
+    #         dataset_ver=dataset_ver,
+    #         debug_mode=debug_mode,
+    #     )
+
+    idl_gtvn = IDLGTVnTraining()
+    for baseline_id in [
+        # "baseline_au",
+        # "baseline_au_no.pt",
+        # "baseline_mda.transfer",
+    ]:
+        idl_gtvn.new_training(
+            baseline_id=baseline_id,
+            train_remark="au_multi.clicks",
+            debug_mode=0,
+        )
     # for idl_gtvn_id, dataset_ver in [
-    # ("idl.gtvn_au_no.pt", DatasetVer.AU_EXT),
-    # ("idl.gtvn_au", DatasetVer.AU_EXT),
+    #     # ("idl.gtvn_au_single.click", DatasetVer.AU_EXT),
+    #     # ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
+    #     # ("idl.gtvn_au_multi.clicks", DatasetVer.OBS_STUDY),
+    #     # ("idl.gtvn_au_no.pt_single.click", DatasetVer.AU_EXT),
     # ]:
-    # debug_mode = 1
-    # idl_gtvn.inference_all_folds(
-    #     idl_gtvn_id=idl_gtvn_id,
-    #     dataset_ver=dataset_ver,
-    #     dataset_part=DatasetPart.VALID,
-    #     debug_mode=debug_mode,
-    # )
-    # idl_gtvn.inference_all_folds(
-    #     idl_gtvn_id=idl_gtvn_id,
-    #     dataset_ver=dataset_ver,
-    #     dataset_part=DatasetPart.TEST,
-    #     debug_mode=debug_mode,
-    # )
-    # idl_gtvn.inference_cross_valid(
-    #     idl_gtvn_id=idl_gtvn_id,
-    #     dataset_ver=dataset_ver,
-    #     debug_mode=debug_mode,
-    # )
+    #     debug_mode = 0
+    #     # idl_gtvn.inference_all_folds(
+    #     #     idl_gtvn_id=idl_gtvn_id,
+    #     #     dataset_ver=dataset_ver,
+    #     #     dataset_part=DatasetPart.VALID,
+    #     #     debug_mode=debug_mode,
+    #     # )
+    #     idl_gtvn.inference_all_folds(
+    #         idl_gtvn_id=idl_gtvn_id,
+    #         dataset_ver=dataset_ver,
+    #         dataset_part=DatasetPart.TEST,
+    #         debug_mode=debug_mode,
+    #     )
+    #     idl_gtvn.inference_cross_valid(
+    #         idl_gtvn_id=idl_gtvn_id,
+    #         dataset_ver=dataset_ver,
+    #         debug_mode=debug_mode,
+    #     )
     # idl_gtvn.obs_study(
     #     idl_gtvn_id="idl.gtvn_" + g.DELETE_FLAG,
     #     dataset_ver=DatasetVer.AU,
@@ -104,15 +106,14 @@ if __name__ == "__main__":
 
     # idl_gtvt = IDLGTVtTraining()
     # for baseline_id in [
-    #     # "baseline_au",
-    #     # "baseline_au_no.pt",
-    #     # "baseline_mda.new",
+    #     "baseline_au",
+    #     "baseline_au_no.pt",
     # ]:
-    # idl_gtvt.simulation(
-    #     baseline_id=baseline_id,
-    #     # train_remark="au.ext_bug.fixed",
-    #     debug_mode=1,
-    # )
+    #     idl_gtvt.simulation(
+    #         baseline_id=baseline_id,
+    #         train_remark=DatasetVer.AU_EXT + baseline_id[len("baseline_au") :],
+    #         debug_mode=0,
+    #     )
     # idl_gtvt.inference(
     #     idl_gtvt_id="idl.gtvt_obs.study_bug",
     #     debug_mode=0,

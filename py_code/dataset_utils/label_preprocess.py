@@ -226,12 +226,6 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                     label_path_list.append(label_path[0])
 
         for label_path in tqdm(label_path_list):
-            output_dir = os.path.join(
-                g.DEBUG_DIR,
-                "{}_{}".format(dataset_ver, fregment_threshold),
-            )
-            g.create_dir(output_dir)
-
             # Load the NIfTI file using SimpleITK
             nii_image = sitk.ReadImage(label_path)
 
@@ -265,6 +259,7 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
 
                 # Check if the fragment has fewer or equal voxels than the threshold
                 if np.sum(fragment_mask) <= fregment_threshold:
+
                     fragment_count += 1
                     print(f"fregment: {fragment_count}")
 
@@ -273,20 +268,37 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
 
                     # Save the original image only once when a fragment is detected
                     if not original_saved:
+
                         label_name = os.path.basename(label_path).replace(".nii", "")
 
-                        lower_threshold_file_already_exist = False
+                        # get patient name
+                        if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
+                            patient_name = Path(label_path).name
+                            patient_name = patient_name[: len("HNCDL_XXX")]
+                        elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+                            patient_name = Path(label_path).parent.name
+
+                        output_dir = os.path.join(
+                            g.DEBUG_DIR,
+                            "{}_{}".format(dataset_ver, fregment_threshold),
+                            patient_name,
+                        )
+
+                        lower_threshold_exist = False
                         for lower_threshold in range(1, fregment_threshold):
-                            file_to_check = os.path.join(
+                            dir_to_check = os.path.join(
                                 g.DEBUG_DIR,
                                 "{}_{}".format(dataset_ver, lower_threshold),
-                                label_name + "_origin.nii",
+                                patient_name,
                             )
-                            if os.path.exists(file_to_check):
-                                lower_threshold_file_already_exist = True
+                            if os.path.exists(dir_to_check):
+                                lower_threshold_exist = True
                                 break
 
-                        if not lower_threshold_file_already_exist:
+                        if not lower_threshold_exist:
+
+                            g.create_dir(output_dir)
+
                             sitk.WriteImage(
                                 nii_image,
                                 os.path.join(output_dir, label_name + "_origin.nii"),
@@ -300,12 +312,12 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                                 os.path.join(output_dir, cn_name),
                             )
                         else:
-                            print("{} already exist".format(file_to_check))
+                            print("{} already exist".format(dir_to_check))
 
                         original_saved = True
 
             # If there are any fragments, save the combined fragment image
-            if fragment_count > 0 and not lower_threshold_file_already_exist:
+            if fragment_count > 0 and not lower_threshold_exist:
                 # Convert the numpy array back to a SimpleITK image
                 combined_fragment_image = sitk.GetImageFromArray(
                     combined_fragment_array

@@ -7,7 +7,8 @@ from research_utils.research_core import calculate_idl_gtvs_metric, update_font_
 if __name__ == "__main__":
     g.clear_gpu_cache()
     g.clear_linux_trash()
-    g.clear_debug_data()
+    # g.clear_debug_data()
+
     update_font_size()
 
     calculate_idl_gtvs_metric(

@@ -34,18 +34,24 @@ class ObsStudyID:
 
 class ObsStudyStep:
     SELECT_PATIENT = "select.patient"
+
     CLICK_GTVT_CENTER = "click.gtvt.center"
-    DRAW_GTVT = "draw.gtvt"
-    DRAW_GTVT_TRANSVERSE = "draw.gtvt.transverse"
-    DRAW_GTVT_CORONAL = "draw.gtvt.coronal"
-    DRAW_GTVT_SAGITTAL = "draw.gtvt.sagittal"
+
+    DRAW_GTVT = "draw.gtvt"  # for "obs study step" and  "step label"
+    DRAW_GTVT_TRANSVERSE = "draw.gtvt.transverse"  # only for "step label"
+    DRAW_GTVT_CORONAL = "draw.gtvt.coronal"  # only for "step label"
+    DRAW_GTVT_SAGITTAL = "draw.gtvt.sagittal"  # only for "step label"
+
     CLICK_GTVN_CENTER = "click.gtvn.center"
-    WAITING = "waiting"
-    WAITING_GTVT = "waiting.gtvt"
-    WAITING_GTVN = "waiting.gtvn"
-    CORRECT_GTVT = "correct.gtvt"
-    CORRECT_GTVN = "correct.gtvn"
-    CORRECT_BOTH = "correct.both"
+
+    WAITING = "waiting"  # for "obs study step" and "step label"
+    WAITING_GTVT = "waiting.gtvt"  # only for "timer"
+    WAITING_GTVN = "waiting.gtvn"  # only for "timer"
+
+    CORRECT_GTVT = "correct.gtvt"  # "obs study step", "step label" and "timer"
+    CORRECT_GTVN = "correct.gtvn"  # "obs study step", "step label" and "timer"
+    CORRECT_BOTH = "correct.both"  # only for "obs study step"
+
     APPROVED = "approved"
 
 
