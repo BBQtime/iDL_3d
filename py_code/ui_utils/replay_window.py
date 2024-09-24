@@ -139,7 +139,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             "gtvn.pred",
             "gtvt.click",
             "gtvn.clicks",
-            "gtvt.delineation",
+            "gtvt.delineation.{}".format(Plane.TRANSVERSE),
+            "gtvt.delineation.{}".format(Plane.CORONAL),
+            "gtvt.delineation.{}".format(Plane.SAGITTAL),
             "gtvt.correction",
             "gtvn.correction",
             "gtvt.pred.final",
@@ -1076,6 +1078,72 @@ class ReplayWindow(QtWidgets.QMainWindow):
             gtv="gtvn", reset_id=reset_id, refresh_imgs=refresh_imgs
         )
 
+    # make this a protected function, shared with obs_study_window
+    # as loading legacy merged gtvt delineation nii is complex
+    def _load_idl_gtvt_delineation(self, cur_round_dir: str):
+        # load gtvt delineations (new version: save 3 nii files for 3 planes)
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            self.img_3d["gtvt.delineation.{}".format(plane)] = None
+
+            nii_path = os.path.join(
+                cur_round_dir, "gtvt_delineation_{}.nii.gz".format(plane)
+            )
+            if os.path.exists(nii_path):
+                self.img_3d["gtvt.delineation.{}".format(plane)] = self._load_3d_img(
+                    nii_path, binary=True
+                )
+
+        # following codes are for legacy merged gtvt delineation nii
+        nii_path = os.path.join(cur_round_dir, "gtvt_delineation.nii.gz")
+        if not os.path.exists(nii_path) or self.img_3d["gtvt.click"] is None:
+            return
+        else:
+            # init merged gtvt delineation
+            gtvt_delineation_merged = None
+
+        # generate empty numpy array
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            if self.img_3d["gtvt.delineation.{}".format(plane)] is None:
+
+                if gtvt_delineation_merged is None:
+                    gtvt_delineation_merged = self._load_3d_img(nii_path, binary=True)
+                    d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+                    d, h, w = int(d), int(h), int(w)
+
+                self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
+                    gtvt_delineation_merged
+                )
+
+                # get slice from merged gtvt delineation
+                if plane == Plane.TRANSVERSE:
+                    self.img_3d["gtvt.delineation.{}".format(plane)][d, :, :] = (
+                        gtvt_delineation_merged[d, :, :]
+                    )
+                elif plane == Plane.CORONAL:
+                    self.img_3d["gtvt.delineation.{}".format(plane)][:, h, :] = (
+                        gtvt_delineation_merged[:, h, :]
+                    )
+                elif plane == Plane.SAGITTAL:
+                    self.img_3d["gtvt.delineation.{}".format(plane)][:, :, w] = (
+                        gtvt_delineation_merged[:, :, w]
+                    )
+
+                gtvt_delineation_cur_plane = self.img_3d[
+                    "gtvt.delineation.{}".format(plane)
+                ].copy()
+                # flip left/right
+                gtvt_delineation_cur_plane = np.flip(gtvt_delineation_cur_plane, axis=2)
+                # turn upside down
+                gtvt_delineation_cur_plane = np.flip(gtvt_delineation_cur_plane, axis=0)
+                # save new version gtvt delineation of each plane
+                g.save_nii(
+                    img=gtvt_delineation_cur_plane,
+                    save_path=os.path.join(
+                        cur_round_dir, "gtvt_delineation_{}.nii.gz".format(plane)
+                    ),
+                    spacing=g.NII_SPACING,
+                )
+
     # _load_idl_gtvt_data and _load_idl_gtvn_data will share this function
     def _load_idl_gtv_data(
         self, gtv: str, reset_id: bool = True, refresh_imgs: bool = True
@@ -1119,7 +1187,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
             # clear idl.gtvt data
             if gtv == "gtvt":
-                for i in ["click", "delineation", "correction"]:
+                for i in [
+                    "click",
+                    "delineation.{}".format(Plane.TRANSVERSE),
+                    "delineation.{}".format(Plane.CORONAL),
+                    "delineation.{}".format(Plane.SAGITTAL),
+                    "correction",
+                ]:
                     self.img_3d["gtvt.{}".format(i)] = None
             # clear idl.gtvn data
             elif gtv == "gtvn":
@@ -1143,7 +1217,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
             # load gtvt data
             if gtv == "gtvt":
-                for i in ["click", "delineation", "correction", "correction.mask"]:
+                # load gtvt click and correction
+                for i in ["click", "correction", "correction.mask"]:
                     nii_path = os.path.join(
                         cur_round_dir, "gtvt_{}.nii.gz".format(i.replace(".", "_"))
                     )
@@ -1153,6 +1228,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
                         )
                     else:
                         self.img_3d["gtvt.{}".format(i)] = None
+
+                # load gtvt delineation
+                self._load_idl_gtvt_delineation(cur_round_dir)
+
                 # # load gtvt selected slices (3d)
                 # selected_slices_json_path = os.path.join(
                 #     cur_patient_dir,
@@ -1399,7 +1478,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             seg_name_list = [
                 "gtvn.pred.final",
                 "gtvt.pred.final",
-                "gtvt.delineation",
+                "gtvt.delineation.{}".format(plane),
                 "gtvn.clicks",
                 "gtvt.click",
             ]
@@ -1415,7 +1494,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "gtvt.pred.final",
                 "gtvn.pred",
                 "gtvt.pred",
-                "gtvt.delineation",
+                "gtvt.delineation.{}".format(plane),
                 "gtvn.clicks",
                 "gtvt.click",
             ]
@@ -1442,19 +1521,22 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "gtvt.pred.final",
                 "gtvn.correction",
                 "gtvt.correction",
+                "gtvt.delineation.{}".format(plane),
             ]:
                 if segment.max() <= 0:
                     continue
 
-            # perfomr erosion to remove the overlap of anatomical planes
-            elif seg_name == "gtvt.delineation":
-                if segment.max() <= 0:
-                    continue
-                else:
-                    kernel = np.ones((3, 3), np.uint8)
-                    eroded_segment = cv2.erode(segment, kernel, iterations=1)
-                    if eroded_segment.max() <= 0:
-                        continue
+            # Following code abandoned, no "cross" in gtvt delineation
+            # as merged gtvt delineation is no longer used for display
+            # # use erosion to remove the overlap of anatomical planes
+            # elif seg_name == "gtvt.delineation":
+            #     if segment.max() <= 0:
+            #         continue
+            #     else:
+            #         kernel = np.ones((3, 3), np.uint8)
+            #         eroded_segment = cv2.erode(segment, kernel, iterations=1)
+            #         if eroded_segment.max() <= 0:
+            #             continue
 
             # zoom in segmentation
             zoomed_h = self._zoomed_rgb[frame_name].shape[0]
@@ -1479,11 +1561,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
             contours = cv2.findContours(
                 segment, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
             )[0]
+            if "gtvt.delineation." in seg_name:
+                color = self.color["gtvt.delineation"]
+            else:
+                color = self.color[seg_name]
             self._contoured_rgb[frame_name] = cv2.drawContours(
                 image=self._contoured_rgb[frame_name],
                 contours=contours,
                 contourIdx=-1,
-                color=self.color[seg_name],
+                color=color,
                 thickness=thickness,
             )
 
@@ -1684,7 +1770,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
             # display contour description on bottom left
             if frame_name == Plane.TRANSVERSE or frame_name == Modal.MR1:
-                self._display_contour_description_on_bottom_left(qimg)
+                self._display_contour_name_on_bottom_left(qimg)
 
             # display slice number on bottom right
             self.__display_slice_id_on_bottom_right(frame_name=frame_name, qimg=qimg)
@@ -1704,33 +1790,56 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __display_gtvt_delineation_of_other_planes(
         self, frame_name: str, qimg: QtGui.QImage
     ):
-        img_frame = self.img_frame[frame_name]
-        plane = img_frame.plane
-
         if self.gtvt_click_pos_3d is None:
-            return
-
-        gtvt_delineation = self.img_3d["gtvt.delineation"]
-        if gtvt_delineation is None:
             return
 
         transverse_id, coronal_id, sagittal_id = self.gtvt_click_pos_3d
 
+        img_frame = self.img_frame[frame_name]
+        plane = img_frame.plane
+
+        if plane == Plane.TRANSVERSE:
+            gtvt_delineation_h = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.CORONAL)
+            ]
+            gtvt_delineation_v = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.SAGITTAL)
+            ]
+        elif plane == Plane.CORONAL:
+            gtvt_delineation_h = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.TRANSVERSE)
+            ]
+            gtvt_delineation_v = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.SAGITTAL)
+            ]
+        elif plane == Plane.SAGITTAL:
+            gtvt_delineation_h = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.TRANSVERSE)
+            ]
+            gtvt_delineation_v = self.img_3d[
+                "gtvt.delineation.{}".format(Plane.CORONAL)
+            ]
+
+        # never use: "if None in [gtvt_delineation_h, gtvt_delineation_v]:"
+        # as "[gtvt_delineation_h, gtvt_delineation_v]" is treated as an numpy array
+        if gtvt_delineation_h is None or gtvt_delineation_v is None:
+            return
+
         # load data of current slice
         if plane == Plane.TRANSVERSE:
             transverse_id = self.cur_slice_id[Plane.TRANSVERSE]
-            line_h = gtvt_delineation[transverse_id, coronal_id, :]
-            line_v = gtvt_delineation[transverse_id, :, sagittal_id]
+            line_h = gtvt_delineation_h[transverse_id, coronal_id, :]
+            line_v = gtvt_delineation_v[transverse_id, :, sagittal_id]
 
         elif plane == Plane.CORONAL:
             coronal_id = self.cur_slice_id[Plane.CORONAL]
-            line_h = gtvt_delineation[transverse_id, coronal_id, :]
-            line_v = gtvt_delineation[:, coronal_id, sagittal_id]
+            line_h = gtvt_delineation_h[transverse_id, coronal_id, :]
+            line_v = gtvt_delineation_v[:, coronal_id, sagittal_id]
 
         elif plane == Plane.SAGITTAL:
             sagittal_id = self.cur_slice_id[Plane.SAGITTAL]
-            line_h = gtvt_delineation[transverse_id, :, sagittal_id]
-            line_v = gtvt_delineation[:, coronal_id, sagittal_id]
+            line_h = gtvt_delineation_h[transverse_id, :, sagittal_id]
+            line_v = gtvt_delineation_v[:, coronal_id, sagittal_id]
 
         line_h = line_h.astype(np.uint8)
         line_v = line_v.astype(np.uint8)
@@ -1862,7 +1971,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
 
             # draw line
-            pen = QtGui.QPen(QtGui.QColor(*self.color["magenta"]))
+            pen = QtGui.QPen(QtGui.QColor(*self.color["gtvt.delineation"]))
             pen.setWidth(line_width)
             painter.setPen(pen)
             painter.drawLine(*(line_pos[0], line_pos[1], line_pos[2], line_pos[3]))
@@ -1997,7 +2106,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             buttom - step * 2,
         ]
 
-    def _display_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+    def _display_contour_name_on_bottom_left(self, qimg: QtGui.QImage):
         left = self._get_text_pos_left()
         bottom = self._get_text_pos_bottom(qimg)
 

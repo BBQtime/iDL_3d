@@ -86,11 +86,13 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             return
 
+        plane = img_frame.plane
+
         # switch to the gtvt center slice if current slice is not.
         if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[img_frame.plane]
-            if self.cur_slice_id[img_frame.plane] != gtvt_center_slice_id:
-                self.cur_slice_id[img_frame.plane] = gtvt_center_slice_id
+            gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[plane]
+            if self.cur_slice_id[plane] != gtvt_center_slice_id:
+                self.cur_slice_id[plane] = gtvt_center_slice_id
 
                 # (1) PLANE_FIXED mode
                 if self.display_mode() == DisplayMode.PLANE_FIXED:
@@ -125,31 +127,21 @@ class ObsStudyWindow(ReplayWindow):
             self.draw_on_img_frame_move(event=event, img_frame=img_frame)
             return
 
-        # (2) clear gtvt delineation in current plane
+        # (2) clear gtvt delineation of current plane
         elif self.obs_study_step == ObsStudyStep.DRAW_GTVT and self.drawing_mode in [
             DrawingMode.GTVT_CLEAR,
             DrawingMode.GTVN_CLEAR,
         ]:
-            # get the position of gtvt center
-            d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
-            d, h, w = int(d), int(h), int(w)
-
-            delineation = self.img_3d["gtvt.delineation"]
-
-            # clear delineation on cur plane
-            if img_frame.plane == Plane.TRANSVERSE:
-                delineation[d, :, :] = np.zeros_like(delineation[d, :, :])
-            elif img_frame.plane == Plane.CORONAL:
-                delineation[:, h, :] = np.zeros_like(delineation[:, h, :])
-            elif img_frame.plane == Plane.SAGITTAL:
-                delineation[:, :, w] = np.zeros_like(delineation[:, :, w])
+            # clear gtvt delineation of current plane
+            self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
+                self.img_3d[Modal.CT]
+            )
 
             # update gtvt delineated state
-            self.__gtvt_delineated_state[img_frame.plane] = False
+            self.__gtvt_delineated_state[plane] = False
+
             # update todo list
-            self._text_label[
-                "draw.gtvt.{}".format(img_frame.plane)
-            ].set_status_missing()
+            self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
 
             # refresh contours only (on all img frames) after using "clear" tool
             self.refresh_imgs(
@@ -174,11 +166,11 @@ class ObsStudyWindow(ReplayWindow):
             ]:
                 gtv = "gtvn"
 
-            d = h = w = self.cur_slice_id[img_frame.plane]
+            d = h = w = self.cur_slice_id[plane]
             correction = self.img_3d["{}.correction".format(gtv)]
             correction_mask = self.img_3d["{}.correction.mask".format(gtv)]
 
-            if img_frame.plane == Plane.TRANSVERSE:
+            if plane == Plane.TRANSVERSE:
                 if self.drawing_mode in [
                     DrawingMode.GTVT_CLEAR,
                     DrawingMode.GTVN_CLEAR,
@@ -213,7 +205,7 @@ class ObsStudyWindow(ReplayWindow):
                                 correction_mask[i, :, :]
                             )
 
-            elif img_frame.plane == Plane.CORONAL:
+            elif plane == Plane.CORONAL:
                 # clear correction
                 correction[:, h, :] = np.zeros_like(correction[:, h, :])
                 # "clear" mode, enable correction mask
@@ -229,7 +221,7 @@ class ObsStudyWindow(ReplayWindow):
                 ]:
                     correction_mask[:, h, :] = np.zeros_like(correction_mask[:, h, :])
 
-            elif img_frame.plane == Plane.SAGITTAL:
+            elif plane == Plane.SAGITTAL:
                 # clear correction
                 correction[:, :, w] = np.zeros_like(correction[:, :, w])
                 # "clear" mode, enable correction mask
@@ -360,7 +352,7 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             return
 
-        # get img frame name
+        plane = img_frame.plane
         frame_name = img_frame.get_frame_name()
 
         # binarize threshold
@@ -413,11 +405,11 @@ class ObsStudyWindow(ReplayWindow):
         new_drawing = empty_zoomed_img
 
         # resize to origin img size (slice from 3d img)
-        if img_frame.plane == Plane.SAGITTAL:
+        if plane == Plane.SAGITTAL:
             actual_shape = self.img_3d[Modal.CT][:, :, 0].shape
-        elif img_frame.plane == Plane.CORONAL:
+        elif plane == Plane.CORONAL:
             actual_shape = self.img_3d[Modal.CT][:, 0, :].shape
-        elif img_frame.plane == Plane.TRANSVERSE:
+        elif plane == Plane.TRANSVERSE:
             actual_shape = self.img_3d[Modal.CT][0, :, :].shape
         new_drawing = cv2.resize(
             new_drawing,
@@ -427,42 +419,42 @@ class ObsStudyWindow(ReplayWindow):
         # binarization (after resize)
         new_drawing = g.binarize_img(img=new_drawing, threshold=binary_threshold)
 
-        # add 2d delineation/correction on 3d ndarray
-
-        # (1) gtvt delineation
+        # get 2d existing drawing (gtvt delineation) from 3d ndarray
         if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+            gtvt_delineation = self.img_3d["gtvt.delineation.{}".format(plane)]
             d, h, w = self.gtvt_click_pos_3d
-            if img_frame.plane == Plane.TRANSVERSE:
-                exist_drawing = self.img_3d["gtvt.delineation"][d, :, :]
-            elif img_frame.plane == Plane.CORONAL:
-                exist_drawing = self.img_3d["gtvt.delineation"][:, h, :]
-            elif img_frame.plane == Plane.SAGITTAL:
-                exist_drawing = self.img_3d["gtvt.delineation"][:, :, w]
-        # (2) gtvt/gtvn correction
+            if plane == Plane.TRANSVERSE:
+                exist_drawing = gtvt_delineation[d, :, :]
+            elif plane == Plane.CORONAL:
+                exist_drawing = gtvt_delineation[:, h, :]
+            elif plane == Plane.SAGITTAL:
+                exist_drawing = gtvt_delineation[:, :, w]
+
+        # get 2d existing drawing (correction) from 3d ndarray
         elif self.obs_study_step in [
             ObsStudyStep.CORRECT_GTVT,
             ObsStudyStep.CORRECT_GTVN,
             ObsStudyStep.CORRECT_BOTH,
         ]:
-            d = h = w = self.cur_slice_id[img_frame.plane]
+            d = h = w = self.cur_slice_id[plane]
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
             elif self.drawing_mode in [DrawingMode.GTVN_PEN, DrawingMode.GTVN_ERASER]:
                 gtv = "gtvn"
             pred_final = self.img_3d["{}.pred.final".format(gtv)]
-            # copy from gtvt/gtvn.pred.final, dont change original data
-            if img_frame.plane == Plane.TRANSVERSE:
+            # copy slice from 3d img, dont change the original 3d img
+            if plane == Plane.TRANSVERSE:
                 exist_drawing = pred_final[d, :, :].copy()
-            elif img_frame.plane == Plane.CORONAL:
+            elif plane == Plane.CORONAL:
                 exist_drawing = pred_final[:, h, :].copy()
-            elif img_frame.plane == Plane.SAGITTAL:
+            elif plane == Plane.SAGITTAL:
                 exist_drawing = pred_final[:, :, w].copy()
 
         # invert color if in eraser mode
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
             exist_drawing = 1 - exist_drawing
 
-        # combine new_drawing and new_drawing
+        # combine exist_drawing and new_drawing
         new_drawing = np.maximum(exist_drawing, new_drawing)
 
         # fill holes if in pen mode
@@ -473,17 +465,18 @@ class ObsStudyWindow(ReplayWindow):
         if self.drawing_mode in [DrawingMode.GTVT_ERASER, DrawingMode.GTVN_ERASER]:
             new_drawing = 1 - new_drawing
 
-        # DRAW_GTVT mode
+        # add 2d drawing into 3d gtvt delineation
         if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-            delineation = self.img_3d["gtvt.delineation"]
+            gtvt_delineation = self.img_3d["gtvt.delineation.{}".format(plane)]
             # replace slice in 3d delineation
-            if img_frame.plane == Plane.TRANSVERSE:
-                delineation[d, :, :] = new_drawing
-            elif img_frame.plane == Plane.CORONAL:
-                delineation[:, h, :] = new_drawing
-            elif img_frame.plane == Plane.SAGITTAL:
-                delineation[:, :, w] = new_drawing
+            if plane == Plane.TRANSVERSE:
+                gtvt_delineation[d, :, :] = new_drawing
+            elif plane == Plane.CORONAL:
+                gtvt_delineation[:, h, :] = new_drawing
+            elif plane == Plane.SAGITTAL:
+                gtvt_delineation[:, :, w] = new_drawing
 
+        # add 2d drawing into 3d correction
         elif self.obs_study_step in [
             ObsStudyStep.CORRECT_GTVT,
             ObsStudyStep.CORRECT_GTVN,
@@ -497,7 +490,7 @@ class ObsStudyWindow(ReplayWindow):
                 correction_mask = self.img_3d["gtvn.correction.mask"]
 
             # replace slice in 3d correction
-            if img_frame.plane == Plane.TRANSVERSE:
+            if plane == Plane.TRANSVERSE:
                 correction[d, :, :] = new_drawing
                 correction_mask[d, :, :] = np.ones_like(new_drawing)
                 self.__interpolation(
@@ -507,11 +500,11 @@ class ObsStudyWindow(ReplayWindow):
                     pred_final=pred_final,
                 )
 
-            elif img_frame.plane == Plane.CORONAL:
+            elif plane == Plane.CORONAL:
                 correction[:, h, :] = new_drawing
                 correction_mask[:, h, :] = np.ones_like(new_drawing)
 
-            elif img_frame.plane == Plane.SAGITTAL:
+            elif plane == Plane.SAGITTAL:
                 correction[:, :, w] = new_drawing
                 correction_mask[:, :, w] = np.ones_like(new_drawing)
 
@@ -700,42 +693,135 @@ class ObsStudyWindow(ReplayWindow):
         self._collap["todo.list"].addWidget(container)
         self._collap["todo.list"].expand()
 
-    def __clear_3d_imgs_and_delete_nii(self, img_name_list: list):
-        # clear 3d imgs
-        for i in img_name_list:
+    def __cleanup_future_step_3d_imgs(self, cur_idl_step: str):
+        imgs_to_delete = []
+        if cur_idl_step in [
+            ObsStudyStep.CLICK_GTVN_CENTER,
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CLICK_GTVT_CENTER,
+        ]:
+            # remove gtvn clicks, only keep crosses on the img frame
+            imgs_to_delete += [
+                "gtvn.clicks",
+                "gtvn.pred",
+                "gtvn.correction",
+                "gtvn.correction.mask",
+                "gtvn.pred.final",
+            ]
+        if cur_idl_step in [
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CLICK_GTVT_CENTER,
+        ]:
+            # keep the gtvt delineations here
+            imgs_to_delete += [
+                "gtvt.pred",
+                "gtvt.correction",
+                "gtvt.correction.mask",
+                "gtvt.pred.final",
+            ]
+        if cur_idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
+            # remove gtvt click, only keep cross on the img frame
+            imgs_to_delete += [
+                "gtvt.click",
+                "gtvt.delineation.{}".format(Plane.TRANSVERSE),
+                "gtvt.delineation.{}".format(Plane.CORONAL),
+                "gtvt.delineation.{}".format(Plane.SAGITTAL),
+            ]
+
+        # clear imgs
+        for i in imgs_to_delete:
             self.img_3d[i] = None
 
-        # delete nii files
-        for gtv in ["gtvt", "gtvn"]:
-            imgs_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self._baseline_id,
-                self._idl_id[gtv],
+        # Initialize an empty array if GTVt delineation is None
+        # (This occurs only during the first initialization)
+        if cur_idl_step == ObsStudyStep.DRAW_GTVT:
+            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+                if self.img_3d["gtvt.delineation.{}".format(plane)] is None:
+                    self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
+                        self.img_3d[Modal.CT]
+                    )
+
+    def __cleanup_future_step_files(self, cur_idl_step: str):
+        if cur_idl_step in [
+            ObsStudyStep.CLICK_GTVN_CENTER,
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CLICK_GTVT_CENTER,
+        ]:
+            # idl gtvn training dir
+            idl_gtvn_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvn"]
+            )
+            # delete gtvn nii files
+            cross_valid_dir = os.path.join(
+                idl_gtvn_dir,
                 "patients",
                 "patient={}".format(self._cur_patient),
                 "round=01",
             )
-            for i in img_name_list:
-                # delete nii file
-                if i.startswith(gtv):
-                    file_name = i.replace(".", "_") + ".nii.gz"
-                    g.delete_path(os.path.join(imgs_dir, file_name))
+            # keep "gtvn_clicks.nii.gz"
+            for file_name in [
+                "gtvn_pred.nii.gz",
+                "gtvn_distance_map.nii.gz",
+                "gtvn_correction.nii.gz",
+                "gtvn_correction_mask.nii.gz",
+            ]:
+                g.delete_path(os.path.join(cross_valid_dir, file_name))
 
-                # delete gtvn_distance_map together with gtvn.pred
-                if i == "gtvn.pred":
-                    g.delete_path(os.path.join(imgs_dir, "gtvn_distance_map.nii.gz"))
+            # delete nii of each fold
+            fold_dir_list = g.get_sub_dirs(
+                idl_gtvn_dir, key_word="fold=", full_path=True
+            )
+            for fold_dir in fold_dir_list:
+                epoch_dir = g.get_sub_dirs(fold_dir, key_word="epoch=", full_path=True)
+                patient_dir = os.path.join(
+                    epoch_dir[0], "patients", "patient={}".format(self._cur_patient)
+                )
+                g.delete_path(patient_dir)
 
-                # delete idl.gtvt related files
-                if i == "gtvt.pred":
-                    # NEVER delete "selected_slices.json",
-                    # otherwise SelectScenario will be GRAVITY_CENTER and
-                    # new selected slices will be generated
-                    # reclick gtvt center will regenerate "selected_slices.json",
-                    g.delete_path(os.path.join(imgs_dir, "round=01.pt"))
-                    g.delete_path(os.path.join(Path(imgs_dir).parent, "loss.json"))
-                    g.delete_path(
-                        os.path.join(Path(imgs_dir).parent.parent.parent, "loss.png")
-                    )
+        if cur_idl_step in [
+            ObsStudyStep.DRAW_GTVT,
+            ObsStudyStep.CLICK_GTVT_CENTER,
+        ]:
+            # NEVER delete "selected_slices.json",
+            # otherwise SelectScenario will be GRAVITY_CENTER
+            # and new selected slices will be generated
+            # reclick gtvt center will regenerate "selected_slices.json",
+            idl_gtvt_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvt"]
+            )
+            g.delete_path(os.path.join(idl_gtvt_dir, "loss.png"))
+            g.delete_path(
+                os.path.join(
+                    idl_gtvt_dir,
+                    "patients",
+                    "patient={}".format(self._cur_patient),
+                    "loss.json",
+                )
+            )
+            cur_round_dir = os.path.join(
+                idl_gtvt_dir,
+                "patients",
+                "patient={}".format(self._cur_patient),
+                "round=01",
+            )
+            # keep gtvt delineation nii files
+            for file_name in [
+                "gtvt_pred.nii.gz",
+                "gtvt_correction.nii.gz",
+                "gtvt_correction_mask.nii.gz",
+                "round=01.pt",
+            ]:
+                g.delete_path(os.path.join(cur_round_dir, file_name))
+
+        if cur_idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
+            # keep "gtvt_click.nii.gz"
+            for file_name in [
+                "gtvt_delineation_{}.nii.gz".format(Plane.TRANSVERSE),
+                "gtvt_delineation_{}.nii.gz".format(Plane.CORONAL),
+                "gtvt_delineation_{}.nii.gz".format(Plane.SAGITTAL),
+                "gtvt_delineation.nii.gz",
+            ]:
+                g.delete_path(os.path.join(cur_round_dir, file_name))
 
     def __goto_idl_step_click_gtvt_center(self):
         # (1) stop idl qthreads
@@ -745,20 +831,19 @@ class ObsStudyWindow(ReplayWindow):
         # (2) update status
         self.__update_cur_idl_step(ObsStudyStep.CLICK_GTVT_CENTER)
 
-        # (3) clear gtvt click pos
-        self.gtvt_click_pos_3d = None
+        # (3) update gtvt click pos
+        if self.img_3d["gtvt.click"] is not None:
+            # save the gtvt click pos to refresh the cross
+            d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+            d, h, w = int(d), int(h), int(w)
+            self.gtvt_click_pos_3d = d, h, w
+        else:
+            self.gtvt_click_pos_3d = None
         # DO NOT clear self.gtvn_clicks_pos_3d
 
-        # (4) clear 3d imgs and delete nii files
-        img_name_list = ["gtvt.click", "gtvt.delineation", "gtvn.clicks"]
-        for i in ["gtvt", "gtvn"]:
-            img_name_list += [
-                "{}.pred".format(i),
-                "{}.correction".format(i),
-                "{}.correction.mask".format(i),
-                "{}.pred.final".format(i),
-            ]
-        self.__clear_3d_imgs_and_delete_nii(img_name_list)
+        # (4) clear future step 3d imgs and related files
+        self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVT_CENTER)
+        self.__cleanup_future_step_files(ObsStudyStep.CLICK_GTVT_CENTER)
 
         # (5) refresh todolist, imgs and crosses
         self.__refresh_todo_list()
@@ -848,17 +933,9 @@ class ObsStudyWindow(ReplayWindow):
         # DO NOT clear self.gtvt_click_pos_3d
         # DO NOT clear self.gtvn_clicks_pos_3d
 
-        # (3) clear 3d imgs and delete nii files
-        img_name_list = ["gtvt.delineation", "gtvn.clicks"]
-        for i in ["gtvt", "gtvn"]:
-            img_name_list += [
-                "{}.pred".format(i),
-                "{}.correction".format(i),
-                "{}.correction.mask".format(i),
-                "{}.pred.final".format(i),
-            ]
-        self.__clear_3d_imgs_and_delete_nii(img_name_list)
-        self.img_3d["gtvt.delineation"] = np.zeros_like(self.img_3d[Modal.CT])
+        # (3) clear future step 3d imgs and related files
+        self.__cleanup_future_step_3d_imgs(ObsStudyStep.DRAW_GTVT)
+        self.__cleanup_future_step_files(ObsStudyStep.DRAW_GTVT)
 
         # (4) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
@@ -901,13 +978,33 @@ class ObsStudyWindow(ReplayWindow):
             "round=01",
         )
         g.create_dir(cur_round_dir)
-        gtvt_delineation_to_save = self.img_3d["gtvt.delineation"].copy()
-        # flip left/right
-        gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=2)
-        # turn upside down
-        gtvt_delineation_to_save = np.flip(gtvt_delineation_to_save, axis=0)
+        # create an empty merge delineation array
+        gtvt_delineation_merged = np.zeros_like(self.img_3d[Modal.CT])
+
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            gtvt_delineation_cur_plane = self.img_3d[
+                "gtvt.delineation.{}".format(plane)
+            ].copy()
+            # flip left/right
+            gtvt_delineation_cur_plane = np.flip(gtvt_delineation_cur_plane, axis=2)
+            # turn upside down
+            gtvt_delineation_cur_plane = np.flip(gtvt_delineation_cur_plane, axis=0)
+            # save nii
+            g.save_nii(
+                img=gtvt_delineation_cur_plane,
+                save_path=os.path.join(
+                    cur_round_dir, "gtvt_delineation_{}.nii.gz".format(plane)
+                ),
+                spacing=g.NII_SPACING,
+            )
+            # merge
+            gtvt_delineation_merged = np.maximum(
+                gtvt_delineation_merged,
+                gtvt_delineation_cur_plane,
+            )
+        # save merged gtvt delineation for iDL GTVt training
         g.save_nii(
-            img=gtvt_delineation_to_save,
+            img=gtvt_delineation_merged,
             save_path=os.path.join(cur_round_dir, "gtvt_delineation.nii.gz"),
             spacing=g.NII_SPACING,
         )
@@ -935,18 +1032,17 @@ class ObsStudyWindow(ReplayWindow):
         # (2) update status (before refresh images)
         self.__update_cur_idl_step(ObsStudyStep.CLICK_GTVN_CENTER)
 
-        # (3) clear gtvn clicks
-        self.gtvn_clicks_pos_3d = List()
+        # (3) update gtvn clicks
+        if self.img_3d["gtvn.clicks"] is not None:
+            # save pos of gtvn clicks to refresh the cross
+            pos = np.where(self.img_3d["gtvn.clicks"] == 1)
+            self.gtvn_clicks_pos_3d = List(zip(*pos))
+        else:
+            self.gtvn_clicks_pos_3d = List()
 
-        # (4) clear 3d imgs and delete nii files, then combine images
-        img_name_list = [
-            "gtvn.clicks",
-            "gtvn.pred",
-            "gtvn.correction",
-            "gtvn.correction.mask",
-            "gtvn.pred.final",
-        ]
-        self.__clear_3d_imgs_and_delete_nii(img_name_list)
+        # (4) clear future step 3d imgs and related files, then combine images
+        self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVN_CENTER)
+        self.__cleanup_future_step_files(ObsStudyStep.CLICK_GTVN_CENTER)
         self.__combine_pred_delineation_correction()
 
         # (5) refresh todolist, imgs and crosses
@@ -1388,37 +1484,32 @@ class ObsStudyWindow(ReplayWindow):
 
     # check delineation in 3 different planes
     def __update_gtvt_delineated_status(self) -> Dict:
-        if self.img_3d["gtvt.delineation"] is None:
+        # no gtvt click
+        if self.img_3d["gtvt.click"] is None:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 self.__gtvt_delineated_state[plane] = False
                 self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
+            return
 
-        else:
-            d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
-            d, h, w = int(d), int(h), int(w)
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+        d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
+        d, h, w = int(d), int(h), int(w)
+
+        for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
+            gtvt_delineation_3d = self.img_3d["gtvt.delineation.{}".format(plane)]
+
+            if gtvt_delineation_3d is None:
+                self.__gtvt_delineated_state[plane] = False
+                self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
+
+            else:
                 if plane == Plane.TRANSVERSE:
-                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        d, :, :
-                    ].copy()
-                    cur_plane_delineation[h, :] = 0
-                    cur_plane_delineation[:, w] = 0
-
+                    gtvt_delineation_2d = gtvt_delineation_3d[d, :, :]
                 elif plane == Plane.CORONAL:
-                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        :, h, :
-                    ].copy()
-                    cur_plane_delineation[d, :] = 0
-                    cur_plane_delineation[:, w] = 0
-
+                    gtvt_delineation_2d = gtvt_delineation_3d[:, h, :]
                 elif plane == Plane.SAGITTAL:
-                    cur_plane_delineation = self.img_3d["gtvt.delineation"][
-                        :, :, w
-                    ].copy()
-                    cur_plane_delineation[d, :] = 0
-                    cur_plane_delineation[:, h] = 0
+                    gtvt_delineation_2d = gtvt_delineation_3d[:, :, w]
 
-                if cur_plane_delineation.max() == 0:
+                if gtvt_delineation_2d.max() <= 0:
                     self.__gtvt_delineated_state[plane] = False
                     self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
                 else:
@@ -2001,13 +2092,6 @@ class ObsStudyWindow(ReplayWindow):
             self.interpolation_step = max(1, int(self.interpolation_step))
             g.save_json({"step": self.interpolation_step}, interpolation_setting_path)
 
-    def __save_idl_step(self):
-        idl_step_of_all_patients = g.load_json(self.__idl_step_json_path)
-        idl_step_of_all_patients["patient={}".format(self._cur_patient)] = (
-            self.obs_study_step
-        )
-        g.save_json(idl_step_of_all_patients, self.__idl_step_json_path)
-
     def __clear_all_drawing_layers(self, img_frame: ImgFrame):
         if self.display_mode() == DisplayMode.MODAL_FIXED:
             frame_name_list = [Modal.CT, Modal.PT, Modal.MR1, Modal.MR2]
@@ -2130,14 +2214,16 @@ class ObsStudyWindow(ReplayWindow):
     def _display_score_on_top_left(self, qimg: QtGui.QImage):
         pass
 
-    def _display_contour_description_on_bottom_left(self, qimg: QtGui.QImage):
+    def _display_contour_name_on_bottom_left(self, qimg: QtGui.QImage):
         left = self._get_text_pos_left()
         bottom = self._get_text_pos_bottom(qimg)
 
         # user input text
         if (
             self.img_3d["gtvt.click"] is not None
-            or self.img_3d["gtvt.delineation"] is not None
+            or self.img_3d["gtvt.delineation.{}".format(Plane.TRANSVERSE)] is not None
+            or self.img_3d["gtvt.delineation.{}".format(Plane.CORONAL)] is not None
+            or self.img_3d["gtvt.delineation.{}".format(Plane.SAGITTAL)] is not None
             or self.img_3d["gtvn.clicks"] is not None
         ):
             self._qimg_draw_text(
@@ -2219,8 +2305,8 @@ class ObsStudyWindow(ReplayWindow):
 
         # load current idl step from json(after cur_patient is updated)
         # init and save idl step of all patients
-        idl_step_of_all_patients = g.load_json(self.__idl_step_json_path)
-        self.obs_study_step = idl_step_of_all_patients[
+        idl_step_all_patients = g.load_json(self.__idl_step_json_path)
+        self.obs_study_step = idl_step_all_patients[
             "patient={}".format(self._cur_patient)
         ]
 
@@ -2326,7 +2412,33 @@ class ObsStudyWindow(ReplayWindow):
 
     def __update_cur_idl_step(self, new_idl_step: str):
         self.obs_study_step = new_idl_step
-        self.__save_idl_step()
+
+        # update idl step
+        idl_step_all_patients = g.load_json(self.__idl_step_json_path)
+        idl_step_all_patients["patient={}".format(self._cur_patient)] = (
+            self.obs_study_step
+        )
+        g.save_json(idl_step_all_patients, self.__idl_step_json_path)
+
+        # # update idl time used
+        # obs_study_step_list = [
+        #     ObsStudyStep.CLICK_GTVT_CENTER,
+        #     ObsStudyStep.DRAW_GTVT,
+        #     ObsStudyStep.CLICK_GTVN_CENTER,
+        #     ObsStudyStep.WAITING_GTVT,
+        #     ObsStudyStep.WAITING_GTVN,
+        #     ObsStudyStep.CORRECT_GTVT,
+        #     ObsStudyStep.CORRECT_GTVN,
+        # ]
+        # idl_time_json_path = os.path.join(
+        #     g.TRAIN_RESULTS_DIR,
+        #     self._baseline_id,
+        #     self._idl_id["gtvt"],  # only save it in gtvt folder
+        #     "time_used.json",
+        # )
+        # time_log = g.load_json(idl_time_json_path)
+        # time_log["patient={}".format(self._cur_patient)][self.obs_study_step] = duration
+        # g.save_json(time_log, idl_time_json_path)
 
     def __refresh_todo_list(self):
         if (
@@ -2469,7 +2581,8 @@ class ObsStudyWindow(ReplayWindow):
             self.gtvn_clicks_pos_3d = List(zip(*pos))
 
     def _load_idl_gtv_data(self, gtv: str) -> str:
-        round_dir = os.path.join(
+
+        cur_round_dir = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
             self._idl_id[gtv],
@@ -2480,13 +2593,13 @@ class ObsStudyWindow(ReplayWindow):
 
         nii_name_list = ["pred", "correction", "correction.mask"]
         if gtv == "gtvt":
-            nii_name_list += ["click", "delineation"]
+            nii_name_list.append("click")
         elif gtv == "gtvn":
             nii_name_list.append("clicks")
 
         for i in nii_name_list:
             nii_path = os.path.join(
-                round_dir,
+                cur_round_dir,
                 "{}_{}.nii.gz".format(
                     gtv,
                     # "correction.mask" -> "correction_mask"
@@ -2499,6 +2612,10 @@ class ObsStudyWindow(ReplayWindow):
                 )
             else:
                 self.img_3d["{}.{}".format(gtv, i)] = None
+
+        # load gtvt delineation
+        if gtv == "gtvt":
+            self._load_idl_gtvt_delineation(cur_round_dir)
 
     def __combine_pred_delineation_correction(self):
         if self.img_3d[Modal.CT] is None:
