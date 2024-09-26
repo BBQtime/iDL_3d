@@ -1793,12 +1793,24 @@ class ReplayWindow(QtWidgets.QMainWindow):
     ):
         if self.gtvt_click_pos_3d is None:
             return
-
-        transverse_id, coronal_id, sagittal_id = self.gtvt_click_pos_3d
+        else:
+            transverse_id, coronal_id, sagittal_id = self.gtvt_click_pos_3d
 
         img_frame = self.img_frame[frame_name]
         plane = img_frame.plane
 
+        # Only display the GTVt delineation edge on slices passing through the GTVt center
+        if plane == Plane.TRANSVERSE:
+            if transverse_id != self.cur_slice_id[plane]:
+                return
+        elif plane == Plane.CORONAL:
+            if coronal_id != self.cur_slice_id[plane]:
+                return
+        elif plane == Plane.SAGITTAL:
+            if sagittal_id != self.cur_slice_id[plane]:
+                return
+
+        # Ensure the correct plane of the GTVt delineation 3D image is loaded
         if plane == Plane.TRANSVERSE:
             gtvt_delineation_h = self.img_3d[
                 "gtvt.delineation.{}".format(Plane.CORONAL)
