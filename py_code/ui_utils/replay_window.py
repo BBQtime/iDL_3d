@@ -113,7 +113,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._zoomed_rgb[i] = None
             self._contoured_rgb[i] = None
 
-        # initialize here not in obs_study_window, because refresh_img function will need it
+        # initialize position of gtvt click here not in obs_study_window,
+        # because refresh_img function will need it
         self.gtvt_click_pos_3d = None
 
     def _add_border(self, input_widget: QtWidgets.QWidget):

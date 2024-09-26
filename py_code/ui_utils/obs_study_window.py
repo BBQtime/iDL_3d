@@ -693,9 +693,9 @@ class ObsStudyWindow(ReplayWindow):
         self._collap["todo.list"].addWidget(container)
         self._collap["todo.list"].expand()
 
-    def __cleanup_future_step_3d_imgs(self, cur_idl_step: str):
+    def __cleanup_future_step_3d_imgs(self, obs_study_step: str):
         imgs_to_delete = []
-        if cur_idl_step in [
+        if obs_study_step in [
             ObsStudyStep.CLICK_GTVN_CENTER,
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CLICK_GTVT_CENTER,
@@ -708,7 +708,7 @@ class ObsStudyWindow(ReplayWindow):
                 "gtvn.correction.mask",
                 "gtvn.pred.final",
             ]
-        if cur_idl_step in [
+        if obs_study_step in [
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CLICK_GTVT_CENTER,
         ]:
@@ -719,7 +719,7 @@ class ObsStudyWindow(ReplayWindow):
                 "gtvt.correction.mask",
                 "gtvt.pred.final",
             ]
-        if cur_idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        if obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
             # remove gtvt click, only keep cross on the img frame
             imgs_to_delete += [
                 "gtvt.click",
@@ -733,16 +733,16 @@ class ObsStudyWindow(ReplayWindow):
             self.img_3d[i] = None
 
         # Initialize an empty array if GTVt delineation is None
-        # (This occurs only during the first initialization)
-        if cur_idl_step == ObsStudyStep.DRAW_GTVT:
+        # (only occurs during the transition from CLICK_GTVT_CENTER to DRAW_GTVT)
+        if obs_study_step == ObsStudyStep.DRAW_GTVT:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if self.img_3d["gtvt.delineation.{}".format(plane)] is None:
                     self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
                         self.img_3d[Modal.CT]
                     )
 
-    def __cleanup_future_step_files(self, cur_idl_step: str):
-        if cur_idl_step in [
+    def __cleanup_future_step_files(self, obs_study_step: str):
+        if obs_study_step in [
             ObsStudyStep.CLICK_GTVN_CENTER,
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CLICK_GTVT_CENTER,
@@ -778,33 +778,21 @@ class ObsStudyWindow(ReplayWindow):
                 )
                 g.delete_path(patient_dir)
 
-        if cur_idl_step in [
+        if obs_study_step in [
             ObsStudyStep.DRAW_GTVT,
             ObsStudyStep.CLICK_GTVT_CENTER,
         ]:
-            # NEVER delete "selected_slices.json",
-            # otherwise SelectScenario will be GRAVITY_CENTER
-            # and new selected slices will be generated
-            # reclick gtvt center will regenerate "selected_slices.json",
+
             idl_gtvt_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvt"]
             )
             g.delete_path(os.path.join(idl_gtvt_dir, "loss.png"))
-            g.delete_path(
-                os.path.join(
-                    idl_gtvt_dir,
-                    "patients",
-                    "patient={}".format(self._cur_patient),
-                    "loss.json",
-                )
+            cur_patient_dir = os.path.join(
+                idl_gtvt_dir, "patients", "patient={}".format(self._cur_patient)
             )
-            cur_round_dir = os.path.join(
-                idl_gtvt_dir,
-                "patients",
-                "patient={}".format(self._cur_patient),
-                "round=01",
-            )
-            # keep gtvt delineation nii files
+            g.delete_path(os.path.join(cur_patient_dir, "loss.json"))
+            cur_round_dir = os.path.join(cur_patient_dir, "round=01")
+            # keep gtvt pred/correction and cnn
             for file_name in [
                 "gtvt_pred.nii.gz",
                 "gtvt_correction.nii.gz",
@@ -813,8 +801,20 @@ class ObsStudyWindow(ReplayWindow):
             ]:
                 g.delete_path(os.path.join(cur_round_dir, file_name))
 
-        if cur_idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
-            # keep "gtvt_click.nii.gz"
+        if obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+            cur_round_dir = os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                self._baseline_id,
+                self._idl_id["gtvt"],
+                "patients",
+                "patient={}".format(self._cur_patient),
+                "round=01",
+            )
+            # (1) keep "gtvt_click.nii.gz"
+            # (2) NEVER delete "selected_slices.json",
+            # otherwise SelectScenario will be GRAVITY_CENTER
+            # and new selected slices will be generated
+            # reclick gtvt center will regenerate "selected_slices.json",
             for file_name in [
                 "gtvt_delineation_{}.nii.gz".format(Plane.TRANSVERSE),
                 "gtvt_delineation_{}.nii.gz".format(Plane.CORONAL),
@@ -832,14 +832,12 @@ class ObsStudyWindow(ReplayWindow):
         self.__update_cur_idl_step(ObsStudyStep.CLICK_GTVT_CENTER)
 
         # (3) update gtvt click pos
+        # DO NOT clear self.gtvn_clicks_pos_3d
         if self.img_3d["gtvt.click"] is not None:
             # save the gtvt click pos to refresh the cross
             d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
             d, h, w = int(d), int(h), int(w)
             self.gtvt_click_pos_3d = d, h, w
-        else:
-            self.gtvt_click_pos_3d = None
-        # DO NOT clear self.gtvn_clicks_pos_3d
 
         # (4) clear future step 3d imgs and related files
         self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVT_CENTER)
@@ -1037,8 +1035,6 @@ class ObsStudyWindow(ReplayWindow):
             # save pos of gtvn clicks to refresh the cross
             pos = np.where(self.img_3d["gtvn.clicks"] == 1)
             self.gtvn_clicks_pos_3d = List(zip(*pos))
-        else:
-            self.gtvn_clicks_pos_3d = List()
 
         # (4) clear future step 3d imgs and related files, then combine images
         self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVN_CENTER)
@@ -1755,7 +1751,6 @@ class ObsStudyWindow(ReplayWindow):
             cross.cross_id = new_cross_id
 
     def remove_3d_pos_of_selected_cross(self, cross: DragCross):
-
         if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
             self.gtvt_click_pos_3d = None
 
@@ -2055,11 +2050,11 @@ class ObsStudyWindow(ReplayWindow):
             for i in ["gtvt", "gtvn"]:
                 self._idl_id[i] = "idl.{}_{}".format(i, self.__train_id)
 
-        # initialize the position of gtvt click / gtvn clicks
-        self.gtvt_click_pos_3d = None
+        # initialize the position of gtvn clicks
         self.gtvn_clicks_pos_3d = List()
+        # position of gtvt click is already initialized in super()._init_data() above
 
-        # drawing
+        # init drawing
         self.drawing_mode = DrawingMode.GTVT_PEN
         self.paint_pos = None  # Store the last painted point
         self.__gtvt_delineated_state = Dict()
