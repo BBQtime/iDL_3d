@@ -1,7 +1,6 @@
 import math
 import os
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import cv2
 import global_utils.global_core as g
@@ -14,7 +13,7 @@ from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QEvent, QPoint, QSize, Qt
 from PyQt5.QtGui import QMouseEvent
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import QGridLayout, QMessageBox, QSizePolicy
 from scipy import ndimage
 from superqt import QCollapsible
 from ui_utils.drag_cross import DragCross
@@ -654,34 +653,79 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self._text_label[i].set_status_notstart()
 
-        # button size 562*187
-        btn_h = 27 if g.is_linux() else 40
-        btn_w = round(btn_h * 562 / 187)
-        self._btn["next.step"] = QtWidgets.QPushButton()
-        self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
-        self._btn["next.step"].clicked.connect(self.__on_btn_next_step_clicked)
-        # set btn icons
-        pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next_step.png"))
-        # pixmap = pixmap.scaled(100, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        pixmap = pixmap.scaled(
-            btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
-        )
-        icon = QtGui.QIcon(pixmap)
-        self._btn["next.step"].setIconSize(QSize(btn_w, btn_h))
-        self._btn["next.step"].setIcon(icon)
-        self._btn["next.step"].setStyleSheet(
-            "QPushButton { border: none; margin: 0px; padding: 0px; }"
-        )
+        # # next step button
+        # # button png img size: 562*187
+        # btn_h = 27 if g.is_linux() else 40
+        # btn_w = round(btn_h * 562 / 187)
+        # self._btn["next.step"] = QtWidgets.QPushButton()
+        # self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
+        # self._btn["next.step"].clicked.connect(self.__on_btn_next_step_clicked)
+        # # set btn icons
+        # pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next_step.png"))
+        # # pixmap = pixmap.scaled(100, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # pixmap = pixmap.scaled(
+        #     btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+        # )
+        # icon = QtGui.QIcon(pixmap)
+        # self._btn["next.step"].setIconSize(QSize(btn_w, btn_h))
+        # self._btn["next.step"].setIcon(icon)
+        # self._btn["next.step"].setStyleSheet(
+        #     "QPushButton { border: none; margin: 0px; padding: 0px; }"
+        # )
 
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
         v_layout.setSpacing(2 if g.is_linux() else 2)
-        v_layout.addWidget(
-            self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
-        )
+        # v_layout.addWidget(
+        #     self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
+        # )
+        next_btn_pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next.png"))
         for i in self._text_label.keys():
             if i in idl_step_list:
-                v_layout.addWidget(self._text_label[i])
+                # Create a grid layout to overlap the button and label
+                grid = QGridLayout()
+
+                self._text_label[i].setFixedHeight(27 if g.is_linux() else 40)
+
+                # Add the QLabel to the grid layout spanning all columns
+                # -1 makes it span all columns
+                grid.addWidget(self._text_label[i], 0, 0, 1, -1)
+
+                # next step button, right-aligned and overlapping the label
+                if i in [
+                    ObsStudyStep.CLICK_GTVT_CENTER,
+                    ObsStudyStep.DRAW_GTVT,
+                    ObsStudyStep.CLICK_GTVN_CENTER,
+                    ObsStudyStep.CORRECT_GTVT,
+                    ObsStudyStep.CORRECT_GTVN,
+                ]:
+                    button = QtWidgets.QPushButton()
+                    # Set button height to match QLabel
+                    # height-=4, because ObsStudyStepLabel has a 2px border
+                    btn_w = btn_h = self._text_label[i].sizeHint().height() - 4
+                    # margin-right: -2px, because ObsStudyStepLabel has a 2px border
+                    button.setStyleSheet(
+                        "QPushButton { border: none; margin-right: 2px; padding: 0px; }"
+                    )
+                    # width is 2px larger than height, because position is adjusts 2px left
+                    button.setFixedSize(QSize(btn_w + 2, btn_h))
+                    next_btn_pixmap = next_btn_pixmap.scaled(
+                        btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+                    )
+                    icon = QtGui.QIcon(next_btn_pixmap)
+                    button.setIconSize(QSize(btn_w, btn_h))
+                    button.setIcon(icon)
+
+                    button.clicked.connect(self.__on_btn_next_step_clicked)
+
+                    # Add the button to the same cell as the QLabel, with right alignment
+                    grid.addWidget(button, 0, 0, 1, -1, alignment=Qt.AlignRight)
+
+                # Set stretch factors to adjust dynamically
+                grid.setColumnStretch(0, 1)  # Ensures the QLabel expands properly
+
+                # Add the grid layout to the vertical layout
+                v_layout.addLayout(grid)
 
         # container
         container = QtWidgets.QWidget()
@@ -851,7 +895,7 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # self._btn["next.step"].setEnabled(True)
 
         # (7) start recording time
         self.__timer[ObsStudyStep.CLICK_GTVT_CENTER].start()
@@ -942,7 +986,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) update widgets
         self.__enable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # self._btn["next.step"].setEnabled(True)
 
         # (6) start recording time
         self.__timer[ObsStudyStep.DRAW_GTVT].start()
@@ -1049,7 +1093,7 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # self._btn["next.step"].setEnabled(True)
 
         # (7) start recording time
         self.__timer[ObsStudyStep.CLICK_GTVN_CENTER].start()
@@ -1091,7 +1135,7 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             self._radio_btn["correct.gtvn"].setChecked(True)
         self.__enable_annotation_tools()
-        self._btn["next.step"].setEnabled(True)
+        # self._btn["next.step"].setEnabled(True)
 
         # (6) start timer
         self.__timer[ObsStudyStep.CORRECT_GTVT].start()
@@ -1115,7 +1159,7 @@ class ObsStudyWindow(ReplayWindow):
         # (5) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        self._btn["next.step"].setEnabled(False)
+        # self._btn["next.step"].setEnabled(False)
         # expand and collapse
         if self._collap["annotation"].isExpanded():
             self._collap["annotation"].collapse()
@@ -1322,7 +1366,8 @@ class ObsStudyWindow(ReplayWindow):
         # (4-1) CORRECT_GTVN -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvn
         if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            self._btn["next.step"].setEnabled(True)
+            # self._btn["next.step"].setEnabled(True)
+            pass
 
         # (4-2) WAITING -> CORRECT_GTVT
         elif self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
@@ -1411,7 +1456,7 @@ class ObsStudyWindow(ReplayWindow):
         elif self.obs_study_step == ObsStudyStep.WAITING:
             self.__disable_annotation_tools()
         # temporarily disable "next.step" button, until obs_study_step=CORRECT_BOTH
-        self._btn["next.step"].setEnabled(False)
+        # self._btn["next.step"].setEnabled(False)
 
         # (8) start and end timer
         self.__timer[ObsStudyStep.CLICK_GTVN_CENTER].end()
@@ -1451,7 +1496,8 @@ class ObsStudyWindow(ReplayWindow):
         # (4-1) CORRECT_GTVT -> CORRECT_BOTH
         # dont change drawing mode, will interrupt user correcting gtvt
         if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            self._btn["next.step"].setEnabled(True)
+            # self._btn["next.step"].setEnabled(True)
+            pass
 
         # (4-2) WAITING -> CORRECT_GTVN
         elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
