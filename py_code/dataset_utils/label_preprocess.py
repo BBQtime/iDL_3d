@@ -120,7 +120,7 @@ def generate_gtvn_clicks_nii(dataset_ver: str):
         gtvn_path_list = g.get_sub_files(
             dataset_dir, key_word="_GTVn.nii", full_path=True
         )
-    elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+    elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA, DatasetVer.NKI]:
         gtvn_path_list = []
         patient_dir_list = g.get_sub_dirs(dataset_dir, full_path=True)
         for patient_dir in patient_dir_list:
@@ -165,7 +165,7 @@ def check_gtvn_clicks_within_label(dataset_ver: str):
         gtvn_path_list = g.get_sub_files(
             dataset_dir, key_word="GTVn.nii", full_path=True
         )
-    elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+    elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA, DatasetVer.NKI]:
         gtvn_path_list = []
         patient_dir_list = g.get_sub_dirs(dataset_dir, full_path=True)
         for patient_dir in patient_dir_list:
@@ -215,7 +215,7 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
             label_path_list = g.get_sub_files(
                 dataset_dir, key_word="GTV{}.nii".format(i), full_path=True
             )
-        elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+        elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA, DatasetVer.NKI]:
             label_path_list = []
             patient_dir_list = g.get_sub_dirs(dataset_dir, full_path=True)
             for patient_dir in patient_dir_list:
@@ -275,7 +275,11 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                         if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
                             patient_name = Path(label_path).name
                             patient_name = patient_name[: len("HNCDL_XXX")]
-                        elif dataset_ver in [DatasetVer.AU_EXT, DatasetVer.MDA]:
+                        elif dataset_ver in [
+                            DatasetVer.AU_EXT,
+                            DatasetVer.MDA,
+                            DatasetVer.NKI,
+                        ]:
                             patient_name = Path(label_path).parent.name
 
                         output_dir = os.path.join(

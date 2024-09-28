@@ -21,18 +21,19 @@ if __name__ == "__main__":
     g.clear_debug_data()
 
     # for dataset_ver in [
-    #     DatasetVer.AU,
-    #     DatasetVer.AU_EXT,
-    #     DatasetVer.OBS_STUDY,
-    #     DatasetVer.MDA,
+    #     # DatasetVer.AU,
+    #     # DatasetVer.AU_EXT,
+    #     # DatasetVer.OBS_STUDY,
+    #     # DatasetVer.MDA,
+    #     # DatasetVer.NKI,
     # ]:
     #     for fregment_threshold in [2, 5, 10]:
     #         label_preprocess.remove_label_fregments(
     #             dataset_ver=dataset_ver,
     #             fregment_threshold=fregment_threshold,
     #         )
-    # label_preprocess.run(DatasetVer.AU_EXT)
-    # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.OBS_STUDY)
+    # label_preprocess.generate_gtvn_clicks_nii(DatasetVer.NKI)
+    # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.NKI)
 
     # baseline = BaselineTraining()
     # baseline.new_training(
@@ -65,12 +66,12 @@ if __name__ == "__main__":
     idl_gtvn = IDLGTVnTraining()
     for baseline_id in [
         # "baseline_au",
-        # "baseline_au_no.pt",
-        # "baseline_mda.transfer",
+        "baseline_nki.new",
+        # "baseline_nki.transfer",
     ]:
         idl_gtvn.new_training(
             baseline_id=baseline_id,
-            train_remark="au_multi.clicks",
+            train_remark=baseline_id[len("baseline_") :] + "_multi.clicks",
             debug_mode=0,
         )
     # for idl_gtvn_id, dataset_ver in [
