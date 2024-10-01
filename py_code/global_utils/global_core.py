@@ -26,7 +26,9 @@ from global_utils.str_lib import DatasetVer, ErrMsg, MdaObs
 from numpy import ndarray
 from torch import Tensor
 from tqdm import tqdm
-
+from multiprocessing import Lock
+# Create a multiprocessing lock (shared across processes)
+file_access_lock = Lock()
 
 def error_exit(err_msg: str = ""):
     assert 0, err_msg
@@ -572,6 +574,15 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+def sort_json_dict(data: dict) -> Dict:
+    # Convert the dictionary to a JSON string with sorted keys
+    sorted_json_str = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    
+    # Load it back into a dictionary
+    sorted_dict = json.loads(sorted_json_str)
+    
+    # Convert it to your custom Dict type if needed
+    return Dict(sorted_dict)
 
 def save_json(data: dict, path: str):
     with open(path, mode="w", encoding="utf-8") as json_file:
@@ -587,6 +598,43 @@ def save_json(data: dict, path: str):
             cls=NumpyEncoder,
         )
 
+def load_setting_global_json(path: str, retries: int = 5, wait_time: float = 0.1) -> Dict:
+    # Retry mechanism in case of an empty or corrupt file
+    for attempt in range(retries):
+        with file_access_lock:  # Lock access to the file
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"JSON file not found: {path}")
+            
+            with open(path, mode="r") as json_file:
+                try:
+                    data = json.load(json_file)
+                    # Check if the data is valid and a non-empty dictionary
+                    if isinstance(data, dict) and data:
+                        break
+                except json.JSONDecodeError as e:
+                    # Handle decoding errors
+                    if attempt == retries - 1:
+                        raise ValueError(f"Error decoding JSON file: {path} - {str(e)}")
+                    # else:
+                    #     print(f"Attempt {attempt + 1}/{retries}: Error decoding JSON file. Retrying...")
+        
+        # Wait before retrying
+        time.sleep(wait_time)
+    else:
+        # If after retries, the data is still invalid, raise an error
+        raise ValueError(f"Failed to load valid JSON data from {path} after {retries} retries.")
+    
+    # Convert the loaded data to a custom Dict object
+    data = Dict(data)
+    
+    # Call "save_json" to sort keys and potentially fix formatting issues
+    data = sort_json_dict(data)
+    # save_json(data=data, path=path)
+
+    # Return the settings data as a Dict object
+    return data
+
+
 
 # after json loaded, key(int) will become string
 def load_json(path: str) -> Dict:
@@ -594,7 +642,8 @@ def load_json(path: str) -> Dict:
         data = json.load(json_file)
     data = Dict(data)
     # call "save_json" to sort key
-    save_json(data=data, path=path)
+    data = sort_json_dict(data)
+    # save_json(data=data, path=path)
     return data
 
 
@@ -774,10 +823,11 @@ def clear_gpu_cache():
 
 
 def used_gpu_count() -> int:
-    if DEVICE == torch.device("cpu"):
+    if DEVICES[0] == torch.device("cpu"):
         return 0
     else:
-        return torch.cuda.device_count()
+        #for now, diable use of multiple GPU in a single process but sending back the value 1
+        return 1 #torch.cuda.device_count() 
 
 
 def clear_debug_data():
@@ -849,28 +899,34 @@ def random_color():
 PROJ_DIR = Path(os.path.dirname(os.path.dirname(__file__))).parent
 DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
 
-__settings = load_json(os.path.join(PROJ_DIR, "settings", "core.json"))
+__settings = load_setting_global_json(os.path.join(PROJ_DIR, "settings", "core.json"))
 
 # use CPU
 if __settings["cuda.visible.devices"] == "":
-    DEVICE = torch.device("cpu")
+    DEVICES = [torch.device("cpu")]
 # use GPU
 else:
     # choose GPU (must come first before any code related to cuda/gpu)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = __settings["cuda.visible.devices"]
 
-    # set main device cuda:0, for multiple GPU to avoid following error:
-    # RuntimeError: module must have its parameters and buffers on
-    # device cuda:0 (device_ids[0]) but found one of them on device: cuda:1
-    if torch.cuda.device_count() > 1:
-        DEVICE = torch.device("cuda:0")
+ # Create a list of available GPU devices
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 0:
+        DEVICES = [torch.device(f"cuda:{i}") for i in range(gpu_count)]
+    else:
+        DEVICES = [torch.device("cpu")]  # Fallback to CPU if no GPU is found
+    # # set main device cuda:0, for multiple GPU to avoid following error:
+    # # RuntimeError: module must have its parameters and buffers on
+    # # device cuda:0 (device_ids[0]) but found one of them on device: cuda:1
+    # if torch.cuda.device_count() > 1:
+    #     DEVICE = torch.device("cuda:0")
 
-    elif torch.cuda.device_count() == 1:
-        DEVICE = torch.device("cuda")
+    # elif torch.cuda.device_count() == 1:
+    #     DEVICE = torch.device("cuda")
 
-    else:  # torch.cuda.device_count() < 1:
-        DEVICE = torch.device("cpu")
+    # else:  # torch.cuda.device_count() < 1:
+    #     DEVICE = torch.device("cpu")
 
 # hide warning
 warnings.filterwarnings("ignore")
@@ -889,7 +945,7 @@ for __i in [
     ]
 
 # window doesn't support pytorch multi-thread
-NUM_WORKERS = __settings["num.workers"] if is_linux() else 0
+NUM_WORKERS = __settings["num.workers"] #if is_linux() else 0
 
 # IMG_SHAPE (Depth, Height, Width)
 IMG_SHAPE = List(__settings["img.shape"])
