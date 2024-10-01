@@ -1,5 +1,11 @@
 import global_utils.global_core as g
-from global_utils.str_lib import DisplayMode, DrawingMode, ObsStudyStep, Plane
+from global_utils.str_lib import (
+    DisplayMode,
+    DrawingMode,
+    ObsStudyGTVnStep,
+    ObsStudyGTVtStep,
+    Plane,
+)
 from PyQt5 import QtGui
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPixmap
@@ -66,10 +72,13 @@ class ImgFrame(QLabel):
                     reload_contours=False,
                 )
 
-        elif self.window().obs_study_step is None:
+        elif (
+            self.window().obs_study_gtvt_step is None
+            or self.window().obs_study_gtvn_step is None
+        ):
             return
 
-        elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        elif self.window().obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             # remove old crosses
             self.window().delete_all_crosses()
             # add new 3d pos
@@ -92,16 +101,11 @@ class ImgFrame(QLabel):
             # refresh crosses
             self.window().refresh_crosses()
 
-        # draw/correct
-        elif self.window().obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        # delineate gtvt
+        elif self.window().obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             self.window().draw_on_img_frame_press(event=event, img_frame=self)
 
-        elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+        elif self.window().obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             pos_3d = self.get_pos_in_3d(event.pos())
             if pos_3d not in self.window().gtvn_clicks_pos_3d:
                 self.window().gtvn_clicks_pos_3d.append(pos_3d)
@@ -122,6 +126,13 @@ class ImgFrame(QLabel):
                     )
                 # refresh crosses on all img frames
                 self.window().refresh_crosses()
+
+        # draw/correct
+        elif (
+            self.window().obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.window().obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
+            self.window().draw_on_img_frame_press(event=event, img_frame=self)
 
     def mousePressEvent(self, event: QMouseEvent):
         super().mousePressEvent(event)
@@ -200,12 +211,11 @@ class ImgFrame(QLabel):
         if not self.window().is_obs_study_window():
             return False
 
-        elif self.window().obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        elif (
+            self.window().obs_study_gtvt_step
+            in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            or self.window().obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self.window().drawing_mode in [
                 DrawingMode.GTVT_ERASER,
                 DrawingMode.GTVN_ERASER,
@@ -258,7 +268,7 @@ class ImgFrame(QLabel):
         if self.__circle_pos and self.window().is_obs_study_window():
             # circle color
             # (1) delineate gtvt
-            if self.window().obs_study_step == ObsStudyStep.DRAW_GTVT:
+            if self.window().obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
                 circle_color = self.window().color["gtvt.delineation"]
             # (2) correct gtvt/gtvn
             else:
@@ -397,23 +407,23 @@ class ImgFrame(QLabel):
         if not self.window().is_obs_study_window():
             return
 
-        if self.window().obs_study_step not in [
-            ObsStudyStep.CLICK_GTVT_CENTER,
-            ObsStudyStep.CLICK_GTVN_CENTER,
-        ]:
+        if (
+            self.window().obs_study_gtvt_step != ObsStudyGTVtStep.CLICK_CENTER
+            and self.window().obs_study_gtvn_step != ObsStudyGTVnStep.CLICK_CENTERS
+        ):
             return
 
         # remove old crosses
         self.delete_all_crosses()
 
         # load crosses position from gtvt/gtvn_clicks_pos_3d
-        if self.window().obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        if self.window().obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             if self.window().gtvt_click_pos_3d is None:
                 return
             else:
                 clicks_pos_3d = [self.window().gtvt_click_pos_3d]
 
-        elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+        elif self.window().obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             if len(self.window().gtvn_clicks_pos_3d) <= 0:
                 return
             else:

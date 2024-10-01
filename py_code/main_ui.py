@@ -5,7 +5,6 @@ from PyQt5.QtWidgets import QApplication
 from ui_utils.login_window import LoginWindow
 
 if __name__ == "__main__":
-
     # show login window
     app = QApplication(sys.argv)
     qdarktheme.setup_theme()

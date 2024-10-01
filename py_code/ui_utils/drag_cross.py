@@ -1,7 +1,7 @@
 import os
 
 import global_utils.global_core as g
-from global_utils.str_lib import DisplayMode, ObsStudyStep, Plane
+from global_utils.str_lib import DisplayMode, ObsStudyGTVnStep, ObsStudyGTVtStep, Plane
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QMouseEvent, QPixmap
 from PyQt5.QtWidgets import QLabel, QWidget
@@ -70,9 +70,9 @@ class DragCross(QWidget):
                 new_cross_id=pos_3d,
             )
             # add cross id (3d position) into main window
-            if self.window().obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+            if self.window().obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
                 self.window().gtvt_click_pos_3d = self.cross_id
-            elif self.window().obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+            elif self.window().obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
                 self.window().gtvn_clicks_pos_3d.append(self.cross_id)
 
             # refresh data and img after cross id updated

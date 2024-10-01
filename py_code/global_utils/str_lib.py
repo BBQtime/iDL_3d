@@ -1,6 +1,7 @@
 class ErrMsg:
-    DATASET_VER_INVALID = "Value of dataset_ver is invalid!"
-    DATASET_PART_INVALID = "Value of dataset_part is invalid!"
+    DATASET_VER_INVALID = "Invalid value for dataset_ver!"
+    DATASET_PART_INVALID = "Invalid value for dataset_part!"
+    OBS_STUDY_STEP_INVALID = "Invalid value for obs study step!"
 
 
 class SelectScenario:
@@ -32,26 +33,19 @@ class ObsStudyID:
     HANNA_GTVN = "idl.gtvn_2024.04.18.11.04.48_Hanna_research"
 
 
-class ObsStudyStep:
-    SELECT_PATIENT = "select.patient"
+class ObsStudyGTVtStep:
+    CLICK_CENTER = "click.center"
+    DELINEATE = "delineate"
+    WAIT_PRED = "wait.pred"
+    CORRECT = "correct"
+    APPROVED = "approved"
 
-    CLICK_GTVT_CENTER = "click.gtvt.center"
 
-    DRAW_GTVT = "draw.gtvt"  # for "obs study step" and  "step label"
-    DRAW_GTVT_TRANSVERSE = "draw.gtvt.transverse"  # only for "step label"
-    DRAW_GTVT_CORONAL = "draw.gtvt.coronal"  # only for "step label"
-    DRAW_GTVT_SAGITTAL = "draw.gtvt.sagittal"  # only for "step label"
-
-    CLICK_GTVN_CENTER = "click.gtvn.center"
-
-    WAITING = "waiting"  # for "obs study step" and "step label"
-    WAITING_GTVT = "waiting.gtvt"  # only for "timer"
-    WAITING_GTVN = "waiting.gtvn"  # only for "timer"
-
-    CORRECT_GTVT = "correct.gtvt"  # "obs study step", "step label" and "timer"
-    CORRECT_GTVN = "correct.gtvn"  # "obs study step", "step label" and "timer"
-    CORRECT_BOTH = "correct.both"  # only for "obs study step"
-
+class ObsStudyGTVnStep:
+    NOT_START = "not.start"
+    CLICK_CENTERS = "click.centers"
+    WAIT_PRED = "wait.pred"
+    CORRECT = "correct"
     APPROVED = "approved"
 
 

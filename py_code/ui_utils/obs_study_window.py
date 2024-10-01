@@ -1,6 +1,5 @@
 import math
 import os
-from datetime import datetime, timedelta
 
 import cv2
 import global_utils.global_core as g
@@ -8,61 +7,29 @@ import numpy as np
 import qimage2ndarray
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DisplayMode, DrawingMode, Modal, ObsStudyStep, Plane
+from global_utils.str_lib import (
+    DisplayMode,
+    DrawingMode,
+    ErrMsg,
+    Modal,
+    ObsStudyGTVnStep,
+    ObsStudyGTVtStep,
+    Plane,
+)
 from numpy import ndarray
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import QEvent, QPoint, QSize, Qt
 from PyQt5.QtGui import QMouseEvent
-from PyQt5.QtWidgets import QGridLayout, QMessageBox, QSizePolicy
+from PyQt5.QtWidgets import QGridLayout, QMessageBox
 from scipy import ndimage
 from superqt import QCollapsible
 from ui_utils.drag_cross import DragCross
 from ui_utils.img_frame import ImgFrame
 from ui_utils.interpolation import interpolate_shapes
-from ui_utils.obs_study_step_label import ObsStudyStepLabel
 from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtThread
+from ui_utils.obs_study_timer import ObsStudyTimer
 from ui_utils.replay_window import ReplayWindow
-
-
-class ObsStudyTimer:
-    def __init__(
-        self,
-        baseline_id: str,
-        idl_gtvt_id: str,
-        patient: str,
-        obs_study_step: str,
-    ):
-        self.__start_time = None
-        self.__patient = patient
-        self.__obs_study_step = obs_study_step
-        # json path
-        self.__json_path = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            baseline_id,
-            idl_gtvt_id,
-            "time_used.json",
-        )
-        # create an empty json file
-        if not os.path.exists(self.__json_path):
-            g.save_json({}, self.__json_path)
-
-    def start(self):
-        self.__start_time = datetime.now()
-
-    def end(self):
-        if self.__start_time is None:
-            return
-
-        duration = datetime.now() - self.__start_time
-        self.__start_time = None
-        total_seconds = int(duration.total_seconds())
-        # create a new timedelta without microseconds
-        duration = timedelta(seconds=total_seconds)
-        duration = str(duration)
-        # save json
-        time_log = g.load_json(self.__json_path)
-        time_log["patient={}".format(self.__patient)][self.__obs_study_step] = duration
-        g.save_json(time_log, self.__json_path)
+from ui_utils.todo_list_label import TodoListLabel
 
 
 class ObsStudyWindow(ReplayWindow):
@@ -77,18 +44,18 @@ class ObsStudyWindow(ReplayWindow):
         super().__init__()
 
     def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
-        if self.obs_study_step not in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
+        # get anatomical plane of current img frame
         plane = img_frame.plane
 
-        # switch to the gtvt center slice if current slice is not.
-        if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+        # Switch to the GTVT center slice if the current slice is not the center
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             gtvt_center_slice_id = self.__get_gtvt_center_slices_id()[plane]
             if self.cur_slice_id[plane] != gtvt_center_slice_id:
                 self.cur_slice_id[plane] = gtvt_center_slice_id
@@ -112,6 +79,8 @@ class ObsStudyWindow(ReplayWindow):
                 # (2) MODAL_FIXED mode, refresh all 4 img frames
                 else:
                     self.refresh_imgs()
+
+                # do nothing after switching to gtvt center slice
                 return
 
         # (1) for pen/eraser mode, record paint position
@@ -126,11 +95,15 @@ class ObsStudyWindow(ReplayWindow):
             self.draw_on_img_frame_move(event=event, img_frame=img_frame)
             return
 
-        # (2) clear gtvt delineation of current plane
-        elif self.obs_study_step == ObsStudyStep.DRAW_GTVT and self.drawing_mode in [
-            DrawingMode.GTVT_CLEAR,
-            DrawingMode.GTVN_CLEAR,
-        ]:
+        # (2) Clear the GTVT delineation on the current plane
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE
+            and self.drawing_mode
+            in [
+                DrawingMode.GTVT_CLEAR,
+                DrawingMode.GTVN_CLEAR,
+            ]
+        ):
             # clear gtvt delineation of current plane
             self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
                 self.img_3d[Modal.CT]
@@ -149,11 +122,10 @@ class ObsStudyWindow(ReplayWindow):
             )
 
         # (3) "clear" / "restore" in correction step
-        elif self.obs_study_step in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self.drawing_mode in [
                 DrawingMode.GTVT_CLEAR,
                 DrawingMode.GTVT_RESTORE,
@@ -248,12 +220,11 @@ class ObsStudyWindow(ReplayWindow):
         if self.paint_pos is None:
             return
 
-        if self.obs_study_step not in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
         # (1) set drawing color and size
@@ -261,14 +232,13 @@ class ObsStudyWindow(ReplayWindow):
         if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVN_PEN]:
             draw_size = self.get_pen_size()
             # delineate gtvt
-            if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
                 draw_color = QtGui.QColor(*self.color["gtvt.delineation"])
             # correct gtvt/gtvn
-            elif self.obs_study_step in [
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-                ObsStudyStep.CORRECT_BOTH,
-            ]:
+            elif (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+                or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            ):
                 if self.drawing_mode in [
                     DrawingMode.GTVT_PEN,
                     DrawingMode.GTVT_ERASER,
@@ -343,12 +313,11 @@ class ObsStudyWindow(ReplayWindow):
         if self.paint_pos is None:
             return
 
-        if self.obs_study_step not in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
         plane = img_frame.plane
@@ -419,7 +388,7 @@ class ObsStudyWindow(ReplayWindow):
         new_drawing = g.binarize_img(img=new_drawing, threshold=binary_threshold)
 
         # get 2d existing drawing (gtvt delineation) from 3d ndarray
-        if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             gtvt_delineation = self.img_3d["gtvt.delineation.{}".format(plane)]
             d, h, w = self.gtvt_click_pos_3d
             if plane == Plane.TRANSVERSE:
@@ -430,11 +399,10 @@ class ObsStudyWindow(ReplayWindow):
                 exist_drawing = gtvt_delineation[:, :, w]
 
         # get 2d existing drawing (correction) from 3d ndarray
-        elif self.obs_study_step in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             d = h = w = self.cur_slice_id[plane]
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 gtv = "gtvt"
@@ -465,7 +433,7 @@ class ObsStudyWindow(ReplayWindow):
             new_drawing = 1 - new_drawing
 
         # add 2d drawing into 3d gtvt delineation
-        if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             gtvt_delineation = self.img_3d["gtvt.delineation.{}".format(plane)]
             # replace slice in 3d delineation
             if plane == Plane.TRANSVERSE:
@@ -476,11 +444,10 @@ class ObsStudyWindow(ReplayWindow):
                 gtvt_delineation[:, :, w] = new_drawing
 
         # add 2d drawing into 3d correction
-        elif self.obs_study_step in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 correction = self.img_3d["gtvt.correction"]
                 correction_mask = self.img_3d["gtvt.correction.mask"]
@@ -565,93 +532,98 @@ class ObsStudyWindow(ReplayWindow):
             for i in range(start_slice_id + 1, end_slice_id):
                 correction_mask[i, :, :] = np.ones_like(correction[i, :, :])
 
-    def __save_corrections_and_masks(self):
-        for gtv in ["gtvt", "gtvn"]:
+    def __save_corrections_and_masks(self, gtv: str):
+        if self.img_3d["{}.correction".format(gtv)] is None:
+            return
 
-            if self.img_3d["{}.correction".format(gtv)] is None:
-                continue
+        cur_patient_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id[gtv],
+            "patients",
+            "patient={}".format(self._cur_patient),
+        )
+        cur_round_dir = os.path.join(
+            cur_patient_dir,
+            "round=01",
+        )
 
-            cur_patient_dir = os.path.join(
-                g.TRAIN_RESULTS_DIR,
-                self._baseline_id,
-                self._idl_id[gtv],
-                "patients",
-                "patient={}".format(self._cur_patient),
-            )
-            cur_round_dir = os.path.join(
-                cur_patient_dir,
-                "round=01",
-            )
-
-            for i in ["correction", "correction.mask"]:
-                img = self.img_3d["{}.{}".format(gtv, i)].copy()
-                # flip left/right
-                img = np.flip(img, axis=2)
-                # turn upside down
-                img = np.flip(img, axis=0)
-                # save
-                g.save_nii(
-                    img=img,
-                    save_path=os.path.join(
-                        cur_round_dir,
-                        "{}_{}.nii.gz".format(
-                            gtv,
-                            # "correction.mask" -> "correction_mask"
-                            i.replace(".", "_"),
-                        ),
+        for i in ["correction", "correction.mask"]:
+            img = self.img_3d["{}.{}".format(gtv, i)].copy()
+            # flip left/right
+            img = np.flip(img, axis=2)
+            # turn upside down
+            img = np.flip(img, axis=0)
+            # save
+            g.save_nii(
+                img=img,
+                save_path=os.path.join(
+                    cur_round_dir,
+                    "{}_{}.nii.gz".format(
+                        gtv,
+                        # "correction.mask" -> "correction_mask"
+                        i.replace(".", "_"),
                     ),
-                    spacing=g.NII_SPACING,
-                )
+                ),
+                spacing=g.NII_SPACING,
+            )
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_pen_clicked(self):
 
         # (1) update drawing mode
-        if self.obs_study_step in [ObsStudyStep.DRAW_GTVT, ObsStudyStep.CORRECT_GTVT]:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             self.drawing_mode = DrawingMode.GTVT_PEN
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            self.drawing_mode = DrawingMode.GTVN_PEN
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_PEN
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_PEN
 
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVT_PEN
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVN_PEN
+
         # (2) update widgets
-        if self.obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             self._text_label["eraser.size"].hide()
             self._slider["eraser.size"].hide()
             self._text_label["pen.size"].show()
             self._slider["pen.size"].show()
 
     def _init_widgets_todo_list(self):
-        idl_step_list = [
-            ObsStudyStep.SELECT_PATIENT,
-            ObsStudyStep.CLICK_GTVT_CENTER,
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-            ObsStudyStep.DRAW_GTVT_CORONAL,
-            ObsStudyStep.DRAW_GTVT_SAGITTAL,
-            ObsStudyStep.CLICK_GTVN_CENTER,
-            ObsStudyStep.WAITING,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
+        todo_list_names = [
+            TodoListLabel.SELECT_PATIENT,
+            TodoListLabel.CLICK_GTVT_CENTER,
+            TodoListLabel.DELINEATE_GTVT,
+            TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+            TodoListLabel.DELINEATE_GTVT_CORONAL,
+            TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+            TodoListLabel.CLICK_GTVN_CENTERS,
+            TodoListLabel.WAIT_PRED,
+            TodoListLabel.CORRECT_GTVT,
+            TodoListLabel.CORRECT_GTVN,
         ]
 
-        # init ObsStudyStepLabel
-        for i in idl_step_list:
-            # create idl step label
-            self._text_label[i] = ObsStudyStepLabel(obs_study_step=i)
+        # init TodoListLabel
+        for i in todo_list_names:
+            # create todo list label
+            self._text_label[i] = TodoListLabel(name=i)
             # set init state
-            if i == ObsStudyStep.SELECT_PATIENT:
-                self._text_label[i].set_status_ongoing()
+            if i == TodoListLabel.SELECT_PATIENT:
+                self._text_label[i].set_status_active()
             else:
-                self._text_label[i].set_status_notstart()
+                self._text_label[i].set_status_not_start()
 
         # # next step button
         # # button png img size: 562*187
@@ -679,53 +651,74 @@ class ObsStudyWindow(ReplayWindow):
         # v_layout.addWidget(
         #     self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
         # )
-        next_btn_pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next.png"))
+        next_btn_pixmap = QtGui.QPixmap(
+            os.path.join(g.PROJ_DIR, "icons", "next_step.png")
+        )
         for i in self._text_label.keys():
-            if i in idl_step_list:
+            if i in todo_list_names:
                 # Create a grid layout to overlap the button and label
                 grid = QGridLayout()
 
+                # set todo list labels height
                 self._text_label[i].setFixedHeight(27 if g.is_linux() else 40)
 
                 # Add the QLabel to the grid layout spanning all columns
                 # -1 makes it span all columns
                 grid.addWidget(self._text_label[i], 0, 0, 1, -1)
 
-                # next step button, right-aligned and overlapping the label
+                # next step buttons, right-aligned and overlapping the label
                 if i in [
-                    ObsStudyStep.CLICK_GTVT_CENTER,
-                    ObsStudyStep.DRAW_GTVT,
-                    ObsStudyStep.CLICK_GTVN_CENTER,
-                    ObsStudyStep.CORRECT_GTVT,
-                    ObsStudyStep.CORRECT_GTVN,
+                    TodoListLabel.CLICK_GTVT_CENTER,
+                    TodoListLabel.DELINEATE_GTVT,
+                    TodoListLabel.CLICK_GTVN_CENTERS,
+                    TodoListLabel.CORRECT_GTVT,
+                    TodoListLabel.CORRECT_GTVN,
                 ]:
-                    button = QtWidgets.QPushButton()
+                    self._btn[i] = QtWidgets.QPushButton()
                     # Set button height to match QLabel
-                    # height-=4, because ObsStudyStepLabel has a 2px border
+                    # height-=4, because TodoListLabel has a 2px border
                     btn_w = btn_h = self._text_label[i].sizeHint().height() - 4
-                    # margin-right: -2px, because ObsStudyStepLabel has a 2px border
-                    button.setStyleSheet(
+                    # margin-right: -2px, because TodoListLabel has a 2px border
+                    self._btn[i].setStyleSheet(
                         "QPushButton { border: none; margin-right: 2px; padding: 0px; }"
                     )
                     # width is 2px larger than height, because position is adjusts 2px left
-                    button.setFixedSize(QSize(btn_w + 2, btn_h))
+                    self._btn[i].setFixedSize(QSize(btn_w + 2, btn_h))
                     next_btn_pixmap = next_btn_pixmap.scaled(
                         btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
                     )
                     icon = QtGui.QIcon(next_btn_pixmap)
-                    button.setIconSize(QSize(btn_w, btn_h))
-                    button.setIcon(icon)
+                    self._btn[i].setIconSize(QSize(btn_w, btn_h))
+                    self._btn[i].setIcon(icon)
 
-                    button.clicked.connect(self.__on_btn_next_step_clicked)
+                    # hide button after init
+                    self._btn[i].hide()
 
                     # Add the button to the same cell as the QLabel, with right alignment
-                    grid.addWidget(button, 0, 0, 1, -1, alignment=Qt.AlignRight)
+                    grid.addWidget(self._btn[i], 0, 0, 1, -1, alignment=Qt.AlignRight)
 
                 # Set stretch factors to adjust dynamically
                 grid.setColumnStretch(0, 1)  # Ensures the QLabel expands properly
 
                 # Add the grid layout to the vertical layout
                 v_layout.addLayout(grid)
+
+        # connect next btns to functions
+        self._btn[TodoListLabel.CLICK_GTVT_CENTER].clicked.connect(
+            self.__confirm_gtvt_center
+        )
+        self._btn[TodoListLabel.DELINEATE_GTVT].clicked.connect(
+            self.__confirm_gtvt_delineation
+        )
+        self._btn[TodoListLabel.CLICK_GTVN_CENTERS].clicked.connect(
+            self.__confirm_gtvn_centers
+        )
+        self._btn[TodoListLabel.CORRECT_GTVT].clicked.connect(
+            self.__approve_gtvt_correction
+        )
+        self._btn[TodoListLabel.CORRECT_GTVN].clicked.connect(
+            self.__approve_gtvn_correction
+        )
 
         # container
         container = QtWidgets.QWidget()
@@ -737,14 +730,15 @@ class ObsStudyWindow(ReplayWindow):
         self._collap["todo.list"].addWidget(container)
         self._collap["todo.list"].expand()
 
-    def __cleanup_future_step_3d_imgs(self, obs_study_step: str):
+    def __cleanup_future_step_3d_imgs(self):
         imgs_to_delete = []
-        if obs_study_step in [
-            ObsStudyStep.CLICK_GTVN_CENTER,
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CLICK_GTVT_CENTER,
+
+        # cleanup all gtvn arrays
+        if self.obs_study_gtvn_step in [
+            ObsStudyGTVnStep.CLICK_CENTERS,
+            ObsStudyGTVnStep.NOT_START,
         ]:
-            # remove gtvn clicks, only keep crosses on the img frame
+            # clear gtvn clicks np array, only keep crosses on the img frame
             imgs_to_delete += [
                 "gtvn.clicks",
                 "gtvn.pred",
@@ -752,19 +746,23 @@ class ObsStudyWindow(ReplayWindow):
                 "gtvn.correction.mask",
                 "gtvn.pred.final",
             ]
-        if obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CLICK_GTVT_CENTER,
+
+        # clean up gtvt pred and correction arrays
+        if self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.DELINEATE,
+            ObsStudyGTVtStep.CLICK_CENTER,
         ]:
-            # keep the gtvt delineations here
+            # dont clear the gtvt delineations np array
             imgs_to_delete += [
                 "gtvt.pred",
                 "gtvt.correction",
                 "gtvt.correction.mask",
                 "gtvt.pred.final",
             ]
-        if obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
-            # remove gtvt click, only keep cross on the img frame
+
+        # cleanup gtvt click and delineations arrays
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+            # clear gtvt click np array, only keep cross on the img frame
             imgs_to_delete += [
                 "gtvt.click",
                 "gtvt.delineation.{}".format(Plane.TRANSVERSE),
@@ -772,24 +770,25 @@ class ObsStudyWindow(ReplayWindow):
                 "gtvt.delineation.{}".format(Plane.SAGITTAL),
             ]
 
-        # clear imgs
+        # cleanup arrays
         for i in imgs_to_delete:
             self.img_3d[i] = None
 
         # Initialize an empty array if GTVt delineation is None
-        # (only occurs during the transition from CLICK_GTVT_CENTER to DRAW_GTVT)
-        if obs_study_step == ObsStudyStep.DRAW_GTVT:
+        # This only occurs during the transition from
+        # ObsStudyGTVtStep.CLICK_CENTER to ObsStudyGTVtStep.DELINEATE
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 if self.img_3d["gtvt.delineation.{}".format(plane)] is None:
                     self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
                         self.img_3d[Modal.CT]
                     )
 
-    def __cleanup_future_step_files(self, obs_study_step: str):
-        if obs_study_step in [
-            ObsStudyStep.CLICK_GTVN_CENTER,
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CLICK_GTVT_CENTER,
+    def __cleanup_future_step_files(self):
+        # cleanup gtvn output files
+        if self.obs_study_gtvn_step in [
+            ObsStudyGTVnStep.CLICK_CENTERS,
+            ObsStudyGTVnStep.NOT_START,
         ]:
             # idl gtvn training dir
             idl_gtvn_dir = os.path.join(
@@ -822,11 +821,11 @@ class ObsStudyWindow(ReplayWindow):
                 )
                 g.delete_path(patient_dir)
 
-        if obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CLICK_GTVT_CENTER,
+        # cleanup gtvt output files
+        if self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.DELINEATE,
+            ObsStudyGTVtStep.CLICK_CENTER,
         ]:
-
             idl_gtvt_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR, self._baseline_id, self._idl_id["gtvt"]
             )
@@ -845,7 +844,8 @@ class ObsStudyWindow(ReplayWindow):
             ]:
                 g.delete_path(os.path.join(cur_round_dir, file_name))
 
-        if obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        # cleanup gtvt delineations nii files
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             cur_round_dir = os.path.join(
                 g.TRAIN_RESULTS_DIR,
                 self._baseline_id,
@@ -867,13 +867,12 @@ class ObsStudyWindow(ReplayWindow):
             ]:
                 g.delete_path(os.path.join(cur_round_dir, file_name))
 
-    def __goto_idl_step_click_gtvt_center(self):
-        # (1) stop idl qthreads
+    def __goto_click_gtvt_center(self):
+        # (1) stop idl gtvt qthread
         self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.__update_cur_idl_step(ObsStudyStep.CLICK_GTVT_CENTER)
+        self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CLICK_CENTER)
 
         # (3) update gtvt click pos
         # DO NOT clear self.gtvn_clicks_pos_3d
@@ -884,8 +883,8 @@ class ObsStudyWindow(ReplayWindow):
             self.gtvt_click_pos_3d = d, h, w
 
         # (4) clear future step 3d imgs and related files
-        self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVT_CENTER)
-        self.__cleanup_future_step_files(ObsStudyStep.CLICK_GTVT_CENTER)
+        self.__cleanup_future_step_3d_imgs()
+        self.__cleanup_future_step_files()
 
         # (5) refresh todolist, imgs and crosses
         self.__refresh_todo_list()
@@ -895,11 +894,40 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        # self._btn["next.step"].setEnabled(True)
+        self.__show_and_hide_next_btns()
 
-        # (7) start recording time
-        self.__timer[ObsStudyStep.CLICK_GTVT_CENTER].start()
+        # (7) end and start timer
+        self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
+        self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
+        self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
+        self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].start()
 
+    def __show_and_hide_next_btns(self):
+        for i in [
+            TodoListLabel.CLICK_GTVT_CENTER,
+            TodoListLabel.DELINEATE_GTVT,
+            TodoListLabel.CLICK_GTVN_CENTERS,
+            TodoListLabel.CORRECT_GTVT,
+            TodoListLabel.CORRECT_GTVN,
+        ]:
+            self._btn[i].hide()
+
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+            self._btn[TodoListLabel.CLICK_GTVT_CENTER].show()
+
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+            self._btn[TodoListLabel.DELINEATE_GTVT].show()
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            self._btn[TodoListLabel.CLICK_GTVN_CENTERS].show()
+
+        else:
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                self._btn[TodoListLabel.CORRECT_GTVT].show()
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                self._btn[TodoListLabel.CORRECT_GTVN].show()
+
+    # this function is connected to widget, dont set input params to this function
     def __confirm_gtvt_center(self):
         # (1) check if there is gtvt click
         if self.gtvt_click_pos_3d is None:
@@ -958,26 +986,25 @@ class ObsStudyWindow(ReplayWindow):
         )
 
         # (5) end timing
-        self.__timer[ObsStudyStep.CLICK_GTVT_CENTER].end()
+        self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].end()
 
         # (6) goto next step
-        self.__goto_idl_step_draw_gtvt()
+        self.__goto_delineate_gtvt()
 
-    def __goto_idl_step_draw_gtvt(self):
-        # (1) stop idl qthread
+    def __goto_delineate_gtvt(self):
+        # (1) stop idl gtvt qthread
         self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
 
         # (2) update status
-        self.__update_cur_idl_step(ObsStudyStep.DRAW_GTVT)
+        self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.DELINEATE)
         self.drawing_mode = DrawingMode.GTVT_PEN
 
         # DO NOT clear self.gtvt_click_pos_3d
         # DO NOT clear self.gtvn_clicks_pos_3d
 
         # (3) clear future step 3d imgs and related files
-        self.__cleanup_future_step_3d_imgs(ObsStudyStep.DRAW_GTVT)
-        self.__cleanup_future_step_files(ObsStudyStep.DRAW_GTVT)
+        self.__cleanup_future_step_3d_imgs()
+        self.__cleanup_future_step_files()
 
         # (4) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
@@ -986,11 +1013,15 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) update widgets
         self.__enable_annotation_tools()
-        # self._btn["next.step"].setEnabled(True)
+        self.__show_and_hide_next_btns()
 
         # (6) start recording time
-        self.__timer[ObsStudyStep.DRAW_GTVT].start()
+        self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].end()
+        self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
+        self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
+        self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
+    # this function is connected to widget, dont set input params to this function
     def __confirm_gtvt_delineation(self):
         # (1) check if gtvt are delineated in 3 planes
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -1061,18 +1092,25 @@ class ObsStudyWindow(ReplayWindow):
         self.__idl_gtvt_thread.start()
 
         # (4) end and start timer
-        self.__timer[ObsStudyStep.DRAW_GTVT].end()
-        self.__timer[ObsStudyStep.WAITING_GTVT].start()
+        self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
+        self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].start()
 
         # (5) goto next step
-        self.__goto_idl_step_click_gtvn_center()
+        self.__goto_click_gtvn_centers()
 
-    def __goto_idl_step_click_gtvn_center(self):
+    def __goto_click_gtvn_centers(self):
         # (1) stop idl gtvn qthread
         self.__idl_gtvn_thread.stop()
 
         # (2) update status (before refresh images)
-        self.__update_cur_idl_step(ObsStudyStep.CLICK_GTVN_CENTER)
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+            obs_study_gtvt_step = ObsStudyGTVtStep.WAIT_PRED
+        else:
+            obs_study_gtvt_step = None
+        self.__update_obs_study_step(
+            obs_study_gtvt_step=obs_study_gtvt_step,
+            obs_study_gtvn_step=ObsStudyGTVnStep.CLICK_CENTERS,
+        )
 
         # (3) update gtvn clicks
         if self.img_3d["gtvn.clicks"] is not None:
@@ -1081,8 +1119,8 @@ class ObsStudyWindow(ReplayWindow):
             self.gtvn_clicks_pos_3d = List(zip(*pos))
 
         # (4) clear future step 3d imgs and related files, then combine images
-        self.__cleanup_future_step_3d_imgs(ObsStudyStep.CLICK_GTVN_CENTER)
-        self.__cleanup_future_step_files(ObsStudyStep.CLICK_GTVN_CENTER)
+        self.__cleanup_future_step_3d_imgs()
+        self.__cleanup_future_step_files()
         self.__combine_pred_delineation_correction()
 
         # (5) refresh todolist, imgs and crosses
@@ -1093,86 +1131,206 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.restore_mouse_cursor()
         self.__disable_annotation_tools()
-        # self._btn["next.step"].setEnabled(True)
+        self.__show_and_hide_next_btns()
 
-        # (7) start recording time
-        self.__timer[ObsStudyStep.CLICK_GTVN_CENTER].start()
+        # (7) end and start timer
+        self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
+        self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
+        self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].start()
 
-    def __goto_idl_step_correct_both(self, drawing_mode: str = DrawingMode.GTVT_PEN):
-        # (1) stop idl qthreads
-        self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
+    # this function is connected to widget, dont set input params to this function
+    def __approve_gtvt_correction(self):
+        # self.__approve_correction("gtvt")
+        self.__goto_correct_pred(obs_study_gtvt_step=ObsStudyGTVtStep.APPROVED)
 
-        # (2) update status
-        self.__update_cur_idl_step(ObsStudyStep.CORRECT_BOTH)
-        self.drawing_mode = drawing_mode
+    # this function is connected to widget, dont set input params to this function
+    def __approve_gtvn_correction(self):
+        # self.__approve_correction("gtvn")
+        self.__goto_correct_pred(obs_study_gtvn_step=ObsStudyGTVnStep.APPROVED)
 
-        # (3) update imgs
-        # init correction and mask
+    def __goto_correct_pred(
+        self,
+        obs_study_gtvt_step: str = None,
+        obs_study_gtvn_step: str = None,
+    ):
+        if obs_study_gtvt_step not in [
+            ObsStudyGTVtStep.CORRECT,
+            ObsStudyGTVtStep.APPROVED,
+            None,
+        ]:
+            g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+        if obs_study_gtvn_step not in [
+            ObsStudyGTVnStep.CORRECT,
+            ObsStudyGTVnStep.APPROVED,
+            None,
+        ]:
+            g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
+        # update obs study steps
+        if obs_study_gtvt_step is not None:
+            self.__update_obs_study_step(obs_study_gtvt_step=obs_study_gtvt_step)
+        if obs_study_gtvn_step is not None:
+            self.__update_obs_study_step(obs_study_gtvn_step=obs_study_gtvn_step)
+
+        # update drawing mode (before update widgets)
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVT_PEN
+        elif self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVN_PEN
+
+        # save corrections and correction masks
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+            self.__save_corrections_and_masks("gtvt")
+        if self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+            self.__save_corrections_and_masks("gtvn")
+
+        # update 3d imgs for display
+        # init correction and mask if they are None
         for gtv in ["gtvt", "gtvn"]:
             for i in ["{}.correction".format(gtv), "{}.correction.mask".format(gtv)]:
                 if self.img_3d[i] is None:
                     self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
+        # combine arrays (3d imgs)
         self.__combine_pred_delineation_correction()
 
-        # (4) refresh todolist and imgs
+        # refresh todolist and imgs
         self.__refresh_todo_list()
         self.refresh_imgs()
 
-        # (5) update widgets
-        if self.drawing_mode in [
-            DrawingMode.GTVT_PEN,
-            DrawingMode.GTVT_ERASER,
-            DrawingMode.GTVT_CLEAR,
-            DrawingMode.GTVT_RESTORE,
-        ]:
-            self._radio_btn["correct.gtvt"].setChecked(True)
-        elif self.drawing_mode in [
-            DrawingMode.GTVN_PEN,
-            DrawingMode.GTVN_ERASER,
-            DrawingMode.GTVN_CLEAR,
-            DrawingMode.GTVN_RESTORE,
-        ]:
-            self._radio_btn["correct.gtvn"].setChecked(True)
-        self.__enable_annotation_tools()
-        # self._btn["next.step"].setEnabled(True)
+        # update widgets
+        self.__show_and_hide_next_btns()
+        # update widgets - both gtvt and gtvn are being corrected
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
+            if self.drawing_mode in [
+                DrawingMode.GTVT_PEN,
+                DrawingMode.GTVT_ERASER,
+                DrawingMode.GTVT_CLEAR,
+                DrawingMode.GTVT_RESTORE,
+            ]:
+                self._radio_btn["correct.gtvt"].setChecked(True)
+            elif self.drawing_mode in [
+                DrawingMode.GTVN_PEN,
+                DrawingMode.GTVN_ERASER,
+                DrawingMode.GTVN_CLEAR,
+                DrawingMode.GTVN_RESTORE,
+            ]:
+                self._radio_btn["correct.gtvn"].setChecked(True)
+            self.__enable_annotation_tools()
 
-        # (6) start timer
-        self.__timer[ObsStudyStep.CORRECT_GTVT].start()
-        self.__timer[ObsStudyStep.CORRECT_GTVN].start()
+        # update widgets - both gtvt and gtvn approved
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            self.restore_mouse_cursor()
+            self.__disable_annotation_tools()
+            # expand and collapse
+            if self._collap["annotation"].isExpanded():
+                self._collap["annotation"].collapse()
+            if not self._collap["patient"].isExpanded():
+                self._collap["patient"].expand()
 
-    def __goto_idl_step_approved(self):
-        # (1) stop idl qthreads (if running)
-        self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
+        # update widgets - only gtvt approved
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                self.change_mouse_cursor(check_mouse_over_img_frame=False)
+                self.__enable_annotation_tools()
+            else:
+                self.restore_mouse_cursor()
+                self.__disable_annotation_tools(check_mouse_over_img_frame=False)
 
-        # (2) update status
-        self.__update_cur_idl_step(ObsStudyStep.APPROVED)
+        # update widgets - only gtvn approved
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+            # update dwaring mode before change mouse cursor
+            self.drawing_mode = DrawingMode.GTVT_PEN
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                self.change_mouse_cursor()
+                self.__enable_annotation_tools()
+            else:
+                self.restore_mouse_cursor()
+                self.__disable_annotation_tools()
 
-        # (3) update imgs
-        self.__combine_pred_delineation_correction()
+        # (7) end / start gtvt timer
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
 
-        # (4) refresh todolist and imgs
-        self.__refresh_todo_list()
-        self.refresh_imgs()
+        # (7) end / start gtvn timer
+        if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
 
-        # (5) update widgets
-        self.restore_mouse_cursor()
-        self.__disable_annotation_tools()
-        # self._btn["next.step"].setEnabled(False)
-        # expand and collapse
-        if self._collap["annotation"].isExpanded():
-            self._collap["annotation"].collapse()
-        if not self._collap["patient"].isExpanded():
-            self._collap["patient"].expand()
+    # def __approve_correction(self, gtv: str):
+    # # (1) save corrections and correction masks
+    # self.__save_corrections_and_masks(gtv)
 
-        # (6) end timers
-        self.__timer[ObsStudyStep.CORRECT_GTVT].end()
-        self.__timer[ObsStudyStep.CORRECT_GTVN].end()
+    # # (2) update status
+    # if gtv == "gtvt":
+    #     self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.APPROVED)
+    # elif gtv == "gtvn":
+    #     self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.APPROVED)
 
-    def on_idl_step_text_box_clicked(self, text_box: ObsStudyStepLabel):
+    # # (3) combine arrays (3d imgs) for display
+    # self.__combine_pred_delineation_correction()
+
+    # # (4) refresh todolist and imgs
+    # self.__refresh_todo_list()
+    # self.refresh_imgs()
+
+    # # (5) update widgets
+    # self.__show_and_hide_next_btns()
+    # # (5) update widgets - both gtvt and gtvn approved
+    # if (
+    #     self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+    #     and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+    # ):
+    #     self.restore_mouse_cursor()
+    #     self.__disable_annotation_tools()
+    #     # expand and collapse
+    #     if self._collap["annotation"].isExpanded():
+    #         self._collap["annotation"].collapse()
+    #     if not self._collap["patient"].isExpanded():
+    #         self._collap["patient"].expand()
+
+    # # (5) update widgets - only gtvt approved
+    # elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+    #     # update dwaring mode before change mouse cursor
+    #     self.drawing_mode = DrawingMode.GTVN_PEN
+    #     if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+    #         self.change_mouse_cursor()
+    #         self.__enable_annotation_tools()
+    #     else:
+    #         self.restore_mouse_cursor()
+    #         self.__disable_annotation_tools()
+
+    # # (5) update widgets - only gtvn approved
+    # elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+    #     # update dwaring mode before change mouse cursor
+    #     self.drawing_mode = DrawingMode.GTVT_PEN
+    #     if self.obs_study_gtvt_step in [
+    #         ObsStudyGTVtStep.DELINEATE,
+    #         ObsStudyGTVtStep.CORRECT,
+    #     ]:
+    #         self.change_mouse_cursor()
+    #         self.__enable_annotation_tools()
+    #     else:
+    #         self.restore_mouse_cursor()
+    #         self.__disable_annotation_tools()
+
+    # # (6) end timer
+    # if gtv == "gtvt":
+    #     self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
+    # elif gtv == "gtvn":
+    #     self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
+
+    def on_todo_list_clicked(self, todo_list_label: TodoListLabel):
         # (1) jump to step SELECT_PATIENT
-        if text_box == self._text_label[ObsStudyStep.SELECT_PATIENT]:
+        if todo_list_label == self._text_label[TodoListLabel.SELECT_PATIENT]:
             if not self._collap["patient"].isExpanded():
                 self._collap["patient"].expand()
             # expande combobox patient, simulate click
@@ -1188,16 +1346,8 @@ class ObsStudyWindow(ReplayWindow):
             QtWidgets.QApplication.postEvent(self.combox["patient"], event)
 
         # (2) jump to step CLICK_GTVT_CENTER
-        elif text_box == self._text_label[ObsStudyStep.CLICK_GTVT_CENTER]:
-            if self.obs_study_step not in [
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-                ObsStudyStep.CORRECT_BOTH,
-                ObsStudyStep.APPROVED,
-            ]:
+        elif todo_list_label == self._text_label[TodoListLabel.CLICK_GTVT_CENTER]:
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
                 return
 
             text = (
@@ -1215,22 +1365,18 @@ class ObsStudyWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.__goto_idl_step_click_gtvt_center()
+            self.__goto_click_gtvt_center()
 
         # (3) jump to step DRAW_GTVT
-        elif text_box in [
-            self._text_label[ObsStudyStep.DRAW_GTVT],
-            self._text_label[ObsStudyStep.DRAW_GTVT_TRANSVERSE],
-            self._text_label[ObsStudyStep.DRAW_GTVT_CORONAL],
-            self._text_label[ObsStudyStep.DRAW_GTVT_SAGITTAL],
+        elif todo_list_label in [
+            self._text_label[TodoListLabel.DELINEATE_GTVT],
+            self._text_label[TodoListLabel.DELINEATE_GTVT_TRANSVERSE],
+            self._text_label[TodoListLabel.DELINEATE_GTVT_CORONAL],
+            self._text_label[TodoListLabel.DELINEATE_GTVT_SAGITTAL],
         ]:
-            if self.obs_study_step not in [
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-                ObsStudyStep.CORRECT_BOTH,
-                ObsStudyStep.APPROVED,
+            if self.obs_study_gtvt_step in [
+                ObsStudyGTVtStep.CLICK_CENTER,
+                ObsStudyGTVtStep.DELINEATE,
             ]:
                 return
 
@@ -1249,16 +1395,13 @@ class ObsStudyWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.__goto_idl_step_draw_gtvt()
+            self.__goto_delineate_gtvt()
 
         # (4) jump to step CLICK_GTVN_CENTER
-        elif text_box == self._text_label[ObsStudyStep.CLICK_GTVN_CENTER]:
-            if self.obs_study_step not in [
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-                ObsStudyStep.CORRECT_BOTH,
-                ObsStudyStep.APPROVED,
+        elif todo_list_label == self._text_label[TodoListLabel.CLICK_GTVN_CENTERS]:
+            if self.obs_study_gtvn_step in [
+                ObsStudyGTVnStep.NOT_START,
+                ObsStudyGTVnStep.CLICK_CENTERS,
             ]:
                 return
 
@@ -1277,17 +1420,14 @@ class ObsStudyWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            self.__goto_idl_step_click_gtvn_center()
+            self.__goto_click_gtvn_centers()
 
-        # (5) revert to step CORRECT_GTVT/GTVN
-        elif text_box in [
-            self._text_label[ObsStudyStep.CORRECT_GTVT],
-            self._text_label[ObsStudyStep.CORRECT_GTVN],
-        ]:
-            if self.obs_study_step != ObsStudyStep.APPROVED:
+        # (5) revert to step CORRECT_GTVT
+        elif todo_list_label == self._text_label[TodoListLabel.CORRECT_GTVT]:
+            if self.obs_study_gtvt_step != ObsStudyGTVtStep.APPROVED:
                 return
 
-            text = "Would you like to revert to SETP 6 and re-correct the predictions?"
+            text = "Would you like to revert to SETP 6 and re-correct GTVt predictions?"
             reply = QMessageBox.question(
                 self,
                 "Message",
@@ -1298,32 +1438,56 @@ class ObsStudyWindow(ReplayWindow):
             if reply == QMessageBox.No:
                 return
 
-            # goto idl step correct both
-            if text_box == self._text_label[ObsStudyStep.CORRECT_GTVT]:
-                self.__goto_idl_step_correct_both(DrawingMode.GTVT_PEN)
-            else:
-                self.__goto_idl_step_correct_both(DrawingMode.GTVN_PEN)
+            # goto correct prediction
+            self.__goto_correct_pred(obs_study_gtvt_step=ObsStudyGTVtStep.CORRECT)
+
+        # (6) revert to step CORRECT_GTVT/GTVN
+        elif todo_list_label == self._text_label[TodoListLabel.CORRECT_GTVN]:
+            if self.obs_study_gtvn_step != ObsStudyGTVnStep.APPROVED:
+                return
+
+            text = "Would you like to revert to SETP 6 and re-correct GTVn predictions?"
+            reply = QMessageBox.question(
+                self,
+                "Message",
+                text,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.No:
+                return
+
+            # goto correct prediction
+            self.__goto_correct_pred(obs_study_gtvn_step=ObsStudyGTVnStep.CORRECT)
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
+
         # (1) update drawing mode
-        if self.obs_study_step in [ObsStudyStep.DRAW_GTVT, ObsStudyStep.CORRECT_GTVT]:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             self.drawing_mode = DrawingMode.GTVT_ERASER
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            self.drawing_mode = DrawingMode.GTVN_ERASER
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_ERASER
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_ERASER
 
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVT_ERASER
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVN_ERASER
+
         # (2) update widgets
-        if self.obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             self._text_label["pen.size"].hide()
             self._slider["pen.size"].hide()
             self._text_label["eraser.size"].show()
@@ -1335,14 +1499,8 @@ class ObsStudyWindow(ReplayWindow):
         self.__progress_bar["gtvt"].setValue(progress_int)
 
     def __on_idl_gtvt_thread_finished(self):
-        # (1) update status
-        # dont update idl step if user has not submitted gtvn clicks
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
-            pass
-        elif self.__idl_gtvn_thread.is_running:
-            self.__update_cur_idl_step(ObsStudyStep.CORRECT_GTVT)
-        else:
-            self.__update_cur_idl_step(ObsStudyStep.CORRECT_BOTH)
+        # (1) update obs_study_gtvt_step
+        self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CORRECT)
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvt_data()
@@ -1363,26 +1521,26 @@ class ObsStudyWindow(ReplayWindow):
 
         # (4) update widgets
         self.__enable_annotation_tools()
-        # (4-1) CORRECT_GTVN -> CORRECT_BOTH
-        # dont change drawing mode, will interrupt user correcting gtvn
-        if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            # self._btn["next.step"].setEnabled(True)
-            pass
+        self.__show_and_hide_next_btns()
 
-        # (4-2) WAITING -> CORRECT_GTVT
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
+        # user is correcting gtvn
+        if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            # dont change drawing mode, it will interrupt user correcting gtvn
+            pass
+        else:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             # change mouse cursor after:
-            # (1) idl step updated
+            # (1) obs study steps updated
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_over_img_frame=True)
 
         # (5) end and start timer
-        self.__timer[ObsStudyStep.WAITING_GTVT].end()
-        self.__timer[ObsStudyStep.CORRECT_GTVT].start()
+        self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
+        self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
 
-    def __confirm_gtvn_center(self):
+    # this function is connected to widget, dont set input params to this function
+    def __confirm_gtvn_centers(self):
         # (1) detect gtvn clicks
         if len(self.gtvn_clicks_pos_3d) == 0:
             text = (
@@ -1401,16 +1559,13 @@ class ObsStudyWindow(ReplayWindow):
                 return
             # no gtvn click
             else:
-                self.__timer[ObsStudyStep.CLICK_GTVN_CENTER].end()
-                self.__timer[ObsStudyStep.WAITING_GTVN].start()
+                self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
+                self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
                 self.__on_idl_gtvn_thread_finished()
                 return
 
         # (2) update status
-        if self.__idl_gtvt_thread.is_running:
-            self.__update_cur_idl_step(ObsStudyStep.WAITING)
-        else:
-            self.__update_cur_idl_step(ObsStudyStep.CORRECT_GTVT)
+        self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.WAIT_PRED)
 
         # (3) add clicks into 3d img
         if self.img_3d["gtvn.clicks"] is None:
@@ -1449,18 +1604,17 @@ class ObsStudyWindow(ReplayWindow):
         self.delete_all_crosses()
 
         # (7) update widgets
-        if self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
+        self.__show_and_hide_next_btns()
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__enable_annotation_tools()
-        elif self.obs_study_step == ObsStudyStep.WAITING:
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
             self.__disable_annotation_tools()
-        # temporarily disable "next.step" button, until obs_study_step=CORRECT_BOTH
-        # self._btn["next.step"].setEnabled(False)
 
         # (8) start and end timer
-        self.__timer[ObsStudyStep.CLICK_GTVN_CENTER].end()
-        self.__timer[ObsStudyStep.WAITING_GTVN].start()
+        self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
+        self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
 
     def __update_idl_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
@@ -1468,11 +1622,8 @@ class ObsStudyWindow(ReplayWindow):
         self.__progress_bar["gtvn"].setValue(progress_int)
 
     def __on_idl_gtvn_thread_finished(self):
-        # (1) update status
-        if self.__idl_gtvt_thread.is_running:
-            self.__update_cur_idl_step(ObsStudyStep.CORRECT_GTVN)
-        else:
-            self.__update_cur_idl_step(ObsStudyStep.CORRECT_BOTH)
+        # (1) update obs study step
+        self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.CORRECT)
 
         # (2) load and combine 3d imgs
         self._load_idl_gtvn_data()
@@ -1493,36 +1644,23 @@ class ObsStudyWindow(ReplayWindow):
 
         # (4) update widgets
         self.__enable_annotation_tools()
-        # (4-1) CORRECT_GTVT -> CORRECT_BOTH
-        # dont change drawing mode, will interrupt user correcting gtvt
-        if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            # self._btn["next.step"].setEnabled(True)
-            pass
+        self.__show_and_hide_next_btns()
 
-        # (4-2) WAITING -> CORRECT_GTVN
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
+        # user is correcting gtvt
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            # dont change drawing mode, will interrupt user correcting gtvt
+            pass
+        else:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
             # change mouse cursor after:
-            # (1) idl step updated
+            # (1) obs study steps updated
             # (2) drawing mode updated
             self.change_mouse_cursor(check_mouse_over_img_frame=True)
 
         # (5) end and start timer
-        self.__timer[ObsStudyStep.WAITING_GTVN].end()
-        self.__timer[ObsStudyStep.CORRECT_GTVN].start()
-
-    # this function is connected to widget, dont set input params to this function
-    def __on_btn_next_step_clicked(self):
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
-            self.__confirm_gtvt_center()
-        elif self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-            self.__confirm_gtvt_delineation()
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
-            self.__confirm_gtvn_center()
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            self.__save_corrections_and_masks()
-            self.__goto_idl_step_approved()
+        self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
+        self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
 
     # check delineation in 3 different planes
     def __update_gtvt_delineated_status(self) -> Dict:
@@ -1553,10 +1691,14 @@ class ObsStudyWindow(ReplayWindow):
 
                 if gtvt_delineation_2d.max() <= 0:
                     self.__gtvt_delineated_state[plane] = False
-                    self._text_label["draw.gtvt.{}".format(plane)].set_status_missing()
+                    self._text_label[
+                        "delineate.gtvt.{}".format(plane)
+                    ].set_status_missing()
                 else:
                     self.__gtvt_delineated_state[plane] = True
-                    self._text_label["draw.gtvt.{}".format(plane)].set_status_done()
+                    self._text_label[
+                        "delineate.gtvt.{}".format(plane)
+                    ].set_status_completed()
 
     def __change_color(self, pixmap: QtGui.QPixmap, old_color, new_color):
         image = pixmap.toImage()
@@ -1576,12 +1718,11 @@ class ObsStudyWindow(ReplayWindow):
         self,
         check_mouse_over_img_frame: bool,  # if = True, only change cursor when mouse is on a img
     ):
-        if self.obs_study_step not in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
         if check_mouse_over_img_frame:
@@ -1607,28 +1748,36 @@ class ObsStudyWindow(ReplayWindow):
             left = cursor_size * 0.5
             top = cursor_size * 0.5
 
-        # CORRECT_BOTH is not a key of self.__cursor
-        # change into CORRECT_GTVT or CORRECT_GTVN based on drawing mode
-        if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+        # get cursor name
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+            cursor_name = TodoListLabel.DELINEATE_GTVT
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self.drawing_mode in [
                 DrawingMode.GTVT_PEN,
                 DrawingMode.GTVT_ERASER,
                 DrawingMode.GTVT_CLEAR,
                 DrawingMode.GTVT_RESTORE,
             ]:
-                obs_study_step = ObsStudyStep.CORRECT_GTVT
+                cursor_name = TodoListLabel.CORRECT_GTVT
             elif self.drawing_mode in [
                 DrawingMode.GTVN_PEN,
                 DrawingMode.GTVN_ERASER,
                 DrawingMode.GTVN_CLEAR,
                 DrawingMode.GTVN_RESTORE,
             ]:
-                obs_study_step = ObsStudyStep.CORRECT_GTVN
+                cursor_name = TodoListLabel.CORRECT_GTVN
 
-        else:  # DRAW_GTVT / CORRECT_GTVT / CORRECT_GTVN
-            obs_study_step = self.obs_study_step
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            cursor_name = TodoListLabel.CORRECT_GTVT
 
-        cursor_pixmap = self.__cursor[obs_study_step][tool]
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            cursor_name = TodoListLabel.CORRECT_GTVN
+
+        cursor_pixmap = self.__cursor[cursor_name][tool]
         self.setCursor(QtGui.QCursor(cursor_pixmap, left, top))
 
     def _init_widgets_cursor(self):
@@ -1639,12 +1788,12 @@ class ObsStudyWindow(ReplayWindow):
             origin_cursor = QtGui.QPixmap(
                 (os.path.join(g.PROJ_DIR, "icons", "{}_cursor.png".format(tool)))
             )
-            for obs_study_step in [
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
+            for name in [
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
             ]:
-                self.__cursor[obs_study_step][tool] = origin_cursor.scaled(
+                self.__cursor[name][tool] = origin_cursor.scaled(
                     cursor_size,
                     cursor_size,
                     Qt.KeepAspectRatio,
@@ -1652,14 +1801,14 @@ class ObsStudyWindow(ReplayWindow):
                 )
                 # change color (after cursor pixmap is scaled to 32*32)
                 # as __change_color is not efficiency
-                if obs_study_step == ObsStudyStep.DRAW_GTVT:
+                if name == TodoListLabel.DELINEATE_GTVT:
                     new_color = self.color["gtvt.delineation"]
-                elif obs_study_step == ObsStudyStep.CORRECT_GTVT:
+                elif name == TodoListLabel.CORRECT_GTVT:
                     new_color = self.color["gtvt.pred"]
-                elif obs_study_step == ObsStudyStep.CORRECT_GTVN:
+                elif name == TodoListLabel.CORRECT_GTVN:
                     new_color = self.color["gtvn.pred"]
-                self.__cursor[obs_study_step][tool] = self.__change_color(
-                    pixmap=self.__cursor[obs_study_step][tool],
+                self.__cursor[name][tool] = self.__change_color(
+                    pixmap=self.__cursor[name][tool],
                     old_color=origin_color,
                     new_color=new_color,
                 )
@@ -1683,51 +1832,55 @@ class ObsStudyWindow(ReplayWindow):
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_restore_clicked(self):
-        if self.obs_study_step not in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step != ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
         # update drawing mode
-        if self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
-            self.drawing_mode = DrawingMode.GTVT_RESTORE
-
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            self.drawing_mode = DrawingMode.GTVN_RESTORE
-
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_RESTORE
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_RESTORE
 
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVT_RESTORE
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVN_RESTORE
+
     # this function is connected to widget, dont set input params to this function
     def __on_btn_clear_clicked(self):
-        if self.obs_study_step not in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
             return
 
         # update drawing mode
-        if self.obs_study_step in [
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CORRECT_GTVT,
-        ]:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             self.drawing_mode = DrawingMode.GTVT_CLEAR
 
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            self.drawing_mode = DrawingMode.GTVN_CLEAR
-
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self._radio_btn["correct.gtvt"].isChecked():
                 self.drawing_mode = DrawingMode.GTVT_CLEAR
             elif self._radio_btn["correct.gtvn"].isChecked():
                 self.drawing_mode = DrawingMode.GTVN_CLEAR
+
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVT_CLEAR
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            self.drawing_mode = DrawingMode.GTVN_CLEAR
 
     def __get_gtvt_center_slices_id(self):
         if self.gtvt_click_pos_3d is None:
@@ -1766,10 +1919,10 @@ class ObsStudyWindow(ReplayWindow):
             self.img_frame[i].delete_all_crosses()
 
     def refresh_crosses(self, frame_name: str = None):
-        if self.obs_study_step not in [
-            ObsStudyStep.CLICK_GTVT_CENTER,
-            ObsStudyStep.CLICK_GTVN_CENTER,
-        ]:
+        if (
+            self.obs_study_gtvt_step != ObsStudyGTVtStep.CLICK_CENTER
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CLICK_CENTERS
+        ):
             return
 
         if frame_name is not None:
@@ -1797,10 +1950,10 @@ class ObsStudyWindow(ReplayWindow):
             cross.cross_id = new_cross_id
 
     def remove_3d_pos_of_selected_cross(self, cross: DragCross):
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             self.gtvt_click_pos_3d = None
 
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             pos_3d = cross.cross_id
             if pos_3d in self.gtvn_clicks_pos_3d:
                 self.gtvn_clicks_pos_3d.remove(pos_3d)
@@ -1847,15 +2000,13 @@ class ObsStudyWindow(ReplayWindow):
         # annotation buttons
         for i in ["pen", "eraser", "clear"]:
             self._btn[i].setEnabled(True)
-        if self.obs_study_step in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             self._btn["restore"].setEnabled(True)
-            # self._btn["restore"].show()
         else:
-            # self._btn["restore"].hide()
             self._btn["restore"].setEnabled(False)
 
         # pen/eraser size slider bars
@@ -1872,7 +2023,10 @@ class ObsStudyWindow(ReplayWindow):
 
         # radio buttons: correct gtvt/gtvn
         for i in ["correct.gtvt", "correct.gtvn"]:
-            if self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+            if (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+                and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            ):
                 self._radio_btn[i].show()
             else:
                 self._radio_btn[i].hide()
@@ -2107,16 +2261,17 @@ class ObsStudyWindow(ReplayWindow):
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
             self.__gtvt_delineated_state[plane] = False
 
-        # init obs_study_step and json file
-        self.obs_study_step = None
-        self.__idl_step_json_path = os.path.join(
+        # init obs study steps and json file
+        self.obs_study_gtvt_step = None
+        self.obs_study_gtvn_step = None
+        self.__obs_study_step_json_path = os.path.join(
             g.TRAIN_RESULTS_DIR,
             self._baseline_id,
             self._idl_id["gtvt"],  # only save it in gtvt folder
             "obs_study_step.json",
         )
-        if not os.path.exists(self.__idl_step_json_path):
-            g.save_json({}, self.__idl_step_json_path)
+        if not os.path.exists(self.__obs_study_step_json_path):
+            g.save_json({}, self.__obs_study_step_json_path)
 
         # load/save interpolation step
         interpolation_setting_path = os.path.join(
@@ -2208,22 +2363,38 @@ class ObsStudyWindow(ReplayWindow):
             )
             return
 
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             text = "Please click the center of primary Gross Tumor Volumes (GTVt)"
-        elif self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             text = "Please delineate GTVt in 3 anatomical planes"
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             text = "Please click the center of malignant lymph nodes (GTVn)"
-        elif self.obs_study_step == ObsStudyStep.WAITING:
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+        ):
             text = "Neural Network is generating auto-segmentation, please wait..."
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
-            text = "Please correct the GTVt auto-segmentation"
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            text = "Please correct the GTVn auto-segmentation"
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            text = "Auto-segmentations of current patient are approved"
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             text = "Please correct the GTVt and GTVn auto-segmentations"
-        elif self.obs_study_step == ObsStudyStep.APPROVED:
-            text = "Auto-segmentations of current patient are finalized"
+
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            text = "Please correct the GTVt auto-segmentation"
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            text = "Please correct the GTVn auto-segmentation"
 
         self._qimg_draw_text(
             qimg=qimg,
@@ -2233,7 +2404,7 @@ class ObsStudyWindow(ReplayWindow):
         )
 
         # show delineated state on qimage
-        if self.obs_study_step == ObsStudyStep.DRAW_GTVT:
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             top += 5
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 top += 20
@@ -2329,72 +2500,66 @@ class ObsStudyWindow(ReplayWindow):
         # reset timers after cur_patient is updated
         self.__timer = Dict()
         for i in [
-            ObsStudyStep.CLICK_GTVT_CENTER,
-            ObsStudyStep.DRAW_GTVT,
-            ObsStudyStep.CLICK_GTVN_CENTER,
-            ObsStudyStep.WAITING_GTVT,
-            ObsStudyStep.WAITING_GTVN,
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
+            ObsStudyTimer.CLICK_GTVT_CENTER,
+            ObsStudyTimer.DELINEATE_GTVT,
+            ObsStudyTimer.CLICK_GTVN_CENTERS,
+            ObsStudyTimer.WAIT_GTVT_PRED,
+            ObsStudyTimer.WAIT_GTVN_PRED,
+            ObsStudyTimer.CORRECT_GTVT,
+            ObsStudyTimer.CORRECT_GTVN,
         ]:
             self.__timer[i] = ObsStudyTimer(
                 baseline_id=self._baseline_id,
                 idl_gtvt_id=self._idl_id["gtvt"],
                 patient=self._cur_patient,
-                obs_study_step=i,
+                timer_name=i,
             )
 
-        # load current idl step from json(after cur_patient is updated)
-        # init and save idl step of all patients
-        idl_step_all_patients = g.load_json(self.__idl_step_json_path)
-        self.obs_study_step = idl_step_all_patients[
+        # load current obs study steps from json(after cur_patient is updated)
+        # init and save obs study steps of all patients
+        cur_patient_obs_study_step = g.load_json(self.__obs_study_step_json_path)[
             "patient={}".format(self._cur_patient)
         ]
 
-        # adjust cur_idl_step
-        # (1) new patient
-        if self.obs_study_step == {}:
-            self.obs_study_step = ObsStudyStep.CLICK_GTVT_CENTER
+        # load obs study gtvt/gtvn steps from json dict
+        # new patient
+        if cur_patient_obs_study_step == {}:
+            self.obs_study_gtvt_step = ObsStudyGTVtStep.CLICK_CENTER
+            self.obs_study_gtvn_step = ObsStudyGTVnStep.NOT_START
+        # previous patient
+        else:
+            self.obs_study_gtvt_step = cur_patient_obs_study_step["gtvt"]
+            self.obs_study_gtvn_step = cur_patient_obs_study_step["gtvn"]
 
-        # (2) cur_idl_step == WAITING or CORRECT_GTVN means gtvt thread was interupted
-        elif self.obs_study_step in [ObsStudyStep.WAITING, ObsStudyStep.CORRECT_GTVN]:
-            # goto the nearest recoverable step
-            self.obs_study_step = ObsStudyStep.DRAW_GTVT
+        # gtvt thread was interupted
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
+            # revert back to the nearest step
+            self.obs_study_gtvt_step = ObsStudyGTVtStep.DELINEATE
 
-        # (3) cur_idl_step == CORRECT_GTVT means gtvn thread was interupted
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
-            # goto the nearest recoverable step
-            self.obs_study_step = ObsStudyStep.CLICK_GTVN_CENTER
-
-        # (4) cur_idl_step == CLICK_GTVN_CENTER means gtvt thread might be interupted
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
-            # no gtvt pred menas gtvt thread was interupted
-            if self.img_3d["gtvt.pred"] is None:
-                # goto the nearest recoverable step
-                self.obs_study_step = ObsStudyStep.DRAW_GTVT
+        # gtvn thread was interupted
+        if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+            # revert back to the nearest step
+            self.obs_study_gtvn_step = ObsStudyGTVnStep.CLICK_CENTERS
 
         # call reset_cur_slice_id() after:
         # (1) _load_multi_modal_imgs
         # (2) _load_idl_gtvt_data(), will load gtvt_click_pos_3d
         # (3) _load_idl_gtvn_data(), will load gtvn_clicks_pos_3d
-        # (4) self.obs_study_step is loaded
+        # (4) obs study gtvt/gtvn steps are loaded
         self.reset_cur_slice_id()
 
-        # last step: goto current idl step
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
-            self.__goto_idl_step_click_gtvt_center()
+        # last step: goto current obs study steps
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+            self.__goto_click_gtvt_center()
 
-        elif self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-            self.__goto_idl_step_draw_gtvt()
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+            self.__goto_delineate_gtvt()
 
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
-            self.__goto_idl_step_click_gtvn_center()
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            self.__goto_click_gtvn_centers()
 
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            self.__goto_idl_step_correct_both()
-
-        elif self.obs_study_step == ObsStudyStep.APPROVED:
-            self.__goto_idl_step_approved()
+        else:
+            self.__goto_correct_pred()
 
     def ensure_slice_id_multiple(self, slice_id: int, slice_count: int):
         remainder = slice_id % self.interpolation_step
@@ -2409,8 +2574,8 @@ class ObsStudyWindow(ReplayWindow):
 
     def reset_cur_slice_id(self):
         if (
-            self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER
-            or self.obs_study_step == ObsStudyStep.DRAW_GTVT
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER
+            or self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE
         ):
             if self.gtvt_click_pos_3d is None:
                 self.cur_slice_id[Plane.CORONAL] = self.img_3d[Modal.CT].shape[1] // 2
@@ -2427,17 +2592,22 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             if len(self.gtvn_clicks_pos_3d) == 0:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
             else:
                 self.cur_slice_id = self.__get_gtvn_center_slices_id()
 
-        elif self.obs_study_step in [
-            ObsStudyStep.CORRECT_GTVT,
-            ObsStudyStep.CORRECT_GTVN,
-            ObsStudyStep.CORRECT_BOTH,
-        ]:
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            self.cur_slice_id = self.__get_gtvt_center_slices_id()
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
             if self.drawing_mode in [DrawingMode.GTVT_PEN, DrawingMode.GTVT_ERASER]:
                 self.cur_slice_id = self.__get_gtvt_center_slices_id()
 
@@ -2448,18 +2618,26 @@ class ObsStudyWindow(ReplayWindow):
                 else:
                     self.cur_slice_id = self.__get_gtvn_center_slices_id()
 
-        elif self.obs_study_step == ObsStudyStep.APPROVED:
-            self.cur_slice_id = self.__get_gtvt_center_slices_id()
+    def __update_obs_study_step(
+        self,
+        obs_study_gtvt_step: str = None,
+        obs_study_gtvn_step: str = None,
+    ):
+        if obs_study_gtvt_step is not None:
+            self.obs_study_gtvt_step = obs_study_gtvt_step
 
-    def __update_cur_idl_step(self, new_idl_step: str):
-        self.obs_study_step = new_idl_step
+        if obs_study_gtvn_step is not None:
+            self.obs_study_gtvn_step = obs_study_gtvn_step
 
-        # update idl step
-        idl_step_all_patients = g.load_json(self.__idl_step_json_path)
-        idl_step_all_patients["patient={}".format(self._cur_patient)] = (
-            self.obs_study_step
-        )
-        g.save_json(idl_step_all_patients, self.__idl_step_json_path)
+        # save updated obs study steps into json
+        all_patients_obs_study_step = g.load_json(self.__obs_study_step_json_path)
+        all_patients_obs_study_step["patient={}".format(self._cur_patient)][
+            "gtvt"
+        ] = self.obs_study_gtvt_step
+        all_patients_obs_study_step["patient={}".format(self._cur_patient)][
+            "gtvn"
+        ] = self.obs_study_gtvn_step
+        g.save_json(all_patients_obs_study_step, self.__obs_study_step_json_path)
 
         # # update idl time used
         # obs_study_step_list = [
@@ -2482,131 +2660,151 @@ class ObsStudyWindow(ReplayWindow):
         # g.save_json(time_log, idl_time_json_path)
 
     def __refresh_todo_list(self):
-        if (
-            self.obs_study_step != ObsStudyStep.CORRECT_BOTH
-            and self.obs_study_step != ObsStudyStep.APPROVED
-        ):
-            self._text_label[self.obs_study_step].set_status_ongoing()
-
-        if self.obs_study_step == ObsStudyStep.CLICK_GTVT_CENTER:
-            done_step_list = [ObsStudyStep.SELECT_PATIENT]
-            notstart_step_list = [
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
+        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+            completed_todo_labels = [TodoListLabel.SELECT_PATIENT]
+            self._text_label[TodoListLabel.CLICK_GTVT_CENTER].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
             ]
-
-        elif self.obs_study_step == ObsStudyStep.DRAW_GTVT:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-            ]
-            notstart_step_list = [
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-            ]
-            # sub steps of draw.gtvt
-            self.__update_gtvt_delineated_status()
-
-        elif self.obs_study_step == ObsStudyStep.CLICK_GTVN_CENTER:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-            ]
-            notstart_step_list = [
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
-            ]
-            if self.__idl_gtvt_thread.is_running:
-                self._text_label[ObsStudyStep.WAITING].set_status_ongoing()
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
             else:
-                self._text_label[ObsStudyStep.WAITING].set_status_notstart()
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_not_start()
 
-        elif self.obs_study_step == ObsStudyStep.WAITING:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
             ]
-            notstart_step_list = [
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
+            self._text_label[TodoListLabel.DELINEATE_GTVT].set_status_active()
+            # update the status of delineate gtvt sub labels
+            self.__update_gtvt_delineated_status()
+            not_start_todo_labels = [
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
             ]
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVT:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-            ]
-            notstart_step_list = [ObsStudyStep.CORRECT_GTVN]
-            self._text_label[ObsStudyStep.WAITING].set_status_ongoing()
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            else:
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_not_start()
 
-        elif self.obs_study_step == ObsStudyStep.CORRECT_GTVN:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
             ]
-            notstart_step_list = [ObsStudyStep.CORRECT_GTVT]
-            self._text_label[ObsStudyStep.WAITING].set_status_ongoing()
-
-        elif self.obs_study_step == ObsStudyStep.CORRECT_BOTH:
-            self._text_label[ObsStudyStep.CORRECT_GTVT].set_status_ongoing()
-            self._text_label[ObsStudyStep.CORRECT_GTVN].set_status_ongoing()
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
+            self._text_label[TodoListLabel.CLICK_GTVN_CENTERS].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
             ]
-            notstart_step_list = []
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            else:
+                self._text_label[TodoListLabel.WAIT_PRED].set_status_not_start()
 
-        elif self.obs_study_step == ObsStudyStep.APPROVED:
-            done_step_list = [
-                ObsStudyStep.SELECT_PATIENT,
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.DRAW_GTVT_TRANSVERSE,
-                ObsStudyStep.DRAW_GTVT_CORONAL,
-                ObsStudyStep.DRAW_GTVT_SAGITTAL,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING,
-                ObsStudyStep.CORRECT_GTVT,
-                ObsStudyStep.CORRECT_GTVN,
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
             ]
-            notstart_step_list = []
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
+            ]
 
-        for i in done_step_list:
-            self._text_label[i].set_status_done()
-        for i in notstart_step_list:
-            self._text_label[i].set_status_notstart()
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_PRED,
+                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.CORRECT_GTVN,
+            ]
+            not_start_todo_labels = []
+
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_PRED,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVT].set_status_active()
+            self._text_label[TodoListLabel.CORRECT_GTVN].set_status_active()
+            not_start_todo_labels = []
+
+        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVT].set_status_active()
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [TodoListLabel.CORRECT_GTVN]
+
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVN].set_status_active()
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [TodoListLabel.CORRECT_GTVT]
+
+        else:
+            print(self.obs_study_gtvt_step)
+            print(self.obs_study_gtvn_step)
+
+        for i in completed_todo_labels:
+            self._text_label[i].set_status_completed()
+        for i in not_start_todo_labels:
+            self._text_label[i].set_status_not_start()
 
     def _load_idl_gtvt_data(self):
         self._load_idl_gtv_data(gtv="gtvt")
