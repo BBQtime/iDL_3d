@@ -3,7 +3,8 @@ from numpy import ndarray
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
 from training_utils.idl_gtvn_training import IDLGTVnTraining
-from training_utils.idl_gtvt_training import IDLGTVtTraining
+# from training_utils.idl_gtvt_training import IDLGTVtTraining
+import time
 
 
 class ObsStudyThread(QThread):
@@ -68,6 +69,7 @@ class ObsStudyGTVnThread(ObsStudyThread):
             patient=self.__patient,
             obs_gtvn_clicks=self.__idl_gtvn_clicks,
             debug_mode=self.__debug_mode,
+            device_id=0,
         )
         self._hide_progress_widgets()
         self.is_running = False
@@ -77,29 +79,76 @@ class ObsStudyGTVnThread(ObsStudyThread):
 class ObsStudyGTVtThread(ObsStudyThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
-
-    def set_param(
-        self,
-        idl_gtvt_id: str,
-        dataset_ver: str,
-        patient: str,
-        debug_mode: bool,
-    ):
-        self.__idl_gtvt_id = idl_gtvt_id
-        self.__dataset_ver = dataset_ver
-        self.__patient = patient
-        self.__debug_mode = debug_mode
+    queue = None
+    # def set_param(
+    #     self,
+    #     idl_gtvt_id: str,
+    #     dataset_ver: str,
+    #     patient: str,
+    #     debug_mode: bool,
+    # ):
+    #     self.__idl_gtvt_id = idl_gtvt_id
+    #     self.__dataset_ver = dataset_ver
+    #     self.__patient = patient
+    #     self.__debug_mode = debug_mode
 
     def run(self):
-        self._show_progress_widgets()
         self.is_running = True
-        idl_gtvt_training = IDLGTVtTraining(self.progress_signal)
-        idl_gtvt_training.obs_study(
-            idl_gtvt_id=self.__idl_gtvt_id,
-            dataset_ver=self.__dataset_ver,
-            patient=self.__patient,
-            debug_mode=self.__debug_mode,
-        )
-        self._hide_progress_widgets()
+        self._show_progress_widgets()
+        try:
+            while self.is_running:
+                # Check the queue for messages from the training process
+                if not self.queue.empty():
+                    message = self.queue.get()
+                    if "progress" in message:
+                        progress_value = message["progress"]
+                        self.progress_signal.emit(progress_value)
+
+                    if "status" in message and message["status"] == "complete":
+                        self.complete_signal.emit()
+                        self.is_running = False
+                        break
+
+                # Sleep for a short time to prevent overloading the CPU
+                time.sleep(0.5)
+
+        except Exception as e:
+            print(f"Error in thread: {str(e)}")
+        finally:
+            self.is_running = False
+            self._hide_progress_widgets()
+            self.complete_signal.emit()
+
+    def stop(self):
         self.is_running = False
-        self.complete_signal.emit()
+        self._hide_progress_widgets()
+
+# class ObsStudyGTVtThread(ObsStudyThread):
+#     progress_signal = pyqtSignal(float)
+#     complete_signal = pyqtSignal()
+
+#     def set_param(
+#         self,
+#         idl_gtvt_id: str,
+#         dataset_ver: str,
+#         patient: str,
+#         debug_mode: bool,
+#     ):
+#         self.__idl_gtvt_id = idl_gtvt_id
+#         self.__dataset_ver = dataset_ver
+#         self.__patient = patient
+#         self.__debug_mode = debug_mode
+
+#     def run(self):
+#         self._show_progress_widgets()
+#         self.is_running = True
+#         # training_idl_gtvt = TrainingIDLGTVt(self.progress_signal)
+#         # training_idl_gtvt.obs_study(
+#         #     idl_gtvt_id=self.__idl_gtvt_id,
+#         #     dataset_ver=self.__dataset_ver,
+#         #     patient=self.__patient,
+#         #     debug_mode=self.__debug_mode,
+#         # )
+#         self._hide_progress_widgets()
+#         self.is_running = False
+#         self.complete_signal.emit()
