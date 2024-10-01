@@ -22,13 +22,14 @@ from global_utils.str_lib import (
 )
 from loss_utils.idl_gtvt_loss import IDLGTVtLoss
 from numpy import ndarray
-from PyQt5.QtCore import pyqtSignal
+# from PyQt5.QtCore import pyqtSignal
 from scipy.ndimage import measurements
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from training_utils.training_core import ObsStudyProgress, TrainingCore
-
+import time
+from multiprocessing import Queue
 matplotlib.use("Agg")
 
 
@@ -47,13 +48,13 @@ class GTVtObsStudyProgress(ObsStudyProgress):
 
 
 class IDLGTVtTraining(TrainingCore):
-    def __init__(self, idl_progress_signal: pyqtSignal = None):
+    def __init__(self):#, idl_progress_signal: None):
         super().__init__()
-        if idl_progress_signal is not None:
-            self._obs_study_progress = GTVtObsStudyProgress()
-            self._obs_study_progress.progress_signal = idl_progress_signal
-        else:
-            self._obs_study_progress = None
+        # if idl_progress_signal is not None:
+        #     self._obs_study_progress = GTVtObsStudyProgress()
+        #     self._obs_study_progress.progress_signal = idl_progress_signal
+        # else:
+        #     self._obs_study_progress = None
 
     def __load_next_round_lr(self, next_round: int, hyper: Dict):
         # hyper["lr"] is a list of lr of each round
@@ -68,9 +69,9 @@ class IDLGTVtTraining(TrainingCore):
         self._load_hyper_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][-1])
 
     # reset cnn/optimizer/scheduler before next patient
-    def __reset_cnn(self, hyper: dict, baseline_cnn_path: str):
+    def __reset_cnn(self, hyper: dict, baseline_cnn_path: str, device_id: int = 0):
         # reload cnn
-        hyper["cnn"] = self._load_exist_cnn(baseline_cnn_path)
+        hyper["cnn"] = self._load_exist_cnn(baseline_cnn_path, device_id=device_id)
 
         self._load_hyper_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][0])
 
@@ -79,6 +80,7 @@ class IDLGTVtTraining(TrainingCore):
         hyper: Dict,
         baseline_id: str,
         debug_mode: bool = False,
+        device_id:int=0,
     ):
         # load shared hyper
         super()._load_hyper(hyper)
@@ -175,7 +177,7 @@ class IDLGTVtTraining(TrainingCore):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-        ).to(g.DEVICE)
+         ).to(g.DEVICES[device_id])
 
         # dataset/dataloader/optimizer/scheduler will be loaded with each patient
         return
@@ -444,6 +446,7 @@ class IDLGTVtTraining(TrainingCore):
         no_pt: bool,
         no_mr: bool,
         metric_funcs: Dict = None,
+        device_id:int=0,
     ):
         cur_round = Path(round_dir).name
 
@@ -465,6 +468,7 @@ class IDLGTVtTraining(TrainingCore):
             no_mr=no_mr,
             metric_funcs=metric_funcs,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
+            device_id=device_id
         )
 
         # save score of cur patient
@@ -492,6 +496,8 @@ class IDLGTVtTraining(TrainingCore):
         hyper: Dict,
         selected_slices: Dict,
         metric_funcs: Dict = None,
+        queue = None,
+            device_id:int=0
     ):
         g.create_dir(round_dir)
 
@@ -555,6 +561,8 @@ class IDLGTVtTraining(TrainingCore):
             no_mr=hyper["no.mr"],
             augment=augment,
             weight=weight,
+            nr_iters=hyper["iter"],
+            use_newcode=True
         )
 
         # optimize batch size (before create dataloader)
@@ -566,91 +574,99 @@ class IDLGTVtTraining(TrainingCore):
             batch_size=hyper["batch.size.actual"],
             shuffle=True,
             num_workers=g.NUM_WORKERS,
+            persistent_workers=True,
+            pin_memory=True
         )
+        
 
-        # idl progress INIT_DATALOADER
-        if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step += (
-                self._obs_study_progress.step.INIT_DATALOADER
-            )
-            self._obs_study_progress.emit_signal()
+        if queue is not None:
+            progress = 0.02
+            queue.put({"progress": progress})
+        # if self._obs_study_progress is not None:
+        #     self._obs_study_progress.cur_step += (
+        #         self._obs_study_progress.step.INIT_DATALOADER
+        #     )
+        #     self._obs_study_progress.emit_signal()
 
-        # function is runing in QThread, run in background and hide tqdm bar
-        if self._obs_study_progress is not None:
-            iter_range = range(hyper["iter"])
-
-        # not in QThread, show tqdm bar
-        else:
-            iter_range = tqdm(range(hyper["iter"]))
-
+        # print("iteration_setup",  block_times["iteration_setup"])
         scaler = GradScaler()
-
         # iter loop through iterations
-        for cur_iter in iter_range:
-            hyper["cnn"].train()
-            iter_loss = 0
-            batch_count = 0
+        
+        cnt = 0
+        cur_iter = 0
+        batch_count = 0
+        augment_times = augment["augment.times"]
+        batch_size = hyper["batch.size.actual"] 
+        idl_gtvt_dataset.set_iter(cur_iter)
+        if queue is not None:
+            totalsteps = len(idl_gtvt_loader)
+            stepsize = (0.9 - progress)/totalsteps
+        for item in tqdm(idl_gtvt_loader):  # Iterate through the DataLoader
+            if queue is not None:
+                progress += stepsize
+                queue.put({"progress": progress})
+            if cnt == 0:  # Begin a new iteration every batch_size (4 augmentations)
+                hyper["cnn"].train()
+                iter_loss = 0  # Reset the iteration loss
+                idl_gtvt_dataset.set_iter(cur_iter)
 
-            # freeze layers before iDL
-            if hyper["layer.freezing"]:
-                if g.used_gpu_count() > 1:
-                    # here, hyper["cnn"] is DataParallel, not network itself
-                    hyper["cnn"].module.freeze_top()
-                else:
-                    hyper["cnn"].freeze_top()
+                if hyper["layer.freezing"]:
+                    if g.used_gpu_count() > 1:
+                        hyper["cnn"].module.freeze_top()
+                    else:
+                        hyper["cnn"].freeze_top()
+                        
 
-            # here, labels only have 2 channels: background and gtvt, No gtvn
-            for item in idl_gtvt_loader:
-                # zero grad at the begining of each mini-batch
-                hyper["optim"].zero_grad()
-                item["input.imgs"] = item["input.imgs"].to(g.DEVICE)
-                item["labels"] = item["labels"].to(g.DEVICE)
-                item["weight.map"] = item["weight.map"].to(g.DEVICE)
-                preds = hyper["cnn"](item["input.imgs"])
+            hyper["optim"].zero_grad()
+            item["input.imgs"] = item["input.imgs"].to(g.DEVICES[device_id])
+            item["labels"] = item["labels"].to(g.DEVICES[device_id])
+            item["weight.map"] = item["weight.map"].to(g.DEVICES[device_id])
 
-                with autocast():
-                    loss = hyper["loss.func"](preds, item["labels"], item["weight.map"])
+            preds = hyper["cnn"](item["input.imgs"])
 
-                # Backpropagation and optimization step
-                # Get grad (must be after: optim.zero_grad())
-                scaler.scale(loss).backward()
-                # Update parameters
-                scaler.step(hyper["optim"])
-                scaler.update()
+            with autocast():
+                loss = hyper["loss.func"](preds, item["labels"], item["weight.map"])
 
-                # Accumulate training loss
-                iter_loss += loss.item()
-                batch_count += 1
+            scaler.scale(loss).backward()
+            scaler.step(hyper["optim"])
+            scaler.update()
+            iter_loss += loss.item()
+            cnt += batch_size
+            batch_count += 1
+            
+            if cnt == augment_times:
+                # Log and reset after 4 augmentations (1 "iteration")
+                iter_loss /= batch_count
+                hyper["scheduler"].step(iter_loss)
 
-                # idl progress MINI_BATCH
-                if batch_count <= 1:
-                    if self._obs_study_progress is not None:
-                        self._obs_study_progress.cur_step += (
-                            self._obs_study_progress.step.FIRST_BATCH
-                        )
-                        self._obs_study_progress.emit_signal()
-                else:
-                    if self._obs_study_progress is not None:
-                        self._obs_study_progress.cur_step += (
-                            self._obs_study_progress.step.OTHER_BATCH
-                        )
-                        self._obs_study_progress.emit_signal()
+                # Emit signal for progress tracking
+                if batch_count == 1 and self._obs_study_progress is not None:
+                    self._obs_study_progress.cur_step += (
+                        self._obs_study_progress.step.FIRST_BATCH
+                    )
+                    self._obs_study_progress.emit_signal()
+                elif self._obs_study_progress is not None:
+                    self._obs_study_progress.cur_step += (
+                        self._obs_study_progress.step.OTHER_BATCH
+                    )
+                    self._obs_study_progress.emit_signal()
 
-            # cur iter finished
-            # Calculate average training loss
-            iter_loss /= batch_count
-            # update scheduler
-            hyper["scheduler"].step(iter_loss)
 
-            # record loss
-            loss_dict[
-                "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
-            ] = iter_loss
-            # save loss and update loss figure after every iter, if there is only one patient
-            patient_dirs_list = g.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))
-            if len(patient_dirs_list) <= 1:
-                g.save_json(loss_dict, loss_json_path)
-                self._plot_loss_fig(idl_gtvt_dir)
+                # Store the iteration loss
+                loss_dict[
+                    "iter={:03d}".format((cur_round - 1) * hyper["iter"] + (cur_iter + 1))
+                ] = iter_loss
+                # Move to the next iteration
+                cur_iter += 1
+                cnt = 0  # Reset counter for the next iteration
+                batch_count = 0 
+                # Optionally, save after every iteration if there's only one patient
+                patient_dirs_list = g.get_sub_dirs(os.path.join(idl_gtvt_dir, "patients"))
+                if len(patient_dirs_list) <= 1:
+                    g.save_json(loss_dict, loss_json_path)
+                    self._plot_loss_fig(idl_gtvt_dir)
+
+
 
         # current round idl finished
         # save cnn
@@ -671,6 +687,9 @@ class IDLGTVtTraining(TrainingCore):
                 data=selected_slices_to_save,
                 path=os.path.join(patient_dir, "selected_slices.json"),
             )
+        if queue is not None:
+            progress += 0.05
+            queue.put({"progress": progress})
 
         # inference
         self.__inference_cur_round(
@@ -680,6 +699,7 @@ class IDLGTVtTraining(TrainingCore):
             no_pt=hyper["no.pt"],
             no_mr=hyper["no.mr"],
             metric_funcs=metric_funcs,
+            device_id=device_id
         )
 
         # save time spent
@@ -693,6 +713,9 @@ class IDLGTVtTraining(TrainingCore):
 
         # save loss
         g.save_json(loss_dict, loss_json_path)
+        if queue is not None:
+            progress += 0.05
+            queue.put({"progress": progress})
 
     def __simulation_single_patient(
         self,
@@ -700,6 +723,7 @@ class IDLGTVtTraining(TrainingCore):
         idl_gtvt_dir: str,
         hyper: Dict,
         metric_funcs: Dict = None,
+        device_id:int=0,
     ):
         print("")
         print("patient:", patient)
@@ -770,6 +794,7 @@ class IDLGTVtTraining(TrainingCore):
                 hyper=hyper,
                 selected_slices=selected_slices,
                 metric_funcs=metric_funcs,
+                device_id=device_id,
             )
 
             if cur_round == max_round:
@@ -827,6 +852,7 @@ class IDLGTVtTraining(TrainingCore):
         baseline_id: str,
         train_remark: str = None,
         debug_mode: bool = False,
+        device_id:int=0,
     ):
         # load baseline hyper
         self._is_valid_baseline_id(baseline_id)
@@ -841,7 +867,7 @@ class IDLGTVtTraining(TrainingCore):
         baseline_no_mr = True if baseline_hyper["no.mr"] else False
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs()
+        metric_funcs = self._load_metric_funcs(device_id=device_id)
 
         # load hyper
         hyper_series = self._load_hyper_series_from_json(g.HYPER_PATH["idl.gtvt"])
@@ -870,6 +896,7 @@ class IDLGTVtTraining(TrainingCore):
                 hyper=hyper,
                 baseline_id=baseline_id,
                 debug_mode=debug_mode,
+                device_id=device_id
             )
             print("")
             self._print_hyper(hyper)
@@ -900,13 +927,21 @@ class IDLGTVtTraining(TrainingCore):
                 self.__reset_cnn(
                     hyper=hyper,
                     baseline_cnn_path=baseline_cnn_path,
+                    device_id=device_id
                 )
+                label = g.load_gtv_labels(
+                    dataset_ver=hyper["dataset.ver"],
+                    patient=patient,
+                )["gtvt"]
+                if label.max() == 0:
+                    continue
 
                 self.__simulation_single_patient(
                     patient=patient,
                     idl_gtvt_dir=idl_gtvt_dir,
                     hyper=hyper,
                     metric_funcs=metric_funcs,
+                    device_id=device_id
                 )
 
                 # calculate and save avg and median scores
@@ -933,8 +968,10 @@ class IDLGTVtTraining(TrainingCore):
         idl_gtvt_id: str,
         dataset_ver: str,
         patient: str,
+        queue: Queue = None, 
         debug_mode: bool = False,
-    ):
+        device_id: int=0):
+
         print("")
         print("observer study: {}".format(idl_gtvt_id))
 
@@ -958,7 +995,7 @@ class IDLGTVtTraining(TrainingCore):
             no_mr = False
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs()
+        metric_funcs = self._load_metric_funcs(device_id=device_id)
 
         # create idl result dir
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
@@ -1005,6 +1042,7 @@ class IDLGTVtTraining(TrainingCore):
             hyper=hyper,
             baseline_id=baseline_id,
             debug_mode=debug_mode,
+            device_id=device_id
         )
 
         # save hyper before training
@@ -1014,22 +1052,22 @@ class IDLGTVtTraining(TrainingCore):
         # training start time
         hyper["time.spent.total"] = datetime.now()
 
-        # obs study progress init (after load hyper)
-        if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step = 0
-            dataset_len = hyper["augment.times"]
-            dataset_len /= hyper["batch.size.actual"]
-            dataset_len = math.ceil(dataset_len)
-            self._obs_study_progress.total_step = (
-                self._obs_study_progress.step.INIT_CNN
-                + self._obs_study_progress.step.INIT_DATALOADER
-                + self._obs_study_progress.step.INFERENCE_LOAD_IMG
-                + self._obs_study_progress.step.INFERENCE_FORWARD
-            )
-            self._obs_study_progress.total_step += hyper["iter"] * (
-                self._obs_study_progress.step.FIRST_BATCH
-                + self._obs_study_progress.step.OTHER_BATCH * (dataset_len - 1)
-            )
+        # # obs study progress init (after load hyper)
+        # if self._obs_study_progress is not None:
+        #     self._obs_study_progress.cur_step = 0
+        #     dataset_len = hyper["augment.times"]
+        #     dataset_len /= hyper["batch.size.actual"]
+        #     dataset_len = math.ceil(dataset_len)
+        #     self._obs_study_progress.total_step = (
+        #         self._obs_study_progress.step.INIT_CNN
+        #         + self._obs_study_progress.step.INIT_DATALOADER
+        #         + self._obs_study_progress.step.INFERENCE_LOAD_IMG
+        #         + self._obs_study_progress.step.INFERENCE_FORWARD
+        #     )
+        #     self._obs_study_progress.total_step += hyper["iter"] * (
+        #         self._obs_study_progress.step.FIRST_BATCH
+        #         + self._obs_study_progress.step.OTHER_BATCH * (dataset_len - 1)
+        #     )
 
         # best baseline cnn is decided by dataset_part
         baseline_cnn_path = self._find_best_cnn_in_folds(baseline_id)
@@ -1037,12 +1075,17 @@ class IDLGTVtTraining(TrainingCore):
         self.__reset_cnn(
             hyper=hyper,
             baseline_cnn_path=baseline_cnn_path,
+            device_id=device_id
         )
 
         # idl progress INIT_CNN
         if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step += self._obs_study_progress.step.INIT_CNN
-            self._obs_study_progress.emit_signal()
+            self._obs_study_progress.cur_step = 0
+            
+        # # idl progress INIT_CNN
+        # if self._obs_study_progress is not None:
+        #     self._obs_study_progress.cur_step += self._obs_study_progress.step.INIT_CNN
+        #     self._obs_study_progress.emit_signal()
 
         # create an empty loss.json
         g.save_json(Dict(), os.path.join(patient_dir, "loss.json"))
@@ -1069,6 +1112,8 @@ class IDLGTVtTraining(TrainingCore):
             hyper=hyper,
             selected_slices=selected_slices,
             metric_funcs=metric_funcs,
+            queue = queue,
+            device_id=device_id
         )
 
         # draw avg loss of all trained patients
@@ -1086,6 +1131,9 @@ class IDLGTVtTraining(TrainingCore):
                 hyper[key_name] = str(hyper[key_name]).split(".", 2)[0]
 
         self._save_hyper(hyper, hyper_save_path)
+         # Signal completion
+        if queue is not None:
+            queue.put({"status": "complete", "message": "Observer study finished successfully."})
 
         # if self._obs_study_progress is not None:
         #     print(self._obs_study_progress.cur_step, self._obs_study_progress.total_step)
@@ -1142,7 +1190,7 @@ class IDLGTVtTraining(TrainingCore):
                 )
         g.save_json(data=scores, path=os.path.join(score_json_path))
 
-    def inference(self, idl_gtvt_id: str, debug_mode: bool = False):
+    def inference(self, idl_gtvt_id: str, debug_mode: bool = False, device_id: int = 0):
         print("")
         print("inference: {}".format(idl_gtvt_id))
 
@@ -1162,7 +1210,7 @@ class IDLGTVtTraining(TrainingCore):
         no_mr = hyper["no.mr"]
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs()
+        metric_funcs = self._load_metric_funcs(device_id=device_id)
 
         # get all patients
         patients = self._load_patients(
@@ -1205,7 +1253,7 @@ class IDLGTVtTraining(TrainingCore):
             ):
                 # load current round cnn
                 cnn_path = g.get_sub_files(round_dir, key_word=".pt", full_path=True)[0]
-                cnn = self._load_exist_cnn(cnn_path)
+                cnn = self._load_exist_cnn(cnn_path, device_id=device_id)
 
                 self.__inference_cur_round(
                     round_dir=round_dir,
@@ -1214,6 +1262,7 @@ class IDLGTVtTraining(TrainingCore):
                     no_pt=no_pt,
                     no_mr=no_mr,
                     metric_funcs=metric_funcs,
+                    device_id=device_id
                 )
 
         self._inference_calculate_avg_median_save_json(
