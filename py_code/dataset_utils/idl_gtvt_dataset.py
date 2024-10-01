@@ -1,5 +1,4 @@
 import os
-import random
 from typing import Tuple
 
 import global_utils.global_core as g
@@ -11,6 +10,7 @@ from global_utils.str_lib import Modal, Plane
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
 from torch import Tensor
+import hashlib
 
 
 class IDLGTVtDataSet(DatasetCore):
@@ -25,6 +25,8 @@ class IDLGTVtDataSet(DatasetCore):
         no_mr: bool,
         augment: Dict,
         weight: Dict,
+        nr_iters: int,
+        use_newcode: bool,
     ):
         super().__init__(
             dataset_ver=dataset_ver,
@@ -33,7 +35,10 @@ class IDLGTVtDataSet(DatasetCore):
             augment=augment,
         )
         self.__augment_times = augment["augment.times"]
-
+        self.__nr_iters = nr_iters
+        self.__use_newcode = use_newcode
+        self.patient = patient
+        self.current_iter = 0
         # origin images
         self.__origin = Dict()
 
@@ -66,23 +71,21 @@ class IDLGTVtDataSet(DatasetCore):
         self.__origin["weight.map"], selected_slices_mask = self.__load_weight_map(
             selected_slices, weight
         )
+        masked_pred = self.__origin["pred"] * (1-selected_slices_mask)
+        # combine pred(un-selected slices) and label(selected slices)
+        masked_label = self.__origin["label"] * selected_slices_mask
+        self.__origin["label"] = g.binarize_img(masked_pred + masked_label)
 
-        # only keep the selected slices in label
-        self.__origin["label"] *= selected_slices_mask
+    
+    def set_iter(self, iter: int):
+        """Sets the current epoch to be used for seed generation."""
+        self.current_iter = iter
 
-        # g.save_nii(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "masked.label.nii.gz"),
-        # )
-
-        # combine baseline pred(un-selected slices) with label(selected slices)
-        self.__origin["label"] += self.__origin["pred"] * (1 - selected_slices_mask)
-
-        # g.save_nii(
-        #     self.__origin["label"],
-        #     os.path.join(g.PROJ_DIR, "debug", "masked.label+pred.nii.gz"),
-        # )
-
+    def _generate_seed(self, patient_id: str, idx: int) -> int:
+        """Generate a deterministic seed based on the patient ID and epoch number."""
+        combined_id = f"{patient_id}_{self.current_iter}_{idx}"
+        return int(hashlib.sha256(combined_id.encode('utf-8')).hexdigest(), 16) % 2**16
+    
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # selected slice mask
         selected_slices_mask = Dict()
@@ -185,7 +188,11 @@ class IDLGTVtDataSet(DatasetCore):
 
     # must be overrided
     def __len__(self):
-        return self.__augment_times
+        if self.__use_newcode:
+            return  self.__augment_times*self.__nr_iters
+        else:
+            return self.__augment_times
+
 
     def _preprocess(
         self,
@@ -228,52 +235,16 @@ class IDLGTVtDataSet(DatasetCore):
         item["shape"] = self.__origin["label"].shape
 
         final = Dict()
-        tmp = Dict()
+        augment_seed = self._generate_seed(self.patient, idx)
+        final["augment.seed"] = augment_seed
+        for i in ["label", "pred"]:
+            final[i] = self._preprocess(
+                img=self.__origin[i],
+                augment_seed=final["augment.seed"],
+            )
+            final[i] = g.binarize_img(final[i])
 
-        origin_label_pred_sum = (
-            self.__origin["label"].sum() + self.__origin["pred"].sum()
-        )
-
-        # loop until target volume is big enough
-        for k in range(50):
-            # make sure same group use the same augment_seed
-            # !!! use python random, DO NOT use np.random !!!
-            # np.random + dataloader will cause multi-processing problem
-            tmp["augment.seed"] = random.randint(0, 2**16)
-
-            # load gtvs
-            for i in ["label", "pred"]:
-                tmp[i] = self._preprocess(
-                    img=self.__origin[i],
-                    augment_seed=tmp["augment.seed"],
-                )
-                tmp[i] = g.binarize_img(tmp[i])
-
-            tmp_label_pred_sum = tmp["label"].sum() + tmp["pred"].sum()
-
-            # target volume is not large enough
-            if tmp_label_pred_sum < origin_label_pred_sum * 0.999:
-                # if "final" dict is empty
-                if final == {}:
-                    for i in ["label", "pred", "augment.seed"]:
-                        final[i] = tmp[i]
-                    if origin_label_pred_sum == 0:
-                        break
-
-                # keep the seed/label/pred with largest target volume
-                final_label_pred_sum = final["label"].sum() + final["pred"].sum()
-                if tmp_label_pred_sum > final_label_pred_sum:
-                    for i in ["label", "pred", "augment.seed"]:
-                        final[i] = tmp[i]
-                continue
-
-            # target volume is large enough, break
-            else:
-                for i in ["label", "pred", "augment.seed"]:
-                    final[i] = tmp[i]
-                break
-
-        # background
+        # # background
         background = 1 - final["label"]
         # !!! background FIRST !!!
         item["labels"] = torch.cat([background, final["label"]], dim=0)

@@ -10,6 +10,8 @@ from global_utils.custom_dict import Dict
 from global_utils.str_lib import DatasetVer, ErrMsg, Modal
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt, measurements
+# from str_lib import DatasetVer, Modal
+import hashlib
 
 
 class IDLGTVnDataSet(DatasetCore):
@@ -34,7 +36,17 @@ class IDLGTVnDataSet(DatasetCore):
         self.__geodesic_distance = geodesic_distance
         self.__obs_gtvn_clicks = obs_gtvn_clicks
         self.__random_click = random_click
+        self.current_epoch = 0
+        
+    def _generate_seed(self, patient_id: str) -> int:
+        """Generate a deterministic seed based on the patient ID and epoch number."""
+        combined_id = f"{patient_id}_{self.current_epoch}"
+        return int(hashlib.sha256(combined_id.encode('utf-8')).hexdigest(), 16) % 2**16
 
+    def set_epoch(self, epoch: int):
+        """Sets the current epoch to be used for seed generation."""
+        self.current_epoch = epoch
+        
     # must be overrided
     def __len__(self):
         return len(self.__patients)
@@ -107,46 +119,12 @@ class IDLGTVnDataSet(DatasetCore):
 
         # find augment seed
         final = Dict()
-        tmp = Dict()
-
-        origin_label_sum = self.__origin["label"].sum()
-
-        # loop until target volume is big enough
-        for k in range(50):
-            # make sure same group use the same augment_seed
-            # !!! use python random, DO NOT use np.random !!!
-            # np.random + dataloader will cause multi-processing problem
-            tmp["augment.seed"] = random.randint(0, 2**16)
-
-            # load gtvs
-            tmp["label"] = self._preprocess(
-                img=self.__origin["label"],
-                augment_seed=tmp["augment.seed"],
-            )
-            tmp["label"] = g.binarize_img(tmp["label"])
-
-            tmp_label_sum = tmp["label"].sum()
-
-            # target volume is not large enough
-            if tmp_label_sum < origin_label_sum * 0.999:
-                # if "final" dict is empty
-                if final == {}:
-                    for i in ["label", "augment.seed"]:
-                        final[i] = tmp[i]
-                    if origin_label_sum == 0:
-                        break
-
-                # keep the seed/label/pred with largest target volume
-                if tmp_label_sum > final["label"].sum():
-                    for i in ["label", "augment.seed"]:
-                        final[i] = tmp[i]
-                continue
-
-            # target volume is large enough, break
-            else:
-                for i in ["label", "augment.seed"]:
-                    final[i] = tmp[i]
-                break
+        final["augment.seed"] = self._generate_seed(patient)
+        final["label"] = self._preprocess(
+            img=self.__origin["label"],
+            augment_seed=final["augment.seed"],
+        )
+        final["label"] = g.binarize_img(final["label"])
 
         # background
         background = 1 - final["label"]
