@@ -30,6 +30,9 @@ from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtThread
 from ui_utils.obs_study_timer import ObsStudyTimer
 from ui_utils.replay_window import ReplayWindow
 from ui_utils.todo_list_label import TodoListLabel
+from multiprocessing import Process, Queue
+from training_utils.idl_gtvt_training import IDLGTVtTraining
+
 
 
 class ObsStudyWindow(ReplayWindow):
@@ -42,6 +45,9 @@ class ObsStudyWindow(ReplayWindow):
         self.__train_id = train_id
         # pass debug_mode parameter to the parent class
         super().__init__()
+        # Queue for communication
+        self.queue = Queue()
+
 
     def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         if (
@@ -1020,6 +1026,41 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
+        
+    def start_training(self,idl_gtvt_id, dataset_ver, patient, queue):
+        # Start the training process in a separate process
+        process_data = (idl_gtvt_id, dataset_ver, patient, queue)  # Only pass the needed data
+
+        self.process = Process(target=self._run_obs_study_in_process, args=process_data)
+        self.process.start()
+        # Set the queue and start the thread
+
+        self.__idl_gtvt_thread.queue = queue
+        if not self.__idl_gtvt_thread.isRunning():  # Ensure it's not already running
+            self.__idl_gtvt_thread.start()
+        # # Start the thread to monitor progress
+        # self.__idl_gtvt_thread = ObsStudyGTVtThread(
+        #     queue=queue,
+        #     progress_bar=self.__progress_bar["gtvt"],
+        #     progress_bar_label=self._text_label["gtvt.progress"],
+        # )
+        # self.__idl_gtvt_thread.progress_signal.connect(self.__update_idl_gtvt_progress_bar)
+        # self.__idl_gtvt_thread.complete_signal.connect(self.__on_idl_gtvt_thread_finished)
+        
+        # self.__idl_gtvt_thread.start()
+        
+        # self.process = Process(target=run_obs_study, args=(idl_gtvt_id, dataset_ver, patient, queue))
+        # self.process.start()
+        # self.timer.start(1000)  # Check every second
+    
+    @staticmethod
+    def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue):
+        
+        try:
+            training = IDLGTVtTraining()
+            training.obs_study(idl_gtvt_id=idl_gtvt_id, dataset_ver=dataset_ver, patient=patient, queue=queue, device_id=1)
+        except Exception as e:
+            pass
 
     # this function is connected to widget, dont set input params to this function
     def __confirm_gtvt_delineation(self):
@@ -1081,15 +1122,15 @@ class ObsStudyWindow(ReplayWindow):
             save_path=os.path.join(cur_round_dir, "gtvt_delineation.nii.gz"),
             spacing=g.NII_SPACING,
         )
-
-        # (3) start idl gtvt thread
-        self.__idl_gtvt_thread.set_param(
-            idl_gtvt_id=self._idl_id["gtvt"],
-            dataset_ver=self.dataset_ver,
-            patient=self._cur_patient,
-            debug_mode=self._debug_mode,
-        )
-        self.__idl_gtvt_thread.start()
+        self.start_training(self._idl_id["gtvt"], self.dataset_ver, self._cur_patient, self.queue)
+        # # (3) start idl gtvt thread
+        # self.__idl_gtvt_thread.set_param(
+        #     idl_gtvt_id=self._idl_id["gtvt"],
+        #     dataset_ver=self.dataset_ver,
+        #     patient=self._cur_patient,
+        #     debug_mode=self._debug_mode,
+        # )
+        # self.__idl_gtvt_thread.start()
 
         # (4) end and start timer
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
