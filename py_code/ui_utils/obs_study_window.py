@@ -1240,7 +1240,7 @@ class ObsStudyWindow(ReplayWindow):
                 self.__enable_annotation_tools()
             else:
                 self.restore_mouse_cursor()
-                self.__disable_annotation_tools(check_mouse_over_img_frame=False)
+                self.__disable_annotation_tools()
 
         # update widgets - only gtvn approved
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
@@ -2383,7 +2383,16 @@ class ObsStudyWindow(ReplayWindow):
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
         ):
             text = "Auto-segmentations of current patient are approved"
-
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            text = "Neural Network is generating GTVt auto-segmentation, please wait..."
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVnStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVtStep.APPROVED
+        ):
+            text = "Neural Network is generating GTVn auto-segmentation, please wait..."
         elif (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
@@ -2395,6 +2404,8 @@ class ObsStudyWindow(ReplayWindow):
 
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
             text = "Please correct the GTVn auto-segmentation"
+        else:
+            text = ""
 
         self._qimg_draw_text(
             qimg=qimg,
@@ -2706,13 +2717,19 @@ class ObsStudyWindow(ReplayWindow):
             ]
             self._text_label[TodoListLabel.CLICK_GTVN_CENTERS].set_status_active()
             not_start_todo_labels = [
-                TodoListLabel.CORRECT_GTVT,
                 TodoListLabel.CORRECT_GTVN,
             ]
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
                 self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
             else:
                 self._text_label[TodoListLabel.WAIT_PRED].set_status_not_start()
+
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                self._text_label[TodoListLabel.CORRECT_GTVT].set_status_active()
+            else:
+                self._text_label[TodoListLabel.CORRECT_GTVT].set_status_not_start()
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+                self._text_label[TodoListLabel.CORRECT_GTVT].set_status_completed()
 
         elif (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
@@ -2734,6 +2751,78 @@ class ObsStudyWindow(ReplayWindow):
             ]
 
         elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVN].set_status_active()
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVT,
+            ]
+        elif (
+            self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+            and self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVT].set_status_active()
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVN,
+            ]
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.CORRECT_GTVN
+            ]
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVT,
+            ]
+        elif (
+            self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+            and self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.CORRECT_GTVT
+            ]
+            self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
+            not_start_todo_labels = [
+                TodoListLabel.CORRECT_GTVN,
+            ]
+        elif (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
         ):
@@ -2750,7 +2839,40 @@ class ObsStudyWindow(ReplayWindow):
                 TodoListLabel.CORRECT_GTVN,
             ]
             not_start_todo_labels = []
-
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_PRED,
+                TodoListLabel.CORRECT_GTVN,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVT].set_status_active()
+            not_start_todo_labels = []
+        elif (
+            self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            and self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+        ):
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_PRED,
+                TodoListLabel.CORRECT_GTVT,
+            ]
+            self._text_label[TodoListLabel.CORRECT_GTVN].set_status_active()
+            not_start_todo_labels = []
         elif (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
@@ -2796,10 +2918,22 @@ class ObsStudyWindow(ReplayWindow):
             self._text_label[TodoListLabel.CORRECT_GTVN].set_status_active()
             self._text_label[TodoListLabel.WAIT_PRED].set_status_active()
             not_start_todo_labels = [TodoListLabel.CORRECT_GTVT]
-
+        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+            completed_todo_labels = [
+                TodoListLabel.SELECT_PATIENT,
+                TodoListLabel.CLICK_GTVT_CENTER,
+                TodoListLabel.DELINEATE_GTVT,
+                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                TodoListLabel.DELINEATE_GTVT_CORONAL,
+                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.CORRECT_GTVN
+            ]
         else:
             print(self.obs_study_gtvt_step)
             print(self.obs_study_gtvn_step)
+            completed_todo_labels = []
+            not_start_todo_labels = []
 
         for i in completed_todo_labels:
             self._text_label[i].set_status_completed()
