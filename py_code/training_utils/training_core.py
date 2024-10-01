@@ -79,7 +79,7 @@ class TrainingCore:
         return patients
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int):
+    def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int, device_id:int=0):
         # cnn architecture
         if hyper["cnn"] == "unet.pp.slim":
             cnn = UNetPPSlim
@@ -97,23 +97,23 @@ class TrainingCore:
         if g.used_gpu_count() > 1:
             hyper["cnn"] = DataParallel(hyper["cnn"])
         # to gpu (if gpu available)
-        hyper["cnn"] = hyper["cnn"].to(g.DEVICE)
+        hyper["cnn"] = hyper["cnn"].to(g.DEVICES[device_id])
 
-    def _load_exist_cnn(self, cnn_path: str):
+    def _load_exist_cnn(self, cnn_path: str, device_id:int=0):
         cnn = torch.load(cnn_path)
         if g.used_gpu_count() > 1:
             cnn = DataParallel(cnn)
-        cnn = cnn.to(g.DEVICE)
+        cnn = cnn.to(g.DEVICES[device_id])
         return cnn
 
-    def _load_metric_funcs(self) -> Dict:
+    def _load_metric_funcs(self, device_id:int=0) -> Dict:
         metric_funcs = Dict()
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             metric_funcs[metric] = MetricFunction(metric)
             # following line will cause bug, cant figure out why:
             # if g.used_gpu_count() > 1:
             #     metric_funcs[metric] = DataParallel(metric_funcs[metric])
-            metric_funcs[metric] = metric_funcs[metric].to(g.DEVICE)
+            metric_funcs[metric] = metric_funcs[metric].to(g.DEVICES[device_id])
         return metric_funcs
 
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
@@ -356,6 +356,105 @@ class TrainingCore:
             # cant find train_dir
             return None
 
+    def _prepare_for_inference_single_patient(
+        self,
+        patient: str,
+        dataset_ver: str,
+        no_pt: bool,
+        no_mr: bool,
+        idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
+        obs_gtvn_clicks: ndarray = None,  # only for observer study
+        device_id: int = 0,  # set which GPU to use
+    ):
+        # Load dataset
+        dataset = self._inference_single_patient_load_dataset(
+            patient=patient,
+            dataset_ver=dataset_ver,
+            no_pt=no_pt,
+            no_mr=no_mr,
+            idl_gtvn_geodesic_distance=idl_gtvn_geodesic_distance,
+            obs_gtvn_clicks=obs_gtvn_clicks,  # this is only for observer study
+        )
+
+        # Get dataset item
+        dataset_item = dataset.get_item(patient)
+        if dataset_item is None:
+            return None, None
+
+        # Prepare input images
+        input_imgs = dataset_item["input.imgs"]
+        input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICES[device_id]), dim=0)
+
+        # Get image shape
+        img_shape = dataset_item["shape"]
+
+        
+        return input_imgs, img_shape, dataset_item
+    
+
+    def _inference_single_prepared_patient(
+        self,
+        cnn,
+        dataset_item,
+        input_imgs: torch.Tensor,
+        img_shape: tuple,
+        metric_funcs: Dict = None,
+        idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
+        device_id: int = 0,  # set which GPU to use
+    ):
+        # Prepare outputs dict
+        outputs = Dict()
+        
+        # Record labels
+        self._inference_single_patient_record_labels(outputs=outputs, dataset_item=dataset_item)
+        
+        # Record GTVN clicks
+        self._inference_single_patient_record_gtvn_clicks(outputs=outputs, dataset_item=dataset_item)
+        
+        # Record GTVN distance map
+        self._inference_single_patient_record_gtvn_distance_map(outputs=outputs, input_imgs=input_imgs, img_shape=img_shape)
+
+        # idl progress INFERENCE_LOAD_IMG
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += self._obs_study_progress.step.INFERENCE_LOAD_IMG
+            self._obs_study_progress.emit_signal()
+
+        # CNN Evaluation
+        cnn.eval()
+
+        # Forward pass
+        with torch.no_grad():
+            preds = cnn.forward(input_imgs)
+        preds = torch.squeeze(preds, dim=0).cpu().numpy()
+
+        # idl progress INFERENCE_FORWARD
+        if self._obs_study_progress is not None:
+            self._obs_study_progress.cur_step += self._obs_study_progress.step.INFERENCE_FORWARD
+            self._obs_study_progress.emit_signal()
+
+        # Record predictions
+        self._inference_single_patient_record_preds(outputs=outputs, preds=preds, img_shape=img_shape)
+
+        # Post-process GTVT
+        self._inference_single_patient_gtvt_post_process(
+            outputs=outputs,
+            idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
+        )
+
+        # Post-process GTVN
+        self._inference_single_patient_gtvn_post_process(outputs)
+
+        # Calculate metrics
+        if metric_funcs is not None and self._obs_study_progress is None:
+            for gtv in outputs.keys():
+                for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                    outputs[gtv][metric] = metric_funcs[metric](
+                        outputs[gtv]["pred"],
+                        outputs[gtv]["label"],
+                    )
+
+        return outputs
+
     def _inference_single_patient(
         self,
         patient: str,
@@ -367,6 +466,7 @@ class TrainingCore:
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
         idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
         obs_gtvn_clicks: ndarray = None,  # only for observer study
+        device_id: int = 0,  # set which GPU to use
     ) -> Dict:
 
         # (1)outputs structure for sigle-observer datasets:
@@ -401,7 +501,7 @@ class TrainingCore:
         if input_imgs is None:
             input_imgs = dataset_item["input.imgs"]
             # add "batch" (c/d/h/w -> b/c/d/h/w)
-            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICE), dim=0)
+            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICES[device_id]), dim=0)
 
         # get img shape
         if img_shape is None:
