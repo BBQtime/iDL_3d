@@ -2405,49 +2405,69 @@ class ObsStudyWindow(ReplayWindow):
             )
             return
 
+        # click gtvt center
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
             text = "Please click the center of primary Gross Tumor Volumes (GTVt)"
 
+        # delineate gtvt
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
             text = "Please delineate GTVt in 3 anatomical planes"
 
+        # click gtvn center
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             text = "Please click the center of malignant lymph nodes (GTVn)"
 
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
-        ):
-            text = "Neural Network is generating auto-segmentation, please wait..."
-
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
-        ):
-            text = "Auto-segmentations of current patient are approved"
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
-        ):
-            text = "Neural Network is generating GTVt auto-segmentation, please wait..."
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVnStep.WAIT_PRED
-            and self.obs_study_gtvn_step == ObsStudyGTVtStep.APPROVED
-        ):
-            text = "Neural Network is generating GTVn auto-segmentation, please wait..."
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
-        ):
-            text = "Please correct the GTVt and GTVn auto-segmentations"
-
-        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-            text = "Please correct the GTVt auto-segmentation"
-
-        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-            text = "Please correct the GTVn auto-segmentation"
+        # other conditions:
+        # gtvt/gtvn - WAIT_PRED/CORRECT/APPROVED, (3*3=9 conditions)
         else:
-            text = ""
+            # (1) both waiting
+            if (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+                and self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+            ):
+                text = "Neural Network is generating auto-segmentations, please wait..."
+
+            # (2) both being corrected
+            elif (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+                and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            ):
+                text = "Please correct the GTVt and GTVn auto-segmentations"
+
+            # (3) both approved
+            elif (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+                and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+            ):
+                text = "Auto-segmentations of current patient are approved"
+
+            # (4) gtvt waiting, gtvn approved (user can do nothing)
+            elif (
+                self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
+                and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+            ):
+                text = "Neural Network is generating GTVt auto-segmentation, please wait..."
+
+            # (5) gtvn waiting, gtvt approved (user can do nothing)
+            elif (
+                self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
+                and self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            ):
+                text = "Neural Network is generating GTVn auto-segmentation, please wait..."
+
+            # (6) gtvt being corrected, gtvn waiting
+            # (7) gtvt being corrected, gtvn approved
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                text = "Please correct the GTVt auto-segmentation"
+
+            # (8) gtvn being corrected, gtvt waiting
+            # (9) gtvn being corrected, gtvt approved
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                text = "Please correct the GTVn auto-segmentation"
+
+            # This block should never be reached
+            else:
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
         self._qimg_draw_text(
             qimg=qimg,
@@ -2808,11 +2828,7 @@ class ObsStudyWindow(ReplayWindow):
             elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
                 completed_todo_labels.append(TodoListLabel.CORRECT_GTVT)
             else:  # This block should never be reached
-                g.error_exit(
-                    "Invalid value of obs_study_gtvt_step: {}".format(
-                        self.obs_study_gtvt_step
-                    )
-                )
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
             # TodoListLabel.CORRECT_GTVN
             if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
@@ -2822,11 +2838,7 @@ class ObsStudyWindow(ReplayWindow):
             elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
                 completed_todo_labels.append(TodoListLabel.CORRECT_GTVN)
             else:  # This block should never be reached
-                g.error_exit(
-                    "Invalid value of obs_study_gtvn_step: {}".format(
-                        self.obs_study_gtvn_step
-                    )
-                )
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
         for i in completed_todo_labels:
             self._text_label[i].set_status_completed()
