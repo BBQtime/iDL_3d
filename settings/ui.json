@@ -27,7 +27,7 @@
             "pred": "yellow"
         }
     },
-    "debug.mode": true,
+    "debug.mode": false,
     "eraser.size": {
         "max": 40,
         "min": 8

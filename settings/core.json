@@ -1,5 +1,5 @@
 {
-    "cuda.visible.devices": "0",
+    "cuda.visible.devices": "0,1",
     "dataset.dir": {
         "au": {
             "linux": "/mnt/faststorage/alan/Datasets/3D_1mm/AU_dataset/",
@@ -47,6 +47,6 @@
     },
     "img.shape": "240,240,240",
     "nii.spacing": "1.0,1.0,1.0",
-    "num.workers": 16,
+    "num.workers": 3,
     "train.results.dir": "train_results"
 }
