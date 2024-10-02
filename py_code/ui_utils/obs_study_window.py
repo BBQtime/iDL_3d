@@ -1026,13 +1026,14 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
-    def start_training(self, idl_gtvt_id, dataset_ver, patient, queue):
+    def start_training(self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
         # Start the training process in a separate process
         process_data = (
             idl_gtvt_id,
             dataset_ver,
             patient,
             queue,
+            debug_mode,
         )  # Only pass the needed data
 
         if g.is_linux():
@@ -1068,7 +1069,7 @@ class ObsStudyWindow(ReplayWindow):
         # self.timer.start(1000)  # Check every second
 
     @staticmethod
-    def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue):
+    def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
         # try:
         training = IDLGTVtTraining()
         training.obs_study(
@@ -1076,6 +1077,7 @@ class ObsStudyWindow(ReplayWindow):
             dataset_ver=dataset_ver,
             patient=patient,
             queue=queue,
+            debug_mode=debug_mode,
             device_id=1,
         )
         # except Exception:
@@ -1144,7 +1146,11 @@ class ObsStudyWindow(ReplayWindow):
 
         # (3) start idl gtvt thread
         self.start_training(
-            self._idl_id["gtvt"], self.dataset_ver, self._cur_patient, self.queue
+            self._idl_id["gtvt"],
+            self.dataset_ver,
+            self._cur_patient,
+            self.queue,
+            self._debug_mode,
         )
         # self.__idl_gtvt_thread.set_param(
         #     idl_gtvt_id=self._idl_id["gtvt"],
@@ -1299,7 +1305,9 @@ class ObsStudyWindow(ReplayWindow):
         # update widgets - only gtvt approved
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-                self.change_mouse_cursor(check_mouse_over_img_frame=False)
+                # Set check_mouse_over_img_frame to Ture
+                # Change the cursor only when it is over an image frame.
+                self.change_mouse_cursor(check_mouse_over_img_frame=True)
                 self.__enable_annotation_tools()
             else:
                 self.restore_mouse_cursor()
@@ -1310,7 +1318,9 @@ class ObsStudyWindow(ReplayWindow):
             # update dwaring mode before change mouse cursor
             self.drawing_mode = DrawingMode.GTVT_PEN
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-                self.change_mouse_cursor()
+                # Set check_mouse_over_img_frame to False
+                # Change the cursor only when it is over an image frame.
+                self.change_mouse_cursor(check_mouse_over_img_frame=True)
                 self.__enable_annotation_tools()
             else:
                 self.restore_mouse_cursor()

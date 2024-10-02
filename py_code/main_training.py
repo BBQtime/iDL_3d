@@ -63,17 +63,17 @@ if __name__ == "__main__":
     #         debug_mode=debug_mode,
     #     )
 
-    idl_gtvn = IDLGTVnTraining()
-    for baseline_id in [
-        # "baseline_au",
-        "baseline_nki.new",
-        # "baseline_nki.transfer",
-    ]:
-        idl_gtvn.new_training(
-            baseline_id=baseline_id,
-            train_remark=baseline_id[len("baseline_") :] + "_multi.clicks",
-            debug_mode=0,
-        )
+    # idl_gtvn = IDLGTVnTraining()
+    # for baseline_id in [
+    #     # "baseline_au",
+    #     "baseline_nki.new",
+    #     # "baseline_nki.transfer",
+    # ]:
+    #     idl_gtvn.new_training(
+    #         baseline_id=baseline_id,
+    #         train_remark=baseline_id[len("baseline_") :] + "_multi.clicks",
+    #         debug_mode=0,
+    #     )
     # for idl_gtvn_id, dataset_ver in [
     #     # ("idl.gtvn_au_single.click", DatasetVer.AU_EXT),
     #     # ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
@@ -105,7 +105,12 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
 
-    # idl_gtvt = IDLGTVtTraining()
+    idl_gtvt = IDLGTVtTraining()
+    idl_gtvt.simulation(
+        baseline_id="baseline_au",
+        train_remark="newcode",
+        debug_mode=0,
+    )
     # for baseline_id in [
     #     "baseline_au",
     #     "baseline_au_no.pt",
