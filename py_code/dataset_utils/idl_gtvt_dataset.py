@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Tuple
 
@@ -10,7 +11,6 @@ from global_utils.str_lib import Modal, Plane
 from numpy import ndarray
 from scipy.ndimage import distance_transform_edt
 from torch import Tensor
-import hashlib
 
 
 class IDLGTVtDataSet(DatasetCore):
@@ -71,12 +71,11 @@ class IDLGTVtDataSet(DatasetCore):
         self.__origin["weight.map"], selected_slices_mask = self.__load_weight_map(
             selected_slices, weight
         )
-        masked_pred = self.__origin["pred"] * (1-selected_slices_mask)
+        masked_pred = self.__origin["pred"] * (1 - selected_slices_mask)
         # combine pred(un-selected slices) and label(selected slices)
         masked_label = self.__origin["label"] * selected_slices_mask
         self.__origin["label"] = g.binarize_img(masked_pred + masked_label)
 
-    
     def set_iter(self, iter: int):
         """Sets the current epoch to be used for seed generation."""
         self.current_iter = iter
@@ -84,8 +83,8 @@ class IDLGTVtDataSet(DatasetCore):
     def _generate_seed(self, patient_id: str, idx: int) -> int:
         """Generate a deterministic seed based on the patient ID and epoch number."""
         combined_id = f"{patient_id}_{self.current_iter}_{idx}"
-        return int(hashlib.sha256(combined_id.encode('utf-8')).hexdigest(), 16) % 2**16
-    
+        return int(hashlib.sha256(combined_id.encode("utf-8")).hexdigest(), 16) % 2**16
+
     def __load_weight_map(self, selected_slices: Dict, weight: Dict):
         # selected slice mask
         selected_slices_mask = Dict()
@@ -189,10 +188,9 @@ class IDLGTVtDataSet(DatasetCore):
     # must be overrided
     def __len__(self):
         if self.__use_newcode:
-            return  self.__augment_times*self.__nr_iters
+            return self.__augment_times * self.__nr_iters
         else:
             return self.__augment_times
-
 
     def _preprocess(
         self,

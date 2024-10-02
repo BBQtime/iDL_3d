@@ -79,7 +79,9 @@ class TrainingCore:
         return patients
 
     # if float64 needed, use: "cnn.to(torch.double)"
-    def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int, out_chan: int, device_id:int=0):
+    def _load_hyper_new_cnn(
+        self, hyper: Dict, in_chan: int, out_chan: int, device_id: int = 0
+    ):
         # cnn architecture
         if hyper["cnn"] == "unet.pp.slim":
             cnn = UNetPPSlim
@@ -99,14 +101,14 @@ class TrainingCore:
         # to gpu (if gpu available)
         hyper["cnn"] = hyper["cnn"].to(g.DEVICES[device_id])
 
-    def _load_exist_cnn(self, cnn_path: str, device_id:int=0):
+    def _load_exist_cnn(self, cnn_path: str, device_id: int = 0):
         cnn = torch.load(cnn_path)
         if g.used_gpu_count() > 1:
             cnn = DataParallel(cnn)
         cnn = cnn.to(g.DEVICES[device_id])
         return cnn
 
-    def _load_metric_funcs(self, device_id:int=0) -> Dict:
+    def _load_metric_funcs(self, device_id: int = 0) -> Dict:
         metric_funcs = Dict()
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             metric_funcs[metric] = MetricFunction(metric)
@@ -388,9 +390,7 @@ class TrainingCore:
         # Get image shape
         img_shape = dataset_item["shape"]
 
-        
         return input_imgs, img_shape, dataset_item
-    
 
     def _inference_single_prepared_patient(
         self,
@@ -404,19 +404,27 @@ class TrainingCore:
     ):
         # Prepare outputs dict
         outputs = Dict()
-        
+
         # Record labels
-        self._inference_single_patient_record_labels(outputs=outputs, dataset_item=dataset_item)
-        
+        self._inference_single_patient_record_labels(
+            outputs=outputs, dataset_item=dataset_item
+        )
+
         # Record GTVN clicks
-        self._inference_single_patient_record_gtvn_clicks(outputs=outputs, dataset_item=dataset_item)
-        
+        self._inference_single_patient_record_gtvn_clicks(
+            outputs=outputs, dataset_item=dataset_item
+        )
+
         # Record GTVN distance map
-        self._inference_single_patient_record_gtvn_distance_map(outputs=outputs, input_imgs=input_imgs, img_shape=img_shape)
+        self._inference_single_patient_record_gtvn_distance_map(
+            outputs=outputs, input_imgs=input_imgs, img_shape=img_shape
+        )
 
         # idl progress INFERENCE_LOAD_IMG
         if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step += self._obs_study_progress.step.INFERENCE_LOAD_IMG
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.INFERENCE_LOAD_IMG
+            )
             self._obs_study_progress.emit_signal()
 
         # CNN Evaluation
@@ -429,11 +437,15 @@ class TrainingCore:
 
         # idl progress INFERENCE_FORWARD
         if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step += self._obs_study_progress.step.INFERENCE_FORWARD
+            self._obs_study_progress.cur_step += (
+                self._obs_study_progress.step.INFERENCE_FORWARD
+            )
             self._obs_study_progress.emit_signal()
 
         # Record predictions
-        self._inference_single_patient_record_preds(outputs=outputs, preds=preds, img_shape=img_shape)
+        self._inference_single_patient_record_preds(
+            outputs=outputs, preds=preds, img_shape=img_shape
+        )
 
         # Post-process GTVT
         self._inference_single_patient_gtvt_post_process(

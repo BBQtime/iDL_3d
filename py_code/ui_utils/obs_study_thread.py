@@ -1,10 +1,11 @@
+# from training_utils.idl_gtvt_training import IDLGTVtTraining
+import time
+
 import global_utils.global_core as g
 from numpy import ndarray
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
 from training_utils.idl_gtvn_training import IDLGTVnTraining
-# from training_utils.idl_gtvt_training import IDLGTVtTraining
-import time
 
 
 class ObsStudyThread(QThread):
@@ -122,6 +123,7 @@ class ObsStudyGTVtThread(ObsStudyThread):
     def stop(self):
         self.is_running = False
         self._hide_progress_widgets()
+
 
 # class ObsStudyGTVtThread(ObsStudyThread):
 #     progress_signal = pyqtSignal(float)

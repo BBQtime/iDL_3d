@@ -1,5 +1,5 @@
+import hashlib
 import os
-import random
 
 # import GeodisTK
 import global_utils.global_core as g
@@ -9,9 +9,7 @@ from dataset_utils.dataset_core import DatasetCore
 from global_utils.custom_dict import Dict
 from global_utils.str_lib import DatasetVer, ErrMsg, Modal
 from numpy import ndarray
-from scipy.ndimage import distance_transform_edt, measurements
-# from str_lib import DatasetVer, Modal
-import hashlib
+from scipy.ndimage import distance_transform_edt
 
 
 class IDLGTVnDataSet(DatasetCore):
@@ -37,16 +35,16 @@ class IDLGTVnDataSet(DatasetCore):
         self.__obs_gtvn_clicks = obs_gtvn_clicks
         self.__random_click = random_click
         self.current_epoch = 0
-        
+
     def _generate_seed(self, patient_id: str) -> int:
         """Generate a deterministic seed based on the patient ID and epoch number."""
         combined_id = f"{patient_id}_{self.current_epoch}"
-        return int(hashlib.sha256(combined_id.encode('utf-8')).hexdigest(), 16) % 2**16
+        return int(hashlib.sha256(combined_id.encode("utf-8")).hexdigest(), 16) % 2**16
 
     def set_epoch(self, epoch: int):
         """Sets the current epoch to be used for seed generation."""
         self.current_epoch = epoch
-        
+
     # must be overrided
     def __len__(self):
         return len(self.__patients)

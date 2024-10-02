@@ -42,7 +42,6 @@ class ObsStudyGTVtStep:
 
 
 class ObsStudyGTVnStep:
-    NOT_START = "not.start"
     CLICK_CENTERS = "click.centers"
     WAIT_PRED = "wait.pred"
     CORRECT = "correct"

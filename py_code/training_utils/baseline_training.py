@@ -153,14 +153,18 @@ class BaselineTraining(TrainingCore):
             if hyper["no.mr"] != baseline_no_mr:
                 g.error_exit("'no.mr' hyper mismatch between idl.gtvn and baseline!")
 
-    def _load_hyper_new_cnn(self, hyper: Dict, in_chan: int = 4, out_chan: int = 3, device_id: int=0):
+    def _load_hyper_new_cnn(
+        self, hyper: Dict, in_chan: int = 4, out_chan: int = 3, device_id: int = 0
+    ):
         if hyper["no.pt"]:
             in_chan -= 1
         if hyper["no.mr"]:
             in_chan -= 2
-        super()._load_hyper_new_cnn(hyper=hyper, in_chan=in_chan, out_chan=out_chan, device_id=device_id)
+        super()._load_hyper_new_cnn(
+            hyper=hyper, in_chan=in_chan, out_chan=out_chan, device_id=device_id
+        )
 
-    def _load_hyper_loss_func(self, hyper: Dict, device_id: int=0):
+    def _load_hyper_loss_func(self, hyper: Dict, device_id: int = 0):
         hyper["loss.func"] = UnifiedFocalLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
@@ -267,14 +271,14 @@ class BaselineTraining(TrainingCore):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def _calculate_loss(self, item: Dict, hyper: Dict,  device_id:int=0):
+    def _calculate_loss(self, item: Dict, hyper: Dict, device_id: int = 0):
         input_imgs = item["input.imgs"].to(g.DEVICES[device_id])
         labels = item["labels"].to(g.DEVICES[device_id])
         preds = hyper["cnn"](input_imgs)
         loss = hyper["loss.func"](preds, labels)
         return loss
 
-    def _training_all_epochs(self, hyper: Dict, fold_dir: str, device_id: int= 0):
+    def _training_all_epochs(self, hyper: Dict, fold_dir: str, device_id: int = 0):
         best_loss_dict = Dict()
         loss_json_path = os.path.join(fold_dir, "loss.json")
         lr_json_path = os.path.join(fold_dir, "lr.json")
@@ -298,7 +302,9 @@ class BaselineTraining(TrainingCore):
 
                 # Mixed precision training
                 with autocast():
-                    loss = self._calculate_loss(item=item, hyper=hyper,  device_id=device_id)
+                    loss = self._calculate_loss(
+                        item=item, hyper=hyper, device_id=device_id
+                    )
 
                 # Backpropagation and optimization step
                 # Get grad (must be after: optim.zero_grad())
@@ -322,7 +328,9 @@ class BaselineTraining(TrainingCore):
             with torch.no_grad():
                 for item in tqdm(hyper["valid.loader"]):
                     with autocast():
-                        loss = self._calculate_loss(item=item, hyper=hyper, device_id=device_id)
+                        loss = self._calculate_loss(
+                            item=item, hyper=hyper, device_id=device_id
+                        )
 
                     valid_loss += loss.item()
                     batch_count += 1
@@ -388,7 +396,7 @@ class BaselineTraining(TrainingCore):
         train_dir: str,
         idl_gtvn_baseline_id: str,
         debug_mode: bool,
-        device_id: int=0
+        device_id: int = 0,
     ):
         g.create_dir(train_dir)
 
@@ -423,7 +431,7 @@ class BaselineTraining(TrainingCore):
                 idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 fold=fold,
                 debug_mode=debug_mode,
-                device_id=device_id
+                device_id=device_id,
             )
             print("")
             self._print_hyper(hyper)
@@ -460,13 +468,13 @@ class BaselineTraining(TrainingCore):
         self,
         train_remark: str = "",
         debug_mode: bool = False,
-        device_id: int=0,
+        device_id: int = 0,
     ):
         self._new_training(
             idl_gtvn_baseline_id=None,
             train_remark=train_remark,
             debug_mode=debug_mode,
-            device_id=device_id
+            device_id=device_id,
         )
 
     def _new_training(
@@ -474,7 +482,7 @@ class BaselineTraining(TrainingCore):
         idl_gtvn_baseline_id: str = None,
         train_remark: str = "",
         debug_mode: bool = False,
-        device_id: int= 0,
+        device_id: int = 0,
     ):
         if idl_gtvn_baseline_id is None:
             hyper_json_path = g.HYPER_PATH["baseline"]
@@ -508,7 +516,7 @@ class BaselineTraining(TrainingCore):
                 train_dir=train_dir,
                 idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 debug_mode=debug_mode,
-                device_id=device_id
+                device_id=device_id,
             )
 
             # inference
@@ -529,7 +537,7 @@ class BaselineTraining(TrainingCore):
                 train_id=train_id,
                 dataset_ver=hyper["dataset.ver"],
                 debug_mode=debug_mode,
-                device_id=device_id
+                device_id=device_id,
             )
 
     def inference_all_folds(
@@ -554,7 +562,7 @@ class BaselineTraining(TrainingCore):
         dataset_part: str,  # only valid or test
         dataset_ver: str = None,
         debug_mode: bool = False,
-        device_id: int = 0
+        device_id: int = 0,
     ):
         print("")
         print("inference: {}".format(train_id))
@@ -660,7 +668,7 @@ class BaselineTraining(TrainingCore):
                         no_mr=no_mr,
                         metric_funcs=metric_funcs,
                         idl_gtvn_geodesic_distance=geodesic_distance,
-                        device_id=device_id
+                        device_id=device_id,
                     )
                     if patient_outputs is None:
                         continue
@@ -671,7 +679,7 @@ class BaselineTraining(TrainingCore):
                             patient=patient,
                             epoch_dir=epoch_dir,
                             patient_outputs=patient_outputs,
-                            device_id=device_id
+                            device_id=device_id,
                         )
 
                     # record score of current patient
@@ -791,7 +799,7 @@ class BaselineTraining(TrainingCore):
         dataset_ver: str = None,
         mda_obs: str = None,
         debug_mode: bool = False,
-        device_id: int = 0, 
+        device_id: int = 0,
     ):
         print("")
         print("cross valid evaluation: {}".format(train_id))

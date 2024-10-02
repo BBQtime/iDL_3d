@@ -1,10 +1,9 @@
-import random
+import hashlib
 
 import global_utils.global_core as g
 import torch
 from dataset_utils.dataset_core import DatasetCore
 from global_utils.custom_dict import Dict
-import hashlib
 
 
 class BaselineDataSet(DatasetCore):
@@ -24,15 +23,16 @@ class BaselineDataSet(DatasetCore):
         )
         self.__patients = patients
         self.current_epoch = 0
-        
+
     def _generate_seed(self, patient_id) -> int:
         """Generate a deterministic seed based on the patient ID and epoch number."""
         combined_id = f"{patient_id}_{self.current_epoch}"
-        return int(hashlib.sha256(combined_id.encode('utf-8')).hexdigest(), 16) % 2**16
+        return int(hashlib.sha256(combined_id.encode("utf-8")).hexdigest(), 16) % 2**16
 
     def set_epoch(self, epoch: int):
         """Sets the current epoch to be used for seed generation."""
         self.current_epoch = epoch
+
     # must be overrided
     def __len__(self):
         return len(self.__patients)
@@ -50,12 +50,10 @@ class BaselineDataSet(DatasetCore):
         # record img shape
         item["shape"] = origin["gtvt"].shape
 
-        tmp = Dict()
         final = Dict()
-        
+
         augment_seed = self._generate_seed(patient)
         final["augment.seed"] = augment_seed
-
 
         # preprocess gtvt and gtvn based on final augment seed
         for gtv in ["gtvt", "gtvn"]:
