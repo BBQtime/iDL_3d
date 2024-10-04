@@ -637,17 +637,17 @@ class IDLGTVtTraining(TrainingCore):
                 iter_loss /= batch_count
                 hyper["scheduler"].step(iter_loss)
 
-                # Emit signal for progress tracking
-                if batch_count == 1 and self._obs_study_progress is not None:
-                    self._obs_study_progress.cur_step += (
-                        self._obs_study_progress.step.FIRST_BATCH
-                    )
-                    self._obs_study_progress.emit_signal()
-                elif self._obs_study_progress is not None:
-                    self._obs_study_progress.cur_step += (
-                        self._obs_study_progress.step.OTHER_BATCH
-                    )
-                    self._obs_study_progress.emit_signal()
+                # # Emit signal for progress tracking
+                # if batch_count == 1 and self._obs_study_progress is not None:
+                #     self._obs_study_progress.cur_step += (
+                #         self._obs_study_progress.step.FIRST_BATCH
+                #     )
+                #     self._obs_study_progress.emit_signal()
+                # elif self._obs_study_progress is not None:
+                #     self._obs_study_progress.cur_step += (
+                #         self._obs_study_progress.step.OTHER_BATCH
+                #     )
+                #     self._obs_study_progress.emit_signal()
 
                 # Store the iteration loss
                 loss_dict[
@@ -1077,8 +1077,8 @@ class IDLGTVtTraining(TrainingCore):
         )
 
         # idl progress INIT_CNN
-        if self._obs_study_progress is not None:
-            self._obs_study_progress.cur_step = 0
+        # if self._obs_study_progress is not None:
+        #     self._obs_study_progress.cur_step = 0
 
         # # idl progress INIT_CNN
         # if self._obs_study_progress is not None:

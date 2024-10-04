@@ -21,7 +21,8 @@ class TodoListLabel(QLabel):
     DELINEATE_GTVT_CORONAL = "delineate.gtvt.coronal"
     DELINEATE_GTVT_SAGITTAL = "delineate.gtvt.sagittal"
     CLICK_GTVN_CENTERS = "click.gtvn.centers"
-    WAIT_PRED = "wait.pred"
+    WAIT_GTVT_PRED = "wait.gtvt.pred"
+    WAIT_GTVN_PRED = "wait.gtvn.pred"
     CORRECT_GTVT = "correct.gtvt"
     CORRECT_GTVN = "correct.gtvn"
 
@@ -50,8 +51,10 @@ class TodoListLabel(QLabel):
             self.setText(str_space + "- in Sagittal")
         elif self.__name == TodoListLabel.CLICK_GTVN_CENTERS:
             self.setText("STEP 4 - Click GTVn center")
-        elif self.__name == TodoListLabel.WAIT_PRED:
-            self.setText("STEP 5 - Generating Results")
+        elif self.__name == TodoListLabel.WAIT_GTVT_PRED:
+            self.setText("STEP 5 - Generating GTVt Results")
+        elif self.__name == TodoListLabel.WAIT_GTVN_PRED:
+            self.setText(str_space + "- Generating GTVn Results")
         elif self.__name == TodoListLabel.CORRECT_GTVT:
             self.setText("STEP 6 - Correct GTVt")
         elif self.__name == TodoListLabel.CORRECT_GTVN:

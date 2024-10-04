@@ -50,9 +50,9 @@ class ObsStudyWindow(ReplayWindow):
         if g.is_linux():
             # Set 'spawn' start method for linux system
             mp.set_start_method("spawn", force=True)
-            self.queue = mp.Queue()
+            self.__queue = mp.Queue()
         else:
-            self.queue = Queue()
+            self.__queue = Queue()
 
     def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         if (
@@ -621,7 +621,8 @@ class ObsStudyWindow(ReplayWindow):
             TodoListLabel.DELINEATE_GTVT_CORONAL,
             TodoListLabel.DELINEATE_GTVT_SAGITTAL,
             TodoListLabel.CLICK_GTVN_CENTERS,
-            TodoListLabel.WAIT_PRED,
+            TodoListLabel.WAIT_GTVT_PRED,
+            TodoListLabel.WAIT_GTVN_PRED,
             TodoListLabel.CORRECT_GTVT,
             TodoListLabel.CORRECT_GTVN,
         ]
@@ -636,32 +637,10 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self._text_label[i].set_status_not_start()
 
-        # # next step button
-        # # button png img size: 562*187
-        # btn_h = 27 if g.is_linux() else 40
-        # btn_w = round(btn_h * 562 / 187)
-        # self._btn["next.step"] = QtWidgets.QPushButton()
-        # self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
-        # self._btn["next.step"].clicked.connect(self.__on_btn_next_step_clicked)
-        # # set btn icons
-        # pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next_step.png"))
-        # # pixmap = pixmap.scaled(100, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        # pixmap = pixmap.scaled(
-        #     btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
-        # )
-        # icon = QtGui.QIcon(pixmap)
-        # self._btn["next.step"].setIconSize(QSize(btn_w, btn_h))
-        # self._btn["next.step"].setIcon(icon)
-        # self._btn["next.step"].setStyleSheet(
-        #     "QPushButton { border: none; margin: 0px; padding: 0px; }"
-        # )
-
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
         v_layout.setSpacing(2 if g.is_linux() else 2)
-        # v_layout.addWidget(
-        #     self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
-        # )
+
         next_btn_pixmap = QtGui.QPixmap(
             os.path.join(g.PROJ_DIR, "icons", "next_step.png")
         )
@@ -1026,27 +1005,14 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
-    def start_training(self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
+    def __start_obs_study_gtvt_process(
+        self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode
+    ):
         # Start the training process in a separate process
-        process_data = (
-            idl_gtvt_id,
-            dataset_ver,
-            patient,
-            queue,
-            debug_mode,
-        )  # Only pass the needed data
+        process_data = idl_gtvt_id, dataset_ver, patient, queue, debug_mode
 
-        if g.is_linux():
-            self.process = mp.Process(
-                target=self._run_obs_study_in_process, args=process_data
-            )
-            self.process.start()
-            self.process.join()
-        else:
-            self.process = Process(
-                target=self._run_obs_study_in_process, args=process_data
-            )
-            self.process.start()
+        self.process = Process(target=self._obs_study_gtvt_process, args=process_data)
+        self.process.start()
 
         # Set the queue and start the thread
         self.__idl_gtvt_thread.queue = queue
@@ -1069,19 +1035,19 @@ class ObsStudyWindow(ReplayWindow):
         # self.timer.start(1000)  # Check every second
 
     @staticmethod
-    def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
-        # try:
-        training = IDLGTVtTraining()
-        training.obs_study(
-            idl_gtvt_id=idl_gtvt_id,
-            dataset_ver=dataset_ver,
-            patient=patient,
-            queue=queue,
-            debug_mode=debug_mode,
-            device_id=1,
-        )
-        # except Exception:
-        #     pass
+    def _obs_study_gtvt_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
+        try:
+            training = IDLGTVtTraining()
+            training.obs_study(
+                idl_gtvt_id=idl_gtvt_id,
+                dataset_ver=dataset_ver,
+                patient=patient,
+                queue=queue,
+                debug_mode=debug_mode,
+                device_id=1,
+            )
+        except Exception:
+            pass
 
     # this function is connected to widget, dont set input params to this function
     def __confirm_gtvt_delineation(self):
@@ -1144,12 +1110,12 @@ class ObsStudyWindow(ReplayWindow):
             spacing=g.NII_SPACING,
         )
 
-        # (3) start idl gtvt thread
-        self.start_training(
+        # (3) start gtvt process
+        self.__start_obs_study_gtvt_process(
             self._idl_id["gtvt"],
             self.dataset_ver,
             self._cur_patient,
-            self.queue,
+            self.__queue,
             self._debug_mode,
         )
         # self.__idl_gtvt_thread.set_param(
@@ -2761,47 +2727,67 @@ class ObsStudyWindow(ReplayWindow):
         # g.save_json(time_log, idl_time_json_path)
 
     def __refresh_todo_list(self):
-        # (1) CLICK_GTVT_CENTER has the highest priority.
-        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+        # (1) CLICK_GTVT_CENTER and DELINEATE_GTVT have the highest priority.
+        if self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.CLICK_CENTER,
+            ObsStudyGTVtStep.DELINEATE,
+        ]:
             completed_todo_labels = [TodoListLabel.SELECT_PATIENT]
-            active_todo_labels = [TodoListLabel.CLICK_GTVT_CENTER]
+            active_todo_labels = []
             not_start_todo_labels = [
-                TodoListLabel.DELINEATE_GTVT,
-                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
-                TodoListLabel.DELINEATE_GTVT_CORONAL,
-                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
-                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_GTVT_PRED,
                 TodoListLabel.CORRECT_GTVT,
-                TodoListLabel.CORRECT_GTVN,
             ]
-            # gtvn thread might be still running while reverting to CLICK_GTVT_CENTER
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
 
-        # (2) Delineate GTVt has the 2nd highest priority.
-        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
-            completed_todo_labels = [
-                TodoListLabel.SELECT_PATIENT,
-                TodoListLabel.CLICK_GTVT_CENTER,
-            ]
-            active_todo_labels = [TodoListLabel.DELINEATE_GTVT]
-            # update the status of delineate gtvt sub todo labels
-            self.__update_gtvt_delineated_status()
-            not_start_todo_labels = [
-                TodoListLabel.CLICK_GTVN_CENTERS,
-                TodoListLabel.CORRECT_GTVT,
-                TodoListLabel.CORRECT_GTVN,
-            ]
-            # gtvn thread might be still running while reverting to CLICK_GTVT_CENTER
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
+            # gtvt todo labels
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+                active_todo_labels.append(TodoListLabel.CLICK_GTVT_CENTER)
+                not_start_todo_labels += [
+                    TodoListLabel.DELINEATE_GTVT,
+                    TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                    TodoListLabel.DELINEATE_GTVT_CORONAL,
+                    TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                ]
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+                completed_todo_labels.append(TodoListLabel.CLICK_GTVT_CENTER)
+                active_todo_labels.append(TodoListLabel.DELINEATE_GTVT)
+                # update the status of delineate gtvt sub todo labels
+                self.__update_gtvt_delineated_status()
             else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
-        # (3) Click GTVn centers has the 3rd highest priority.
+            # gtvn todo labels
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+                not_start_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,  # wait until gtvt is clicked or delineated
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                completed_todo_labels.append(TodoListLabel.CLICK_GTVN_CENTERS)
+                active_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                completed_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,
+                    TodoListLabel.WAIT_GTVN_PRED,
+                ]
+                # wait until gtvt is clicked or delineated
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+                completed_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            else:
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
+        # (2) Click GTVn centers has the 2nd highest priority.
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            # gtvt is clicked and delineated
             completed_todo_labels = [
                 TodoListLabel.SELECT_PATIENT,
                 TodoListLabel.CLICK_GTVT_CENTER,
@@ -2810,18 +2796,31 @@ class ObsStudyWindow(ReplayWindow):
                 TodoListLabel.DELINEATE_GTVT_CORONAL,
                 TodoListLabel.DELINEATE_GTVT_SAGITTAL,
             ]
+            # gtvn todo labels
             active_todo_labels = [TodoListLabel.CLICK_GTVN_CENTERS]
             not_start_todo_labels = [
-                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.WAIT_GTVN_PRED,
                 TodoListLabel.CORRECT_GTVN,
             ]
-            # gtvt thread might be still running while reverting to CLICK_GTVN_CENTERS
+            # gtvt todo labels
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
+                active_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
 
-        # (4) other conditions
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
+                # wait until gtvn centers are clicked
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVT_PRED,
+                    TodoListLabel.CORRECT_GTVT,
+                ]
+            else:
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
+        # (3) other conditions
         # obs_study_gtvt_step == WAIT_PRED / CORRECT / APPROVED, != CLICK_CENTER / DELINEATE
         # obs_study_gtvn_step == WAIT_PRED / CORRECT / APPROVED, != CLICK_CENTERS
         else:
@@ -2837,35 +2836,38 @@ class ObsStudyWindow(ReplayWindow):
             active_todo_labels = []
             not_start_todo_labels = []
 
-            # TodoListLabel.WAIT_PRED
-            if (
-                self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
-                or self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
-            ):
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            # if neither obs_study_gtvt_step or obs_study_gtvn_step == WAIT_PRED,
-            # they == CORRECT or APPROVED, means both gtvt and gtvn pred are ready
-            else:
-                completed_todo_labels.append(TodoListLabel.WAIT_PRED)
-
-            # TodoListLabel.CORRECT_GTVT
+            # gtvt todo labels
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
+                active_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
                 not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
             elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
                 active_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
             elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
-                completed_todo_labels.append(TodoListLabel.CORRECT_GTVT)
-            else:  # This block should never be reached
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVT_PRED,
+                    TodoListLabel.CORRECT_GTVT,
+                ]
+            else:
                 g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
-            # TodoListLabel.CORRECT_GTVN
+            # gtvn todo labels
             if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                active_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
                 not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
             elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
                 active_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
             elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
-                completed_todo_labels.append(TodoListLabel.CORRECT_GTVN)
-            else:  # This block should never be reached
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            else:
                 g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
         for i in completed_todo_labels:

@@ -8,7 +8,7 @@ from ui_utils.login_window import LoginWindow
 if __name__ == "__main__":
     g.clear_gpu_cache()
     g.clear_linux_trash()
-    # g.clear_debug_data()
+    g.clear_debug_data()
 
     # show login window
     app = QApplication(sys.argv)
