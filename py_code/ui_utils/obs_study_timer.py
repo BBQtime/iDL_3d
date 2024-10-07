@@ -6,6 +6,7 @@ import global_utils.global_core as g
 
 class ObsStudyTimer:
     # key names for dict
+    PATIENT_TOTAL_TIME = "total.time"
     CLICK_GTVT_CENTER = "click.gtvt.center"
     CLICK_GTVN_CENTERS = "click.gtvn.centers"
     DELINEATE_GTVT = "delineate.gtvt"

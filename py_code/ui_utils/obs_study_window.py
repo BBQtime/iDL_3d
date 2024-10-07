@@ -1193,6 +1193,7 @@ class ObsStudyWindow(ReplayWindow):
             None,
         ]:
             g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
         if obs_study_gtvn_step not in [
             ObsStudyGTVnStep.CORRECT,
             ObsStudyGTVnStep.APPROVED,
@@ -1206,11 +1207,21 @@ class ObsStudyWindow(ReplayWindow):
         if obs_study_gtvn_step is not None:
             self.__update_obs_study_step(obs_study_gtvn_step=obs_study_gtvn_step)
 
-        # update drawing mode (before update widgets)
-        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-            self.drawing_mode = DrawingMode.GTVT_PEN
-        elif self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT:
-            self.drawing_mode = DrawingMode.GTVN_PEN
+        # switch drawing mode (before update widgets)
+        # gtvt
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step != ObsStudyGTVtStep.CORRECT
+        ):
+            self._radio_btn["correct.gtvt"].setChecked(True)
+            self.__switch_drawing_mode_gtv()
+        # gtvn
+        elif (
+            self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvt_step != ObsStudyGTVtStep.CORRECT
+        ):
+            self._radio_btn["correct.gtvn"].setChecked(True)
+            self.__switch_drawing_mode_gtv()
 
         # save corrections and correction masks
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
@@ -1236,22 +1247,8 @@ class ObsStudyWindow(ReplayWindow):
         # update widgets - both gtvt and gtvn are being corrected
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
         ):
-            if self.drawing_mode in [
-                DrawingMode.GTVT_PEN,
-                DrawingMode.GTVT_ERASER,
-                DrawingMode.GTVT_CLEAR,
-                DrawingMode.GTVT_RESTORE,
-            ]:
-                self._radio_btn["correct.gtvt"].setChecked(True)
-            elif self.drawing_mode in [
-                DrawingMode.GTVN_PEN,
-                DrawingMode.GTVN_ERASER,
-                DrawingMode.GTVN_CLEAR,
-                DrawingMode.GTVN_RESTORE,
-            ]:
-                self._radio_btn["correct.gtvn"].setChecked(True)
             self.__enable_annotation_tools()
 
         # update widgets - both gtvt and gtvn approved
@@ -1291,17 +1288,24 @@ class ObsStudyWindow(ReplayWindow):
                 self.restore_mouse_cursor()
                 self.__disable_annotation_tools()
 
-        # (7) end / start gtvt timer
+        # (7) end / start gtvt timer????
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
 
-        # (7) end / start gtvn timer
+        # (7) end / start gtvn timer????
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
+
+        # (8) end total timer
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
 
     def on_todo_list_clicked(self, todo_list_label: TodoListLabel):
         # (1) jump to step SELECT_PATIENT
@@ -2523,6 +2527,7 @@ class ObsStudyWindow(ReplayWindow):
         # reset timers after cur_patient is updated
         self.__timer = Dict()
         for i in [
+            ObsStudyTimer.PATIENT_TOTAL_TIME,
             ObsStudyTimer.CLICK_GTVT_CENTER,
             ObsStudyTimer.DELINEATE_GTVT,
             ObsStudyTimer.CLICK_GTVN_CENTERS,
@@ -2570,6 +2575,10 @@ class ObsStudyWindow(ReplayWindow):
         # (3) _load_idl_gtvn_data(), will load gtvn_clicks_pos_3d
         # (4) obs study gtvt/gtvn steps are loaded
         self.reset_cur_slice_id()
+
+        # start total timer
+        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
+        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].start()
 
         # last step: goto current obs study steps
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
