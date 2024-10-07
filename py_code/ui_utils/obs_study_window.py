@@ -969,7 +969,7 @@ class ObsStudyWindow(ReplayWindow):
             path=os.path.join(cur_patient_dir, "selected_slices.json"),
         )
 
-        # (5) end timing
+        # (5) end timer
         self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].end()
 
         # (6) goto next step
@@ -1303,69 +1303,6 @@ class ObsStudyWindow(ReplayWindow):
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
 
-    # def __approve_correction(self, gtv: str):
-    # # (1) save corrections and correction masks
-    # self.__save_corrections_and_masks(gtv)
-
-    # # (2) update status
-    # if gtv == "gtvt":
-    #     self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.APPROVED)
-    # elif gtv == "gtvn":
-    #     self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.APPROVED)
-
-    # # (3) combine arrays (3d imgs) for display
-    # self.__combine_pred_delineation_correction()
-
-    # # (4) refresh todolist and imgs
-    # self.__refresh_todo_list()
-    # self.refresh_imgs()
-
-    # # (5) update widgets
-    # self.__show_and_hide_next_btns()
-    # # (5) update widgets - both gtvt and gtvn approved
-    # if (
-    #     self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
-    #     and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
-    # ):
-    #     self.restore_mouse_cursor()
-    #     self.__disable_annotation_tools()
-    #     # expand and collapse
-    #     if self._collap["annotation"].isExpanded():
-    #         self._collap["annotation"].collapse()
-    #     if not self._collap["patient"].isExpanded():
-    #         self._collap["patient"].expand()
-
-    # # (5) update widgets - only gtvt approved
-    # elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
-    #     # update dwaring mode before change mouse cursor
-    #     self.drawing_mode = DrawingMode.GTVN_PEN
-    #     if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-    #         self.change_mouse_cursor()
-    #         self.__enable_annotation_tools()
-    #     else:
-    #         self.restore_mouse_cursor()
-    #         self.__disable_annotation_tools()
-
-    # # (5) update widgets - only gtvn approved
-    # elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
-    #     # update dwaring mode before change mouse cursor
-    #     self.drawing_mode = DrawingMode.GTVT_PEN
-    #     if self.obs_study_gtvt_step in [
-    #         ObsStudyGTVtStep.DELINEATE,
-    #         ObsStudyGTVtStep.CORRECT,
-    #     ]:
-    #         self.change_mouse_cursor()
-    #         self.__enable_annotation_tools()
-    #     else:
-    #         self.restore_mouse_cursor()
-    #         self.__disable_annotation_tools()
-
-    # # (6) end timer
-    # if gtv == "gtvt":
-    #     self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
-    # elif gtv == "gtvn":
-    #     self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
-
     def on_todo_list_clicked(self, todo_list_label: TodoListLabel):
         # (1) jump to step SELECT_PATIENT
         if todo_list_label == self._text_label[TodoListLabel.SELECT_PATIENT]:
@@ -1572,7 +1509,13 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
-        self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
+        if self.drawing_mode in [
+            DrawingMode.GTVT_PEN,
+            DrawingMode.GTVT_ERASER,
+            DrawingMode.GTVT_CLEAR,
+            DrawingMode.GTVT_RESTORE,
+        ]:
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
 
     # this function is connected to widget, dont set input params to this function
     def __confirm_gtvn_centers(self):
@@ -1590,6 +1533,7 @@ class ObsStudyWindow(ReplayWindow):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
+            # user decided to click gtvn center
             if reply == QMessageBox.No:
                 return
             # no gtvn click
@@ -1695,7 +1639,13 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
-        self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
+        if self.drawing_mode in [
+            DrawingMode.GTVN_PEN,
+            DrawingMode.GTVN_ERASER,
+            DrawingMode.GTVN_CLEAR,
+            DrawingMode.GTVN_RESTORE,
+        ]:
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
 
     # check delineation in 3 different planes
     def __update_gtvt_delineated_status(self) -> Dict:
@@ -2350,6 +2300,9 @@ class ObsStudyWindow(ReplayWindow):
             # restore
             elif self.drawing_mode == DrawingMode.GTVN_RESTORE:
                 self.drawing_mode = DrawingMode.GTVT_RESTORE
+            # switch timer
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].pause()
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
 
         # gtvt to gtvn
         elif self._radio_btn["correct.gtvn"].isChecked():
@@ -2365,6 +2318,9 @@ class ObsStudyWindow(ReplayWindow):
             # restore
             elif self.drawing_mode == DrawingMode.GTVT_RESTORE:
                 self.drawing_mode = DrawingMode.GTVN_RESTORE
+            # switch timer
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].pause()
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
 
     def get_pen_size(self):
         pen_size = self._slider["pen.size"].value() / 100
