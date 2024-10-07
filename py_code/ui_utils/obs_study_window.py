@@ -43,6 +43,7 @@ class ObsStudyWindow(ReplayWindow):
     ):
         self.__user_name = user_name
         self.__train_id = train_id
+        self.process = None
         # pass debug_mode parameter to the parent class
         super().__init__()
 
@@ -874,6 +875,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __goto_click_gtvt_center(self):
         # (1) stop idl gtvt qthread
+        self.kill_process()
         self.__idl_gtvt_thread.stop()
 
         # (2) update status
@@ -998,6 +1000,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __goto_delineate_gtvt(self):
         # (1) stop idl gtvt qthread
+        self.kill_process()
         self.__idl_gtvt_thread.stop()
 
         # (2) update status
@@ -1067,6 +1070,21 @@ class ObsStudyWindow(ReplayWindow):
         # self.process = Process(target=run_obs_study, args=(idl_gtvt_id, dataset_ver, patient, queue))
         # self.process.start()
         # self.timer.start(1000)  # Check every second
+    def is_process_started(self):
+        # Check if the process has been started
+        return self.process is not None
+    
+    def is_process_running(self):
+        # Check if the process is still running
+        if self.process:
+            return self.process.is_alive()
+        return False
+    def kill_process(self):
+        # Terminate the process if it's running
+        if self.is_process_started() and self.is_process_running():
+            self.process.terminate()  # Terminate the process
+            self.process.join()  # Ensure the process is properly joined
+            self.process = None
 
     @staticmethod
     def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
@@ -2570,6 +2588,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def _load_patient_data(self):
         # stop idl qthreads (if running)
+        self.kill_process()
         self.__idl_gtvt_thread.stop()
         self.__idl_gtvn_thread.stop()
 

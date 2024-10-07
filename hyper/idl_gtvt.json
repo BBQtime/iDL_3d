@@ -4,7 +4,7 @@
     "augment.min": 2,
     "augment.times": 4,
     "batch.size": 1,
-    "dataset.ver": "au.ext",
+    "dataset.ver": "obs.study",
     "dropout": 0.3,
     "iter": 20,
     "layer.freezing": false,
