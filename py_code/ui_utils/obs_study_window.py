@@ -29,7 +29,7 @@ from training_utils.idl_gtvt_training import IDLGTVtTraining
 from ui_utils.drag_cross import DragCross
 from ui_utils.img_frame import ImgFrame
 from ui_utils.interpolation import interpolate_shapes
-from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtThread
+from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtProgressThread
 from ui_utils.obs_study_timer import ObsStudyTimer
 from ui_utils.replay_window import ReplayWindow
 from ui_utils.todo_list_label import TodoListLabel
@@ -852,8 +852,8 @@ class ObsStudyWindow(ReplayWindow):
                 g.delete_path(os.path.join(cur_round_dir, file_name))
 
     def __goto_click_gtvt_center(self):
-        # (1) stop idl gtvt qthread
-        self.__idl_gtvt_thread.stop()
+        # (1) stop gtvt process and thread
+        self.__stop_obs_study_gtvt_process()
 
         # (2) update status
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CLICK_CENTER)
@@ -976,8 +976,8 @@ class ObsStudyWindow(ReplayWindow):
         self.__goto_delineate_gtvt()
 
     def __goto_delineate_gtvt(self):
-        # (1) stop idl gtvt qthread
-        self.__idl_gtvt_thread.stop()
+        # (1) stop gtvt process and thread
+        self.__stop_obs_study_gtvt_process()
 
         # (2) update status
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.DELINEATE)
@@ -1005,37 +1005,36 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
+    def __stop_obs_study_gtvt_process(self):
+        # terminate gtvt training process
+        if self._obs_study_gtvt_process is not None:
+            if self._obs_study_gtvt_process.is_alive():
+                self._obs_study_gtvt_process.terminate()
+            # Clean up process resources
+            self._obs_study_gtvt_process.join()
+        # stop progress thread
+        self.__obs_study_gtvt_progress_thread.stop()
+
     def __start_obs_study_gtvt_process(
         self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode
     ):
         # Start the training process in a separate process
         process_data = idl_gtvt_id, dataset_ver, patient, queue, debug_mode
 
-        self.process = Process(target=self._obs_study_gtvt_process, args=process_data)
-        self.process.start()
+        self._obs_study_gtvt_process = Process(
+            target=self._obs_study_gtvt_process_func, args=process_data
+        )
+        self._obs_study_gtvt_process.start()
 
-        # Set the queue and start the thread
-        self.__idl_gtvt_thread.queue = queue
-        if not self.__idl_gtvt_thread.isRunning():  # Ensure it's not already running
-            self.__idl_gtvt_thread.start()
-
-        # # Start the thread to monitor progress
-        # self.__idl_gtvt_thread = ObsStudyGTVtThread(
-        #     queue=queue,
-        #     progress_bar=self.__progress_bar["gtvt"],
-        #     progress_bar_label=self._text_label["gtvt.progress"],
-        # )
-        # self.__idl_gtvt_thread.progress_signal.connect(self.__update_idl_gtvt_progress_bar)
-        # self.__idl_gtvt_thread.complete_signal.connect(self.__on_idl_gtvt_thread_finished)
-
-        # self.__idl_gtvt_thread.start()
-
-        # self.process = Process(target=run_obs_study, args=(idl_gtvt_id, dataset_ver, patient, queue))
-        # self.process.start()
-        # self.timer.start(1000)  # Check every second
+        # Start the thread to monitor progress
+        self.__obs_study_gtvt_progress_thread.queue = queue  # Set the queue
+        if not self.__obs_study_gtvt_progress_thread.isRunning():
+            self.__obs_study_gtvt_progress_thread.start()
 
     @staticmethod
-    def _obs_study_gtvt_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
+    def _obs_study_gtvt_process_func(
+        idl_gtvt_id, dataset_ver, patient, queue, debug_mode
+    ):
         try:
             training = IDLGTVtTraining()
             training.obs_study(
@@ -1118,13 +1117,13 @@ class ObsStudyWindow(ReplayWindow):
             self.__queue,
             self._debug_mode,
         )
-        # self.__idl_gtvt_thread.set_param(
+        # self.__obs_study_gtvt_thread.set_param(
         #     idl_gtvt_id=self._idl_id["gtvt"],
         #     dataset_ver=self.dataset_ver,
         #     patient=self._cur_patient,
         #     debug_mode=self._debug_mode,
         # )
-        # self.__idl_gtvt_thread.start()
+        # self.__obs_study_gtvt_thread.start()
 
         # (4) end and start timer
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
@@ -1135,7 +1134,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __goto_click_gtvn_centers(self):
         # (1) stop idl gtvn qthread
-        self.__idl_gtvn_thread.stop()
+        self.__obs_study_gtvn_thread.stop()
 
         # (2) update status (before refresh images)
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
@@ -1529,12 +1528,12 @@ class ObsStudyWindow(ReplayWindow):
             self._text_label["eraser.size"].show()
             self._slider["eraser.size"].show()
 
-    def __update_idl_gtvt_progress_bar(self, progress_signal: float):
+    def __update_obs_study_gtvt_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
         g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvt"].setValue(progress_int)
 
-    def __on_idl_gtvt_thread_finished(self):
+    def __on_obs_study_gtvt_thread_finished(self):
         # (1) update obs_study_gtvt_step
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CORRECT)
 
@@ -1597,7 +1596,7 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
                 self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
-                self.__on_idl_gtvn_thread_finished()
+                self.__on_obs_study_gtvn_thread_finished()
                 return
 
         # (2) update status
@@ -1621,14 +1620,14 @@ class ObsStudyWindow(ReplayWindow):
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
         # (5) start idl gtvn thread
-        self.__idl_gtvn_thread.set_param(
+        self.__obs_study_gtvn_thread.set_param(
             idl_gtvn_id=self._idl_id["gtvn"],
             dataset_ver=self.dataset_ver,
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
             debug_mode=self._debug_mode,
         )
-        self.__idl_gtvn_thread.start()
+        self.__obs_study_gtvn_thread.start()
 
         # (6) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
@@ -1652,12 +1651,12 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
 
-    def __update_idl_gtvn_progress_bar(self, progress_signal: float):
+    def __update_obs_study_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
         g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvn"].setValue(progress_int)
 
-    def __on_idl_gtvn_thread_finished(self):
+    def __on_obs_study_gtvn_thread_finished(self):
         # (1) update obs study step
         self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.CORRECT)
 
@@ -2208,26 +2207,27 @@ class ObsStudyWindow(ReplayWindow):
             v_layout.addWidget(self._text_label["{}.progress".format(i)])
             v_layout.addWidget(self.__progress_bar[i])
 
-        # idl gtvt/gtvn thread (after progress bars and progress bar labels initialized)
-        self.__idl_gtvt_thread = ObsStudyGTVtThread(
+        # gtvt/gtvn thread (after progress bars and progress bar labels initialized)
+        self._obs_study_gtvt_process = None
+        self.__obs_study_gtvt_progress_thread = ObsStudyGTVtProgressThread(
             progress_bar=self.__progress_bar["gtvt"],
             progress_bar_label=self._text_label["gtvt.progress"],
         )
-        self.__idl_gtvt_thread.progress_signal.connect(
-            self.__update_idl_gtvt_progress_bar
+        self.__obs_study_gtvt_progress_thread.progress_signal.connect(
+            self.__update_obs_study_gtvt_progress_bar
         )
-        self.__idl_gtvt_thread.complete_signal.connect(
-            self.__on_idl_gtvt_thread_finished
+        self.__obs_study_gtvt_progress_thread.complete_signal.connect(
+            self.__on_obs_study_gtvt_thread_finished
         )
-        self.__idl_gtvn_thread = ObsStudyGTVnThread(
+        self.__obs_study_gtvn_thread = ObsStudyGTVnThread(
             progress_bar=self.__progress_bar["gtvn"],
             progress_bar_label=self._text_label["gtvn.progress"],
         )
-        self.__idl_gtvn_thread.progress_signal.connect(
-            self.__update_idl_gtvn_progress_bar
+        self.__obs_study_gtvn_thread.progress_signal.connect(
+            self.__update_obs_study_gtvn_progress_bar
         )
-        self.__idl_gtvn_thread.complete_signal.connect(
-            self.__on_idl_gtvn_thread_finished
+        self.__obs_study_gtvn_thread.complete_signal.connect(
+            self.__on_obs_study_gtvn_thread_finished
         )
 
         container = QtWidgets.QWidget()
@@ -2536,8 +2536,8 @@ class ObsStudyWindow(ReplayWindow):
 
     def _load_patient_data(self):
         # stop idl qthreads (if running)
-        self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
+        self.__stop_obs_study_gtvt_process()
+        self.__obs_study_gtvn_thread.stop()
 
         # update widgets
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:

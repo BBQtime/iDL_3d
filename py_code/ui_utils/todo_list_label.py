@@ -36,7 +36,7 @@ class TodoListLabel(QLabel):
         self.setFixedHeight(g.TEXT_HEIGHT + 3)
 
         # init text
-        str_space = "            "
+        str_space = "             "
         if self.__name == TodoListLabel.SELECT_PATIENT:
             self.setText("STEP 1 - Select Patient")
         elif self.__name == TodoListLabel.CLICK_GTVT_CENTER:
@@ -59,6 +59,8 @@ class TodoListLabel(QLabel):
             self.setText("STEP 6 - Correct GTVt")
         elif self.__name == TodoListLabel.CORRECT_GTVN:
             self.setText(str_space + "- Correct GTVn")
+        else:
+            g.error_exit("Todo label name error!")
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
