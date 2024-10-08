@@ -954,7 +954,10 @@ for __i in [
     ]
 
 # window doesn't support pytorch multi-thread
-NUM_WORKERS = __settings["num.workers"]  # if is_linux() else 0
+if is_linux():
+    NUM_WORKERS = __settings["num.workers"]["linux"]
+else:
+    NUM_WORKERS = __settings["num.workers"]["windows"]
 
 # IMG_SHAPE (Depth, Height, Width)
 IMG_SHAPE = List(__settings["img.shape"])

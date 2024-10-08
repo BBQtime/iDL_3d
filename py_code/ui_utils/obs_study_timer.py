@@ -6,6 +6,7 @@ import global_utils.global_core as g
 
 class ObsStudyTimer:
     # key names for dict
+    PATIENT_TOTAL_TIME = "total.time"
     CLICK_GTVT_CENTER = "click.gtvt.center"
     CLICK_GTVN_CENTERS = "click.gtvn.centers"
     DELINEATE_GTVT = "delineate.gtvt"
@@ -22,6 +23,7 @@ class ObsStudyTimer:
         timer_name: str,
     ):
         self.__start_time = None
+        self.__accumulated_time = timedelta(0)  # Store total accumulated time
         self.__patient = patient
         self.__timer_name = timer_name
         # json path
@@ -36,19 +38,34 @@ class ObsStudyTimer:
             g.save_json({}, self.__json_path)
 
     def start(self):
-        self.__start_time = datetime.now()
+        if self.__start_time is None:
+            # Start the timer, either for the first time or after a pause
+            self.__start_time = datetime.now()
 
-    def end(self):
+    def pause(self):
         if self.__start_time is None:
             return
+        # Calculate the time since the timer started and accumulate it
+        self.__accumulated_time += datetime.now() - self.__start_time
+        self.__start_time = None  # Stop the timer
 
-        duration = datetime.now() - self.__start_time
-        self.__start_time = None
-        total_seconds = int(duration.total_seconds())
-        # create a new timedelta without microseconds
+    def end(self):
+        if self.__start_time is None and self.__accumulated_time == timedelta(0):
+            return
+
+        # If the timer is running, calculate the time from start to now
+        if self.__start_time is not None:
+            self.__accumulated_time += datetime.now() - self.__start_time
+
+        total_seconds = int(self.__accumulated_time.total_seconds())
         duration = timedelta(seconds=total_seconds)
         duration = str(duration)
-        # save json
+
+        # Reset for next session
+        self.__start_time = None
+        self.__accumulated_time = timedelta(0)
+
+        # Save JSON
         time_log = g.load_json(self.__json_path)
         time_log["patient={}".format(self.__patient)][self.__timer_name] = duration
         g.save_json(time_log, self.__json_path)

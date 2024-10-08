@@ -77,7 +77,7 @@ class ObsStudyGTVnThread(ObsStudyThread):
         self.complete_signal.emit()
 
 
-class ObsStudyGTVtThread(ObsStudyThread):
+class ObsStudyGTVtProgressThread(ObsStudyThread):
     progress_signal = pyqtSignal(float)
     complete_signal = pyqtSignal()
     queue = None

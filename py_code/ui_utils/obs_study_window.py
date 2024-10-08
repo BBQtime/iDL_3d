@@ -29,7 +29,7 @@ from training_utils.idl_gtvt_training import IDLGTVtTraining
 from ui_utils.drag_cross import DragCross
 from ui_utils.img_frame import ImgFrame
 from ui_utils.interpolation import interpolate_shapes
-from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtThread
+from ui_utils.obs_study_thread import ObsStudyGTVnThread, ObsStudyGTVtProgressThread
 from ui_utils.obs_study_timer import ObsStudyTimer
 from ui_utils.replay_window import ReplayWindow
 from ui_utils.todo_list_label import TodoListLabel
@@ -43,7 +43,6 @@ class ObsStudyWindow(ReplayWindow):
     ):
         self.__user_name = user_name
         self.__train_id = train_id
-        self.process = None
         # pass debug_mode parameter to the parent class
         super().__init__()
 
@@ -51,9 +50,9 @@ class ObsStudyWindow(ReplayWindow):
         if g.is_linux():
             # Set 'spawn' start method for linux system
             mp.set_start_method("spawn", force=True)
-            self.queue = mp.Queue()
+            self.__queue = mp.Queue()
         else:
-            self.queue = Queue()
+            self.__queue = Queue()
 
     def draw_on_img_frame_press(self, event: QtGui.QMouseEvent, img_frame: ImgFrame):
         if (
@@ -622,7 +621,8 @@ class ObsStudyWindow(ReplayWindow):
             TodoListLabel.DELINEATE_GTVT_CORONAL,
             TodoListLabel.DELINEATE_GTVT_SAGITTAL,
             TodoListLabel.CLICK_GTVN_CENTERS,
-            TodoListLabel.WAIT_PRED,
+            TodoListLabel.WAIT_GTVT_PRED,
+            TodoListLabel.WAIT_GTVN_PRED,
             TodoListLabel.CORRECT_GTVT,
             TodoListLabel.CORRECT_GTVN,
         ]
@@ -637,32 +637,10 @@ class ObsStudyWindow(ReplayWindow):
             else:
                 self._text_label[i].set_status_not_start()
 
-        # # next step button
-        # # button png img size: 562*187
-        # btn_h = 27 if g.is_linux() else 40
-        # btn_w = round(btn_h * 562 / 187)
-        # self._btn["next.step"] = QtWidgets.QPushButton()
-        # self._btn["next.step"].setFixedSize(QSize(btn_w, btn_h))
-        # self._btn["next.step"].clicked.connect(self.__on_btn_next_step_clicked)
-        # # set btn icons
-        # pixmap = QtGui.QPixmap(os.path.join(g.PROJ_DIR, "icons", "next_step.png"))
-        # # pixmap = pixmap.scaled(100, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        # pixmap = pixmap.scaled(
-        #     btn_w, btn_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
-        # )
-        # icon = QtGui.QIcon(pixmap)
-        # self._btn["next.step"].setIconSize(QSize(btn_w, btn_h))
-        # self._btn["next.step"].setIcon(icon)
-        # self._btn["next.step"].setStyleSheet(
-        #     "QPushButton { border: none; margin: 0px; padding: 0px; }"
-        # )
-
         # v layout
         v_layout = QtWidgets.QVBoxLayout()
         v_layout.setSpacing(2 if g.is_linux() else 2)
-        # v_layout.addWidget(
-        #     self._btn["next.step"], alignment=Qt.AlignmentFlag.AlignRight
-        # )
+
         next_btn_pixmap = QtGui.QPixmap(
             os.path.join(g.PROJ_DIR, "icons", "next_step.png")
         )
@@ -874,9 +852,8 @@ class ObsStudyWindow(ReplayWindow):
                 g.delete_path(os.path.join(cur_round_dir, file_name))
 
     def __goto_click_gtvt_center(self):
-        # (1) stop idl gtvt qthread
-        self.kill_process()
-        self.__idl_gtvt_thread.stop()
+        # (1) stop gtvt process and thread
+        self.__stop_obs_study_gtvt_process()
 
         # (2) update status
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CLICK_CENTER)
@@ -992,16 +969,15 @@ class ObsStudyWindow(ReplayWindow):
             path=os.path.join(cur_patient_dir, "selected_slices.json"),
         )
 
-        # (5) end timing
+        # (5) end timer
         self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].end()
 
         # (6) goto next step
         self.__goto_delineate_gtvt()
 
     def __goto_delineate_gtvt(self):
-        # (1) stop idl gtvt qthread
-        self.kill_process()
-        self.__idl_gtvt_thread.stop()
+        # (1) stop gtvt process and thread
+        self.__stop_obs_study_gtvt_process()
 
         # (2) update status
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.DELINEATE)
@@ -1029,77 +1005,48 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
-    def start_training(self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
+    def __stop_obs_study_gtvt_process(self):
+        # terminate gtvt training process
+        if self._obs_study_gtvt_process is not None:
+            if self._obs_study_gtvt_process.is_alive():
+                self._obs_study_gtvt_process.terminate()
+            # Clean up process resources
+            self._obs_study_gtvt_process.join()
+        # stop progress thread
+        self.__obs_study_gtvt_progress_thread.stop()
+
+    def __start_obs_study_gtvt_process(
+        self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode
+    ):
         # Start the training process in a separate process
-        process_data = (
-            idl_gtvt_id,
-            dataset_ver,
-            patient,
-            queue,
-            debug_mode,
-        )  # Only pass the needed data
+        process_data = idl_gtvt_id, dataset_ver, patient, queue, debug_mode
 
-        if g.is_linux():
-            self.process = mp.Process(
-                target=self._run_obs_study_in_process, args=process_data
-            )
-            self.process.start()
-            self.process.join()
-        else:
-            self.process = Process(
-                target=self._run_obs_study_in_process, args=process_data
-            )
-            self.process.start()
+        self._obs_study_gtvt_process = Process(
+            target=self._obs_study_gtvt_process_func, args=process_data
+        )
+        self._obs_study_gtvt_process.start()
 
-        # Set the queue and start the thread
-        self.__idl_gtvt_thread.queue = queue
-        if not self.__idl_gtvt_thread.isRunning():  # Ensure it's not already running
-            self.__idl_gtvt_thread.start()
-
-        # # Start the thread to monitor progress
-        # self.__idl_gtvt_thread = ObsStudyGTVtThread(
-        #     queue=queue,
-        #     progress_bar=self.__progress_bar["gtvt"],
-        #     progress_bar_label=self._text_label["gtvt.progress"],
-        # )
-        # self.__idl_gtvt_thread.progress_signal.connect(self.__update_idl_gtvt_progress_bar)
-        # self.__idl_gtvt_thread.complete_signal.connect(self.__on_idl_gtvt_thread_finished)
-
-        # self.__idl_gtvt_thread.start()
-
-        # self.process = Process(target=run_obs_study, args=(idl_gtvt_id, dataset_ver, patient, queue))
-        # self.process.start()
-        # self.timer.start(1000)  # Check every second
-    def is_process_started(self):
-        # Check if the process has been started
-        return self.process is not None
-    
-    def is_process_running(self):
-        # Check if the process is still running
-        if self.process:
-            return self.process.is_alive()
-        return False
-    def kill_process(self):
-        # Terminate the process if it's running
-        if self.is_process_started() and self.is_process_running():
-            self.process.terminate()  # Terminate the process
-            self.process.join()  # Ensure the process is properly joined
-            self.process = None
+        # Start the thread to monitor progress
+        self.__obs_study_gtvt_progress_thread.queue = queue  # Set the queue
+        if not self.__obs_study_gtvt_progress_thread.isRunning():
+            self.__obs_study_gtvt_progress_thread.start()
 
     @staticmethod
-    def _run_obs_study_in_process(idl_gtvt_id, dataset_ver, patient, queue, debug_mode):
-        # try:
-        training = IDLGTVtTraining()
-        training.obs_study(
-            idl_gtvt_id=idl_gtvt_id,
-            dataset_ver=dataset_ver,
-            patient=patient,
-            queue=queue,
-            debug_mode=debug_mode,
-            device_id=1,
-        )
-        # except Exception:
-        #     pass
+    def _obs_study_gtvt_process_func(
+        idl_gtvt_id, dataset_ver, patient, queue, debug_mode
+    ):
+        try:
+            training = IDLGTVtTraining()
+            training.obs_study(
+                idl_gtvt_id=idl_gtvt_id,
+                dataset_ver=dataset_ver,
+                patient=patient,
+                queue=queue,
+                debug_mode=debug_mode,
+                device_id=1,
+            )
+        except Exception:
+            pass
 
     # this function is connected to widget, dont set input params to this function
     def __confirm_gtvt_delineation(self):
@@ -1162,21 +1109,21 @@ class ObsStudyWindow(ReplayWindow):
             spacing=g.NII_SPACING,
         )
 
-        # (3) start idl gtvt thread
-        self.start_training(
+        # (3) start gtvt process
+        self.__start_obs_study_gtvt_process(
             self._idl_id["gtvt"],
             self.dataset_ver,
             self._cur_patient,
-            self.queue,
+            self.__queue,
             self._debug_mode,
         )
-        # self.__idl_gtvt_thread.set_param(
+        # self.__obs_study_gtvt_thread.set_param(
         #     idl_gtvt_id=self._idl_id["gtvt"],
         #     dataset_ver=self.dataset_ver,
         #     patient=self._cur_patient,
         #     debug_mode=self._debug_mode,
         # )
-        # self.__idl_gtvt_thread.start()
+        # self.__obs_study_gtvt_thread.start()
 
         # (4) end and start timer
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
@@ -1187,7 +1134,7 @@ class ObsStudyWindow(ReplayWindow):
 
     def __goto_click_gtvn_centers(self):
         # (1) stop idl gtvn qthread
-        self.__idl_gtvn_thread.stop()
+        self.__obs_study_gtvn_thread.stop()
 
         # (2) update status (before refresh images)
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
@@ -1246,6 +1193,7 @@ class ObsStudyWindow(ReplayWindow):
             None,
         ]:
             g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
         if obs_study_gtvn_step not in [
             ObsStudyGTVnStep.CORRECT,
             ObsStudyGTVnStep.APPROVED,
@@ -1259,11 +1207,21 @@ class ObsStudyWindow(ReplayWindow):
         if obs_study_gtvn_step is not None:
             self.__update_obs_study_step(obs_study_gtvn_step=obs_study_gtvn_step)
 
-        # update drawing mode (before update widgets)
-        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-            self.drawing_mode = DrawingMode.GTVT_PEN
-        elif self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT:
-            self.drawing_mode = DrawingMode.GTVN_PEN
+        # switch drawing mode (before update widgets)
+        # gtvt
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step != ObsStudyGTVtStep.CORRECT
+        ):
+            self._radio_btn["correct.gtvt"].setChecked(True)
+            self.__switch_drawing_mode_gtv()
+        # gtvn
+        elif (
+            self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvt_step != ObsStudyGTVtStep.CORRECT
+        ):
+            self._radio_btn["correct.gtvn"].setChecked(True)
+            self.__switch_drawing_mode_gtv()
 
         # save corrections and correction masks
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
@@ -1289,22 +1247,8 @@ class ObsStudyWindow(ReplayWindow):
         # update widgets - both gtvt and gtvn are being corrected
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+            or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
         ):
-            if self.drawing_mode in [
-                DrawingMode.GTVT_PEN,
-                DrawingMode.GTVT_ERASER,
-                DrawingMode.GTVT_CLEAR,
-                DrawingMode.GTVT_RESTORE,
-            ]:
-                self._radio_btn["correct.gtvt"].setChecked(True)
-            elif self.drawing_mode in [
-                DrawingMode.GTVN_PEN,
-                DrawingMode.GTVN_ERASER,
-                DrawingMode.GTVN_CLEAR,
-                DrawingMode.GTVN_RESTORE,
-            ]:
-                self._radio_btn["correct.gtvn"].setChecked(True)
             self.__enable_annotation_tools()
 
         # update widgets - both gtvt and gtvn approved
@@ -1344,80 +1288,24 @@ class ObsStudyWindow(ReplayWindow):
                 self.restore_mouse_cursor()
                 self.__disable_annotation_tools()
 
-        # (7) end / start gtvt timer
+        # (7) end / start gtvt timer????
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
 
-        # (7) end / start gtvn timer
+        # (7) end / start gtvn timer????
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
 
-    # def __approve_correction(self, gtv: str):
-    # # (1) save corrections and correction masks
-    # self.__save_corrections_and_masks(gtv)
-
-    # # (2) update status
-    # if gtv == "gtvt":
-    #     self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.APPROVED)
-    # elif gtv == "gtvn":
-    #     self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.APPROVED)
-
-    # # (3) combine arrays (3d imgs) for display
-    # self.__combine_pred_delineation_correction()
-
-    # # (4) refresh todolist and imgs
-    # self.__refresh_todo_list()
-    # self.refresh_imgs()
-
-    # # (5) update widgets
-    # self.__show_and_hide_next_btns()
-    # # (5) update widgets - both gtvt and gtvn approved
-    # if (
-    #     self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
-    #     and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
-    # ):
-    #     self.restore_mouse_cursor()
-    #     self.__disable_annotation_tools()
-    #     # expand and collapse
-    #     if self._collap["annotation"].isExpanded():
-    #         self._collap["annotation"].collapse()
-    #     if not self._collap["patient"].isExpanded():
-    #         self._collap["patient"].expand()
-
-    # # (5) update widgets - only gtvt approved
-    # elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
-    #     # update dwaring mode before change mouse cursor
-    #     self.drawing_mode = DrawingMode.GTVN_PEN
-    #     if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-    #         self.change_mouse_cursor()
-    #         self.__enable_annotation_tools()
-    #     else:
-    #         self.restore_mouse_cursor()
-    #         self.__disable_annotation_tools()
-
-    # # (5) update widgets - only gtvn approved
-    # elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
-    #     # update dwaring mode before change mouse cursor
-    #     self.drawing_mode = DrawingMode.GTVT_PEN
-    #     if self.obs_study_gtvt_step in [
-    #         ObsStudyGTVtStep.DELINEATE,
-    #         ObsStudyGTVtStep.CORRECT,
-    #     ]:
-    #         self.change_mouse_cursor()
-    #         self.__enable_annotation_tools()
-    #     else:
-    #         self.restore_mouse_cursor()
-    #         self.__disable_annotation_tools()
-
-    # # (6) end timer
-    # if gtv == "gtvt":
-    #     self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
-    # elif gtv == "gtvn":
-    #     self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
+        # (8) end total timer
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
 
     def on_todo_list_clicked(self, todo_list_label: TodoListLabel):
         # (1) jump to step SELECT_PATIENT
@@ -1581,12 +1469,12 @@ class ObsStudyWindow(ReplayWindow):
             self._text_label["eraser.size"].show()
             self._slider["eraser.size"].show()
 
-    def __update_idl_gtvt_progress_bar(self, progress_signal: float):
+    def __update_obs_study_gtvt_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
         g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvt"].setValue(progress_int)
 
-    def __on_idl_gtvt_thread_finished(self):
+    def __on_obs_study_gtvt_thread_finished(self):
         # (1) update obs_study_gtvt_step
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.CORRECT)
 
@@ -1625,7 +1513,13 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
-        self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
+        if self.drawing_mode in [
+            DrawingMode.GTVT_PEN,
+            DrawingMode.GTVT_ERASER,
+            DrawingMode.GTVT_CLEAR,
+            DrawingMode.GTVT_RESTORE,
+        ]:
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
 
     # this function is connected to widget, dont set input params to this function
     def __confirm_gtvn_centers(self):
@@ -1643,21 +1537,22 @@ class ObsStudyWindow(ReplayWindow):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
+            # user decided to click gtvn center
             if reply == QMessageBox.No:
                 return
             # no gtvn click
             else:
                 self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
                 self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
-                self.__on_idl_gtvn_thread_finished()
+                self.__on_obs_study_gtvn_thread_finished()
                 return
 
         # (2) update status
         self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.WAIT_PRED)
 
         # (3) add clicks into 3d img
-        if self.img_3d["gtvn.clicks"] is None:
-            self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
+        # if self.img_3d["gtvn.clicks"] is None:
+        self.img_3d["gtvn.clicks"] = np.zeros_like(self.img_3d[Modal.CT])
         for pos in self.gtvn_clicks_pos_3d:
             # pos 0-transverse 1-coronal 2-saggital
             self.img_3d["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
@@ -1673,14 +1568,14 @@ class ObsStudyWindow(ReplayWindow):
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
 
         # (5) start idl gtvn thread
-        self.__idl_gtvn_thread.set_param(
+        self.__obs_study_gtvn_thread.set_param(
             idl_gtvn_id=self._idl_id["gtvn"],
             dataset_ver=self.dataset_ver,
             patient=self._cur_patient,
             idl_gtvn_clicks=idl_gtvn_clicks,
             debug_mode=self._debug_mode,
         )
-        self.__idl_gtvn_thread.start()
+        self.__obs_study_gtvn_thread.start()
 
         # (6) refresh todolist and imgs, delete crosses
         self.__refresh_todo_list()
@@ -1704,12 +1599,12 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
 
-    def __update_idl_gtvn_progress_bar(self, progress_signal: float):
+    def __update_obs_study_gtvn_progress_bar(self, progress_signal: float):
         progress_int = round(progress_signal * 100)
         g.clamp_value(progress_int, (0, 100))
         self.__progress_bar["gtvn"].setValue(progress_int)
 
-    def __on_idl_gtvn_thread_finished(self):
+    def __on_obs_study_gtvn_thread_finished(self):
         # (1) update obs study step
         self.__update_obs_study_step(obs_study_gtvn_step=ObsStudyGTVnStep.CORRECT)
 
@@ -1748,7 +1643,13 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
-        self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
+        if self.drawing_mode in [
+            DrawingMode.GTVN_PEN,
+            DrawingMode.GTVN_ERASER,
+            DrawingMode.GTVN_CLEAR,
+            DrawingMode.GTVN_RESTORE,
+        ]:
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
 
     # check delineation in 3 different planes
     def __update_gtvt_delineated_status(self) -> Dict:
@@ -2260,26 +2161,27 @@ class ObsStudyWindow(ReplayWindow):
             v_layout.addWidget(self._text_label["{}.progress".format(i)])
             v_layout.addWidget(self.__progress_bar[i])
 
-        # idl gtvt/gtvn thread (after progress bars and progress bar labels initialized)
-        self.__idl_gtvt_thread = ObsStudyGTVtThread(
+        # gtvt/gtvn thread (after progress bars and progress bar labels initialized)
+        self._obs_study_gtvt_process = None
+        self.__obs_study_gtvt_progress_thread = ObsStudyGTVtProgressThread(
             progress_bar=self.__progress_bar["gtvt"],
             progress_bar_label=self._text_label["gtvt.progress"],
         )
-        self.__idl_gtvt_thread.progress_signal.connect(
-            self.__update_idl_gtvt_progress_bar
+        self.__obs_study_gtvt_progress_thread.progress_signal.connect(
+            self.__update_obs_study_gtvt_progress_bar
         )
-        self.__idl_gtvt_thread.complete_signal.connect(
-            self.__on_idl_gtvt_thread_finished
+        self.__obs_study_gtvt_progress_thread.complete_signal.connect(
+            self.__on_obs_study_gtvt_thread_finished
         )
-        self.__idl_gtvn_thread = ObsStudyGTVnThread(
+        self.__obs_study_gtvn_thread = ObsStudyGTVnThread(
             progress_bar=self.__progress_bar["gtvn"],
             progress_bar_label=self._text_label["gtvn.progress"],
         )
-        self.__idl_gtvn_thread.progress_signal.connect(
-            self.__update_idl_gtvn_progress_bar
+        self.__obs_study_gtvn_thread.progress_signal.connect(
+            self.__update_obs_study_gtvn_progress_bar
         )
-        self.__idl_gtvn_thread.complete_signal.connect(
-            self.__on_idl_gtvn_thread_finished
+        self.__obs_study_gtvn_thread.complete_signal.connect(
+            self.__on_obs_study_gtvn_thread_finished
         )
 
         container = QtWidgets.QWidget()
@@ -2402,6 +2304,9 @@ class ObsStudyWindow(ReplayWindow):
             # restore
             elif self.drawing_mode == DrawingMode.GTVN_RESTORE:
                 self.drawing_mode = DrawingMode.GTVT_RESTORE
+            # switch timer
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].pause()
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
 
         # gtvt to gtvn
         elif self._radio_btn["correct.gtvn"].isChecked():
@@ -2417,6 +2322,9 @@ class ObsStudyWindow(ReplayWindow):
             # restore
             elif self.drawing_mode == DrawingMode.GTVT_RESTORE:
                 self.drawing_mode = DrawingMode.GTVN_RESTORE
+            # switch timer
+            self.__timer[ObsStudyTimer.CORRECT_GTVT].pause()
+            self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
 
     def get_pen_size(self):
         pen_size = self._slider["pen.size"].value() / 100
@@ -2588,9 +2496,8 @@ class ObsStudyWindow(ReplayWindow):
 
     def _load_patient_data(self):
         # stop idl qthreads (if running)
-        self.kill_process()
-        self.__idl_gtvt_thread.stop()
-        self.__idl_gtvn_thread.stop()
+        self.__stop_obs_study_gtvt_process()
+        self.__obs_study_gtvn_thread.stop()
 
         # update widgets
         for i in ["annotation", "display.mode", "color.enhance", "zoom"]:
@@ -2620,6 +2527,7 @@ class ObsStudyWindow(ReplayWindow):
         # reset timers after cur_patient is updated
         self.__timer = Dict()
         for i in [
+            ObsStudyTimer.PATIENT_TOTAL_TIME,
             ObsStudyTimer.CLICK_GTVT_CENTER,
             ObsStudyTimer.DELINEATE_GTVT,
             ObsStudyTimer.CLICK_GTVN_CENTERS,
@@ -2667,6 +2575,10 @@ class ObsStudyWindow(ReplayWindow):
         # (3) _load_idl_gtvn_data(), will load gtvn_clicks_pos_3d
         # (4) obs study gtvt/gtvn steps are loaded
         self.reset_cur_slice_id()
+
+        # start total timer
+        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
+        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].start()
 
         # last step: goto current obs study steps
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
@@ -2780,47 +2692,67 @@ class ObsStudyWindow(ReplayWindow):
         # g.save_json(time_log, idl_time_json_path)
 
     def __refresh_todo_list(self):
-        # (1) CLICK_GTVT_CENTER has the highest priority.
-        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+        # (1) CLICK_GTVT_CENTER and DELINEATE_GTVT have the highest priority.
+        if self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.CLICK_CENTER,
+            ObsStudyGTVtStep.DELINEATE,
+        ]:
             completed_todo_labels = [TodoListLabel.SELECT_PATIENT]
-            active_todo_labels = [TodoListLabel.CLICK_GTVT_CENTER]
+            active_todo_labels = []
             not_start_todo_labels = [
-                TodoListLabel.DELINEATE_GTVT,
-                TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
-                TodoListLabel.DELINEATE_GTVT_CORONAL,
-                TodoListLabel.DELINEATE_GTVT_SAGITTAL,
-                TodoListLabel.CLICK_GTVN_CENTERS,
+                TodoListLabel.WAIT_GTVT_PRED,
                 TodoListLabel.CORRECT_GTVT,
-                TodoListLabel.CORRECT_GTVN,
             ]
-            # gtvn thread might be still running while reverting to CLICK_GTVT_CENTER
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
 
-        # (2) Delineate GTVt has the 2nd highest priority.
-        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
-            completed_todo_labels = [
-                TodoListLabel.SELECT_PATIENT,
-                TodoListLabel.CLICK_GTVT_CENTER,
-            ]
-            active_todo_labels = [TodoListLabel.DELINEATE_GTVT]
-            # update the status of delineate gtvt sub todo labels
-            self.__update_gtvt_delineated_status()
-            not_start_todo_labels = [
-                TodoListLabel.CLICK_GTVN_CENTERS,
-                TodoListLabel.CORRECT_GTVT,
-                TodoListLabel.CORRECT_GTVN,
-            ]
-            # gtvn thread might be still running while reverting to CLICK_GTVT_CENTER
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
+            # gtvt todo labels
+            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
+                active_todo_labels.append(TodoListLabel.CLICK_GTVT_CENTER)
+                not_start_todo_labels += [
+                    TodoListLabel.DELINEATE_GTVT,
+                    TodoListLabel.DELINEATE_GTVT_TRANSVERSE,
+                    TodoListLabel.DELINEATE_GTVT_CORONAL,
+                    TodoListLabel.DELINEATE_GTVT_SAGITTAL,
+                ]
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
+                completed_todo_labels.append(TodoListLabel.CLICK_GTVT_CENTER)
+                active_todo_labels.append(TodoListLabel.DELINEATE_GTVT)
+                # update the status of delineate gtvt sub todo labels
+                self.__update_gtvt_delineated_status()
             else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
-        # (3) Click GTVn centers has the 3rd highest priority.
+            # gtvn todo labels
+            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+                not_start_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,  # wait until gtvt is clicked or delineated
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                completed_todo_labels.append(TodoListLabel.CLICK_GTVN_CENTERS)
+                active_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                completed_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,
+                    TodoListLabel.WAIT_GTVN_PRED,
+                ]
+                # wait until gtvt is clicked or delineated
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
+            elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
+                completed_todo_labels += [
+                    TodoListLabel.CLICK_GTVN_CENTERS,
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            else:
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
+        # (2) Click GTVn centers has the 2nd highest priority.
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            # gtvt is clicked and delineated
             completed_todo_labels = [
                 TodoListLabel.SELECT_PATIENT,
                 TodoListLabel.CLICK_GTVT_CENTER,
@@ -2829,18 +2761,31 @@ class ObsStudyWindow(ReplayWindow):
                 TodoListLabel.DELINEATE_GTVT_CORONAL,
                 TodoListLabel.DELINEATE_GTVT_SAGITTAL,
             ]
+            # gtvn todo labels
             active_todo_labels = [TodoListLabel.CLICK_GTVN_CENTERS]
             not_start_todo_labels = [
-                TodoListLabel.CORRECT_GTVT,
+                TodoListLabel.WAIT_GTVN_PRED,
                 TodoListLabel.CORRECT_GTVN,
             ]
-            # gtvt thread might be still running while reverting to CLICK_GTVN_CENTERS
+            # gtvt todo labels
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            else:
-                not_start_todo_labels.append(TodoListLabel.WAIT_PRED)
+                active_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
 
-        # (4) other conditions
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
+                # wait until gtvn centers are clicked
+                not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
+            elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVT_PRED,
+                    TodoListLabel.CORRECT_GTVT,
+                ]
+            else:
+                g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
+
+        # (3) other conditions
         # obs_study_gtvt_step == WAIT_PRED / CORRECT / APPROVED, != CLICK_CENTER / DELINEATE
         # obs_study_gtvn_step == WAIT_PRED / CORRECT / APPROVED, != CLICK_CENTERS
         else:
@@ -2856,35 +2801,38 @@ class ObsStudyWindow(ReplayWindow):
             active_todo_labels = []
             not_start_todo_labels = []
 
-            # TodoListLabel.WAIT_PRED
-            if (
-                self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED
-                or self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED
-            ):
-                active_todo_labels.append(TodoListLabel.WAIT_PRED)
-            # if neither obs_study_gtvt_step or obs_study_gtvn_step == WAIT_PRED,
-            # they == CORRECT or APPROVED, means both gtvt and gtvn pred are ready
-            else:
-                completed_todo_labels.append(TodoListLabel.WAIT_PRED)
-
-            # TodoListLabel.CORRECT_GTVT
+            # gtvt todo labels
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
+                active_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
                 not_start_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
             elif self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVT_PRED)
                 active_todo_labels.append(TodoListLabel.CORRECT_GTVT)
+
             elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
-                completed_todo_labels.append(TodoListLabel.CORRECT_GTVT)
-            else:  # This block should never be reached
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVT_PRED,
+                    TodoListLabel.CORRECT_GTVT,
+                ]
+            else:
                 g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
-            # TodoListLabel.CORRECT_GTVN
+            # gtvn todo labels
             if self.obs_study_gtvn_step == ObsStudyGTVnStep.WAIT_PRED:
+                active_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
                 not_start_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
             elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                completed_todo_labels.append(TodoListLabel.WAIT_GTVN_PRED)
                 active_todo_labels.append(TodoListLabel.CORRECT_GTVN)
+
             elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
-                completed_todo_labels.append(TodoListLabel.CORRECT_GTVN)
-            else:  # This block should never be reached
+                completed_todo_labels += [
+                    TodoListLabel.WAIT_GTVN_PRED,
+                    TodoListLabel.CORRECT_GTVN,
+                ]
+            else:
                 g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
         for i in completed_todo_labels:
