@@ -948,6 +948,7 @@ class ObsStudyWindow(ReplayWindow):
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=2)
         # turn upside down
         idl_gtvt_click = np.flip(idl_gtvt_click, axis=0)
+        # save nii
         g.save_nii(
             img=idl_gtvt_click,
             save_path=os.path.join(cur_round_dir, "gtvt_click.nii.gz"),
@@ -1557,7 +1558,16 @@ class ObsStudyWindow(ReplayWindow):
             # pos 0-transverse 1-coronal 2-saggital
             self.img_3d["gtvn.clicks"][pos[0]][pos[1]][pos[2]] = 1
 
-        # (4) transform gtvn clicks ndarray for idl.gtvn thread
+        # (4) transform gtvn clicks ndarray for idl.gtvn thread, also save the nii
+        cur_round_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            self._baseline_id,
+            self._idl_id["gtvn"],
+            "patients",
+            "patient={}".format(self._cur_patient),
+            "round=01",
+        )
+        g.create_dir(cur_round_dir)
         # copy data (dont change origin ndarray)
         idl_gtvn_clicks = self.img_3d["gtvn.clicks"].copy()
         # only flip non-empty img
@@ -1566,6 +1576,12 @@ class ObsStudyWindow(ReplayWindow):
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=2)
             # turn upside down
             idl_gtvn_clicks = np.flip(idl_gtvn_clicks, axis=0)
+            # save nii
+            g.save_nii(
+                img=idl_gtvn_clicks,
+                save_path=os.path.join(cur_round_dir, "gtvn_clicks.nii.gz"),
+                spacing=g.NII_SPACING,
+            )
 
         # (5) start idl gtvn thread
         self.__obs_study_gtvn_thread.set_param(
