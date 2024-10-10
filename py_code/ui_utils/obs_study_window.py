@@ -771,7 +771,7 @@ class ObsStudyWindow(ReplayWindow):
                         self.img_3d[Modal.CT]
                     )
 
-    def __cleanup_future_step_files(self):
+    def __cleanup_future_step_files(self, keep_gtvn_clicks_nii: bool = True):
         # cleanup gtvn output files
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
             # idl gtvn training dir
@@ -785,13 +785,16 @@ class ObsStudyWindow(ReplayWindow):
                 "patient={}".format(self._cur_patient),
                 "round=01",
             )
-            # keep "gtvn_clicks.nii.gz"
-            for file_name in [
+            gtvn_files_list = [
                 "gtvn_pred.nii.gz",
                 "gtvn_distance_map.nii.gz",
                 "gtvn_correction.nii.gz",
                 "gtvn_correction_mask.nii.gz",
-            ]:
+            ]
+            if not keep_gtvn_clicks_nii:
+                gtvn_files_list.append("gtvn_clicks.nii.gz")
+            # keep "gtvn_clicks.nii.gz"
+            for file_name in gtvn_files_list:
                 g.delete_path(os.path.join(cross_valid_dir, file_name))
 
             # delete nii of each fold
@@ -1537,13 +1540,20 @@ class ObsStudyWindow(ReplayWindow):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
-            # user decided to click gtvn center
+            # user decided to re-click gtvn center
             if reply == QMessageBox.No:
                 return
-            # no gtvn click
+            # user confirm there is no gtvn
             else:
+                # Clean up GTVn arrays and files of future steps
+                # Note: obs_study_gtvn_step is still CLICK_CENTERS,
+                # ensuring that the arrays and files are cleaned up correctly.
+                self.__cleanup_future_step_3d_imgs()
+                # also delete "gtvn_clicks.nii.gz"
+                self.__cleanup_future_step_files(keep_gtvn_clicks_nii=False)
                 self.__timer[ObsStudyTimer.CLICK_GTVN_CENTERS].end()
                 self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].start()
+                # gtvn step will be updated in the following function
                 self.__on_obs_study_gtvn_thread_finished()
                 return
 
