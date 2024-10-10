@@ -1193,6 +1193,7 @@ class ObsStudyWindow(ReplayWindow):
     ):
         # (1) check obs_study_gtvt_step
         if obs_study_gtvt_step not in [
+            ObsStudyGTVtStep.WAIT_PRED,
             ObsStudyGTVtStep.CORRECT,
             ObsStudyGTVtStep.APPROVED,
             None,
@@ -1201,6 +1202,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (2) check obs_study_gtvn_step
         if obs_study_gtvn_step not in [
+            ObsStudyGTVnStep.WAIT_PRED,
             ObsStudyGTVnStep.CORRECT,
             ObsStudyGTVnStep.APPROVED,
             None,
