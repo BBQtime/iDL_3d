@@ -2984,3 +2984,8 @@ class ObsStudyWindow(ReplayWindow):
             pass
 
         self.refresh_mouse_cursor()
+
+        # refresh img_frame to add or remove eraser circle
+        img_frame_name = self._under_mouse_img_frame_name()
+        if img_frame_name:
+            self.img_frame[img_frame_name].update()

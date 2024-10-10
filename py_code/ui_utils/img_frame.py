@@ -37,8 +37,8 @@ class ImgFrame(QLabel):
         self.drawing_layer.fill(Qt.transparent)
         self.pen_mode = True
 
-        # eraser circle
-        self.__circle_pos = None
+        # init cursor pos (for eraser circle painting)
+        self.__cursor_pos = None
 
     def clear_drawing_layer(self):
         self.drawing_layer = QPixmap(self.size())
@@ -151,8 +151,7 @@ class ImgFrame(QLabel):
 
         # put this before draw_on_img_frame_move()
         # because draw_on_img_frame_move will trigger repaint
-        if should_paint_eraser_circle:
-            self.__circle_pos = event.pos()
+        self.__cursor_pos = event.pos()
 
         # in "mouseMoveEvent", use event.buttons() instead of event.button()
         # button() returns the mouse button that caused the event, which is Qt::NoButton
@@ -223,6 +222,7 @@ class ImgFrame(QLabel):
                 return True
             else:
                 return False
+
         else:
             return False
 
@@ -231,20 +231,16 @@ class ImgFrame(QLabel):
         super().enterEvent(event)
 
         self.window().refresh_mouse_cursor()
-        if self.__should_paint_eraser_circle():
-            self.__circle_pos = event.pos()
-            self.update()  # repaint
-        else:
-            self.__circle_pos = None
+        self.__cursor_pos = event.pos()
+        self.update()  # repaint
 
     # This function is called when the mouse leaves the QLabel area
     def leaveEvent(self, event):
         super().leaveEvent(event)
 
         self.window().setCursor(Qt.ArrowCursor)
-        self.__circle_pos = None
-        if self.__should_paint_eraser_circle():
-            self.update()  # repaint
+        self.__cursor_pos = None
+        self.update()  # repaint
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -265,7 +261,7 @@ class ImgFrame(QLabel):
             painter.drawPixmap(self.rect(), self.drawing_layer)
 
         # draw eraser circle
-        if self.__circle_pos and self.window().is_obs_study_window():
+        if self.__cursor_pos and self.__should_paint_eraser_circle():
             # circle color
             # (1) delineate gtvt
             if self.window().obs_study_gtvt_step == ObsStudyGTVtStep.DELINEATE:
@@ -288,7 +284,7 @@ class ImgFrame(QLabel):
             painter.setBrush(Qt.NoBrush)
             radius = self.window().get_eraser_size() / 2.0
             # Draw circle at the mouse position
-            painter.drawEllipse(self.__circle_pos, radius, radius)
+            painter.drawEllipse(self.__cursor_pos, radius, radius)
 
     def set_background(self, img: QImage):
         self.background_img = QPixmap.fromImage(img)
