@@ -230,7 +230,7 @@ class ImgFrame(QLabel):
     def enterEvent(self, event):
         super().enterEvent(event)
 
-        self.window().change_mouse_cursor(check_mouse_over_img_frame=False)
+        self.window().refresh_mouse_cursor()
         if self.__should_paint_eraser_circle():
             self.__circle_pos = event.pos()
             self.update()  # repaint
@@ -241,7 +241,7 @@ class ImgFrame(QLabel):
     def leaveEvent(self, event):
         super().leaveEvent(event)
 
-        self.window().restore_mouse_cursor()
+        self.window().setCursor(Qt.ArrowCursor)
         self.__circle_pos = None
         if self.__should_paint_eraser_circle():
             self.update()  # repaint

@@ -876,7 +876,7 @@ class ObsStudyWindow(ReplayWindow):
         self.refresh_crosses()
 
         # (6) update widgets
-        self.restore_mouse_cursor()
+        self.refresh_mouse_cursor()
         self.__disable_annotation_tools()
         self.__show_and_hide_next_btns()
 
@@ -984,10 +984,9 @@ class ObsStudyWindow(ReplayWindow):
         self.__update_obs_study_step(obs_study_gtvt_step=ObsStudyGTVtStep.DELINEATE)
         self.drawing_mode = DrawingMode.GTVT_PEN
 
+        # (3) clear future step 3d imgs and related files
         # DO NOT clear self.gtvt_click_pos_3d
         # DO NOT clear self.gtvn_clicks_pos_3d
-
-        # (3) clear future step 3d imgs and related files
         self.__cleanup_future_step_3d_imgs()
         self.__cleanup_future_step_files()
 
@@ -1007,14 +1006,15 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].start()
 
     def __stop_obs_study_gtvt_process(self):
+        # stop progress thread
+        self.__obs_study_gtvt_progress_thread.stop()
+
         # terminate gtvt training process
         if self._obs_study_gtvt_process is not None:
             if self._obs_study_gtvt_process.is_alive():
                 self._obs_study_gtvt_process.terminate()
             # Clean up process resources
             self._obs_study_gtvt_process.join()
-        # stop progress thread
-        self.__obs_study_gtvt_progress_thread.stop()
 
     def __start_obs_study_gtvt_process(
         self, idl_gtvt_id, dataset_ver, patient, queue, debug_mode
@@ -1131,7 +1131,10 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].start()
 
         # (5) goto next step
-        self.__goto_click_gtvn_centers()
+        if self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            self.__goto_click_gtvn_centers()
+        else:
+            self.__goto_correct_pred(obs_study_gtvt_step=ObsStudyGTVtStep.WAIT_PRED)
 
     def __goto_click_gtvn_centers(self):
         # (1) stop idl gtvn qthread
@@ -1164,7 +1167,7 @@ class ObsStudyWindow(ReplayWindow):
         self.refresh_crosses()
 
         # (6) update widgets
-        self.restore_mouse_cursor()
+        self.refresh_mouse_cursor()
         self.__disable_annotation_tools()
         self.__show_and_hide_next_btns()
 
@@ -1188,6 +1191,7 @@ class ObsStudyWindow(ReplayWindow):
         obs_study_gtvt_step: str = None,
         obs_study_gtvn_step: str = None,
     ):
+        # (1) check obs_study_gtvt_step
         if obs_study_gtvt_step not in [
             ObsStudyGTVtStep.CORRECT,
             ObsStudyGTVtStep.APPROVED,
@@ -1195,6 +1199,7 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
+        # (2) check obs_study_gtvn_step
         if obs_study_gtvn_step not in [
             ObsStudyGTVnStep.CORRECT,
             ObsStudyGTVnStep.APPROVED,
@@ -1202,13 +1207,13 @@ class ObsStudyWindow(ReplayWindow):
         ]:
             g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
-        # update obs study steps
+        # (3) update obs study steps
         if obs_study_gtvt_step is not None:
             self.__update_obs_study_step(obs_study_gtvt_step=obs_study_gtvt_step)
         if obs_study_gtvn_step is not None:
             self.__update_obs_study_step(obs_study_gtvn_step=obs_study_gtvn_step)
 
-        # switch drawing mode (before update widgets)
+        # (4) switch drawing mode (before update widgets)
         # gtvt
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
@@ -1223,28 +1228,31 @@ class ObsStudyWindow(ReplayWindow):
         ):
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.__switch_drawing_mode_gtv()
+        else:
+            pass
 
-        # save corrections and correction masks
+        # (5) save corrections and correction masks
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             self.__save_corrections_and_masks("gtvt")
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__save_corrections_and_masks("gtvn")
 
-        # update 3d imgs for display
+        # (6) update 3d arrays for display
         # init correction and mask if they are None
         for gtv in ["gtvt", "gtvn"]:
             for i in ["{}.correction".format(gtv), "{}.correction.mask".format(gtv)]:
                 if self.img_3d[i] is None:
                     self.img_3d[i] = np.zeros_like(self.img_3d[Modal.CT])
-        # combine arrays (3d imgs)
+        # combine 3d arrays
         self.__combine_pred_delineation_correction()
 
-        # refresh todolist and imgs
+        # (7) refresh todolist and imgs
         self.__refresh_todo_list()
         self.refresh_imgs()
 
-        # update widgets
+        # (8) update widgets
         self.__show_and_hide_next_btns()
+        self.refresh_mouse_cursor()
         # update widgets - both gtvt and gtvn are being corrected
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
@@ -1257,23 +1265,13 @@ class ObsStudyWindow(ReplayWindow):
             self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
         ):
-            self.restore_mouse_cursor()
             self.__disable_annotation_tools()
-            # expand and collapse
-            if self._collap["annotation"].isExpanded():
-                self._collap["annotation"].collapse()
-            if not self._collap["patient"].isExpanded():
-                self._collap["patient"].expand()
 
         # update widgets - only gtvt approved
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-                # Set check_mouse_over_img_frame to Ture
-                # Change the cursor only when it is over an image frame.
-                self.change_mouse_cursor(check_mouse_over_img_frame=True)
                 self.__enable_annotation_tools()
             else:
-                self.restore_mouse_cursor()
                 self.__disable_annotation_tools()
 
         # update widgets - only gtvn approved
@@ -1281,32 +1279,34 @@ class ObsStudyWindow(ReplayWindow):
             # update dwaring mode before change mouse cursor
             self.drawing_mode = DrawingMode.GTVT_PEN
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-                # Set check_mouse_over_img_frame to False
-                # Change the cursor only when it is over an image frame.
-                self.change_mouse_cursor(check_mouse_over_img_frame=True)
                 self.__enable_annotation_tools()
             else:
-                self.restore_mouse_cursor()
                 self.__disable_annotation_tools()
 
-        # (7) end / start gtvt timer????
+        # (9) end / start gtvt timer
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].start()
         elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
+        else:
+            pass
 
-        # (7) end / start gtvn timer????
+        # (10) end / start gtvn timer
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].start()
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__timer[ObsStudyTimer.CORRECT_GTVN].end()
+        else:
+            pass
 
-        # (8) end total timer
+        # (11) end total timer
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
             and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
         ):
             self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
+        else:
+            pass
 
     def on_todo_list_clicked(self, todo_list_label: TodoListLabel):
         # (1) jump to step SELECT_PATIENT
@@ -1523,7 +1523,7 @@ class ObsStudyWindow(ReplayWindow):
             # change mouse cursor after:
             # (1) obs study steps updated
             # (2) drawing mode updated
-            self.change_mouse_cursor(check_mouse_over_img_frame=True)
+            self.refresh_mouse_cursor()
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
@@ -1668,7 +1668,7 @@ class ObsStudyWindow(ReplayWindow):
             # change mouse cursor after:
             # (1) obs study steps updated
             # (2) drawing mode updated
-            self.change_mouse_cursor(check_mouse_over_img_frame=True)
+            self.refresh_mouse_cursor()
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
@@ -1729,23 +1729,18 @@ class ObsStudyWindow(ReplayWindow):
                     image.setPixelColor(x, y, new_qcolor)
         return QtGui.QPixmap.fromImage(image)
 
-    def restore_mouse_cursor(self):
-        self.setCursor(Qt.ArrowCursor)
-
-    def change_mouse_cursor(
-        self,
-        check_mouse_over_img_frame: bool,  # if = True, only change cursor when mouse is on a img
-    ):
+    def refresh_mouse_cursor(self):
         if (
             self.obs_study_gtvt_step
             not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
             and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
         ):
+            self.setCursor(Qt.ArrowCursor)
             return
 
-        if check_mouse_over_img_frame:
-            if self._under_mouse_img_frame_name() is None:
-                return
+        if self._under_mouse_img_frame_name() is None:
+            self.setCursor(Qt.ArrowCursor)
+            return
 
         # set cursor center based on cursor size
         cursor_size = 32
@@ -1794,6 +1789,9 @@ class ObsStudyWindow(ReplayWindow):
 
         elif self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
             cursor_name = TodoListLabel.CORRECT_GTVN
+
+        else:
+            g.error_exit(ErrMsg.OBS_STUDY_STEP_INVALID)
 
         cursor_pixmap = self.__cursor[cursor_name][tool]
         self.setCursor(QtGui.QCursor(cursor_pixmap, left, top))

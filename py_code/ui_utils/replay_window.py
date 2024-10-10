@@ -2234,18 +2234,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
             # mod y pos
             top += 20
 
+    # abstract function
     def draw_on_img_frame_move(self, *args, **kwargs):
         return
 
+    # abstract function
     def draw_on_img_frame_release(self, *args, **kwargs):
         return
 
-    # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
-    def change_mouse_cursor(self, check_mouse_over_img_frame: bool):
-        return
-
-    # abstract function for ObsStudyWindow, triggerd by ImgFrame.enterEvent()
-    def restore_mouse_cursor(self):
+    # abstract function
+    # also triggerd by ImgFrame.enterEvent()
+    def refresh_mouse_cursor(self):
         return
 
     def _qimg_draw_text(
