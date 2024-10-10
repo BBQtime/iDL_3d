@@ -878,7 +878,7 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.refresh_mouse_cursor()
         self.__disable_annotation_tools()
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
 
         # (7) end and start timer
         self.__timer[ObsStudyTimer.DELINEATE_GTVT].end()
@@ -886,7 +886,7 @@ class ObsStudyWindow(ReplayWindow):
         self.__timer[ObsStudyTimer.CORRECT_GTVT].end()
         self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].start()
 
-    def __show_and_hide_next_btns(self):
+    def __refresh_next_btns(self):
         for i in [
             TodoListLabel.CLICK_GTVT_CENTER,
             TodoListLabel.DELINEATE_GTVT,
@@ -997,7 +997,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (5) update widgets
         self.__enable_annotation_tools()
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
 
         # (6) start recording time
         self.__timer[ObsStudyTimer.CLICK_GTVT_CENTER].end()
@@ -1169,7 +1169,7 @@ class ObsStudyWindow(ReplayWindow):
         # (6) update widgets
         self.refresh_mouse_cursor()
         self.__disable_annotation_tools()
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
 
         # (7) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
@@ -1222,22 +1222,28 @@ class ObsStudyWindow(ReplayWindow):
             and self.obs_study_gtvn_step != ObsStudyGTVtStep.CORRECT
         ):
             self._radio_btn["correct.gtvt"].setChecked(True)
-            self.__switch_drawing_mode_gtv()
+            self.__switch_gtv_drawing_mode()
         # gtvn
         elif (
             self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT
             and self.obs_study_gtvt_step != ObsStudyGTVtStep.CORRECT
         ):
             self._radio_btn["correct.gtvn"].setChecked(True)
-            self.__switch_drawing_mode_gtv()
+            self.__switch_gtv_drawing_mode()
         else:
             pass
 
         # (5) save corrections and correction masks
+        # gtvt
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
             self.__save_corrections_and_masks("gtvt")
+        else:
+            pass
+        # gtvn
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
             self.__save_corrections_and_masks("gtvn")
+        else:
+            pass
 
         # (6) update 3d arrays for display
         # init correction and mask if they are None
@@ -1253,37 +1259,15 @@ class ObsStudyWindow(ReplayWindow):
         self.refresh_imgs()
 
         # (8) update widgets
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
         self.refresh_mouse_cursor()
-        # update widgets - both gtvt and gtvn are being corrected
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
             or self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
         ):
             self.__enable_annotation_tools()
-
-        # update widgets - both gtvt and gtvn approved
-        elif (
-            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
-            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
-        ):
+        else:
             self.__disable_annotation_tools()
-
-        # update widgets - only gtvt approved
-        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED:
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-                self.__enable_annotation_tools()
-            else:
-                self.__disable_annotation_tools()
-
-        # update widgets - only gtvn approved
-        elif self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED:
-            # update dwaring mode before change mouse cursor
-            self.drawing_mode = DrawingMode.GTVT_PEN
-            if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-                self.__enable_annotation_tools()
-            else:
-                self.__disable_annotation_tools()
 
         # (9) end / start gtvt timer
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
@@ -1513,7 +1497,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (4) update widgets
         self.__enable_annotation_tools()
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
 
         # user is correcting gtvn
         if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
@@ -1618,12 +1602,19 @@ class ObsStudyWindow(ReplayWindow):
         self.delete_all_crosses()
 
         # (7) update widgets
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
+        # gtvt training is waiting for correction,
+        # enable annotation tools and switch to gtvt pen mode
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             self.__enable_annotation_tools()
-        elif self.obs_study_gtvt_step == ObsStudyGTVtStep.WAIT_PRED:
+        # gtvt training is still ongoing or gtvt correction is approved
+        # disable annotation tools as there is nothing to be corrected
+        elif self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.WAIT_PRED,
+            ObsStudyGTVtStep.APPROVED,
+        ]:
             self.__disable_annotation_tools()
 
         # (8) start and end timer
@@ -1658,7 +1649,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (4) update widgets
         self.__enable_annotation_tools()
-        self.__show_and_hide_next_btns()
+        self.__refresh_next_btns()
 
         # user is correcting gtvt
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
@@ -2159,7 +2150,7 @@ class ObsStudyWindow(ReplayWindow):
             )
             self._radio_btn["correct.{}".format(i)].hide()
         self.__radio_group_drawing_mode.buttonClicked.connect(
-            self.__switch_drawing_mode_gtv
+            self.__switch_gtv_drawing_mode
         )
 
         # create qcollapsible space
@@ -2318,7 +2309,7 @@ class ObsStudyWindow(ReplayWindow):
             self.img_frame[i].update()
 
     # this function is connected to widget, dont set input params to this function
-    def __switch_drawing_mode_gtv(self):
+    def __switch_gtv_drawing_mode(self):
         # gtvn to gtvt
         if self._radio_btn["correct.gtvt"].isChecked():
             # pen
