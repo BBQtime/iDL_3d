@@ -1219,20 +1219,35 @@ class ObsStudyWindow(ReplayWindow):
             self.__update_obs_study_step(obs_study_gtvn_step=obs_study_gtvn_step)
 
         # (4) switch drawing mode (before update widgets)
-        # gtvt
+        # only gtvt is being corrected
         if (
             self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
-            and self.obs_study_gtvn_step != ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
         ):
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.__switch_gtv_drawing_mode()
-        # gtvn
+        # only gtvn is being corrected
         elif (
-            self.obs_study_gtvn_step == ObsStudyGTVtStep.CORRECT
+            self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
             and self.obs_study_gtvt_step != ObsStudyGTVtStep.CORRECT
         ):
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.__switch_gtv_drawing_mode()
+        # both gtvt and gtvn are being corrected
+        elif (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT
+        ):
+            # only triggered when TodoListLabel.CORRECT_GTVT is clicked
+            if obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
+                self._radio_btn["correct.gtvt"].setChecked(True)
+                self.__switch_gtv_drawing_mode()
+            # only triggered when TodoListLabel.CORRECT_GTVN is clicked
+            elif obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
+                self._radio_btn["correct.gtvn"].setChecked(True)
+                self.__switch_gtv_drawing_mode()
+            else:
+                pass
         else:
             pass
 
