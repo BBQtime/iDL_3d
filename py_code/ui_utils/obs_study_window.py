@@ -1327,6 +1327,7 @@ class ObsStudyWindow(ReplayWindow):
 
         # (2) jump to step CLICK_GTVT_CENTER
         elif todo_list_label == self._text_label[TodoListLabel.CLICK_GTVT_CENTER]:
+            # can not jump to DELINEATE_GTVT from the following step:
             if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
                 return
 
@@ -1347,13 +1348,14 @@ class ObsStudyWindow(ReplayWindow):
 
             self.__goto_click_gtvt_center()
 
-        # (3) jump to step DRAW_GTVT
+        # (3) jump to step DELINEATE_GTVT
         elif todo_list_label in [
             self._text_label[TodoListLabel.DELINEATE_GTVT],
             self._text_label[TodoListLabel.DELINEATE_GTVT_TRANSVERSE],
             self._text_label[TodoListLabel.DELINEATE_GTVT_CORONAL],
             self._text_label[TodoListLabel.DELINEATE_GTVT_SAGITTAL],
         ]:
+            # can not jump to DELINEATE_GTVT from the following steps:
             if self.obs_study_gtvt_step in [
                 ObsStudyGTVtStep.CLICK_CENTER,
                 ObsStudyGTVtStep.DELINEATE,
@@ -1379,7 +1381,15 @@ class ObsStudyWindow(ReplayWindow):
 
         # (4) jump to step CLICK_GTVN_CENTER
         elif todo_list_label == self._text_label[TodoListLabel.CLICK_GTVN_CENTERS]:
-            if self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS:
+            # can not jump to CLICK_GTVN_CENTER from the following steps:
+            if (
+                self.obs_study_gtvt_step
+                in [
+                    ObsStudyGTVtStep.CLICK_CENTER,
+                    ObsStudyGTVtStep.DELINEATE,
+                ]
+                or self.obs_study_gtvn_step == ObsStudyGTVnStep.CLICK_CENTERS
+            ):
                 return
 
             text = (
@@ -1436,6 +1446,9 @@ class ObsStudyWindow(ReplayWindow):
 
             # goto correct prediction
             self.__goto_correct_pred(obs_study_gtvn_step=ObsStudyGTVnStep.CORRECT)
+
+        else:
+            pass
 
     # this function is connected to widget, dont set input params to this function
     def __on_btn_eraser_clicked(self):
