@@ -2963,3 +2963,24 @@ class ObsStudyWindow(ReplayWindow):
 
     def is_obs_study_window(self):
         return True
+
+    def _switch_pen_eraser(self):
+        if (
+            self.obs_study_gtvt_step
+            not in [ObsStudyGTVtStep.DELINEATE, ObsStudyGTVtStep.CORRECT]
+            and self.obs_study_gtvn_step != ObsStudyGTVnStep.CORRECT
+        ):
+            return
+
+        if self.drawing_mode == DrawingMode.GTVT_PEN:
+            self.drawing_mode = DrawingMode.GTVT_ERASER
+        elif self.drawing_mode == DrawingMode.GTVT_ERASER:
+            self.drawing_mode = DrawingMode.GTVT_PEN
+        elif self.drawing_mode == DrawingMode.GTVN_PEN:
+            self.drawing_mode = DrawingMode.GTVN_ERASER
+        elif self.drawing_mode == DrawingMode.GTVN_ERASER:
+            self.drawing_mode = DrawingMode.GTVN_PEN
+        else:
+            pass
+
+        self.refresh_mouse_cursor()

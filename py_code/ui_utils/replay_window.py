@@ -2405,6 +2405,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             self.refresh_imgs()
 
+    # Abstract function for ObsStudyWindow
+    def _switch_pen_eraser(self):
+        pass
+
     def __event_key_f1(self):
         if not self.__help_msg_box_shown:
             text = (
@@ -2420,6 +2424,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 "Left click - Paint.\n"
                 "Right click - Drag and move image (when zoomed in).\n"
                 "Delete/Backspace - Remove a selected GTVt/GTVn center.\n"
+                "Tab - Switch between Pen and Eraser.\n"
             )
             self.__help_msg_box_shown = True
             QMessageBox.information(
@@ -2465,8 +2470,16 @@ class ReplayWindow(QtWidgets.QMainWindow):
             elif event.key() == Qt.Key_F1:
                 self.__event_key_f1()
 
+            # press "Delete" or "Backspace"
             elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
                 self.delete_selected_crosses()
+
+            # press "Tab"
+            elif event.key() == Qt.Key_Tab:
+                self._switch_pen_eraser()
+
+            else:
+                pass
 
             # return True means event is handled
             # block all key press event from reaching any widget
