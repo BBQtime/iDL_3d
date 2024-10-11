@@ -1517,17 +1517,21 @@ class ObsStudyWindow(ReplayWindow):
         self.__enable_annotation_tools()
         self.__refresh_next_btns()
 
-        # user is correcting gtvn
-        if self.obs_study_gtvn_step == ObsStudyGTVnStep.CORRECT:
-            # dont change drawing mode, it will interrupt user correcting gtvn
-            pass
-        else:
+        # user is not clicking or correcting gtvn
+        if self.obs_study_gtvn_step in [
+            ObsStudyGTVnStep.WAIT_PRED,
+            ObsStudyGTVnStep.APPROVED,
+        ]:
             self._radio_btn["correct.gtvt"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVT_PEN
             # change mouse cursor after:
             # (1) obs study steps updated
             # (2) drawing mode updated
             self.refresh_mouse_cursor()
+
+        # otherwise, do nothing to avoid interrupting user input
+        else:
+            pass
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVT_PRED].end()
@@ -1676,17 +1680,21 @@ class ObsStudyWindow(ReplayWindow):
         self.__enable_annotation_tools()
         self.__refresh_next_btns()
 
-        # user is correcting gtvt
-        if self.obs_study_gtvt_step == ObsStudyGTVtStep.CORRECT:
-            # dont change drawing mode, will interrupt user correcting gtvt
-            pass
-        else:
+        # user is not clicking, delineating or correcting gtvt
+        if self.obs_study_gtvt_step in [
+            ObsStudyGTVtStep.WAIT_PRED,
+            ObsStudyGTVtStep.APPROVED,
+        ]:
             self._radio_btn["correct.gtvn"].setChecked(True)
             self.drawing_mode = DrawingMode.GTVN_PEN
             # change mouse cursor after:
             # (1) obs study steps updated
             # (2) drawing mode updated
             self.refresh_mouse_cursor()
+
+        # otherwise, do nothing to avoid interrupting user input
+        else:
+            pass
 
         # (5) end and start timer
         self.__timer[ObsStudyTimer.WAIT_GTVN_PRED].end()
