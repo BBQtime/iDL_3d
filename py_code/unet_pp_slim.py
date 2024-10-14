@@ -240,29 +240,3 @@ class UNetPPSlim(nn.Module):
         else:
             output = self.final["3"](x04)
             return output
-
-
-# for testing
-if 0:
-    # dataset avg shape: 221 265 233
-    img_shape = (221, 265, 233)
-    batch_size = 1
-    in_chan = 5
-    out_chan = 2
-
-    cnn = UNetPPSlim(in_chan, out_chan)
-    if g.used_gpu_count() > 1:
-        cnn = nn.DataParallel(cnn)
-    cnn = cnn.to(g.DEVICE)
-
-    input_data = torch.rand(
-        batch_size,
-        in_chan,
-        img_shape[0],
-        img_shape[1],
-        img_shape[2],
-    ).to(g.DEVICE)
-
-    print(input_data.shape)
-    output_data = cnn.forward(input_data)
-    print(output_data.shape)

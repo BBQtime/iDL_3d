@@ -186,29 +186,3 @@ class UNetSlim(nn.Module):
 
         output = self.final(x04)
         return output
-
-
-# for testing
-if 0:
-    img_size = 256
-    img_depth = 256
-    batch_size = 1
-    in_chan = 4
-    out_chan = 3
-
-    cnn = UNetSlim(in_chan, out_chan)
-    if g.used_gpu_count() > 1:
-        cnn = nn.DataParallel(cnn)
-    cnn = cnn.to(g.DEVICE)
-
-    input_data = torch.rand(
-        batch_size,
-        in_chan,
-        img_depth,
-        img_size,
-        img_size,
-    ).to(g.DEVICE)
-
-    print(input_data.shape)
-    output_data = cnn.forward(input_data)
-    print(output_data.shape)

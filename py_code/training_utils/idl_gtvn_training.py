@@ -39,21 +39,28 @@ class IDLGTVnTraining(BaselineTraining):
             self._obs_study_progress = None
 
     def _load_hyper_new_cnn(
-        self, hyper: Dict, in_chan: int = 5, out_chan: int = 2, device_id: int = 0
+        self,
+        hyper: Dict,
+        device_id: int,
+        in_chan: int = 5,
+        out_chan: int = 2,
     ):
-        # no need to reduce cnn input channel here if no_pt=true
-        # it will be reduced in super()._load_hyper_new_cnn
+        # No need to reduce CNN input channels here if no_pt is True.
+        # The input channels will be reduced in super()._load_hyper_new_cnn instead.
         super()._load_hyper_new_cnn(
-            hyper=hyper, in_chan=in_chan, out_chan=out_chan, device_id=device_id
+            hyper=hyper,
+            device_id=device_id,
+            in_chan=in_chan,
+            out_chan=out_chan,
         )
 
-    def _load_hyper_loss_func(self, hyper: Dict, device_id: int = 0):
+    def _load_hyper_loss_func(self, hyper: Dict, device_id: int):
         hyper["loss.func"] = IDLGTVnLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-        ).to(g.DEVICES[device_id])
+        ).to(g.get_device(device_id))
 
     def _load_hyper_data_sets(self, hyper: Dict):
         # load train/valid/test datasets
@@ -80,16 +87,16 @@ class IDLGTVnTraining(BaselineTraining):
     def new_training(
         self,
         baseline_id: str,
+        device_id: int = -1,  # use all cards by default
         train_remark: str = "",
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._new_training(
+            device_id=device_id,
             idl_gtvn_baseline_id=baseline_id,
             train_remark=train_remark,
             debug_mode=debug_mode,
-            device_id=device_id,
         )
 
     def obs_study(
@@ -99,7 +106,7 @@ class IDLGTVnTraining(BaselineTraining):
         patient: str,
         obs_gtvn_clicks: ndarray = None,  # None means no gtvn click
         debug_mode=False,
-        device_id: int = 0,
+        device_id: int = 0,  # Use card 0 by default, as GTVn inference requires less resources than GTVt re-training.
     ):
         print("")
         print("observer study: {}".format(idl_gtvn_id))
@@ -124,7 +131,7 @@ class IDLGTVnTraining(BaselineTraining):
         geodesic_distance = bool(hyper["geodesic.distance"])
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs(device_id=device_id)
+        metric_funcs = self._load_metric_funcs(device_id)
 
         # idl progress init
         if self._obs_study_progress is not None:
@@ -151,9 +158,9 @@ class IDLGTVnTraining(BaselineTraining):
                 dataset_ver=dataset_ver,
                 no_pt=no_pt,
                 no_mr=no_mr,
+                device_id=device_id,
                 idl_gtvn_geodesic_distance=geodesic_distance,
                 obs_gtvn_clicks=obs_gtvn_clicks,
-                device_id=device_id,
             )
         )
         # loop through fold dirs
@@ -188,7 +195,6 @@ class IDLGTVnTraining(BaselineTraining):
                 input_imgs=input_imgs,
                 img_shape=img_shape,
                 metric_funcs=metric_funcs,
-                device_id=device_id,
             )
             # # outputs structure: gtvs/gtvt/gtvn: {pred, dsc, msd, hd95}
             # patient_outputs = self._inference_single_patient(
@@ -298,11 +304,13 @@ class IDLGTVnTraining(BaselineTraining):
         idl_gtvn_id: str,
         dataset_part: str,
         dataset_ver: str = None,
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
         self._inference_all_folds(
             train_id=idl_gtvn_id,
+            device_id=device_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,

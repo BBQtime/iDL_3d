@@ -25,13 +25,13 @@ class BaselineTraining(TrainingCore):
     def _load_hyper(
         self,
         hyper: Dict,
+        device_id: int,
         idl_gtvn_baseline_id: str,
         fold: int,
         debug_mode: bool,
-        device_id: int = 0,
     ):
         # shared by baseline/idl.gtvn/idl.gtvt
-        super()._load_hyper(hyper)
+        super()._load_hyper(hyper=hyper, device_id=device_id)
 
         # epochs
         if debug_mode:
@@ -52,8 +52,9 @@ class BaselineTraining(TrainingCore):
         hyper["lr"] = g.clamp_value(hyper["lr"], (g.EPS, 1.0))
 
         # actual lr
-        if g.used_gpu_count() > 1:
-            hyper["lr.actual"] = hyper["lr"] * g.used_gpu_count()
+        used_gpu_count = g.used_gpu_count(device_id)
+        if used_gpu_count > 1:
+            hyper["lr.actual"] = hyper["lr"] * used_gpu_count
         else:
             hyper["lr.actual"] = hyper["lr"]
 
@@ -93,7 +94,7 @@ class BaselineTraining(TrainingCore):
         for key_name in [DatasetPart.TRAIN, DatasetPart.VALID]:
             hyper["{}.patients".format(key_name)] = patients[key_name]
 
-        self._load_hyper_loss_func(hyper, device_id=device_id)
+        self._load_hyper_loss_func(hyper=hyper, device_id=device_id)
 
         # load datasets before load dataloaders
         self._load_hyper_data_sets(hyper)
@@ -125,7 +126,10 @@ class BaselineTraining(TrainingCore):
                 g.error_exit(
                     "'no.mr' hyper mismatch between existing CNN and transfer learning!"
                 )
-            hyper["cnn"] = self._load_exist_cnn(pretrain_cnn_path)
+            hyper["cnn"] = self._load_exist_cnn(
+                cnn_path=pretrain_cnn_path,
+                device_id=device_id,
+            )
 
         self._load_hyper_optim_and_scheduler(hyper=hyper)
 
@@ -154,23 +158,31 @@ class BaselineTraining(TrainingCore):
                 g.error_exit("'no.mr' hyper mismatch between idl.gtvn and baseline!")
 
     def _load_hyper_new_cnn(
-        self, hyper: Dict, in_chan: int = 4, out_chan: int = 3, device_id: int = 0
+        self,
+        hyper: Dict,
+        device_id: int,
+        in_chan: int = 4,
+        out_chan: int = 3,
     ):
         if hyper["no.pt"]:
             in_chan -= 1
         if hyper["no.mr"]:
             in_chan -= 2
+
         super()._load_hyper_new_cnn(
-            hyper=hyper, in_chan=in_chan, out_chan=out_chan, device_id=device_id
+            hyper=hyper,
+            device_id=device_id,
+            in_chan=in_chan,
+            out_chan=out_chan,
         )
 
-    def _load_hyper_loss_func(self, hyper: Dict, device_id: int = 0):
+    def _load_hyper_loss_func(self, hyper: Dict, device_id: int):
         hyper["loss.func"] = UnifiedFocalLoss(
             asym=hyper["loss.asym"],
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-        ).to(g.DEVICES[device_id])
+        ).to(g.get_device(device_id))
 
     def _load_hyper_data_sets(self, hyper: Dict):
         # load train/valid/test datasets
@@ -271,14 +283,24 @@ class BaselineTraining(TrainingCore):
         plt.legend()
         plt.savefig(loss_json_path[:-4] + "png")
 
-    def _calculate_loss(self, item: Dict, hyper: Dict, device_id: int = 0):
-        input_imgs = item["input.imgs"].to(g.DEVICES[device_id])
-        labels = item["labels"].to(g.DEVICES[device_id])
+    def _calculate_loss(
+        self,
+        item: Dict,
+        hyper: Dict,
+        device_id: int,
+    ):
+        input_imgs = item["input.imgs"].to(g.get_device(device_id))
+        labels = item["labels"].to(g.get_device(device_id))
         preds = hyper["cnn"](input_imgs)
         loss = hyper["loss.func"](preds, labels)
         return loss
 
-    def _training_all_epochs(self, hyper: Dict, fold_dir: str, device_id: int = 0):
+    def _training_all_epochs(
+        self,
+        hyper: Dict,
+        device_id: int,
+        fold_dir: str,
+    ):
         best_loss_dict = Dict()
         loss_json_path = os.path.join(fold_dir, "loss.json")
         lr_json_path = os.path.join(fold_dir, "lr.json")
@@ -303,7 +325,9 @@ class BaselineTraining(TrainingCore):
                 # Mixed precision training
                 with autocast():
                     loss = self._calculate_loss(
-                        item=item, hyper=hyper, device_id=device_id
+                        item=item,
+                        hyper=hyper,
+                        device_id=device_id,
                     )
 
                 # Backpropagation and optimization step
@@ -329,7 +353,9 @@ class BaselineTraining(TrainingCore):
                 for item in tqdm(hyper["valid.loader"]):
                     with autocast():
                         loss = self._calculate_loss(
-                            item=item, hyper=hyper, device_id=device_id
+                            item=item,
+                            hyper=hyper,
+                            device_id=device_id,
                         )
 
                     valid_loss += loss.item()
@@ -366,8 +392,9 @@ class BaselineTraining(TrainingCore):
                 epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
                 g.create_dir(epoch_dir)
                 self._save_cnn(
-                    hyper,
-                    os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch)),
+                    hyper=hyper,
+                    save_path=os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch)),
+                    device_id=device_id,
                 )
             else:
                 worst_epoch = best_loss_dict.key_with_max_value()
@@ -381,8 +408,11 @@ class BaselineTraining(TrainingCore):
                     epoch_dir = os.path.join(fold_dir, "epoch={:03d}".format(epoch))
                     g.create_dir(epoch_dir)
                     self._save_cnn(
-                        hyper,
-                        os.path.join(epoch_dir, "epoch={:03d}.pt".format(epoch)),
+                        hyper=hyper,
+                        save_path=os.path.join(
+                            epoch_dir, "epoch={:03d}.pt".format(epoch)
+                        ),
+                        device_id=device_id,
                     )
                     patience = 0
                 else:
@@ -393,10 +423,10 @@ class BaselineTraining(TrainingCore):
     def _training_all_folds(
         self,
         hyper: Dict,
+        device_id: int,
         train_dir: str,
         idl_gtvn_baseline_id: str,
         debug_mode: bool,
-        device_id: int = 0,
     ):
         g.create_dir(train_dir)
 
@@ -428,10 +458,10 @@ class BaselineTraining(TrainingCore):
             # load and print hyperparams
             self._load_hyper(
                 hyper=hyper,
+                device_id=device_id,
                 idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 fold=fold,
                 debug_mode=debug_mode,
-                device_id=device_id,
             )
             print("")
             self._print_hyper(hyper)
@@ -450,7 +480,11 @@ class BaselineTraining(TrainingCore):
 
             # start training
             hyper["time.spent"] = datetime.now()
-            self._training_all_epochs(hyper, fold_dir, device_id=device_id)
+            self._training_all_epochs(
+                hyper=hyper,
+                device_id=device_id,
+                fold_dir=fold_dir,
+            )
             hyper["time.spent"] = datetime.now() - hyper["time.spent"]
             hyper["time.spent"] = str(hyper["time.spent"]).split(".", 2)[0]
 
@@ -466,23 +500,23 @@ class BaselineTraining(TrainingCore):
 
     def new_training(
         self,
+        device_id: int = -1,  # use all cards by default
         train_remark: str = "",
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         self._new_training(
+            device_id=device_id,
             idl_gtvn_baseline_id=None,
             train_remark=train_remark,
             debug_mode=debug_mode,
-            device_id=device_id,
         )
 
     def _new_training(
         self,
+        device_id: int,
         idl_gtvn_baseline_id: str = None,
         train_remark: str = "",
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         if idl_gtvn_baseline_id is None:
             hyper_json_path = g.HYPER_PATH["baseline"]
@@ -513,10 +547,10 @@ class BaselineTraining(TrainingCore):
 
             self._training_all_folds(
                 hyper=hyper,
+                device_id=device_id,
                 train_dir=train_dir,
                 idl_gtvn_baseline_id=idl_gtvn_baseline_id,
                 debug_mode=debug_mode,
-                device_id=device_id,
             )
 
             # inference
@@ -524,6 +558,7 @@ class BaselineTraining(TrainingCore):
             for dataset_part in [DatasetPart.VALID, DatasetPart.TEST]:
                 self._inference_all_folds(
                     train_id=train_id,
+                    device_id=device_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
                     debug_mode=debug_mode,
@@ -535,9 +570,9 @@ class BaselineTraining(TrainingCore):
             # (3) cross validation evaluation after non optimal epochs removed
             self._inference_cross_valid(
                 train_id=train_id,
+                device_id=device_id,
                 dataset_ver=hyper["dataset.ver"],
                 debug_mode=debug_mode,
-                device_id=device_id,
             )
 
     def inference_all_folds(
@@ -545,11 +580,13 @@ class BaselineTraining(TrainingCore):
         baseline_id: str,
         dataset_part: str,  # only valid or test
         dataset_ver: str = None,
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._inference_all_folds(
             train_id=baseline_id,
+            device_id=device_id,
             dataset_part=dataset_part,
             dataset_ver=dataset_ver,
             debug_mode=debug_mode,
@@ -559,10 +596,10 @@ class BaselineTraining(TrainingCore):
     def _inference_all_folds(
         self,
         train_id: str,
+        device_id: int,
         dataset_part: str,  # only valid or test
         dataset_ver: str = None,
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         print("")
         print("inference: {}".format(train_id))
@@ -619,7 +656,7 @@ class BaselineTraining(TrainingCore):
 
         # load segmentation metrics
         if dataset_part == DatasetPart.VALID:
-            metric_funcs = self._load_metric_funcs(device_id=device_id)
+            metric_funcs = self._load_metric_funcs(device_id)
         # no need to load segmentation metrics
         else:
             metric_funcs = None
@@ -666,9 +703,9 @@ class BaselineTraining(TrainingCore):
                         dataset_ver=dataset_ver,
                         no_pt=no_pt,
                         no_mr=no_mr,
+                        device_id=device_id,
                         metric_funcs=metric_funcs,
                         idl_gtvn_geodesic_distance=geodesic_distance,
-                        device_id=device_id,
                     )
                     if patient_outputs is None:
                         continue
@@ -679,7 +716,6 @@ class BaselineTraining(TrainingCore):
                             patient=patient,
                             epoch_dir=epoch_dir,
                             patient_outputs=patient_outputs,
-                            device_id=device_id,
                         )
 
                     # record score of current patient
@@ -777,6 +813,7 @@ class BaselineTraining(TrainingCore):
     def inference_cross_valid(
         self,
         baseline_id: str,
+        device_id: int = 1,  # use card 1 by default
         dataset_ver: str = None,  # au/mda
         mda_obs: str = None,
         debug_mode: bool = False,
@@ -784,6 +821,7 @@ class BaselineTraining(TrainingCore):
         self._is_valid_baseline_id(baseline_id)
         self._inference_cross_valid(
             train_id=baseline_id,
+            device_id=device_id,
             dataset_ver=dataset_ver,
             mda_obs=mda_obs,
             debug_mode=debug_mode,
@@ -796,10 +834,10 @@ class BaselineTraining(TrainingCore):
     def _inference_cross_valid(
         self,
         train_id: str,
+        device_id: int,
         dataset_ver: str = None,
         mda_obs: str = None,
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         print("")
         print("cross valid evaluation: {}".format(train_id))
@@ -821,7 +859,7 @@ class BaselineTraining(TrainingCore):
         print("dataset version: {}".format(dataset_ver))
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs(device_id=device_id)
+        metric_funcs = self._load_metric_funcs(device_id)
 
         # create folder in train_dir to save cross_valid preds
         g.create_dir(os.path.join(Path(fold_dirs[0]).parent, "patients"))

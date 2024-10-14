@@ -56,20 +56,34 @@ class IDLGTVtTraining(TrainingCore):
         # else:
         #     self._obs_study_progress = None
 
-    def __load_next_round_lr(self, next_round: int, hyper: Dict):
+    def __load_next_round_lr(
+        self,
+        next_round: int,
+        hyper: Dict,
+        device_id: int,
+    ):
         # hyper["lr"] is a list of lr of each round
         if next_round > len(hyper["lr"]):
             next_round = len(hyper["lr"])
 
-        if g.used_gpu_count() > 1:
-            hyper["lr.actual"].append(hyper["lr"][next_round - 1] * g.used_gpu_count())
+        used_gpu_count = g.used_gpu_count(device_id)
+        if used_gpu_count > 1:
+            hyper["lr.actual"].append(hyper["lr"][next_round - 1] * used_gpu_count)
         else:
             hyper["lr.actual"].append(hyper["lr"][next_round - 1])
 
-        self._load_hyper_optim_and_scheduler(hyper=hyper, lr=hyper["lr.actual"][-1])
+        self._load_hyper_optim_and_scheduler(
+            hyper=hyper,
+            lr=hyper["lr.actual"][-1],
+        )
 
     # reset cnn/optimizer/scheduler before next patient
-    def __reset_cnn(self, hyper: dict, baseline_cnn_path: str, device_id: int = 0):
+    def __reset_cnn(
+        self,
+        hyper: dict,
+        baseline_cnn_path: str,
+        device_id: int,
+    ):
         # reload cnn
         hyper["cnn"] = self._load_exist_cnn(baseline_cnn_path, device_id=device_id)
 
@@ -78,12 +92,12 @@ class IDLGTVtTraining(TrainingCore):
     def _load_hyper(
         self,
         hyper: Dict,
+        device_id: int,
         baseline_id: str,
         debug_mode: bool = False,
-        device_id: int = 0,
     ):
         # load shared hyper
-        super()._load_hyper(hyper)
+        super()._load_hyper(hyper=hyper, device_id=device_id)
 
         # iter
         if debug_mode:
@@ -105,8 +119,9 @@ class IDLGTVtTraining(TrainingCore):
 
         # actual lr
         hyper["lr.actual"] = List()
-        if g.used_gpu_count() > 1:
-            hyper["lr.actual"].append(hyper["lr"][0] * g.used_gpu_count())
+        used_gpu_count = g.used_gpu_count(device_id)
+        if used_gpu_count > 1:
+            hyper["lr.actual"].append(hyper["lr"][0] * used_gpu_count)
         else:
             hyper["lr.actual"].append(hyper["lr"][0])
 
@@ -177,7 +192,7 @@ class IDLGTVtTraining(TrainingCore):
             weight=hyper["loss.weight"],
             delta=hyper["loss.delta"],
             gamma=hyper["loss.gamma"],
-        ).to(g.DEVICES[device_id])
+        ).to(g.get_device(device_id))
 
         # dataset/dataloader/optimizer/scheduler will be loaded with each patient
         return
@@ -445,8 +460,8 @@ class IDLGTVtTraining(TrainingCore):
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
+        device_id: int,
         metric_funcs: Dict = None,
-        device_id: int = 0,
     ):
         cur_round = Path(round_dir).name
 
@@ -466,9 +481,9 @@ class IDLGTVtTraining(TrainingCore):
             dataset_ver=dataset_ver,
             no_pt=no_pt,
             no_mr=no_mr,
+            device_id=device_id,
             metric_funcs=metric_funcs,
             idl_gtvt_label_masked_by_selected_slices=idl_gtvt_label_masked_by_selected_slices,
-            device_id=device_id,
         )
 
         # save score of cur patient
@@ -494,10 +509,10 @@ class IDLGTVtTraining(TrainingCore):
         self,
         round_dir: str,
         hyper: Dict,
+        device_id: int,
         selected_slices: Dict,
         metric_funcs: Dict = None,
         queue=None,
-        device_id: int = 0,
     ):
         g.create_dir(round_dir)
 
@@ -610,15 +625,15 @@ class IDLGTVtTraining(TrainingCore):
                 idl_gtvt_dataset.set_iter(cur_iter)
 
                 if hyper["layer.freezing"]:
-                    if g.used_gpu_count() > 1:
+                    if g.used_gpu_count(device_id) > 1:
                         hyper["cnn"].module.freeze_top()
                     else:
                         hyper["cnn"].freeze_top()
 
             hyper["optim"].zero_grad()
-            item["input.imgs"] = item["input.imgs"].to(g.DEVICES[device_id])
-            item["labels"] = item["labels"].to(g.DEVICES[device_id])
-            item["weight.map"] = item["weight.map"].to(g.DEVICES[device_id])
+            item["input.imgs"] = item["input.imgs"].to(g.get_device(device_id))
+            item["labels"] = item["labels"].to(g.get_device(device_id))
+            item["weight.map"] = item["weight.map"].to(g.get_device(device_id))
 
             preds = hyper["cnn"](item["input.imgs"])
 
@@ -670,7 +685,11 @@ class IDLGTVtTraining(TrainingCore):
         # current round idl finished
         # save cnn
         cnn_save_path = os.path.join(round_dir, Path(round_dir).name + ".pt")
-        self._save_cnn(hyper, cnn_save_path)
+        self._save_cnn(
+            hyper=hyper,
+            save_path=cnn_save_path,
+            device_id=device_id,
+        )
 
         # save selected_slices dict before inference, because masked_label needs it
         # copy a new dict to avoid changing origin selected_slices dict
@@ -697,8 +716,8 @@ class IDLGTVtTraining(TrainingCore):
             dataset_ver=hyper["dataset.ver"],
             no_pt=hyper["no.pt"],
             no_mr=hyper["no.mr"],
-            metric_funcs=metric_funcs,
             device_id=device_id,
+            metric_funcs=metric_funcs,
         )
 
         # save time spent
@@ -721,8 +740,8 @@ class IDLGTVtTraining(TrainingCore):
         patient: str,
         idl_gtvt_dir: str,
         hyper: Dict,
+        device_id: int,
         metric_funcs: Dict = None,
-        device_id: int = 0,
     ):
         print("")
         print("patient:", patient)
@@ -791,9 +810,9 @@ class IDLGTVtTraining(TrainingCore):
             self.__training_single_round(
                 round_dir=round_dir,
                 hyper=hyper,
+                device_id=device_id,
                 selected_slices=selected_slices,
                 metric_funcs=metric_funcs,
-                device_id=device_id,
             )
 
             if cur_round == max_round:
@@ -801,7 +820,11 @@ class IDLGTVtTraining(TrainingCore):
 
             # load new lr before next round
             if hyper["lr"]["reset"]:
-                self.__load_next_round_lr(cur_round + 1, hyper)
+                self.__load_next_round_lr(
+                    next_round=cur_round + 1,
+                    hyper=hyper,
+                    device_id=device_id,
+                )
 
         # draw avg loss of all trained patients
         self._plot_loss_fig(idl_gtvt_dir)
@@ -851,7 +874,7 @@ class IDLGTVtTraining(TrainingCore):
         baseline_id: str,
         train_remark: str = None,
         debug_mode: bool = False,
-        device_id: int = 0,
+        device_id: int = -1,  # use all cards by default
     ):
         # load baseline hyper
         self._is_valid_baseline_id(baseline_id)
@@ -866,7 +889,7 @@ class IDLGTVtTraining(TrainingCore):
         baseline_no_mr = True if baseline_hyper["no.mr"] else False
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs(device_id=device_id)
+        metric_funcs = self._load_metric_funcs(device_id)
 
         # load hyper
         hyper_series = self._load_hyper_series_from_json(g.HYPER_PATH["idl.gtvt"])
@@ -893,9 +916,9 @@ class IDLGTVtTraining(TrainingCore):
             # load and print hyper
             self._load_hyper(
                 hyper=hyper,
+                device_id=device_id,
                 baseline_id=baseline_id,
                 debug_mode=debug_mode,
-                device_id=device_id,
             )
             print("")
             self._print_hyper(hyper)
@@ -939,8 +962,8 @@ class IDLGTVtTraining(TrainingCore):
                     patient=patient,
                     idl_gtvt_dir=idl_gtvt_dir,
                     hyper=hyper,
-                    metric_funcs=metric_funcs,
                     device_id=device_id,
+                    metric_funcs=metric_funcs,
                 )
 
                 # calculate and save avg and median scores
@@ -969,7 +992,7 @@ class IDLGTVtTraining(TrainingCore):
         patient: str,
         queue: Queue = None,
         debug_mode: bool = False,
-        device_id: int = 0,
+        device_id: int = 1,  # Use card 1 by default, as GTVt re-training requires more resources than GTVn inference.
     ):
 
         print("")
@@ -995,7 +1018,7 @@ class IDLGTVtTraining(TrainingCore):
             no_mr = False
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs(device_id=device_id)
+        metric_funcs = self._load_metric_funcs(device_id)
 
         # create idl result dir
         idl_gtvt_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_gtvt_id)
@@ -1040,9 +1063,9 @@ class IDLGTVtTraining(TrainingCore):
         # load and print hyper
         self._load_hyper(
             hyper=hyper,
+            device_id=device_id,
             baseline_id=baseline_id,
             debug_mode=debug_mode,
-            device_id=device_id,
         )
 
         # save hyper before training
@@ -1073,7 +1096,9 @@ class IDLGTVtTraining(TrainingCore):
         baseline_cnn_path = self._find_best_cnn_in_folds(baseline_id)
 
         self.__reset_cnn(
-            hyper=hyper, baseline_cnn_path=baseline_cnn_path, device_id=device_id
+            hyper=hyper,
+            baseline_cnn_path=baseline_cnn_path,
+            device_id=device_id,
         )
 
         # idl progress INIT_CNN
@@ -1108,10 +1133,10 @@ class IDLGTVtTraining(TrainingCore):
         self.__training_single_round(
             round_dir=os.path.join(patient_dir, "round=01"),
             hyper=hyper,
+            device_id=device_id,
             selected_slices=selected_slices,
             metric_funcs=metric_funcs,
             queue=queue,
-            device_id=device_id,
         )
 
         # draw avg loss of all trained patients
@@ -1193,7 +1218,12 @@ class IDLGTVtTraining(TrainingCore):
                 )
         g.save_json(data=scores, path=os.path.join(score_json_path))
 
-    def inference(self, idl_gtvt_id: str, debug_mode: bool = False, device_id: int = 0):
+    def inference(
+        self,
+        idl_gtvt_id: str,
+        device_id: int = 1,  # use card 1 by default
+        debug_mode: bool = False,
+    ):
         print("")
         print("inference: {}".format(idl_gtvt_id))
 
@@ -1213,7 +1243,7 @@ class IDLGTVtTraining(TrainingCore):
         no_mr = hyper["no.mr"]
 
         # load segmentation metrics
-        metric_funcs = self._load_metric_funcs(device_id=device_id)
+        metric_funcs = self._load_metric_funcs(device_id)
 
         # get all patients
         patients = self._load_patients(
@@ -1264,8 +1294,8 @@ class IDLGTVtTraining(TrainingCore):
                     dataset_ver=dataset_ver,
                     no_pt=no_pt,
                     no_mr=no_mr,
-                    metric_funcs=metric_funcs,
                     device_id=device_id,
+                    metric_funcs=metric_funcs,
                 )
 
         self._inference_calculate_avg_median_save_json(

@@ -70,7 +70,7 @@ class ObsStudyGTVnThread(ObsStudyThread):
             patient=self.__patient,
             obs_gtvn_clicks=self.__idl_gtvn_clicks,
             debug_mode=self.__debug_mode,
-            device_id=0,
+            device_id=0,  # Use card 0, as GTVn inference requires less resources than GTVt re-training.
         )
         self._hide_progress_widgets()
         self.is_running = False

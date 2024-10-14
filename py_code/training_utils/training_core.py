@@ -80,42 +80,46 @@ class TrainingCore:
 
     # if float64 needed, use: "cnn.to(torch.double)"
     def _load_hyper_new_cnn(
-        self, hyper: Dict, in_chan: int, out_chan: int, device_id: int = 0
+        self,
+        hyper: Dict,
+        device_id: int,
+        in_chan: int,
+        out_chan: int,
     ):
-        # cnn architecture
+        # choose cnn architecture
         if hyper["cnn"] == "unet.pp.slim":
             cnn = UNetPPSlim
         elif hyper["cnn"] == "unet.slim":
             cnn = UNetSlim
         else:
             g.error_exit("Incorrect hyper[cnn] value!")
+
         hyper["cnn"] = cnn(
             in_chan=in_chan,
             out_chan=out_chan,
             dataset_ver=hyper["dataset.ver"],
             dropout=hyper["dropout"],
         )
-        # set multi-GPU
-        if g.used_gpu_count() > 1:
-            hyper["cnn"] = DataParallel(hyper["cnn"])
-        # to gpu (if gpu available)
-        hyper["cnn"] = hyper["cnn"].to(g.DEVICES[device_id])
 
-    def _load_exist_cnn(self, cnn_path: str, device_id: int = 0):
+        # set multi-GPU
+        if g.used_gpu_count(device_id) > 1:
+            hyper["cnn"] = DataParallel(hyper["cnn"])
+
+        # to gpu (if gpu available)
+        hyper["cnn"] = hyper["cnn"].to(g.get_device(device_id))
+
+    def _load_exist_cnn(self, cnn_path: str, device_id: int):
         cnn = torch.load(cnn_path)
-        if g.used_gpu_count() > 1:
+        if g.used_gpu_count(device_id) > 1:
             cnn = DataParallel(cnn)
-        cnn = cnn.to(g.DEVICES[device_id])
+        cnn = cnn.to(g.get_device(device_id))
         return cnn
 
-    def _load_metric_funcs(self, device_id: int = 0) -> Dict:
+    def _load_metric_funcs(self, device_id: int) -> Dict:
         metric_funcs = Dict()
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             metric_funcs[metric] = MetricFunction(metric)
-            # following line will cause bug, cant figure out why:
-            # if g.used_gpu_count() > 1:
-            #     metric_funcs[metric] = DataParallel(metric_funcs[metric])
-            metric_funcs[metric] = metric_funcs[metric].to(g.DEVICES[device_id])
+            metric_funcs[metric] = metric_funcs[metric].to(g.get_device(device_id))
         return metric_funcs
 
     def _load_hyper_dataset_version(self, hyper: Dict, idl_baseline_id: str):
@@ -139,20 +143,24 @@ class TrainingCore:
                 baseline_dataset_ver=baseline_dataset_ver,
             )
 
-    def _load_hyper(self, hyper: Dict) -> None:
-        # device name
-        if g.used_gpu_count() < 1:
+    def _load_hyper(self, hyper: Dict, device_id: int) -> None:
+        used_gpu_count = g.used_gpu_count(device_id)
+
+        # record device name
+        if used_gpu_count <= 0:
             hyper["device"] = "cpu"
-        else:
+        elif used_gpu_count >= 2:
             hyper["device"] = "gpu:" + os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            hyper["device"] = "gpu:{}".format(device_id)
 
         # dropout
         hyper["dropout"] = g.clamp_value(hyper["dropout"], (0.0, 1.0))
 
         # batch size
         hyper["batch.size"] = g.clamp_value(hyper["batch.size"], (1, None))
-        if g.used_gpu_count() > 1:
-            hyper["batch.size.actual"] = hyper["batch.size"] * g.used_gpu_count()
+        if used_gpu_count > 1:
+            hyper["batch.size.actual"] = hyper["batch.size"] * used_gpu_count
         else:
             hyper["batch.size.actual"] = hyper["batch.size"]
 
@@ -267,10 +275,10 @@ class TrainingCore:
         g.save_json(dataset_split, g.DATASET_SPLIT_PATH[dataset_ver])
         return dataset_split
 
-    def _save_cnn(self, hyper: Dict, save_path: str):
+    def _save_cnn(self, hyper: Dict, save_path: str, device_id: int):
         if not save_path.endswith(".pt"):
             save_path += ".pt"
-        if g.used_gpu_count() > 1:
+        if g.used_gpu_count(device_id) > 1:
             torch.save(hyper["cnn"].module, save_path)
         else:
             torch.save(hyper["cnn"], save_path)
@@ -364,9 +372,9 @@ class TrainingCore:
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
+        device_id: int,
         idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
         obs_gtvn_clicks: ndarray = None,  # only for observer study
-        device_id: int = 0,  # set which GPU to use
     ):
         # Load dataset
         dataset = self._inference_single_patient_load_dataset(
@@ -385,7 +393,7 @@ class TrainingCore:
 
         # Prepare input images
         input_imgs = dataset_item["input.imgs"]
-        input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICES[device_id]), dim=0)
+        input_imgs = torch.unsqueeze(input_imgs.to(g.get_device(device_id)), dim=0)
 
         # Get image shape
         img_shape = dataset_item["shape"]
@@ -400,7 +408,6 @@ class TrainingCore:
         img_shape: tuple,
         metric_funcs: Dict = None,
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
-        device_id: int = 0,  # set which GPU to use
     ):
         # Prepare outputs dict
         outputs = Dict()
@@ -474,11 +481,11 @@ class TrainingCore:
         dataset_ver: str,
         no_pt: bool,
         no_mr: bool,
+        device_id: int,
         metric_funcs: Dict = None,
         idl_gtvt_label_masked_by_selected_slices: ndarray = None,  # only for idl.gtvt post processing
         idl_gtvn_geodesic_distance: bool = True,  # only for idl.gtvn
         obs_gtvn_clicks: ndarray = None,  # only for observer study
-        device_id: int = 0,  # set which GPU to use
     ) -> Dict:
 
         # (1)outputs structure for sigle-observer datasets:
@@ -513,7 +520,7 @@ class TrainingCore:
         if input_imgs is None:
             input_imgs = dataset_item["input.imgs"]
             # add "batch" (c/d/h/w -> b/c/d/h/w)
-            input_imgs = torch.unsqueeze(input_imgs.to(g.DEVICES[device_id]), dim=0)
+            input_imgs = torch.unsqueeze(input_imgs.to(g.get_device(device_id)), dim=0)
 
         # get img shape
         if img_shape is None:

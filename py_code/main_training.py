@@ -35,11 +35,12 @@ if __name__ == "__main__":
     # label_preprocess.generate_gtvn_clicks_nii(DatasetVer.NKI)
     # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.NKI)
 
-    # baseline = BaselineTraining()
-    # baseline.new_training(
-    #     # train_remark="mda.transfer",
-    #     debug_mode=1,
-    # )
+    baseline = BaselineTraining()
+    baseline.new_training(
+        device_id=-1,
+        # train_remark="mda.transfer",
+        debug_mode=1,
+    )
     # for baseline_id, dataset_ver in [
     #     # ("baseline_au_no.pt", DatasetVer.AU_EXT),
     #     # ("baseline_au", DatasetVer.AU_EXT),
@@ -105,12 +106,12 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
 
-    idl_gtvt = IDLGTVtTraining()
-    idl_gtvt.simulation(
-        baseline_id="baseline_au",
-        train_remark="newcode",
-        debug_mode=0,
-    )
+    # idl_gtvt = IDLGTVtTraining()
+    # idl_gtvt.simulation(
+    #     baseline_id="baseline_au",
+    #     train_remark="newcode",
+    #     debug_mode=0,
+    # )
     # for baseline_id in [
     #     "baseline_au",
     #     "baseline_au_no.pt",

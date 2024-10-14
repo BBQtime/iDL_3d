@@ -831,12 +831,38 @@ def clear_gpu_cache():
         torch.cuda.empty_cache()
 
 
-def used_gpu_count() -> int:
-    if DEVICES[0] == torch.device("cpu"):
+def used_gpu_count(device_id: int) -> int:
+    # (1) use CPU
+    if __DEVICES[0] == torch.device("cpu"):
         return 0
+    # (2) use multiple GPUs
+    elif device_id <= -1 and len(__DEVICES) >= 2:
+        return len(__DEVICES)
+    # (3) use only 1 GPU, or only 1 visible GPU
     else:
-        # for now, diable use of multiple GPU in a single process but sending back the value 1
-        return 1  # torch.cuda.device_count()
+        return 1
+
+
+def get_device(device_id: int) -> torch.device:
+    # (1) use CPU
+    if __DEVICES[0] == torch.device("cpu"):
+        return __DEVICES[0]
+    # (2) more than 1 visible GPU devices
+    elif len(__DEVICES) >= 2:
+        # use all GPUs
+        if device_id == -1:
+            return __DEVICES[0]
+        # only use 1 GPU
+        else:
+            return __DEVICES[device_id]
+    # (3) only 1 visible GPU device
+    elif len(__DEVICES) == 1:
+        # Use "cuda:0" as the primary device, regardless the physical GPU ID
+        return __DEVICES[0]
+
+    # should never reach here
+    else:
+        error_exit("device setting error!")
 
 
 def clear_debug_data():
@@ -910,32 +936,21 @@ DEBUG_DIR = os.path.join(PROJ_DIR, "debug")
 
 __settings = load_setting_global_json(os.path.join(PROJ_DIR, "settings", "core.json"))
 
-# use CPU
-if __settings["cuda.visible.devices"] == "":
-    DEVICES = [torch.device("cpu")]
+# devices setting
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # use GPU
-else:
-    # choose GPU (must come first before any code related to cuda/gpu)
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+if __settings["cuda.visible.devices"] in ["0", "1", "0,1"]:
     os.environ["CUDA_VISIBLE_DEVICES"] = __settings["cuda.visible.devices"]
-
-    # Create a list of available GPU devices
     gpu_count = torch.cuda.device_count()
     if gpu_count > 0:
-        DEVICES = [torch.device(f"cuda:{i}") for i in range(gpu_count)]
-    else:
-        DEVICES = [torch.device("cpu")]  # Fallback to CPU if no GPU is found
-    # # set main device cuda:0, for multiple GPU to avoid following error:
-    # # RuntimeError: module must have its parameters and buffers on
-    # # device cuda:0 (device_ids[0]) but found one of them on device: cuda:1
-    # if torch.cuda.device_count() > 1:
-    #     DEVICE = torch.device("cuda:0")
+        __DEVICES = [torch.device("cuda:{}".format(i)) for i in range(gpu_count)]
+    else:  # Fallback to CPU if no GPU is found
+        __DEVICES = [torch.device("cpu")]
+# use CPU
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    __DEVICES = [torch.device("cpu")]
 
-    # elif torch.cuda.device_count() == 1:
-    #     DEVICE = torch.device("cuda")
-
-    # else:  # torch.cuda.device_count() < 1:
-    #     DEVICE = torch.device("cpu")
 
 # hide warning
 warnings.filterwarnings("ignore")
