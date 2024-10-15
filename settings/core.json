@@ -18,7 +18,7 @@
             "windows": "E:/Alan/Datasets/3D_1mm/MDA_dataset/"
         },
         "nki": {
-            "linux": null,
+            "linux": "/mnt/faststorage/alan/Datasets/3D_1mm/NKI_dataset_label_only/",
             "windows": "E:/Alan/Datasets/3D_1mm/NKI_dataset/"
         },
         "obs.study": {
