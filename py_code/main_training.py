@@ -20,21 +20,30 @@ if __name__ == "__main__":
     g.clear_linux_trash()
     g.clear_debug_data()
 
-    # for dataset_ver in [
-    #     # DatasetVer.AU,
-    #     # DatasetVer.AU_EXT, #done
-    #     # DatasetVer.NKI, #done
-    # ]:
-    #     print(f"Dataset: {dataset_ver}")
-    #     for fregment_threshold in [2, 5, 10]:
-    #         label_preprocess.remove_label_fregments(
-    #             dataset_ver=dataset_ver,
-    #             fregment_threshold=fregment_threshold,
-    #             debug_mode=1,
-    #         )
+    for dataset_ver in [
+        # DatasetVer.AU,
+        # DatasetVer.AU_EXT, # done, 876
+        # DatasetVer.OBS_STUDY,  # no gtvn fregment
+        # DatasetVer.MDA,  # no gtvn fregment
+        # DatasetVer.NKI, # done, 292/296
+    ]:
+        print(f"Dataset: {dataset_ver}")
+        for fregment_threshold in [2, 5, 10]:
+            label_preprocess.remove_label_fregments(
+                dataset_ver=dataset_ver,
+                fregment_threshold=fregment_threshold,
+                debug_mode=1,
+            )
 
-    # label_preprocess.generate_gtvn_clicks_nii(DatasetVer.AU_EXT)
-    # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.NKI)
+    for dataset_ver in [
+        # DatasetVer.AU,
+        # DatasetVer.AU_EXT,  # done, 876
+        # DatasetVer.OBS_STUDY,  # no need to update
+        # DatasetVer.MDA,
+        # DatasetVer.NKI,
+    ]:
+        label_preprocess.generate_gtvn_clicks_nii(dataset_ver)
+        label_preprocess.check_gtvn_clicks_within_label(dataset_ver)
 
     # baseline = BaselineTraining()
     # baseline.new_training(

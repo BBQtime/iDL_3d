@@ -102,7 +102,7 @@ def __process_connected_components_pca(img, diameter_threshold):
     img = __binarize_img(img)
     # include face-connected, edge-connected, and also corner-connected neighbors.
     all_cc, num_cc = cc3d.connected_components(img, connectivity=26, return_N=True)
-    print(f"number of ccs> {(num_cc)}")
+    # print(f"number of ccs> {(num_cc)}")
     gravity_centers = np.zeros_like(img)
 
     for segid in range(1, num_cc + 1):
@@ -129,13 +129,13 @@ def generate_gtvn_clicks_nii(dataset_ver: str):
             )
             if len(gtvn_path) > 0:
                 gtvn_path_list.append(gtvn_path[0])
-            else:
-                print(Path(patient_dir).name, " has no GTVn")
+            # else:
+            #     print(Path(patient_dir).name, " has no GTVn")
     else:
         g.error_exit("dataset error")
 
     for gtvn_path in tqdm(gtvn_path_list):
-        print(gtvn_path)
+        # print(gtvn_path)
         img = sitk.ReadImage(gtvn_path)
         spacing = img.GetSpacing()
         origin = img.GetOrigin()
@@ -143,7 +143,7 @@ def generate_gtvn_clicks_nii(dataset_ver: str):
         gravity_centers = __process_connected_components_pca(
             imgarray, diameter_threshold
         )
-        print(f"number of gcs> {np.sum(gravity_centers)}")
+        # print(f"number of gcs> {np.sum(gravity_centers)}")
         itk_img = sitk.GetImageFromArray(gravity_centers)
         itk_img.SetSpacing(spacing)
         itk_img.SetOrigin(origin)
@@ -154,8 +154,27 @@ def generate_gtvn_clicks_nii(dataset_ver: str):
             gtvn_nii_name = gtvn_nii_name.replace("GTVn.nii", "GTVn_clicks.nii.gz")
         elif gtvn_nii_name.endswith("GTVn.nii.gz"):
             gtvn_nii_name = gtvn_nii_name.replace("GTVn.nii.gz", "GTVn_clicks.nii.gz")
-        gtvn_click_path = os.path.join(Path(gtvn_path).parent, gtvn_nii_name)
-        sitk.WriteImage(itk_img, gtvn_click_path)
+        gtvn_clicks_path = os.path.join(Path(gtvn_path).parent, gtvn_nii_name)
+
+        # compare with exisitng gtvn clicks nii
+        if os.path.exists(gtvn_clicks_path):
+            existing_clicks = sitk.ReadImage(gtvn_clicks_path)
+            existing_clicks = sitk.GetArrayFromImage(existing_clicks)
+            existing_clicks = existing_clicks.sum()
+            new_clicks = gravity_centers.sum()
+            if existing_clicks != new_clicks:
+                print(gtvn_clicks_path, "Number of gtvn clicks are not equal")
+                # backup old gtvn clicks
+                shutil.copy(
+                    gtvn_clicks_path,
+                    gtvn_clicks_path.replace(
+                        "GTVn_clicks.nii.gz", "GTVn_clicks_origin.nii.gz"
+                    ),
+                )
+                # write new gtvn clicks
+                sitk.WriteImage(itk_img, gtvn_clicks_path)
+        else:
+            sitk.WriteImage(itk_img, gtvn_clicks_path)
 
 
 def check_gtvn_clicks_within_label(dataset_ver: str):
