@@ -100,7 +100,8 @@ def __process_and_place_centers(cur_cc, threshold, gravity_centers):
 
 def __process_connected_components_pca(img, diameter_threshold):
     img = __binarize_img(img)
-    all_cc, num_cc = cc3d.connected_components(img, connectivity=18, return_N=True)
+    # include face-connected, edge-connected, and also corner-connected neighbors.
+    all_cc, num_cc = cc3d.connected_components(img, connectivity=26, return_N=True)
     print(f"number of ccs> {(num_cc)}")
     gravity_centers = np.zeros_like(img)
 
@@ -201,7 +202,12 @@ def check_gtvn_clicks_within_label(dataset_ver: str):
                 )
 
 
-def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
+def remove_label_fregments(
+    dataset_ver: str,
+    fregment_threshold: int = 2,  # 2/5/10
+    debug_mode=True,
+):
+    print(f"Fregment threshold: {fregment_threshold}")
 
     dataset_dir = g.DATASET_DIR[dataset_ver]
 
@@ -231,49 +237,42 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
             # Convert the image to a numpy array for processing
             nii_array = sitk.GetArrayFromImage(nii_image)
 
-            # Use connected component labeling to label fragments
-            connected_components = sitk.ConnectedComponent(
-                sitk.Cast(nii_image, sitk.sitkUInt8)
+            # Use cc3d to label connected components
+            all_cc, num_cc = cc3d.connected_components(
+                nii_array, connectivity=26, return_N=True
             )
-
-            # Convert connected components image to a numpy array
-            connected_array = sitk.GetArrayFromImage(connected_components)
-
-            # Get the number of connected components
-            labels = np.unique(connected_array)
 
             fragment_count = 0
             original_saved = False
 
             # Create an empty array for storing all fragments in one image
             combined_fragment_array = np.zeros_like(nii_array)
+            # Mask to keep large components
+            keep_mask = np.ones_like(nii_array, dtype=bool)
 
             # Process each connected component (fragment)
-            for label in labels:
-                if label == 0:
-                    continue  # Skip the background
-
+            for label in range(1, num_cc + 1):  # Skip label 0 (background)
                 # Create a mask for the current label (fragment)
-                fragment_mask = connected_array == label
+                fragment_mask = all_cc == label
 
                 # Check if the fragment has fewer or equal voxels than the threshold
                 if np.sum(fragment_mask) <= fregment_threshold:
-
                     fragment_count += 1
-                    print(f"fregment: {fragment_count}")
+                    # print("Fragment: {}".format(fragment_count))
 
                     # Add this fragment to the combined fragment array
                     combined_fragment_array[fragment_mask] = 1
 
+                    # Update the keep_mask to remove the small fragment
+                    keep_mask[fragment_mask] = False
+
                     # Save the original image only once when a fragment is detected
                     if not original_saved:
-
                         label_name = os.path.basename(label_path).replace(".nii", "")
 
-                        # get patient name
+                        # Get patient name
                         if dataset_ver in [DatasetVer.AU, DatasetVer.OBS_STUDY]:
-                            patient_name = Path(label_path).name
-                            patient_name = patient_name[: len("HNCDL_XXX")]
+                            patient_name = Path(label_path).name[: len("HNCDL_XXX")]
                         elif dataset_ver in [
                             DatasetVer.AU_EXT,
                             DatasetVer.MDA,
@@ -281,11 +280,14 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                         ]:
                             patient_name = Path(label_path).parent.name
 
-                        output_dir = os.path.join(
-                            g.DEBUG_DIR,
-                            "{}_{}".format(dataset_ver, fregment_threshold),
-                            patient_name,
-                        )
+                        if debug_mode:
+                            output_dir = os.path.join(
+                                g.DEBUG_DIR,
+                                "{}_{}".format(dataset_ver, fregment_threshold),
+                                patient_name,
+                            )
+                        else:
+                            output_dir = Path(label_path).parent
 
                         lower_threshold_exist = False
                         for lower_threshold in range(1, fregment_threshold):
@@ -299,7 +301,6 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                                 break
 
                         if not lower_threshold_exist:
-
                             g.create_dir(output_dir)
 
                             sitk.WriteImage(
@@ -307,15 +308,19 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
                                 os.path.join(output_dir, label_name + "_origin.nii"),
                             )
 
-                            # also save ct img
-                            ct_path = label_path.replace("GTVn.nii", "CT.nii")
-                            cn_name = os.path.basename(ct_path)
-                            shutil.copy(
-                                ct_path,
-                                os.path.join(output_dir, cn_name),
-                            )
+                            if debug_mode:
+                                # Also save ct img
+                                ct_path = label_path.replace("GTVn.nii", "CT.nii")
+                                if os.path.exists(ct_path):
+                                    cn_name = os.path.basename(ct_path)
+                                    shutil.copy(
+                                        ct_path,
+                                        os.path.join(output_dir, cn_name),
+                                    )
+
                         else:
-                            print("{} already exist".format(dir_to_check))
+                            pass
+                            # print("{} already exist".format(dir_to_check))
 
                         original_saved = True
 
@@ -331,7 +336,19 @@ def remove_label_fregments(dataset_ver: str, fregment_threshold: int = 2):
 
                 # Save the combined fragment image with the fragment count in the label_name
                 fragment_path = os.path.join(
-                    output_dir, f"{label_name}_fragments_{fragment_count}.nii"
+                    output_dir, f"{label_name}_fragments_{fragment_count}.nii.gz"
                 )
                 sitk.WriteImage(combined_fragment_image, fragment_path)
-                print(f"Combined fragment file saved at: {fragment_path}")
+                # print(f"Combined fragment file saved at: {fragment_path}")
+
+                # Create a new NIfTI image with fragments removed
+                nii_array[~keep_mask] = 0  # Set removed fragments to 0
+                filtered_image = sitk.GetImageFromArray(nii_array)
+
+                # Copy original image metadata
+                filtered_image.CopyInformation(nii_image)
+
+                # Save the new image
+                filtered_path = os.path.join(output_dir, f"{label_name}.nii")
+                sitk.WriteImage(filtered_image, filtered_path)
+                # print(f"Filtered image saved at: {filtered_path}")

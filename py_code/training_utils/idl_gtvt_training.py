@@ -872,9 +872,9 @@ class IDLGTVtTraining(TrainingCore):
     def simulation(
         self,
         baseline_id: str,
+        device_id: int = -1,  # use all cards by default
         train_remark: str = None,
         debug_mode: bool = False,
-        device_id: int = -1,  # use all cards by default
     ):
         # load baseline hyper
         self._is_valid_baseline_id(baseline_id)

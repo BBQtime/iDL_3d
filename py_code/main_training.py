@@ -22,17 +22,18 @@ if __name__ == "__main__":
 
     # for dataset_ver in [
     #     # DatasetVer.AU,
-    #     # DatasetVer.AU_EXT,
-    #     # DatasetVer.OBS_STUDY,
-    #     # DatasetVer.MDA,
-    #     # DatasetVer.NKI,
+    #     # DatasetVer.AU_EXT, #done
+    #     # DatasetVer.NKI, #done
     # ]:
+    #     print(f"Dataset: {dataset_ver}")
     #     for fregment_threshold in [2, 5, 10]:
     #         label_preprocess.remove_label_fregments(
     #             dataset_ver=dataset_ver,
     #             fregment_threshold=fregment_threshold,
+    #             debug_mode=1,
     #         )
-    # label_preprocess.generate_gtvn_clicks_nii(DatasetVer.NKI)
+
+    # label_preprocess.generate_gtvn_clicks_nii(DatasetVer.AU_EXT)
     # label_preprocess.check_gtvn_clicks_within_label(DatasetVer.NKI)
 
     # baseline = BaselineTraining()
@@ -64,19 +65,21 @@ if __name__ == "__main__":
     #         debug_mode=debug_mode,
     #     )
 
-    idl_gtvn = IDLGTVnTraining()
-    for baseline_id in [
-        # "baseline_au",
-        "baseline_au_no.pt",
-        # "baseline_nki.new",
-        # "baseline_nki.transfer",
-    ]:
-        idl_gtvn.new_training(
-            baseline_id=baseline_id,
-            device_id=1,
-            train_remark=baseline_id[len("baseline_") :] + "_multi.clicks",
-            debug_mode=0,
-        )
+    # idl_gtvn = IDLGTVnTraining()
+    # for baseline_id in [
+    #     # "baseline_au",
+    #     # "baseline_au_no.pt",
+    #     # "baseline_mda.new",
+    #     "baseline_mda.transfer",
+    #     # "baseline_nki.new",
+    #     # "baseline_nki.transfer",
+    # ]:
+    #     idl_gtvn.new_training(
+    #         baseline_id=baseline_id,
+    #         device_id=1,
+    #         train_remark=baseline_id[len("baseline_") :] + "_multi.clicks",
+    #         debug_mode=0,
+    #     )
     # for idl_gtvn_id, dataset_ver in [
     #     # ("idl.gtvn_au_single.click", DatasetVer.AU_EXT),
     #     # ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
@@ -109,18 +112,14 @@ if __name__ == "__main__":
     # )
 
     # idl_gtvt = IDLGTVtTraining()
-    # idl_gtvt.simulation(
-    #     baseline_id="baseline_au",
-    #     train_remark="newcode",
-    #     debug_mode=0,
-    # )
     # for baseline_id in [
     #     "baseline_au",
-    #     "baseline_au_no.pt",
+    #     # "baseline_au_no.pt",
     # ]:
     #     idl_gtvt.simulation(
     #         baseline_id=baseline_id,
-    #         train_remark=DatasetVer.AU_EXT + baseline_id[len("baseline_au") :],
+    #         device_id=0,
+    #         train_remark="",
     #         debug_mode=0,
     #     )
     # idl_gtvt.inference(

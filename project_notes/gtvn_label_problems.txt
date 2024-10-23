@@ -1,6 +1,10 @@
-patients with hollow in GTVn label:
-NKI_236
-
 patients with fregments in GTVn label:
-NKI_292
-NKI_296
+
+AU:
+120/244/254/211
+
+AU_EXT:
+876
+
+NKI:
+292/296
