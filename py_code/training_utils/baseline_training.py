@@ -500,22 +500,22 @@ class BaselineTraining(TrainingCore):
 
     def new_training(
         self,
-        device_id: int = -1,  # use all cards by default
         train_remark: str = "",
+        device_id: int = -1,  # use all cards by default
         debug_mode: bool = False,
     ):
         self._new_training(
-            device_id=device_id,
             idl_gtvn_baseline_id=None,
             train_remark=train_remark,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 
     def _new_training(
         self,
-        device_id: int,
         idl_gtvn_baseline_id: str = None,
         train_remark: str = "",
+        device_id: int = -1,  # use all cards by default
         debug_mode: bool = False,
     ):
         if idl_gtvn_baseline_id is None:
@@ -558,9 +558,9 @@ class BaselineTraining(TrainingCore):
             for dataset_part in [DatasetPart.VALID, DatasetPart.TEST]:
                 self._inference_all_folds(
                     train_id=train_id,
-                    device_id=device_id,
                     dataset_ver=hyper["dataset.ver"],
                     dataset_part=dataset_part,
+                    device_id=device_id,
                     debug_mode=debug_mode,
                 )
 
@@ -578,17 +578,17 @@ class BaselineTraining(TrainingCore):
     def inference_all_folds(
         self,
         baseline_id: str,
-        dataset_part: str,  # only valid or test
         dataset_ver: str = None,
+        dataset_part: str = DatasetPart.TEST,  # only valid or test
         device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._inference_all_folds(
             train_id=baseline_id,
-            device_id=device_id,
-            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
+            dataset_part=dataset_part,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 
@@ -596,9 +596,9 @@ class BaselineTraining(TrainingCore):
     def _inference_all_folds(
         self,
         train_id: str,
-        device_id: int,
-        dataset_part: str,  # only valid or test
         dataset_ver: str = None,
+        dataset_part: str = DatasetPart.TEST,  # only valid or test
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         print("")
@@ -813,17 +813,17 @@ class BaselineTraining(TrainingCore):
     def inference_cross_valid(
         self,
         baseline_id: str,
-        device_id: int = 1,  # use card 1 by default
         dataset_ver: str = None,  # au/mda
         mda_obs: str = None,
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._inference_cross_valid(
             train_id=baseline_id,
-            device_id=device_id,
             dataset_ver=dataset_ver,
             mda_obs=mda_obs,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 
@@ -834,9 +834,9 @@ class BaselineTraining(TrainingCore):
     def _inference_cross_valid(
         self,
         train_id: str,
-        device_id: int,
         dataset_ver: str = None,
         mda_obs: str = None,
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         print("")

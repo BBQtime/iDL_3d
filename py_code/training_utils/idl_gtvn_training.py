@@ -87,15 +87,15 @@ class IDLGTVnTraining(BaselineTraining):
     def new_training(
         self,
         baseline_id: str,
-        device_id: int = -1,  # use all cards by default
         train_remark: str = "",
+        device_id: int = -1,  # use all cards by default
         debug_mode: bool = False,
     ):
         self._is_valid_baseline_id(baseline_id)
         self._new_training(
-            device_id=device_id,
             idl_gtvn_baseline_id=baseline_id,
             train_remark=train_remark,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 
@@ -302,17 +302,17 @@ class IDLGTVnTraining(BaselineTraining):
     def inference_all_folds(
         self,
         idl_gtvn_id: str,
-        dataset_part: str,
         dataset_ver: str = None,
+        dataset_part: str = DatasetPart.TEST,  # only valid or test
         device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
         self._inference_all_folds(
             train_id=idl_gtvn_id,
-            device_id=device_id,
-            dataset_part=dataset_part,
             dataset_ver=dataset_ver,
+            dataset_part=dataset_part,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 
@@ -477,6 +477,7 @@ class IDLGTVnTraining(BaselineTraining):
         idl_gtvn_id: str,
         dataset_ver: str = None,  # au/mda
         mda_obs: str = None,
+        device_id: int = 1,  # use card 1 by default
         debug_mode: bool = False,
     ):
         self.__is_valid_idl_gtvn_id(idl_gtvn_id)
@@ -484,6 +485,7 @@ class IDLGTVnTraining(BaselineTraining):
             train_id=idl_gtvn_id,
             dataset_ver=dataset_ver,
             mda_obs=mda_obs,
+            device_id=device_id,
             debug_mode=debug_mode,
         )
 

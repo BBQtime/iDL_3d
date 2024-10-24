@@ -109,7 +109,7 @@ class TrainingCore:
         hyper["cnn"] = hyper["cnn"].to(g.get_device(device_id))
 
     def _load_exist_cnn(self, cnn_path: str, device_id: int):
-        cnn = torch.load(cnn_path)
+        cnn = torch.load(cnn_path, map_location=g.get_device(device_id))
         if g.used_gpu_count(device_id) > 1:
             cnn = DataParallel(cnn)
         cnn = cnn.to(g.get_device(device_id))
