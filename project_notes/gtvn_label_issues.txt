@@ -4,7 +4,7 @@ AU:
 120/244/254/211 (training set)
 
 AU_EXT:
-876 (test set)
+876/839 (test set) (remove GTVn)
 
 NKI:
 292/296 (training set)

@@ -94,20 +94,20 @@ if __name__ == "__main__":
     #         debug_mode=0,
     #     )
     for idl_gtvn_id, dataset_ver in [
+        ("idl.gtvn_mda.new_multi.clicks", DatasetVer.MDA),
         ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
         ("idl.gtvn_au_no.pt_multi.clicks", DatasetVer.AU_EXT),
-        ("idl.gtvn_au_no.pt_multi.clicks", DatasetVer.OBS_STUDY),
-        ("idl.gtvn_au_no.pt_multi.clicks", DatasetVer.MDA),
     ]:
         device_id = 1
         debug_mode = 0
-        # idl_gtvn.inference_all_folds(
-        #     idl_gtvn_id=idl_gtvn_id,
-        #     dataset_ver=dataset_ver,
-        #     dataset_part=DatasetPart.VALID,
-        #     device_id=device_id,
-        #     debug_mode=debug_mode,
-        # )
+        if idl_gtvn_id == "idl.gtvn_mda.new_multi.clicks":
+            idl_gtvn.inference_all_folds(
+                idl_gtvn_id=idl_gtvn_id,
+                dataset_ver=dataset_ver,
+                dataset_part=DatasetPart.VALID,
+                device_id=device_id,
+                debug_mode=debug_mode,
+            )
         idl_gtvn.inference_all_folds(
             idl_gtvn_id=idl_gtvn_id,
             dataset_ver=dataset_ver,
