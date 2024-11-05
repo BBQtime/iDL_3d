@@ -1046,8 +1046,8 @@ class ObsStudyWindow(ReplayWindow):
                 dataset_ver=dataset_ver,
                 patient=patient,
                 queue=queue,
-                debug_mode=debug_mode,
                 device_id=1,  # Use card 1, as GTVt re-training requires more resources than GTVn inference.
+                debug_mode=debug_mode,
             )
         except Exception:
             pass

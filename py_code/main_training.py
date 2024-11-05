@@ -45,40 +45,40 @@ if __name__ == "__main__":
     #     label_preprocess.generate_gtvn_clicks_nii(dataset_ver)
     #     label_preprocess.check_gtvn_clicks_within_label(dataset_ver)
 
-    baseline = BaselineTraining()
-    # baseline.new_training(
-    #     # train_remark="mda.transfer",
-    #     device_id=-1,
-    #     debug_mode=1,
-    # )
-    for baseline_id, dataset_ver in [
-        ("baseline_au", DatasetVer.AU_EXT),
-        ("baseline_au_no.pt", DatasetVer.AU_EXT),
-    ]:
-        device_id = 1
-        debug_mode = 0
-        # baseline.inference_all_folds(
-        #     baseline_id=baseline_id,
-        #     dataset_ver=dataset_ver,
-        #     dataset_part=DatasetPart.VALID,
-        #     device_id=device_id,
-        #     debug_mode=debug_mode,
-        # )
-        baseline.inference_all_folds(
-            baseline_id=baseline_id,
-            dataset_ver=dataset_ver,
-            dataset_part=DatasetPart.TEST,
-            device_id=device_id,
-            debug_mode=debug_mode,
-        )
-        baseline.inference_cross_valid(
-            baseline_id=baseline_id,
-            dataset_ver=dataset_ver,
-            device_id=device_id,
-            debug_mode=debug_mode,
-        )
+    # baseline = BaselineTraining()
+    # # baseline.new_training(
+    # #     # train_remark="mda.transfer",
+    # #     device_id=-1,
+    # #     debug_mode=1,
+    # # )
+    # for baseline_id, dataset_ver in [
+    #     ("baseline_au", DatasetVer.AU_EXT),
+    #     ("baseline_au_no.pt", DatasetVer.AU_EXT),
+    # ]:
+    #     device_id = 1
+    #     debug_mode = 0
+    #     # baseline.inference_all_folds(
+    #     #     baseline_id=baseline_id,
+    #     #     dataset_ver=dataset_ver,
+    #     #     dataset_part=DatasetPart.VALID,
+    #     #     device_id=device_id,
+    #     #     debug_mode=debug_mode,
+    #     # )
+    #     baseline.inference_all_folds(
+    #         baseline_id=baseline_id,
+    #         dataset_ver=dataset_ver,
+    #         dataset_part=DatasetPart.TEST,
+    #         device_id=device_id,
+    #         debug_mode=debug_mode,
+    #     )
+    #     baseline.inference_cross_valid(
+    #         baseline_id=baseline_id,
+    #         dataset_ver=dataset_ver,
+    #         device_id=device_id,
+    #         debug_mode=debug_mode,
+    #     )
 
-    idl_gtvn = IDLGTVnTraining()
+    # idl_gtvn = IDLGTVnTraining()
     # for baseline_id in [
     #     # "baseline_au",
     #     # "baseline_au_no.pt",
@@ -93,38 +93,39 @@ if __name__ == "__main__":
     #         device_id=1,
     #         debug_mode=0,
     #     )
-    for idl_gtvn_id, dataset_ver in [
-        ("idl.gtvn_mda.new_multi.clicks", DatasetVer.MDA),
-        ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
-        ("idl.gtvn_au_no.pt_multi.clicks", DatasetVer.AU_EXT),
-    ]:
-        device_id = 1
-        debug_mode = 0
-        if idl_gtvn_id == "idl.gtvn_mda.new_multi.clicks":
-            idl_gtvn.inference_all_folds(
-                idl_gtvn_id=idl_gtvn_id,
-                dataset_ver=dataset_ver,
-                dataset_part=DatasetPart.VALID,
-                device_id=device_id,
-                debug_mode=debug_mode,
-            )
-        idl_gtvn.inference_all_folds(
-            idl_gtvn_id=idl_gtvn_id,
-            dataset_ver=dataset_ver,
-            dataset_part=DatasetPart.TEST,
-            device_id=device_id,
-            debug_mode=debug_mode,
-        )
-        idl_gtvn.inference_cross_valid(
-            idl_gtvn_id=idl_gtvn_id,
-            dataset_ver=dataset_ver,
-            device_id=device_id,
-            debug_mode=debug_mode,
-        )
+    # for idl_gtvn_id, dataset_ver in [
+    #     ("idl.gtvn_mda.new_multi.clicks", DatasetVer.MDA),
+    #     ("idl.gtvn_au_multi.clicks", DatasetVer.AU_EXT),
+    #     ("idl.gtvn_au_no.pt_multi.clicks", DatasetVer.AU_EXT),
+    # ]:
+    #     device_id = 1
+    #     debug_mode = 0
+    #     if idl_gtvn_id == "idl.gtvn_mda.new_multi.clicks":
+    #         idl_gtvn.inference_all_folds(
+    #             idl_gtvn_id=idl_gtvn_id,
+    #             dataset_ver=dataset_ver,
+    #             dataset_part=DatasetPart.VALID,
+    #             device_id=device_id,
+    #             debug_mode=debug_mode,
+    #         )
+    #     idl_gtvn.inference_all_folds(
+    #         idl_gtvn_id=idl_gtvn_id,
+    #         dataset_ver=dataset_ver,
+    #         dataset_part=DatasetPart.TEST,
+    #         device_id=device_id,
+    #         debug_mode=debug_mode,
+    #     )
+    #     idl_gtvn.inference_cross_valid(
+    #         idl_gtvn_id=idl_gtvn_id,
+    #         dataset_ver=dataset_ver,
+    #         device_id=device_id,
+    #         debug_mode=debug_mode,
+    #     )
     # idl_gtvn.obs_study(
     #     idl_gtvn_id="idl.gtvn_" + g.DELETE_FLAG,
-    #     dataset_ver=DatasetVer.AU,
-    #     patient="106",
+    #     dataset_ver=DatasetVer.OBS_STUDY,
+    #     patient="489",
+    #     device_id=1,
     #     debug_mode=1,
     # )
 
@@ -145,8 +146,9 @@ if __name__ == "__main__":
     # )
     # idl_gtvt.obs_study(
     #     idl_gtvt_id="idl.gtvt_" + g.DELETE_FLAG,
-    #     dataset_ver=DatasetVer.AU,
-    #     patient="106",
+    #     dataset_ver=DatasetVer.OBS_STUDY,
+    #     patient="489",
+    #     device_id=1,
     #     debug_mode=1,
     # )
 

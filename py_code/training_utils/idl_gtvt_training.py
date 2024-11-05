@@ -991,10 +991,9 @@ class IDLGTVtTraining(TrainingCore):
         dataset_ver: str,
         patient: str,
         queue: Queue = None,
-        debug_mode: bool = False,
         device_id: int = 1,  # Use card 1 by default, as GTVt re-training requires more resources than GTVn inference.
+        debug_mode: bool = False,
     ):
-
         print("")
         print("observer study: {}".format(idl_gtvt_id))
 

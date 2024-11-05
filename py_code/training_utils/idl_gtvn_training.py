@@ -105,8 +105,8 @@ class IDLGTVnTraining(BaselineTraining):
         dataset_ver: str,
         patient: str,
         obs_gtvn_clicks: ndarray = None,  # None means no gtvn click
-        debug_mode=False,
         device_id: int = 0,  # Use card 0 by default, as GTVn inference requires less resources than GTVt re-training.
+        debug_mode=False,
     ):
         print("")
         print("observer study: {}".format(idl_gtvn_id))
