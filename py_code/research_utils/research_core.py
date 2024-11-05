@@ -55,16 +55,16 @@ def explain_metric(metric: str):
 
 
 def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
-    simulation_base_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_simulation")
-    idl_gtvt_dir = os.path.join(simulation_base_dir, idl_gtvt_id)
-    idl_gtvn_dir = os.path.join(simulation_base_dir, idl_gtvn_id)
+    baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_au")
+    idl_gtvt_dir = os.path.join(baseline_dir, idl_gtvt_id)
+    idl_gtvn_dir = os.path.join(baseline_dir, idl_gtvn_id)
 
     metric_dict = Dict()
     for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
         metric_dict[Stat.AVG][metric_type] = []
         metric_dict[Stat.MEDIAN][metric_type] = []
 
-    patient_list = List(g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.AU])["test"])
+    patient_list = List(g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.AU_EXT])["test"])
     for patient in patient_list:
         print(patient)
 
@@ -118,7 +118,7 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
 
         # load label
         gtvs_label = g.load_gtv_labels(
-            dataset_ver=DatasetVer.AU,
+            dataset_ver=DatasetVer.AU_EXT,
             patient=patient,
         )["gtvs"]
         print(
@@ -160,6 +160,4 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
         median = g.calculate_median(metric_dict[Stat.MEDIAN][metric_type])
         metric_dict[Stat.MEDIAN][metric_type] = median
 
-    g.save_json(
-        metric_dict, os.path.join(simulation_base_dir, "inference_au_gtvs.json")
-    )
+    g.save_json(metric_dict, os.path.join(baseline_dir, "inference_au_gtvs.json"))

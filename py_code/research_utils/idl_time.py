@@ -4,7 +4,6 @@ import global_utils.global_core as g
 import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
-from global_utils.str_lib import ObsStudyStep
 from research_utils.research_core import COLOR_LIST
 from tqdm import tqdm
 

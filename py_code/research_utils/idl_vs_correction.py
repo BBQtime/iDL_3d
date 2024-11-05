@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import Metric, ObsStudyStep, Stat
+from global_utils.str_lib import Metric, Stat
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
