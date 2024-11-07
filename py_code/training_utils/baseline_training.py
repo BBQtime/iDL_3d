@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 import global_utils.global_core as g
+import matplotlib
 import numpy as np
 import torch
 from dataset_utils.baseline_dataset import BaselineDataSet
@@ -10,6 +11,10 @@ from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
 from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
 from loss_utils.unified_focal_loss import UnifiedFocalLoss
+
+# Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
+# Without this line, using breakpoints under X11 without VCXSRV can cause the debugger to freeze.
+matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from numpy import ndarray
 from torch.cuda.amp import GradScaler, autocast

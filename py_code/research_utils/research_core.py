@@ -1,6 +1,11 @@
 import os
 
 import global_utils.global_core as g
+import matplotlib
+
+# Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
+# Without this line, using breakpoints under X11 without VCXSRV can cause the debugger to freeze.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
@@ -11,6 +16,14 @@ from metric_utils.metric_func import (
     dice,
     hausdorff_distance_95,
 )
+
+JESPER_GTVT_ID = "idl.gtvt_2024.10.07.13.23.47_Jesper"
+KENNETH_GTVT_ID = "idl.gtvt_2024.10.11.11.09.32_Kenneth"
+HANNA_GTVT_ID = "idl.gtvt_2024.10.17.10.22.39_Hanna"
+JESPER_GTVN_ID = "idl.gtvn_2024.10.07.13.23.47_Jesper"
+KENNETH_GTVN_ID = "idl.gtvn_2024.10.11.11.09.32_Kenneth"
+HANNA_GTVN_ID = "idl.gtvn_2024.10.17.10.22.39_Hanna"
+
 
 COLOR_LIST = [
     "#1f77b4",
@@ -161,3 +174,6 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
         metric_dict[Stat.MEDIAN][metric_type] = median
 
     g.save_json(metric_dict, os.path.join(baseline_dir, "inference_au_gtvs.json"))
+
+
+update_font_size()

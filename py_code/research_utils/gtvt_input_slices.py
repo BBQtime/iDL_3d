@@ -3,6 +3,11 @@ import os
 
 import cv2
 import global_utils.global_core as g
+import matplotlib
+
+# Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
+# Without this line, using breakpoints under X11 without VCXSRV can cause the debugger to freeze.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict

@@ -2,11 +2,23 @@ import csv
 import os
 
 import global_utils.global_core as g
+import matplotlib
+
+# Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
+# Without this line, using breakpoints under X11 without VCXSRV can cause the debugger to freeze.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import Metric, Stat
+from global_utils.str_lib import (
+    DatasetPart,
+    DatasetVer,
+    Metric,
+    ObsStudyGTVnStep,
+    ObsStudyGTVtStep,
+    Stat,
+)
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
@@ -49,16 +61,28 @@ def calculate_metrics(obs_study_id: str):
     obs_study_step_json_path = os.path.join(
         g.TRAIN_RESULTS_DIR,
         "baseline_obs.study",
-        g.replace_char_in_str(obs_study_id, 7, "t"),
+        g.replace_char_in_str(
+            obs_study_id, 7, "t"
+        ),  # obs_study_step.json is under idl.gtvt dir
         "obs_study_step.json",
     )
     obs_study_step = g.load_json(obs_study_step_json_path)
+
+    # select approved patients
     for patient in obs_study_step.keys():
-        if obs_study_step[patient] == ObsStudyStep.APPROVED:
+        if (
+            gtv == "gtvt"
+            and obs_study_step[patient]["gtvt"] == ObsStudyGTVtStep.APPROVED
+        ):
+            patient_list.append(patient)
+        elif (
+            gtv == "gtvn"
+            and obs_study_step[patient]["gtvn"] == ObsStudyGTVnStep.APPROVED
+        ):
             patient_list.append(patient)
 
+    # loop through patients
     for patient in tqdm(patient_list):
-
         patient_dir = os.path.join(obs_study_dir, "patients", patient)
 
         if os.path.exists(patient_dir):
@@ -169,77 +193,77 @@ def calculate_metrics(obs_study_id: str):
     g.save_json(data=metrics_dict, path=metrics_path)
 
 
-def create_metrics_table(obs_study_id_list: list):
-    table_path = Dict()
-    table_data = Dict()
+# def create_metrics_table(obs_study_id_list: list):
+#     table_path = Dict()
+#     table_data = Dict()
 
-    for i in ["gtvt", "gtvn"]:
-        table_path[i] = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            "baseline_obs.study",
-            "3d_idl_vs_correct_{}.csv".format(i),
-        )
+#     for i in ["gtvt", "gtvn"]:
+#         table_path[i] = os.path.join(
+#             g.TRAIN_RESULTS_DIR,
+#             "baseline_obs.study",
+#             "3d_idl_vs_correct_{}.csv".format(i),
+#         )
 
-        table_data[i] = [
-            ["Metric", "Statistics", "Jesper", "Kenneth", "Hanna"],  # Header row
-        ]
-        for metric in [
-            Metric.DSC,
-            Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            Metric.APL_VOXEL,
-            Metric.SDSC,
-        ]:
-            for stat in [
-                # Stat.AVG,
-                Stat.MEDIAN,
-            ]:
-                cur_item = [metric, stat, "", "", ""]
-                table_data[i].append(cur_item)
+#         table_data[i] = [
+#             ["Metric", "Statistics", "Jesper", "Kenneth", "Hanna"],  # Header row
+#         ]
+#         for metric in [
+#             Metric.DSC,
+#             Metric.MSD,
+#             Metric.HD95,
+#             Metric.APL_PCT,
+#             Metric.APL_VOXEL,
+#             Metric.SDSC,
+#         ]:
+#             for stat in [
+#                 # Stat.AVG,
+#                 Stat.MEDIAN,
+#             ]:
+#                 cur_item = [metric, stat, "", "", ""]
+#                 table_data[i].append(cur_item)
 
-    for obs_study_id in tqdm(obs_study_id_list):
-        if obs_study_id.startswith("idl.gtvn_"):
-            cur_table_data = table_data["gtvn"]
-        elif obs_study_id.startswith("idl.gtvt_"):
-            cur_table_data = table_data["gtvt"]
-        else:
-            g.error_exit("obs study train id error")
+#     for obs_study_id in tqdm(obs_study_id_list):
+#         if obs_study_id.startswith("idl.gtvn_"):
+#             cur_table_data = table_data["gtvn"]
+#         elif obs_study_id.startswith("idl.gtvt_"):
+#             cur_table_data = table_data["gtvt"]
+#         else:
+#             g.error_exit("obs study train id error")
 
-        obs_study_dir = os.path.join(
-            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
-        )
-        metrics_dict = g.load_json(
-            os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
-        )
+#         obs_study_dir = os.path.join(
+#             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+#         )
+#         metrics_dict = g.load_json(
+#             os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
+#         )
 
-        for metric in [
-            Metric.DSC,
-            Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            Metric.APL_VOXEL,
-            Metric.SDSC,
-        ]:
-            for stat in [
-                # Stat.AVG,
-                Stat.MEDIAN,
-            ]:
-                cur_value = metrics_dict[stat][metric]
-                for item in cur_table_data:
-                    if item[0] == metric and item[1] == stat:
-                        if "Jesper" in obs_study_id:
-                            item[2] = cur_value
-                        elif "Kenneth" in obs_study_id:
-                            item[3] = cur_value
-                        elif "Hanna" in obs_study_id:
-                            item[4] = cur_value
-                        break
+#         for metric in [
+#             Metric.DSC,
+#             Metric.MSD,
+#             Metric.HD95,
+#             Metric.APL_PCT,
+#             Metric.APL_VOXEL,
+#             Metric.SDSC,
+#         ]:
+#             for stat in [
+#                 # Stat.AVG,
+#                 Stat.MEDIAN,
+#             ]:
+#                 cur_value = metrics_dict[stat][metric]
+#                 for item in cur_table_data:
+#                     if item[0] == metric and item[1] == stat:
+#                         if "Jesper" in obs_study_id:
+#                             item[2] = cur_value
+#                         elif "Kenneth" in obs_study_id:
+#                             item[3] = cur_value
+#                         elif "Hanna" in obs_study_id:
+#                             item[4] = cur_value
+#                         break
 
-    for i in ["gtvt", "gtvn"]:
-        with open(table_path[i], "w", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerows(table_data[i])
+#     for i in ["gtvt", "gtvn"]:
+#         with open(table_path[i], "w", newline="") as file:
+#             writer = csv.writer(file)
+#             writer.writerows(table_data[i])
 
 
 def plot_metrics(obs_study_id_list: list):
@@ -264,8 +288,21 @@ def plot_metrics(obs_study_id_list: list):
     )
 
     observers_list = ["Jesper", "Kenneth", "Hanna"]
-    patients_list = ["489", "496", "499", "509", "513", "536", "538"]
+    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
+        DatasetPart.TEST
+    ]
+    patients_list = List(patients_list)
+    patients_list.remove("462")  # patient 462 is for testing
+
+    # init label of x axis
+    x_label = []
+    for i in range(1, len(patients_list) + 1):
+        x_label.append(str(i))
+
     if gtv == "gtvn":
+        # patient 536 doesnt have gtvn
+        del_idx = patients_list.index("536")
+        x_label.remove(x_label[del_idx])
         patients_list.remove("536")
 
     # Set up a 2x3 grid of subplots
@@ -290,7 +327,6 @@ def plot_metrics(obs_study_id_list: list):
 
         # loop through observer study train id
         for obs_study_id in obs_study_id_list:
-
             metrics_dict = g.load_json(
                 os.path.join(
                     g.TRAIN_RESULTS_DIR,
@@ -307,9 +343,12 @@ def plot_metrics(obs_study_id_list: list):
 
             # add patients' metrics
             for patient in patients_list:
-                fig_data[observer].append(
-                    metrics_dict["patient={}".format(patient)][metric]
-                )
+                if metrics_dict["patient={}".format(patient)][metric] == {}:
+                    fig_data[observer].append(0)
+                else:
+                    fig_data[observer].append(
+                        metrics_dict["patient={}".format(patient)][metric]
+                    )
 
         ax = axes[i]
 
@@ -362,10 +401,7 @@ def plot_metrics(obs_study_id_list: list):
 
         # Set x-axis ticks to be centered under each group of bars
         ax.set_xticks(indices + bar_width)
-        if gtv == "gtvn":
-            ax.set_xticklabels(["1", "2", "3", "4", "5", "7"])
-        elif gtv == "gtvt":
-            ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
+        ax.set_xticklabels(x_label)
 
         # # Add a legend to describe the observers
         # if metric == Metric.APL_PCT:

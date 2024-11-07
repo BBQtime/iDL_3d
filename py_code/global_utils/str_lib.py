@@ -24,15 +24,6 @@ class DrawingMode:
     GTVN_RESTORE = "gtvn.restore"
 
 
-class ObsStudyID:
-    JESPER_GTVT = "idl.gtvt_2024.03.18.09.05.54_Jesper_research"
-    KENNETH_GTVT = "idl.gtvt_2024.04.12.12.05.44_Kenneth_research"
-    HANNA_GTVT = "idl.gtvt_2024.04.18.11.04.48_Hanna_research"
-    JESPER_GTVN = "idl.gtvn_2024.03.18.09.05.54_Jesper_research"
-    KENNETH_GTVN = "idl.gtvn_2024.04.12.12.05.44_Kenneth_research"
-    HANNA_GTVN = "idl.gtvn_2024.04.18.11.04.48_Hanna_research"
-
-
 class ObsStudyGTVtStep:
     CLICK_CENTER = "click.center"
     DELINEATE = "delineate"

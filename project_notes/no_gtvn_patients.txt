@@ -6,5 +6,8 @@ The following patients has no GTVn label
 (2)NKI dataset:
 NKI_220,NKI_240,NKI_244,NKI_246,NKI_250,NKI_276,NKI_288,NKI_289,NKI_306,NKI_325,NKI_334
 
+(3)Observer study dataset:
+536
+
 This issue has been resolved by generating empty ndarray in g.load_gtv_labels() function.
 It is recommended to keep a list of these patients for future reference.
