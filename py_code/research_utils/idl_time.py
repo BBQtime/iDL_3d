@@ -2,6 +2,9 @@ import os
 
 import global_utils.global_core as g
 import matplotlib
+from global_utils.custom_list import List
+from global_utils.str_lib import DatasetPart, DatasetVer
+from ui_utils.obs_study_timer import ObsStudyTimer
 
 # Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
 # Without this line, using breakpoints under X11 without VCXSRV can cause the debugger to freeze.
@@ -28,24 +31,29 @@ def __time_str_to_seconds(time_str: str):
 
 
 def __explain_idl_step(idl_step: str):
-    if idl_step == ObsStudyStep.CLICK_GTVN_CENTER:
+    if idl_step == ObsStudyTimer.CLICK_GTVN_CENTERS:
         return "Click GTVn Centers"
-    elif idl_step == ObsStudyStep.CLICK_GTVT_CENTER:
+    elif idl_step == ObsStudyTimer.CLICK_GTVT_CENTER:
         return "Click GTVt Center"
-    elif idl_step == ObsStudyStep.CORRECT_GTVN:
+    elif idl_step == ObsStudyTimer.CORRECT_GTVN:
         return "Correction"
-    elif idl_step == ObsStudyStep.DRAW_GTVT:
+    elif idl_step == ObsStudyTimer.DELINEATE_GTVT:
         return "Delineate GTVt"
-    elif idl_step == ObsStudyStep.WAITING_GTVN:
+    elif idl_step == ObsStudyTimer.WAIT_GTVN_PRED:
         return "AI Generate GTVn"
-    elif idl_step == ObsStudyStep.WAITING_GTVT:
+    elif idl_step == ObsStudyTimer.WAIT_GTVT_PRED:
         return "AI Generate GTVt"
     else:
         return None
 
 
-def plot_time_per_patient(obs_study_id_list: list):
-    patients_list = ["489", "496", "499", "509", "513", "536", "538"]
+def plot_time_per_patient(obs_study_gtvt_id_list: list):
+    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
+        DatasetPart.TEST
+    ]
+    patients_list = List(patients_list)
+    patients_list.remove("462")  # patient 462 is for testing
+
     observers_list = ["Jesper", "Kenneth", "Hanna"]
 
     fig_data = Dict()
@@ -53,45 +61,27 @@ def plot_time_per_patient(obs_study_id_list: list):
         fig_data[observer] = []
 
     # loop through observer study train id
-    for obs_study_id in tqdm(obs_study_id_list):
-        if not obs_study_id.startswith("idl.gtvt_"):
+    for obs_study_gtvt_id in tqdm(obs_study_gtvt_id_list):
+        if not obs_study_gtvt_id.startswith("idl.gtvt_"):
             g.error_exit("Must be an 'idl.gtvt' id!")
         json_path = os.path.join(
-            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id, "time_used.json"
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            obs_study_gtvt_id,
+            "time_used.json",
         )
         time_dict = g.load_json(json_path)
 
         # get observer name from train id
         for observer in observers_list:
-            if observer in obs_study_id:
+            if observer in obs_study_gtvt_id:
                 break
 
         for patient in patients_list:
-            total_gtvt_sec = 0
-            total_gtvn_sec = 0
-            patient_time = time_dict["patient={}".format(patient)]
-
-            for i in [
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.WAITING_GTVT,
-                ObsStudyStep.CORRECT_GTVT,
-            ]:
-                cur_gtvt_sec = __time_str_to_seconds(patient_time[i])
-                total_gtvt_sec += cur_gtvt_sec
-
-            for i in [
-                ObsStudyStep.CLICK_GTVT_CENTER,
-                ObsStudyStep.DRAW_GTVT,
-                ObsStudyStep.CLICK_GTVN_CENTER,
-                ObsStudyStep.WAITING_GTVN,
-                ObsStudyStep.CORRECT_GTVN,
-            ]:
-                cur_gtvn_sec = __time_str_to_seconds(patient_time[i])
-                total_gtvn_sec += cur_gtvn_sec
-
-            # print(total_gtvt_sec, total_gtvn_sec)
-            fig_data[observer].append(max(total_gtvt_sec, total_gtvn_sec))
+            total_time = time_dict["patient={}".format(patient)]["total.time"]
+            total_time = __time_str_to_seconds(total_time)
+            total_time = __seconds_to_minutes_decimal(total_time)
+            fig_data[observer].append(total_time)
 
         # # calculate avg and mean
         # avg = g.calculate_avg(fig_data[observer])
@@ -101,8 +91,8 @@ def plot_time_per_patient(obs_study_id_list: list):
         # fig_data[observer].append(avg)
         # fig_data[observer].append(median)
 
-        for i in range(len(fig_data[observer])):
-            fig_data[observer][i] = __seconds_to_minutes_decimal(fig_data[observer][i])
+        # for i in range(len(fig_data[observer])):
+        #     fig_data[observer][i] = __seconds_to_minutes_decimal(fig_data[observer][i])
 
     # Set up a 2x3 grid of subplots
     _, ax = plt.subplots(figsize=(12, 8))
@@ -140,7 +130,11 @@ def plot_time_per_patient(obs_study_id_list: list):
 
     # Set x-axis ticks to be centered under each group of bars
     ax.set_xticks(indices + bar_width)
-    ax.set_xticklabels(["1", "2", "3", "4", "5", "6", "7"])
+    # init label of x axis
+    x_label = []
+    for i in range(1, len(patients_list) + 1):
+        x_label.append(str(i))
+    ax.set_xticklabels(x_label)
 
     # Add a legend to describe the observers
     # ax.legend()

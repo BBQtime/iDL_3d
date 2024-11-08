@@ -2,7 +2,7 @@ import global_utils.global_core as g
 from global_utils.custom_list import List
 
 # from research_utils import iov
-from research_utils import gtvt_input_slices, idl_vs_correction, iov
+from research_utils import gtvt_input_slices, idl_time, idl_vs_correction, iov
 from research_utils.research_core import (
     HANNA_GTVN_ID,
     HANNA_GTVT_ID,
@@ -57,12 +57,6 @@ if __name__ == "__main__":
 
     # iov.plot_iov()
 
-    # idl_time.plot_time_per_patient(
-    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
-    # )
-
-    # idl_time.plot_time_per_step(
-    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
-    # )
+    idl_time.plot_time_per_patient([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
     print("Done!")
