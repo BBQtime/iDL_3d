@@ -11,7 +11,7 @@ import numpy as np
 import seaborn as sns
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetVer, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stat
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
@@ -24,6 +24,7 @@ from tqdm import tqdm
 
 
 def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
+    print(f"{obs_study_id_1} vs {obs_study_id_2}")
     obs_study_id = Dict()
     obs_study_id["1"] = obs_study_id_1
     obs_study_id["2"] = obs_study_id_2
@@ -52,10 +53,10 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
         "idl.gtvt_"
     ):
         gtv = "gtvt"
-
     else:
         g.error_exit("obs study train id error")
 
+    # init observers
     observer = Dict()
     # get observer from obs study id
     for name in ["Jesper", "Kenneth", "Hanna", "Label"]:
@@ -65,6 +66,17 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
     if observer["1"] == observer["2"]:
         g.error_exit("2 observers cannot be identical.")
 
+    # init patients
+    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
+        DatasetPart.TEST
+    ]
+    patients_list = List(patients_list)
+    patients_list.remove("462")
+    if gtv == "gtvn":
+        # patient 536 doesnt have gtvn
+        patients_list.remove("536")
+
+    # init metrics dict
     metrics_dict = Dict()
 
     for result_type in ["idl", "correct"]:
@@ -79,8 +91,7 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             ]:
                 metrics_dict[result_type][stat][metric] = []
 
-        patients = ["489", "496", "499", "509", "513", "536", "538"]
-        for patient in tqdm(patients):
+        for patient in tqdm(patients_list):
             patient = "patient={}".format(patient)
 
             img_data = Dict()
@@ -133,6 +144,7 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                     else:
                         img_data[idx] = None
 
+            # both imgs are not empty
             if img_data["1"] is not None and img_data["2"] is not None:
                 if img_data["1"].shape != img_data["2"].shape:
                     g.error_exit("Img size of observer 1 and 2 are different!")
@@ -164,19 +176,22 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                     reference=img_data["2"],
                     tolerance=1.0,
                 )
-            elif (
-                (img_data["1"] is None and img_data["2"] is None)
-                or (img_data["1"] is None and observer["2"] == "Label")
-                or (img_data["2"] is None and observer["1"] == "Label")
-            ):
-                dsc = 1.0
-                msd = 0.0
-                hd95 = 0.0
-                apl_pct = 0.0
-                apl_voxel = 0
-                sdsc = 1.0
+            # both imgs are empty
+            elif img_data["1"] is None and img_data["2"] is None:
+                dsc = None
+                msd = None
+                hd95 = None
+                apl_pct = None
+                apl_voxel = None
+                sdsc = None
+            # one of imgs is empty
             else:
-                g.error_exit("One of the observer has not patient data.")
+                dsc = 0.0
+                msd = None
+                hd95 = None
+                apl_pct = 1.0
+                apl_voxel = None
+                sdsc = 0.0
 
             metrics_dict[result_type][patient][Metric.DSC] = dsc
             metrics_dict[result_type][patient][Metric.MSD] = msd

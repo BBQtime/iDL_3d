@@ -56,7 +56,6 @@ def calculate_metrics(obs_study_id: str):
             metrics_dict[stat][metric] = []
     g.save_json(data=metrics_dict, path=metrics_path)
 
-    patient_list = []
     # open "obs_study_step.json" and find approved patients
     obs_study_step_json_path = os.path.join(
         g.TRAIN_RESULTS_DIR,
@@ -69,7 +68,11 @@ def calculate_metrics(obs_study_id: str):
     obs_study_step = g.load_json(obs_study_step_json_path)
 
     # select approved patients
+    patient_list = []
     for patient in obs_study_step.keys():
+        # patient 462 is for testing
+        if patient == "patient=462":
+            continue
         if (
             gtv == "gtvt"
             and obs_study_step[patient]["gtvt"] == ObsStudyGTVtStep.APPROVED

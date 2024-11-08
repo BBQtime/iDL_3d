@@ -68,6 +68,9 @@ def calculate_metrics(obs_study_id: str):
             )
         )
         for patient in obs_study_step.keys():
+            # patient 462 is for testing
+            if patient == "patient=462":
+                continue
             if obs_study_step[patient]["gtvt"] == ObsStudyGTVtStep.APPROVED:
                 patient_list.append(patient)
 
