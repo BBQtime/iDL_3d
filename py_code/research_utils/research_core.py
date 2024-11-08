@@ -32,6 +32,7 @@ COLOR_LIST = [
     "#FFD700",  # Gold
     "#808080",  # Gray
     "#00BFFF",  # Deep Sky Blue
+    "#6A5ACD",  # Light Slate Blue
 ]
 
 

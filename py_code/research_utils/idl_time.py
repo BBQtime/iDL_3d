@@ -35,8 +35,10 @@ def __explain_idl_step(idl_step: str):
         return "Click GTVn Centers"
     elif idl_step == ObsStudyTimer.CLICK_GTVT_CENTER:
         return "Click GTVt Center"
+    elif idl_step == ObsStudyTimer.CORRECT_GTVT:
+        return "Correct GTVt"
     elif idl_step == ObsStudyTimer.CORRECT_GTVN:
-        return "Correction"
+        return "Correct GTVn"
     elif idl_step == ObsStudyTimer.DELINEATE_GTVT:
         return "Delineate GTVt"
     elif idl_step == ObsStudyTimer.WAIT_GTVN_PRED:
@@ -126,7 +128,7 @@ def plot_time_per_patient(obs_study_gtvt_id_list: list):
     # Configure title and labels
     ax.set_xlabel("Patients")
     ax.set_ylabel("Minutes")
-    ax.set_title("Time Used for Each Patient")
+    ax.set_title("Median Time Used per Patient")
 
     # Set x-axis ticks to be centered under each group of bars
     ax.set_xticks(indices + bar_width)
@@ -151,16 +153,17 @@ def plot_time_per_patient(obs_study_gtvt_id_list: list):
     plt.savefig(fig_path, format="pdf")
 
 
-def plot_time_per_step(obs_study_id_list: list):
+def plot_time_per_step(obs_study_gtvt_id_list: list):
     observers_list = ["Jesper", "Kenneth", "Hanna"]
     idl_step_list = [
-        ObsStudyStep.CLICK_GTVT_CENTER,
-        ObsStudyStep.DRAW_GTVT,
-        ObsStudyStep.WAITING_GTVT,
-        ObsStudyStep.CORRECT_GTVT,
-        ObsStudyStep.CLICK_GTVN_CENTER,
-        ObsStudyStep.WAITING_GTVN,
-        ObsStudyStep.CORRECT_GTVN,
+        ObsStudyTimer.CLICK_GTVT_CENTER,
+        ObsStudyTimer.DELINEATE_GTVT,
+        ObsStudyTimer.WAIT_GTVT_PRED,
+        ObsStudyTimer.CLICK_GTVN_CENTERS,
+        ObsStudyTimer.WAIT_GTVN_PRED,
+        ObsStudyTimer.CORRECT_GTVT,
+        ObsStudyTimer.CORRECT_GTVN,
+        # ObsStudyTimer.PATIENT_TOTAL_TIME,
     ]
 
     # Set up a 2x3 grid of subplots
@@ -172,8 +175,8 @@ def plot_time_per_step(obs_study_id_list: list):
 
     sub_fig_idx = 0
     # loop through observer study train id
-    for obs_study_id in tqdm(obs_study_id_list):
-        if not obs_study_id.startswith("idl.gtvt_"):
+    for obs_study_gtvt_id in tqdm(obs_study_gtvt_id_list):
+        if not obs_study_gtvt_id.startswith("idl.gtvt_"):
             g.error_exit("Must be an 'idl.gtvt' id!")
 
         # init data
@@ -183,7 +186,10 @@ def plot_time_per_step(obs_study_id_list: list):
 
         # load json
         json_path = os.path.join(
-            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id, "time_used.json"
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            obs_study_gtvt_id,
+            "time_used.json",
         )
         time_dict = g.load_json(json_path)
 
@@ -193,51 +199,48 @@ def plot_time_per_step(obs_study_id_list: list):
                 seconds = __time_str_to_seconds(time_dict[patient][idl_step])
                 fig_data[idl_step]["value"].append(seconds)
 
-            # fix gtvn correction time
-            # sometimes gtvn corerction time is much lower than gtvt
-            # this is caused by user's regret
-            gtvt_time = (
-                fig_data[ObsStudyStep.WAITING_GTVT]["value"][-1]
-                + fig_data[ObsStudyStep.CORRECT_GTVT]["value"][-1]
-            )
-            gtvn_time = (
-                fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"][-1]
-                + fig_data[ObsStudyStep.WAITING_GTVN]["value"][-1]
-                + fig_data[ObsStudyStep.CORRECT_GTVN]["value"][-1]
-            )
-            if gtvt_time != gtvn_time:
-                fig_data[ObsStudyStep.CORRECT_GTVN]["value"][-1] = (
-                    gtvt_time
-                    - fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"][-1]
-                    - fig_data[ObsStudyStep.WAITING_GTVN]["value"][-1]
-                )
-
         for idl_step in idl_step_list:
             fig_data[idl_step]["value"] = g.calculate_avg(fig_data[idl_step]["value"])
 
-        # add start time
-        fig_data[ObsStudyStep.CLICK_GTVT_CENTER]["start"] = 0
-        fig_data[ObsStudyStep.DRAW_GTVT]["start"] = fig_data[
-            ObsStudyStep.CLICK_GTVT_CENTER
+        # set start points of each step
+        fig_data[ObsStudyTimer.CLICK_GTVT_CENTER]["start"] = 0
+        fig_data[ObsStudyTimer.DELINEATE_GTVT]["start"] = fig_data[
+            ObsStudyTimer.CLICK_GTVT_CENTER
         ]["value"]
-        fig_data[ObsStudyStep.WAITING_GTVT]["start"] = fig_data[
-            ObsStudyStep.CLICK_GTVN_CENTER
+        fig_data[ObsStudyTimer.WAIT_GTVT_PRED]["start"] = fig_data[
+            ObsStudyTimer.CLICK_GTVN_CENTERS
         ]["start"] = (
-            fig_data[ObsStudyStep.DRAW_GTVT]["start"]
-            + fig_data[ObsStudyStep.DRAW_GTVT]["value"]
+            fig_data[ObsStudyTimer.DELINEATE_GTVT]["start"]
+            + fig_data[ObsStudyTimer.DELINEATE_GTVT]["value"]
         )
-        fig_data[ObsStudyStep.WAITING_GTVN]["start"] = (
-            fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["start"]
-            + fig_data[ObsStudyStep.CLICK_GTVN_CENTER]["value"]
+        fig_data[ObsStudyTimer.WAIT_GTVN_PRED]["start"] = (
+            fig_data[ObsStudyTimer.CLICK_GTVN_CENTERS]["start"]
+            + fig_data[ObsStudyTimer.CLICK_GTVN_CENTERS]["value"]
         )
-        fig_data[ObsStudyStep.CORRECT_GTVT]["start"] = (
-            fig_data[ObsStudyStep.WAITING_GTVT]["start"]
-            + fig_data[ObsStudyStep.WAITING_GTVT]["value"]
+
+        # check wether correct.gtvt or correct.gtvn started first
+        wait_gtvt_end_point = (
+            fig_data[ObsStudyTimer.WAIT_GTVT_PRED]["start"]
+            + fig_data[ObsStudyTimer.WAIT_GTVT_PRED]["value"]
         )
-        fig_data[ObsStudyStep.CORRECT_GTVN]["start"] = (
-            fig_data[ObsStudyStep.WAITING_GTVN]["start"]
-            + fig_data[ObsStudyStep.WAITING_GTVN]["value"]
+        wait_gtvn_end_point = (
+            fig_data[ObsStudyTimer.WAIT_GTVN_PRED]["start"]
+            + fig_data[ObsStudyTimer.WAIT_GTVN_PRED]["value"]
         )
+        # gtvt pred comes first
+        if wait_gtvt_end_point < wait_gtvn_end_point:
+            fig_data[ObsStudyTimer.CORRECT_GTVT]["start"] = wait_gtvt_end_point
+            fig_data[ObsStudyTimer.CORRECT_GTVN]["start"] = max(
+                wait_gtvn_end_point,
+                wait_gtvt_end_point + fig_data[ObsStudyTimer.CORRECT_GTVT]["value"],
+            )
+        # gtvn pred comes first
+        else:
+            fig_data[ObsStudyTimer.CORRECT_GTVN]["start"] = wait_gtvn_end_point
+            fig_data[ObsStudyTimer.CORRECT_GTVT]["start"] = max(
+                wait_gtvt_end_point,
+                wait_gtvn_end_point + fig_data[ObsStudyTimer.CORRECT_GTVN]["value"],
+            )
 
         # seconds to minutes
         for idl_step in idl_step_list:
@@ -253,14 +256,12 @@ def plot_time_per_step(obs_study_id_list: list):
         total_height = len(idl_step) * (bar_height + step_space)
         y_positions = [
             total_height - (i * (bar_height + step_space))
-            for i in range(
-                len(idl_step_list) - 1
-            )  # len-1 because correct.gtvt/gtvn are combined
+            for i in range(len(idl_step_list))
         ]
 
         # set title
         for observer in observers_list:
-            if observer in obs_study_id:
+            if observer in obs_study_gtvt_id:
                 break
         ax.set_title(
             "Observer {}".format(observers_list.index(observer) + 1),
@@ -269,10 +270,7 @@ def plot_time_per_step(obs_study_id_list: list):
         ax.set_yticks([y + bar_height / 2 for y in y_positions])
         y_labels = []
         for idl_step in idl_step_list:
-            if idl_step == ObsStudyStep.CORRECT_GTVT:
-                continue
-            else:
-                y_labels.append(__explain_idl_step(idl_step))
+            y_labels.append(__explain_idl_step(idl_step))
         ax.set_yticklabels(y_labels, rotation=30)
         ax.grid(True)
 
@@ -281,17 +279,14 @@ def plot_time_per_step(obs_study_id_list: list):
 
         idx = 0
         for idl_step in idl_step_list:
-            if idl_step == ObsStudyStep.CORRECT_GTVT:
-                continue
-            else:
-                lower = fig_data[idl_step]["start"]
-                value = fig_data[idl_step]["value"]
-                ax.broken_barh(
-                    [(lower, value)],
-                    (y_positions[idx], bar_height),
-                    facecolors=COLOR_LIST[idx],
-                )
-                idx += 1
+            lower = fig_data[idl_step]["start"]
+            value = fig_data[idl_step]["value"]
+            ax.broken_barh(
+                [(lower, value)],
+                (y_positions[idx], bar_height),
+                facecolors=COLOR_LIST[idx],
+            )
+            idx += 1
 
         # next sub plot
         sub_fig_idx += 1
