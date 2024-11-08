@@ -1,8 +1,8 @@
 import global_utils.global_core as g
 from global_utils.custom_list import List
 
-# from research_utils import gtvt_input_slices, idl_time, idl_vs_correction, iov
-from research_utils import idl_vs_correction
+# from research_utils import  idl_time,  iov
+from research_utils import gtvt_input_slices, idl_vs_correction
 from research_utils.research_core import (
     HANNA_GTVN_ID,
     HANNA_GTVT_ID,
@@ -33,24 +33,17 @@ if __name__ == "__main__":
     # ]:
     #     idl_vs_correction.calculate_metrics(obs_study_id)
 
-    idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
-    idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
+    # idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
+    # idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
 
     # for obs_study_id in [
     #     JESPER_GTVT_ID,
     #     KENNETH_GTVT_ID,
     #     HANNA_GTVT_ID,
     # ]:
-    #     gtvt_input_slices.calculate_comparison_metrics(obs_study_id)
+    #     gtvt_input_slices.calculate_metrics(obs_study_id)
 
-    # for obs_study_id in [
-    #     JESPER_GTVT_ID,
-    #     KENNETH_GTVT_ID,
-    #     HANNA_GTVT_ID,
-    # ]:
-    #     gtvt_input_slices.calculate_input_inconsistency(obs_study_id)
-
-    # gtvt_input_slices.plot_metrics_comparison(
+    # gtvt_input_slices.create_metrics_table(
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
 
