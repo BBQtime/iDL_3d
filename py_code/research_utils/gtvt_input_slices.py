@@ -12,7 +12,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import Metric, ObsStudyGTVtStep, Plane, Stat
+from global_utils.str_lib import (
+    DatasetPart,
+    DatasetVer,
+    Metric,
+    ObsStudyGTVtStep,
+    Plane,
+    Stat,
+)
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
@@ -54,7 +61,7 @@ def calculate_metrics(obs_study_id: str):
             ]:
                 plane_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
                 if metric == Metric.MSD or metric == Metric.HD95:
-                    plane_list.append("anatomical")
+                    plane_list.append("cross.plane")
                 for plane in plane_list:
                     metrics_dict[stat][metric][plane] = []
         g.save_json(data=metrics_dict, path=metrics_path)
@@ -105,8 +112,7 @@ def calculate_metrics(obs_study_id: str):
                 os.path.join(patient_dir, "selected_slices.json")
             )
 
-            # for anatomical msd and hd95
-            sds_full = None
+            sds_full = None  # for cross-plane msd and hd95
             for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
                 slice_id = int(selected_slices[plane]["round=01"])
 
@@ -170,7 +176,7 @@ def calculate_metrics(obs_study_id: str):
                 metrics_dict[patient][Metric.MSD][plane] = msd
                 metrics_dict[patient][Metric.HD95][plane] = hd95
 
-                # calculate anatomical msd and hd95
+                # calculate cross-plane msd and hd95
                 sds1 = surface_distances(
                     binary_img_1=test,
                     binary_img_2=reference,
@@ -217,16 +223,16 @@ def calculate_metrics(obs_study_id: str):
                             metrics_dict[patient][metric][plane]
                         )
 
-            # anatomical msd and hd95
-            metrics_dict[patient][Metric.MSD]["anatomical"] = np.mean(sds_full)
-            metrics_dict[patient][Metric.HD95]["anatomical"] = np.percentile(
+            # calculate cross-plane msd and hd95
+            metrics_dict[patient][Metric.MSD]["cross.plane"] = np.mean(sds_full)
+            metrics_dict[patient][Metric.HD95]["cross.plane"] = np.percentile(
                 sds_full, 95
             )
             # record value for avg and median calculation
             for stat in [Stat.AVG, Stat.MEDIAN]:
                 for metric in [Metric.MSD, Metric.HD95]:
-                    metrics_dict[stat][metric]["anatomical"].append(
-                        metrics_dict[patient][metric]["anatomical"]
+                    metrics_dict[stat][metric]["cross.plane"].append(
+                        metrics_dict[patient][metric]["cross.plane"]
                     )
 
         # calculate avg and median
@@ -240,7 +246,7 @@ def calculate_metrics(obs_study_id: str):
         ]:
             plane_list = [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]
             if metric == Metric.MSD or metric == Metric.HD95:
-                plane_list.append("anatomical")
+                plane_list.append("cross.plane")
             for plane in plane_list:
                 metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
                     metrics_dict[Stat.MEDIAN][metric][plane]
@@ -252,14 +258,22 @@ def calculate_metrics(obs_study_id: str):
         g.save_json(data=metrics_dict, path=metrics_path)
 
 
-def create_metrics_table(obs_study_id_list: list):
+def create_metrics_tables(obs_study_id_list: list):
     target_pairs = [
         ("idl", "correct"),
         ("delineation", "idl"),
         ("delineation", "correct"),
     ]
 
+    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
+        DatasetPart.TEST
+    ]
+    patients_list = List(patients_list)
+    patients_list.remove("462")  # patient 462 is for testing
+    patients_list = List([Stat.AVG, Stat.MEDIAN]) + patients_list
+
     for target_1, target_2 in target_pairs:
+        print(f"2D {target_1} vs {target_2}")
         table_path = os.path.join(
             g.TRAIN_RESULTS_DIR,
             "baseline_obs.study",
@@ -268,29 +282,25 @@ def create_metrics_table(obs_study_id_list: list):
         # Header row
         table_data = [
             [
-                "Metric",
-                "Anatomical Plane",
-                "Statistics",
+                "Patient",
+                "Metric (Cross-Plane)",
                 "Jesper",
                 "Kenneth",
                 "Hanna",
             ],
         ]
-        for metric in [
-            Metric.DSC,
-            Metric.MSD,
-            Metric.HD95,
-            Metric.APL_PCT,
-            Metric.APL_VOXEL,
-            Metric.SDSC,
-        ]:
-            for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                for stat in [
-                    # Stat.AVG,
-                    Stat.MEDIAN,
-                ]:
-                    cur_item = [metric, plane, stat, "", "", ""]
-                    table_data.append(cur_item)
+
+        for patient in patients_list:
+            for metric_type in [
+                # Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                # Metric.APL_PCT,
+                # Metric.APL_VOXEL,
+                # Metric.SDSC,
+            ]:
+                cur_item = [patient, metric_type, "", "", ""]
+                table_data.append(cur_item)
 
         for obs_study_id in tqdm(obs_study_id_list):
             if not obs_study_id.startswith("idl.gtvt_"):
@@ -304,34 +314,30 @@ def create_metrics_table(obs_study_id_list: list):
                     obs_study_dir, "2d_{}_vs_{}.json".format(target_1, target_2)
                 )
             )
+            for patient in patients_list:
+                for metric_type in [
+                    # Metric.DSC,
+                    Metric.MSD,
+                    Metric.HD95,
+                    # Metric.APL_PCT,
+                    # Metric.APL_VOXEL,
+                    # Metric.SDSC,
+                ]:
+                    if patient not in [Stat.AVG, Stat.MEDIAN]:
+                        cur_value = metrics_dict[f"patient={patient}"]
+                    else:
+                        cur_value = metrics_dict[patient]
+                    cur_value = cur_value[metric_type]["cross.plane"]
 
-            for metric in [
-                Metric.DSC,
-                Metric.MSD,
-                Metric.HD95,
-                Metric.APL_PCT,
-                Metric.APL_VOXEL,
-                Metric.SDSC,
-            ]:
-                for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-                    for stat in [
-                        # Stat.AVG,
-                        Stat.MEDIAN,
-                    ]:
-                        cur_value = metrics_dict[stat][metric][plane]
-                        for item in table_data:
-                            if (
-                                item[0] == metric
-                                and item[1] == plane
-                                and item[2] == stat
-                            ):
-                                if "Jesper" in obs_study_id:
-                                    item[3] = cur_value
-                                elif "Kenneth" in obs_study_id:
-                                    item[4] = cur_value
-                                elif "Hanna" in obs_study_id:
-                                    item[5] = cur_value
-                                break
+                    for item in table_data:
+                        if item[0] == patient and item[1] == metric_type:
+                            if "Jesper" in obs_study_id:
+                                item[2] = cur_value
+                            elif "Kenneth" in obs_study_id:
+                                item[3] = cur_value
+                            elif "Hanna" in obs_study_id:
+                                item[4] = cur_value
+                            break
 
         with open(table_path, "w", newline="") as file:
             writer = csv.writer(file)
@@ -533,7 +539,7 @@ def create_metrics_table(obs_study_id_list: list):
 #                     x_value = x_axis_dict[patient]
 #                     x_list.append(x_value)
 
-#                     y_value = y_axis_dict[patient][metric]["anatomical"]
+#                     y_value = y_axis_dict[patient][metric]["cross.plane"]
 #                     y_list.append(y_value)
 
 #                 # Perform linear regression

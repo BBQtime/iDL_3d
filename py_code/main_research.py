@@ -41,7 +41,7 @@ if __name__ == "__main__":
     # ]:
     #     gtvt_input_slices.calculate_metrics(obs_study_id)
 
-    # gtvt_input_slices.create_metrics_table(
+    # gtvt_input_slices.create_metrics_tables(
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
 
