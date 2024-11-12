@@ -284,12 +284,6 @@ def plot_metrics(obs_study_id_list: list):
         elif gtv != cur_gtv:
             g.error_exit("All items in obs_study_id_list should be same gtv type")
 
-    fig_path = os.path.join(
-        g.TRAIN_RESULTS_DIR,
-        "baseline_obs.study",
-        "3d_idl_vs_correct_{}.pdf".format(gtv),
-    )
-
     observers_list = ["Jesper", "Kenneth", "Hanna"]
     patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
         DatasetPart.TEST
@@ -451,5 +445,11 @@ def plot_metrics(obs_study_id_list: list):
     # plt.tight_layout(rect=[0, 0, 0.00, 0.95])  # Adjust rect to fit the suptitle
     plt.tight_layout()
 
-    # Save the plot as a PDF file in the specified directory
-    plt.savefig(fig_path, format="pdf")
+    # Save the plot as PDF and PNG files in the specified directory
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            f"3d_idl_vs_correct_{gtv}.{file_ext}",
+        )
+        plt.savefig(fig_path, format=file_ext)

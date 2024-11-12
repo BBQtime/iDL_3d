@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
     # for gtv_list in [
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID, "label"],
-    #     # [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
+    #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
     # ]:
     #     gtv_list = List(gtv_list)
     #     for pair in gtv_list.get_combinations(2):

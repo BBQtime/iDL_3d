@@ -358,7 +358,8 @@ def plot_iov():
 
             plt.tight_layout()
 
-            fig_path = os.path.join(
-                obs_study_dir, "iov_{}_{}.pdf".format(gtv, result_type)
-            )
-            plt.savefig(fig_path)
+            for file_ext in ["pdf", "png"]:
+                fig_path = os.path.join(
+                    obs_study_dir, f"iov_{gtv}_{result_type}.{file_ext}"
+                )
+                plt.savefig(fig_path, format=file_ext)

@@ -146,17 +146,18 @@ def plot_time_per_patient(obs_study_gtvt_id_list: list):
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
 
-    # Save the plot as a PDF file in the specified directory
-    fig_path = os.path.join(
-        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_patient.pdf"
-    )
-    plt.savefig(fig_path, format="pdf")
+    # Save the plot as PDF and PNG files in the specified directory
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", f"time_per_patient.{file_ext}"
+        )
+        plt.savefig(fig_path, format=file_ext)
 
 
 def plot_time_per_step(obs_study_gtvt_id_list: list):
     observers_list = ["Jesper", "Kenneth", "Hanna"]
     idl_step_list = [
-        ObsStudyTimer.CLICK_GTVT_CENTER,
+        # ObsStudyTimer.CLICK_GTVT_CENTER,
         ObsStudyTimer.DELINEATE_GTVT,
         ObsStudyTimer.WAIT_GTVT_PRED,
         ObsStudyTimer.CLICK_GTVN_CENTERS,
@@ -203,10 +204,8 @@ def plot_time_per_step(obs_study_gtvt_id_list: list):
             fig_data[idl_step]["value"] = g.calculate_avg(fig_data[idl_step]["value"])
 
         # set start points of each step
-        fig_data[ObsStudyTimer.CLICK_GTVT_CENTER]["start"] = 0
-        fig_data[ObsStudyTimer.DELINEATE_GTVT]["start"] = fig_data[
-            ObsStudyTimer.CLICK_GTVT_CENTER
-        ]["value"]
+        # fig_data[ObsStudyTimer.CLICK_GTVT_CENTER]["start"] = 0
+        fig_data[ObsStudyTimer.DELINEATE_GTVT]["start"] = 0
         fig_data[ObsStudyTimer.WAIT_GTVT_PRED]["start"] = fig_data[
             ObsStudyTimer.CLICK_GTVN_CENTERS
         ]["start"] = (
@@ -275,7 +274,7 @@ def plot_time_per_step(obs_study_gtvt_id_list: list):
         ax.grid(True)
 
         # set limit of x axis
-        ax.set_xlim(-0.5, 20)
+        ax.set_xlim(-0.5, 11.5)
 
         idx = 0
         for idl_step in idl_step_list:
@@ -297,8 +296,9 @@ def plot_time_per_step(obs_study_gtvt_id_list: list):
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
-    # Save the plot as a PDF file in the specified directory
-    fig_path = os.path.join(
-        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_step.pdf"
-    )
-    plt.savefig(fig_path, format="pdf")
+    # Save the plot as PDF and PNG files in the specified directory
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", f"time_per_step.{file_ext}"
+        )
+        plt.savefig(fig_path, format=file_ext)
