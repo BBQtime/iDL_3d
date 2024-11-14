@@ -31,6 +31,16 @@ if __name__ == "__main__":
     # ]:
     #     idl_vs_correction.calculate_metrics(obs_study_id)
 
+    # obs_study_id_list = [
+    #     JESPER_GTVT_ID,
+    #     KENNETH_GTVT_ID,
+    #     HANNA_GTVT_ID,
+    #     JESPER_GTVN_ID,
+    #     KENNETH_GTVN_ID,
+    #     HANNA_GTVN_ID,
+    # ]
+    # idl_vs_correction.create_metrics_tables(obs_study_id_list)
+
     # idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
     # idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
 

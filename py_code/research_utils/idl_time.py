@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
-from research_utils.research_core import COLOR_LIST
+from research_utils.research_core import COLOR_LIST, get_obs_study_patients_list
 from tqdm import tqdm
 
 
@@ -50,12 +50,7 @@ def __explain_idl_step(idl_step: str):
 
 
 def plot_time_per_patient(obs_study_gtvt_id_list: list):
-    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
-        DatasetPart.TEST
-    ]
-    patients_list = List(patients_list)
-    patients_list.remove("462")  # patient 462 is for testing
-
+    patients_list = get_obs_study_patients_list()
     observers_list = ["Jesper", "Kenneth", "Hanna"]
 
     fig_data = Dict()

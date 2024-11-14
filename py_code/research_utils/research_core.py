@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetVer, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stat
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
     dice,
@@ -175,6 +175,15 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
         metric_dict[Stat.MEDIAN][metric_type] = median
 
     g.save_json(metric_dict, os.path.join(baseline_dir, "inference_au_gtvs.json"))
+
+
+def get_obs_study_patients_list():
+    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
+        DatasetPart.TEST
+    ]
+    patients_list = List(patients_list)
+    patients_list.remove("462")  # patient 462 is for exercise
+    return patients_list
 
 
 update_font_size()

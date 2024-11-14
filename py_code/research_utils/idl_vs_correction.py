@@ -26,7 +26,11 @@ from metric_utils.metric_func import (
     hausdorff_distance_95,
     surface_dice,
 )
-from research_utils.research_core import COLOR_LIST, explain_metric
+from research_utils.research_core import (
+    COLOR_LIST,
+    explain_metric,
+    get_obs_study_patients_list,
+)
 from tqdm import tqdm
 
 
@@ -196,77 +200,86 @@ def calculate_metrics(obs_study_id: str):
     g.save_json(data=metrics_dict, path=metrics_path)
 
 
-# def create_metrics_table(obs_study_id_list: list):
-#     table_path = Dict()
-#     table_data = Dict()
+def create_metrics_tables(obs_study_id_list: list):
+    table_path = Dict()
+    table_data = Dict()
+    patients_list = Dict()
 
-#     for i in ["gtvt", "gtvn"]:
-#         table_path[i] = os.path.join(
-#             g.TRAIN_RESULTS_DIR,
-#             "baseline_obs.study",
-#             "3d_idl_vs_correct_{}.csv".format(i),
-#         )
+    # init an empty table with title only
+    for gtv in ["gtvt", "gtvn"]:
+        patients_list[gtv] = get_obs_study_patients_list()
+        if gtv == "gtvn":
+            # patient 536 does not have gtvn
+            patients_list[gtv].remove("536")
+        patients_list[gtv] = List([Stat.AVG, Stat.MEDIAN]) + patients_list[gtv]
 
-#         table_data[i] = [
-#             ["Metric", "Statistics", "Jesper", "Kenneth", "Hanna"],  # Header row
-#         ]
-#         for metric in [
-#             Metric.DSC,
-#             Metric.MSD,
-#             Metric.HD95,
-#             Metric.APL_PCT,
-#             Metric.APL_VOXEL,
-#             Metric.SDSC,
-#         ]:
-#             for stat in [
-#                 # Stat.AVG,
-#                 Stat.MEDIAN,
-#             ]:
-#                 cur_item = [metric, stat, "", "", ""]
-#                 table_data[i].append(cur_item)
+        table_path[gtv] = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            f"3d_idl_vs_correct_{gtv}.csv",
+        )
 
-#     for obs_study_id in tqdm(obs_study_id_list):
-#         if obs_study_id.startswith("idl.gtvn_"):
-#             cur_table_data = table_data["gtvn"]
-#         elif obs_study_id.startswith("idl.gtvt_"):
-#             cur_table_data = table_data["gtvt"]
-#         else:
-#             g.error_exit("obs study train id error")
+        # Header row
+        table_data[gtv] = [["Patient", "Metric", "Jesper", "Kenneth", "Hanna"]]
 
-#         obs_study_dir = os.path.join(
-#             g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
-#         )
-#         metrics_dict = g.load_json(
-#             os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
-#         )
+        for patient in patients_list[gtv]:
+            for metric_type in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
 
-#         for metric in [
-#             Metric.DSC,
-#             Metric.MSD,
-#             Metric.HD95,
-#             Metric.APL_PCT,
-#             Metric.APL_VOXEL,
-#             Metric.SDSC,
-#         ]:
-#             for stat in [
-#                 # Stat.AVG,
-#                 Stat.MEDIAN,
-#             ]:
-#                 cur_value = metrics_dict[stat][metric]
-#                 for item in cur_table_data:
-#                     if item[0] == metric and item[1] == stat:
-#                         if "Jesper" in obs_study_id:
-#                             item[2] = cur_value
-#                         elif "Kenneth" in obs_study_id:
-#                             item[3] = cur_value
-#                         elif "Hanna" in obs_study_id:
-#                             item[4] = cur_value
-#                         break
+                cur_item = [patient, metric_type, "", "", ""]
+                table_data[gtv].append(cur_item)
 
-#     for i in ["gtvt", "gtvn"]:
-#         with open(table_path[i], "w", newline="") as file:
-#             writer = csv.writer(file)
-#             writer.writerows(table_data[i])
+    for obs_study_id in tqdm(obs_study_id_list):
+        if obs_study_id.startswith("idl.gtvn_"):
+            gtv = "gtvn"
+        elif obs_study_id.startswith("idl.gtvt_"):
+            gtv = "gtvt"
+        else:
+            g.error_exit("obs study train id error")
+
+        obs_study_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_id
+        )
+        metrics_dict = g.load_json(
+            os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
+        )
+        # record metrics
+        for patient in patients_list[gtv]:
+            for metric_type in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
+                if patient not in [Stat.AVG, Stat.MEDIAN]:
+                    cur_value = metrics_dict[f"patient={patient}"]
+                else:
+                    cur_value = metrics_dict[patient]
+                cur_value = cur_value[metric_type]
+
+                for item in table_data[gtv]:
+                    if item[0] == patient and item[1] == metric_type:
+                        if "Jesper" in obs_study_id:
+                            item[2] = cur_value
+                        elif "Kenneth" in obs_study_id:
+                            item[3] = cur_value
+                        elif "Hanna" in obs_study_id:
+                            item[4] = cur_value
+                        break
+
+    # save csv tables
+    for gtv in ["gtvt", "gtvn"]:
+        with open(table_path[gtv], "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerows(table_data[gtv])
 
 
 def plot_metrics(obs_study_id_list: list):
@@ -284,12 +297,8 @@ def plot_metrics(obs_study_id_list: list):
         elif gtv != cur_gtv:
             g.error_exit("All items in obs_study_id_list should be same gtv type")
 
+    patients_list = get_obs_study_patients_list()
     observers_list = ["Jesper", "Kenneth", "Hanna"]
-    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
-        DatasetPart.TEST
-    ]
-    patients_list = List(patients_list)
-    patients_list.remove("462")  # patient 462 is for testing
 
     # init label of x axis
     x_label = []

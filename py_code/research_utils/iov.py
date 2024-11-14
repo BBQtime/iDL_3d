@@ -19,7 +19,11 @@ from metric_utils.metric_func import (
     hausdorff_distance_95,
     surface_dice,
 )
-from research_utils.research_core import FONT_SIZE, explain_metric
+from research_utils.research_core import (
+    FONT_SIZE,
+    explain_metric,
+    get_obs_study_patients_list,
+)
 from tqdm import tqdm
 
 
@@ -67,11 +71,7 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
         g.error_exit("2 observers cannot be identical.")
 
     # init patients
-    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
-        DatasetPart.TEST
-    ]
-    patients_list = List(patients_list)
-    patients_list.remove("462")
+    patients_list = get_obs_study_patients_list()
     if gtv == "gtvn":
         # patient 536 doesnt have gtvn
         patients_list.remove("536")

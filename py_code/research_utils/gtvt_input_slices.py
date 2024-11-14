@@ -28,7 +28,11 @@ from metric_utils.metric_func import (
     surface_dice,
     surface_distances,
 )
-from research_utils.research_core import COLOR_LIST, explain_metric
+from research_utils.research_core import (
+    COLOR_LIST,
+    explain_metric,
+    get_obs_study_patients_list,
+)
 from tqdm import tqdm
 
 
@@ -265,11 +269,7 @@ def create_metrics_tables(obs_study_id_list: list):
         ("delineation", "correct"),
     ]
 
-    patients_list = g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.OBS_STUDY])[
-        DatasetPart.TEST
-    ]
-    patients_list = List(patients_list)
-    patients_list.remove("462")  # patient 462 is for testing
+    patients_list = get_obs_study_patients_list()
     patients_list = List([Stat.AVG, Stat.MEDIAN]) + patients_list
 
     for target_1, target_2 in target_pairs:
