@@ -16,6 +16,8 @@ if __name__ == "__main__":
     g.clear_linux_trash()
     g.clear_debug_data()
 
+    gtvt_input_slices.plot_bias_gtvt_center()
+
     # calculate_idl_gtvs_metric(
     #     idl_gtvt_id="idl.gtvt_au.ext_center",
     #     idl_gtvn_id="idl.gtvn_au_multi.clicks",

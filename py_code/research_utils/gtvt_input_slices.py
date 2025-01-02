@@ -592,3 +592,89 @@ def create_metrics_tables(obs_study_id_list: list):
 #         plt.tight_layout()
 #         # Save the plot as a PDF file in the specified directory
 #         plt.savefig(fig_path, format="pdf")
+
+
+def plot_bias_gtvt_center():
+    metrics = [Metric.DSC, Metric.MSD, Metric.HD95]
+
+    data = Dict()
+    baseline_au_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_au")
+    bias_results_dirs = g.get_sub_dirs(
+        baseline_au_dir,
+        key_word="au.ext_bias.center.",
+        full_path=True,
+    )
+    # Loop through bias results dirs and load metrics of each patient
+    for bias_result_dir in bias_results_dirs:
+        idx = bias_results_dirs.index(bias_result_dir)
+        metric_json_path = os.path.join(bias_result_dir, "inference_au.ext_test.json")
+        metric_dict = g.load_json(metric_json_path)
+        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+            if idx not in data:
+                data[idx] = {}
+            if metric_type not in data[idx]:
+                data[idx][metric_type] = []
+            for patient in metric_dict.keys():
+                if patient in [Stat.AVG, Stat.MEDIAN]:
+                    continue
+                cur_value = metric_dict[patient][metric_type]["round=01"]
+                if cur_value is not None:  # Ensure the value is not None
+                    data[idx][metric_type].append(cur_value)
+
+    # CoG baseline values
+    cog_baseline = {
+        Metric.DSC: 0.867687026176512,
+        Metric.MSD: 1.2264917672792,
+        Metric.HD95: 3.60555127546398,
+    }
+
+    # Plotting
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
+    fig.suptitle("iDL with Biased CoG(Center of Gravity) for GTVt", fontsize=16)
+    colors = plt.cm.tab10(np.linspace(0, 1, len(bias_results_dirs)))
+
+    for i, metric_type in enumerate(metrics):
+        ax = axes[i]
+
+        # Collect data for the current metric
+        metric_data = [data[idx][metric_type] for idx in range(10)]
+
+        # Boxplot for each experiment with individual colors
+        for idx, experiment_data in enumerate(metric_data):
+            ax.boxplot(
+                [experiment_data],
+                positions=[idx],
+                patch_artist=True,
+                boxprops=dict(facecolor=colors[idx % len(colors)]),
+                widths=0.5,
+                medianprops=dict(color="white", linewidth=2),
+            )
+
+        # Add baseline as dashed line
+        ax.axhline(
+            y=cog_baseline[metric_type],
+            color="black",
+            linestyle="--",
+            linewidth=2,
+            label="CoG Baseline",
+        )
+
+        # Formatting
+        ax.set_title(metric_type.upper())
+        ax.set_xlabel("Experiment ID")
+        ax.set_ylabel("Metric Value")
+        ax.set_xticks(range(10))
+
+        if i == 0:  # Add legend to the first subplot
+            ax.legend()
+
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0.03, 1, 1])
+
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            f"bias_gtvt_center.{file_ext}",
+        )
+        plt.savefig(fig_path, format=file_ext)
