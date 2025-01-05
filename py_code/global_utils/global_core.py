@@ -646,13 +646,15 @@ def load_setting_global_json(
 
 
 # after json loaded, key(int) will become string
-def load_json(path: str) -> Dict:
+def load_json(path: str, overwrite_sorted: bool = False) -> Dict:
     with open(path, mode="r") as json_file:
         data = json.load(json_file)
     data = Dict(data)
-    # call "save_json" to sort key
+    # sort by keys
     data = sort_json_dict(data)
-    # save_json(data=data, path=path)
+    # overwrite json with sorted keys
+    if overwrite_sorted:
+        save_json(data=data, path=path)
     return data
 
 

@@ -7,7 +7,6 @@ class ErrMsg:
 class SelectScenario:
     LARGEST = "largest"
     GRAVITY_CENTER = "gravity.center"
-    BIAS_GRAVITY_CENTER = "bias.gravity.center"
     EQUAL_DIVIDE = "equal.divide"
     RANDOM = "random"
     USER_CLICK = "user.click"

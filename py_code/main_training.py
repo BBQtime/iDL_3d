@@ -129,17 +129,17 @@ if __name__ == "__main__":
     #     debug_mode=1,
     # )
 
-    # idl_gtvt = IDLGTVtTraining()
-    # for baseline_id in [
-    #     "baseline_au",
-    #     # "baseline_au_no.pt",
-    # ]:
-    #     idl_gtvt.simulation(
-    #         baseline_id=baseline_id,
-    #         device_id=0,
-    #         train_remark="",
-    #         debug_mode=0,
-    #     )
+    idl_gtvt = IDLGTVtTraining()
+    for baseline_id in [
+        "baseline_au",
+        # "baseline_au_no.pt",
+    ]:
+        idl_gtvt.simulation(
+            baseline_id=baseline_id,
+            device_id=0,
+            train_remark=DatasetVer.AU_EXT,
+            debug_mode=0,
+        )
     # idl_gtvt.inference(
     #     idl_gtvt_id="idl.gtvt_obs.study_bug",
     #     debug_mode=0,

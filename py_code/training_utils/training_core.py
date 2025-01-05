@@ -326,7 +326,7 @@ class TrainingCore:
 
     def _load_hyper_series_from_json(self, path: str) -> List:
         hyper_series_list = List()
-        origin_hyper_dict = g.load_json(path)
+        origin_hyper_dict = g.load_json(path, overwrite_sorted=True)
         hyper_keys = origin_hyper_dict.keys()
 
         # make sure all values of hyper dict are "list" type

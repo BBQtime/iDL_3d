@@ -156,10 +156,19 @@ class IDLGTVtTraining(TrainingCore):
             SelectScenario.USER_CLICK,
             SelectScenario.LARGEST,
             SelectScenario.GRAVITY_CENTER,
-            SelectScenario.BIAS_GRAVITY_CENTER,
             SelectScenario.EQUAL_DIVIDE,
         ]:
             hyper["select.scenario"] = SelectScenario.RANDOM
+
+        # bias range of gravity center
+        try:
+            bias_range = int(hyper["gravity.center.bias.range"])
+        except (ValueError, TypeError):
+            bias_range = 0
+        # Clamp the value within the desired range (0 to 20)
+        bias_range = g.clamp_value(bias_range, (0, 20))
+        # Update the dictionary
+        hyper["gravity.center.bias.range"] = bias_range
 
         # weight map parameters
         hyper["weight.background"] = g.clamp_value(
@@ -262,54 +271,56 @@ class IDLGTVtTraining(TrainingCore):
             g.error_exit("label is empty!")
 
         # get gravity center of label
-        if (
-            hyper["select.scenario"]
-            in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
-            and cur_round == 1
-        ):
+        if hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER and cur_round == 1:
             d, h, w = measurements.center_of_mass(label)
             # float to int
             gravity_center = (round(d), round(h), round(w))
 
             if hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER:
-                gtvt_click = gravity_center
+                bias_range = hyper["gravity.center.bias.range"]
 
-            # simulate biased gravity center
-            elif hyper["select.scenario"] == SelectScenario.BIAS_GRAVITY_CENTER:
+                if bias_range <= 0:
+                    gtvt_click = gravity_center
 
-                while_counter = 0
-                while 1:
-                    while_counter += 1
-                    # cant find biased gravity center after 50 times attempts
-                    # use gravity center instead
-                    if while_counter >= 50:
-                        print("bias gravity center - while counter: ", while_counter)
-                        gtvt_click = gravity_center
-                        break
+                # simulate biased gravity center
+                else:
+                    while_counter = 0
+                    while 1:
+                        while_counter += 1
+                        # cant find biased gravity center after 50 times attempts
+                        # use gravity center instead
+                        if while_counter >= 50:
+                            print(
+                                "bias gravity center - while counter: ", while_counter
+                            )
+                            gtvt_click = gravity_center
+                            break
 
-                    # add random bias
-                    random_bias = (
-                        random.randint(-5, 5),
-                        random.randint(-5, 5),
-                        random.randint(-5, 5),
-                    )
-                    d, h, w = gravity_center
-                    d += random_bias[0]
-                    h += random_bias[1]
-                    w += random_bias[2]
+                        # add random bias
+                        random_bias = (
+                            random.randint(-bias_range, bias_range),
+                            random.randint(-bias_range, bias_range),
+                            random.randint(-bias_range, bias_range),
+                        )
+                        d, h, w = gravity_center
+                        d += random_bias[0]
+                        h += random_bias[1]
+                        w += random_bias[2]
 
-                    # check if biased label center is inside label
-                    if (
-                        0 <= d < label.shape[0]
-                        and 0 <= h < label.shape[1]
-                        and 0 <= w < label.shape[2]
-                        and label[d, h, w] > 0
-                    ):
-                        print("bias gravity center - while counter: ", while_counter)
-                        gtvt_click = (d, h, w)
-                        break
-                    else:
-                        continue
+                        # check if biased label center is inside label
+                        if (
+                            0 <= d < label.shape[0]
+                            and 0 <= h < label.shape[1]
+                            and 0 <= w < label.shape[2]
+                            and label[d, h, w] > 0
+                        ):
+                            # print(
+                            #     "bias gravity center - while counter: ", while_counter
+                            # )
+                            gtvt_click = (d, h, w)
+                            break
+                        else:
+                            continue
 
         # select slices through each plane
         for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
@@ -351,8 +362,7 @@ class IDLGTVtTraining(TrainingCore):
 
             # "gravity.center", round = 1
             elif (
-                hyper["select.scenario"]
-                in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
+                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
                 and cur_round == 1
             ):
                 d, h, w = gtvt_click
@@ -385,8 +395,7 @@ class IDLGTVtTraining(TrainingCore):
 
             # make sure number of new_round_slices is no more than select.step
             if (
-                hyper["select.scenario"]
-                in [SelectScenario.GRAVITY_CENTER, SelectScenario.BIAS_GRAVITY_CENTER]
+                hyper["select.scenario"] == SelectScenario.GRAVITY_CENTER
                 and cur_round == 1
             ):
                 new_slices_num = 1
