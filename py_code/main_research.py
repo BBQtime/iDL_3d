@@ -57,13 +57,15 @@ if __name__ == "__main__":
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
 
-    for gtv_list in [
-        [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
-        [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID, "label"],
-    ]:
-        gtv_list = List(gtv_list)
-        for pair in gtv_list.get_combinations(2):
-            iov.calculate_iov(pair[0], pair[1])
+    # for gtv_list in [
+    #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
+    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID, "label"],
+    # ]:
+    #     gtv_list = List(gtv_list)
+    #     for pair in gtv_list.get_combinations(2):
+    #         iov.calculate_iov(pair[0], pair[1])
+
+    iov.create_median_table()
 
     # iov.plot_iov()
 

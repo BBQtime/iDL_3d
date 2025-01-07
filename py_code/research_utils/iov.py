@@ -1,3 +1,4 @@
+import csv
 import os
 
 import global_utils.global_core as g
@@ -247,6 +248,52 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
         final_dict = Dict()
     final_dict[gtv] = metrics_dict
     g.save_json(data=final_dict, path=metrics_path)
+
+
+def create_median_table():
+    obs_study_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
+    observer_mapping = {
+        "Obs. 1 vs 2": "iov_Jesper_vs_Kenneth.json",
+        "Obs. 2 vs 3": "iov_Kenneth_vs_Hanna.json",
+        "Obs. 1 vs 3": "iov_Jesper_vs_Hanna.json",
+        "Obs. 1 vs label": "iov_Jesper_vs_Label.json",
+        "Obs. 2 vs label": "iov_Kenneth_vs_Label.json",
+        "Obs. 3 vs label": "iov_Hanna_vs_Label.json",
+    }
+    table_data = [["Observers", "DSC", "MSD (mm)", "HD95 (mm)"]]
+
+    for gtv in ["GTVt", "GTVn"]:
+        table_data.append([gtv, "", "", ""])
+
+        for obs_pair in observer_mapping:
+            new_row = [obs_pair]
+            # open json
+            json_name = observer_mapping[obs_pair]
+            json_data = g.load_json(os.path.join(obs_study_dir, json_name))
+            # iov of final correction
+            json_data = json_data[gtv.lower()]["correct"]
+            # each metric type
+            for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+                median_value = json_data[Stats.MEDIAN][metric_type]
+                min_value = json_data[Stats.MIN][metric_type]
+                max_value = json_data[Stats.MAX][metric_type]
+                # rounding off
+                decimal_places = 2 if metric_type == Metric.DSC else 1
+                # median_value = round(median_value, decimal_places)
+                median_value = f"{median_value:.{decimal_places}f}"
+                min_value = f"{min_value:.{decimal_places}f}"
+                max_value = f"{max_value:.{decimal_places}f}"
+                # add metric of current metric type
+                new_row.append(f"{median_value} ({min_value}~{max_value})")
+            # add new row
+            table_data.append(new_row)
+        # add empty row after gtvt/gtvn
+        table_data.append(["", "", "", ""])
+
+    table_path = os.path.join(obs_study_dir, "iov_median.csv")
+    with open(table_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(table_data)
 
 
 def plot_iov():
