@@ -43,8 +43,8 @@ if __name__ == "__main__":
     # ]
     # idl_vs_correction.create_metrics_tables(obs_study_id_list)
 
-    # idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
-    # idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
+    idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
+    idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
 
     # for obs_study_id in [
     #     JESPER_GTVT_ID,
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #     for pair in gtv_list.get_combinations(2):
     #         iov.calculate_iov(pair[0], pair[1])
 
-    iov.create_median_table()
+    # iov.create_median_table()
 
     # iov.plot_iov()
 

@@ -19,6 +19,7 @@ from global_utils.str_lib import (
     ObsStudyGTVtStep,
     Stats,
 )
+from matplotlib.ticker import PercentFormatter
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
@@ -403,9 +404,12 @@ def plot_metrics(obs_study_id_list: list):
 
         # Define y-axis range to accommodate label placement above 1.0
         # Define y-axis ticks to display key points including 1.0
-        if metric == Metric.DSC or metric == Metric.SDSC or metric == Metric.APL_PCT:
+        if metric in [Metric.DSC, Metric.SDSC]:
+            ax.set_ylim(0.5, 1.05)
+
+        elif metric == Metric.APL_PCT:
             ax.set_ylim(0, 1.1)
-            # ax.set_yticks(np.linspace(0, 1, 6))
+            ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
 
         # Set x-axis ticks to be centered under each group of bars
         ax.set_xticks(indices + bar_width)
