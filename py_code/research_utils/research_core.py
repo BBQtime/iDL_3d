@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stats
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
     dice,
@@ -75,8 +75,8 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
 
     metric_dict = Dict()
     for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-        metric_dict[Stat.AVG][metric_type] = []
-        metric_dict[Stat.MEDIAN][metric_type] = []
+        metric_dict[Stats.AVG][metric_type] = []
+        metric_dict[Stats.MEDIAN][metric_type] = []
 
     patient_list = List(g.load_json(g.DATASET_SPLIT_PATH[DatasetVer.AU_EXT])["test"])
     for patient in patient_list:
@@ -165,14 +165,14 @@ def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
                     voxel_spacing=g.NII_SPACING,
                 )
             metric_dict["patient={}".format(patient)][metric_type] = metric_num
-            metric_dict[Stat.AVG][metric_type].append(metric_num)
-            metric_dict[Stat.MEDIAN][metric_type].append(metric_num)
+            metric_dict[Stats.AVG][metric_type].append(metric_num)
+            metric_dict[Stats.MEDIAN][metric_type].append(metric_num)
 
     for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-        avg = g.calculate_avg(metric_dict[Stat.AVG][metric_type])
-        metric_dict[Stat.AVG][metric_type] = avg
-        median = g.calculate_median(metric_dict[Stat.MEDIAN][metric_type])
-        metric_dict[Stat.MEDIAN][metric_type] = median
+        avg = g.calculate_avg(metric_dict[Stats.AVG][metric_type])
+        metric_dict[Stats.AVG][metric_type] = avg
+        median = g.calculate_median(metric_dict[Stats.MEDIAN][metric_type])
+        metric_dict[Stats.MEDIAN][metric_type] = median
 
     g.save_json(metric_dict, os.path.join(baseline_dir, "inference_au_gtvs.json"))
 

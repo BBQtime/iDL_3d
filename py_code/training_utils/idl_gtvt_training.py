@@ -22,7 +22,7 @@ from global_utils.str_lib import (
     Metric,
     Plane,
     SelectScenario,
-    Stat,
+    Stats,
 )
 from loss_utils.idl_gtvt_loss import IDLGTVtLoss
 from numpy import ndarray
@@ -1210,7 +1210,7 @@ class IDLGTVtTraining(TrainingCore):
 
         # add all patients score in to a list
         for patient in scores:
-            if patient == Stat.MEDIAN or patient == Stat.AVG:
+            if patient == Stats.MEDIAN or patient == Stats.AVG:
                 continue
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 for cur_round in scores[patient][metric]:
@@ -1222,10 +1222,10 @@ class IDLGTVtTraining(TrainingCore):
         # calculate median score
         for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
             for cur_round in all_patient_scores[metric]:
-                scores[Stat.MEDIAN][metric][cur_round] = g.calculate_median(
+                scores[Stats.MEDIAN][metric][cur_round] = g.calculate_median(
                     all_patient_scores[metric][cur_round]
                 )
-                scores[Stat.AVG][metric][cur_round] = g.calculate_avg(
+                scores[Stats.AVG][metric][cur_round] = g.calculate_avg(
                     all_patient_scores[metric][cur_round]
                 )
         g.save_json(data=scores, path=os.path.join(score_json_path))

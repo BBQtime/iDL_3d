@@ -18,7 +18,7 @@ from global_utils.str_lib import (
     Metric,
     ObsStudyGTVtStep,
     Plane,
-    Stat,
+    Stats,
 )
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
@@ -54,7 +54,7 @@ def calculate_metrics(obs_study_id: str):
         metrics_path = os.path.join(
             obs_study_dir, "2d_{}_vs_{}.json".format(target_1, target_2)
         )
-        for stat in [Stat.AVG, Stat.MEDIAN]:
+        for stats in [Stats.AVG, Stats.MEDIAN]:
             for metric in [
                 Metric.DSC,
                 Metric.MSD,
@@ -67,7 +67,7 @@ def calculate_metrics(obs_study_id: str):
                 if metric == Metric.MSD or metric == Metric.HD95:
                     plane_list.append("cross.plane")
                 for plane in plane_list:
-                    metrics_dict[stat][metric][plane] = []
+                    metrics_dict[stats][metric][plane] = []
         g.save_json(data=metrics_dict, path=metrics_path)
 
         patient_list = []
@@ -214,7 +214,7 @@ def calculate_metrics(obs_study_id: str):
                 metrics_dict[patient][Metric.SDSC][plane] = sdsc
 
                 # record value for avg and median calculation
-                for stat in [Stat.AVG, Stat.MEDIAN]:
+                for stats in [Stats.AVG, Stats.MEDIAN]:
                     for metric in [
                         Metric.DSC,
                         Metric.MSD,
@@ -223,7 +223,7 @@ def calculate_metrics(obs_study_id: str):
                         Metric.APL_VOXEL,
                         Metric.SDSC,
                     ]:
-                        metrics_dict[stat][metric][plane].append(
+                        metrics_dict[stats][metric][plane].append(
                             metrics_dict[patient][metric][plane]
                         )
 
@@ -233,9 +233,9 @@ def calculate_metrics(obs_study_id: str):
                 sds_full, 95
             )
             # record value for avg and median calculation
-            for stat in [Stat.AVG, Stat.MEDIAN]:
+            for stats in [Stats.AVG, Stats.MEDIAN]:
                 for metric in [Metric.MSD, Metric.HD95]:
-                    metrics_dict[stat][metric]["cross.plane"].append(
+                    metrics_dict[stats][metric]["cross.plane"].append(
                         metrics_dict[patient][metric]["cross.plane"]
                     )
 
@@ -252,11 +252,11 @@ def calculate_metrics(obs_study_id: str):
             if metric == Metric.MSD or metric == Metric.HD95:
                 plane_list.append("cross.plane")
             for plane in plane_list:
-                metrics_dict[Stat.MEDIAN][metric][plane] = g.calculate_median(
-                    metrics_dict[Stat.MEDIAN][metric][plane]
+                metrics_dict[Stats.MEDIAN][metric][plane] = g.calculate_median(
+                    metrics_dict[Stats.MEDIAN][metric][plane]
                 )
-                metrics_dict[Stat.AVG][metric][plane] = g.calculate_avg(
-                    metrics_dict[Stat.AVG][metric][plane]
+                metrics_dict[Stats.AVG][metric][plane] = g.calculate_avg(
+                    metrics_dict[Stats.AVG][metric][plane]
                 )
 
         g.save_json(data=metrics_dict, path=metrics_path)
@@ -270,7 +270,7 @@ def create_metrics_tables(obs_study_id_list: list):
     ]
 
     patients_list = get_obs_study_patients_list()
-    patients_list = List([Stat.AVG, Stat.MEDIAN]) + patients_list
+    patients_list = List([Stats.AVG, Stats.MEDIAN]) + patients_list
 
     for target_1, target_2 in target_pairs:
         print(f"2D {target_1} vs {target_2}")
@@ -323,7 +323,7 @@ def create_metrics_tables(obs_study_id_list: list):
                     # Metric.APL_VOXEL,
                     # Metric.SDSC,
                 ]:
-                    if patient not in [Stat.AVG, Stat.MEDIAN]:
+                    if patient not in [Stats.AVG, Stats.MEDIAN]:
                         cur_value = metrics_dict[f"patient={patient}"]
                     else:
                         cur_value = metrics_dict[patient]
@@ -354,10 +354,10 @@ def create_metrics_tables(obs_study_id_list: list):
 
 #     metrics_dict = Dict()
 #     metrics_path = os.path.join(obs_study_dir, "gtvt_input_inconsistency.json")
-#     for stat in [Stat.AVG, Stat.MEDIAN]:
-#         metrics_dict[stat] = []
+#     for stats in [Stats.AVG, Stats.MEDIAN]:
+#         metrics_dict[stats] = []
 #         # for plane in [Plane.TRANSVERSE, Plane.CORONAL, Plane.SAGITTAL]:
-#         #     metrics_dict[stat][plane] = []
+#         #     metrics_dict[stats][plane] = []
 #     g.save_json(data=metrics_dict, path=metrics_path)
 
 #     # get patients
@@ -439,12 +439,12 @@ def create_metrics_tables(obs_study_id_list: list):
 #         metrics_dict[patient] = round(hd100)
 
 #         # record value for avg and median calculation
-#         for stat in [Stat.AVG, Stat.MEDIAN]:
-#             metrics_dict[stat].append(hd100)
+#         for stats in [Stats.AVG, Stats.MEDIAN]:
+#             metrics_dict[stats].append(hd100)
 
 #     # calculate avg and median
-#     metrics_dict[Stat.MEDIAN] = g.calculate_median(metrics_dict[Stat.MEDIAN])
-#     metrics_dict[Stat.AVG] = g.calculate_avg(metrics_dict[Stat.AVG])
+#     metrics_dict[Stats.MEDIAN] = g.calculate_median(metrics_dict[Stats.MEDIAN])
+#     metrics_dict[Stats.AVG] = g.calculate_avg(metrics_dict[Stats.AVG])
 
 #     g.save_json(data={"hd100": metrics_dict}, path=metrics_path)
 
@@ -615,7 +615,7 @@ def plot_bias_gtvt_center():
             if metric_type not in data[idx]:
                 data[idx][metric_type] = []
             for patient in metric_dict.keys():
-                if patient in [Stat.AVG, Stat.MEDIAN]:
+                if patient in [Stats.AVG, Stats.MEDIAN]:
                     continue
                 cur_value = metric_dict[patient][metric_type]["round=01"]
                 if cur_value is not None:  # Ensure the value is not None

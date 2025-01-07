@@ -17,7 +17,7 @@ from global_utils.str_lib import (
     Metric,
     ObsStudyGTVnStep,
     ObsStudyGTVtStep,
-    Stat,
+    Stats,
 )
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
@@ -48,7 +48,7 @@ def calculate_metrics(obs_study_id: str):
 
     metrics_dict = Dict()
     metrics_path = os.path.join(obs_study_dir, "3d_idl_vs_correct.json")
-    for stat in [Stat.AVG, Stat.MEDIAN]:
+    for stats in [Stats.AVG, Stats.MEDIAN]:
         for metric in [
             Metric.DSC,
             Metric.MSD,
@@ -57,7 +57,7 @@ def calculate_metrics(obs_study_id: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            metrics_dict[stat][metric] = []
+            metrics_dict[stats][metric] = []
     g.save_json(data=metrics_dict, path=metrics_path)
 
     # open "obs_study_step.json" and find approved patients
@@ -172,7 +172,7 @@ def calculate_metrics(obs_study_id: str):
             metrics_dict[patient][Metric.SDSC] = 1.0
 
         # record value for avg and median calculation
-        for stat in [Stat.AVG, Stat.MEDIAN]:
+        for stats in [Stats.AVG, Stats.MEDIAN]:
             for metric in [
                 Metric.DSC,
                 Metric.MSD,
@@ -181,7 +181,7 @@ def calculate_metrics(obs_study_id: str):
                 Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
-                metrics_dict[stat][metric].append(metrics_dict[patient][metric])
+                metrics_dict[stats][metric].append(metrics_dict[patient][metric])
 
     # calculate avg and median
     for metric in [
@@ -192,10 +192,12 @@ def calculate_metrics(obs_study_id: str):
         Metric.APL_VOXEL,
         Metric.SDSC,
     ]:
-        metrics_dict[Stat.MEDIAN][metric] = g.calculate_median(
-            metrics_dict[Stat.MEDIAN][metric]
+        metrics_dict[Stats.MEDIAN][metric] = g.calculate_median(
+            metrics_dict[Stats.MEDIAN][metric]
         )
-        metrics_dict[Stat.AVG][metric] = g.calculate_avg(metrics_dict[Stat.AVG][metric])
+        metrics_dict[Stats.AVG][metric] = g.calculate_avg(
+            metrics_dict[Stats.AVG][metric]
+        )
 
     g.save_json(data=metrics_dict, path=metrics_path)
 
@@ -211,7 +213,7 @@ def create_metrics_tables(obs_study_id_list: list):
         if gtv == "gtvn":
             # patient 536 does not have gtvn
             patients_list[gtv].remove("536")
-        patients_list[gtv] = List([Stat.AVG, Stat.MEDIAN]) + patients_list[gtv]
+        patients_list[gtv] = List([Stats.AVG, Stats.MEDIAN]) + patients_list[gtv]
 
         table_path[gtv] = os.path.join(
             g.TRAIN_RESULTS_DIR,
@@ -259,7 +261,7 @@ def create_metrics_tables(obs_study_id_list: list):
                 Metric.APL_VOXEL,
                 Metric.SDSC,
             ]:
-                if patient not in [Stat.AVG, Stat.MEDIAN]:
+                if patient not in [Stats.AVG, Stats.MEDIAN]:
                     cur_value = metrics_dict[f"patient={patient}"]
                 else:
                     cur_value = metrics_dict[patient]

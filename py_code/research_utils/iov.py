@@ -11,7 +11,7 @@ import numpy as np
 import seaborn as sns
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, Metric, Stats
 from metric_utils.added_path_len import APL
 from metric_utils.metric_func import (
     avg_surface_distance_symmetric,
@@ -80,16 +80,15 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
     metrics_dict = Dict()
 
     for result_type in ["idl", "correct"]:
-        for stat in [Stat.AVG, Stat.MEDIAN]:
-            for metric in [
-                Metric.DSC,
-                Metric.MSD,
-                Metric.HD95,
-                Metric.APL_PCT,
-                Metric.APL_VOXEL,
-                Metric.SDSC,
-            ]:
-                metrics_dict[result_type][stat][metric] = []
+        for metric in [
+            Metric.DSC,
+            Metric.MSD,
+            Metric.HD95,
+            Metric.APL_PCT,
+            Metric.APL_VOXEL,
+            Metric.SDSC,
+        ]:
+            metrics_dict[result_type][Stats.AVG][metric] = []
 
         for patient in tqdm(patients_list):
             patient = "patient={}".format(patient)
@@ -200,19 +199,18 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             metrics_dict[result_type][patient][Metric.APL_VOXEL] = apl_voxel
             metrics_dict[result_type][patient][Metric.SDSC] = sdsc
 
-            # record value for avg and median calculation
-            for stat in [Stat.AVG, Stat.MEDIAN]:
-                for metric in [
-                    Metric.DSC,
-                    Metric.MSD,
-                    Metric.HD95,
-                    Metric.APL_PCT,
-                    Metric.APL_VOXEL,
-                    Metric.SDSC,
-                ]:
-                    metrics_dict[result_type][stat][metric].append(
-                        metrics_dict[result_type][patient][metric]
-                    )
+            # record value for avg/median/max/min calculation
+            for metric in [
+                Metric.DSC,
+                Metric.MSD,
+                Metric.HD95,
+                Metric.APL_PCT,
+                Metric.APL_VOXEL,
+                Metric.SDSC,
+            ]:
+                metrics_dict[result_type][Stats.AVG][metric].append(
+                    metrics_dict[result_type][patient][metric]
+                )
 
         # calculate avg and median
         for metric in [
@@ -223,11 +221,18 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
             Metric.APL_VOXEL,
             Metric.SDSC,
         ]:
-            metrics_dict[result_type][Stat.MEDIAN][metric] = g.calculate_median(
-                metrics_dict[result_type][Stat.MEDIAN][metric]
+            metrics_dict[result_type][Stats.MEDIAN][metric] = g.calculate_median(
+                metrics_dict[result_type][Stats.AVG][metric]
             )
-            metrics_dict[result_type][Stat.AVG][metric] = g.calculate_avg(
-                metrics_dict[result_type][Stat.AVG][metric]
+            metrics_dict[result_type][Stats.MIN][metric] = g.calculate_min(
+                metrics_dict[result_type][Stats.AVG][metric]
+            )
+            metrics_dict[result_type][Stats.MAX][metric] = g.calculate_max(
+                metrics_dict[result_type][Stats.AVG][metric]
+            )
+            # calculate average value at the end
+            metrics_dict[result_type][Stats.AVG][metric] = g.calculate_avg(
+                metrics_dict[result_type][Stats.AVG][metric]
             )
 
     # save json

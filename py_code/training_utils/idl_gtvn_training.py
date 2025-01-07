@@ -7,7 +7,7 @@ import torch
 from dataset_utils.idl_gtvn_dataset import IDLGTVnDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stats
 from loss_utils.idl_gtvn_loss import IDLGTVnLoss
 from numpy import ndarray
 from PyQt5.QtCore import pyqtSignal
@@ -326,9 +326,9 @@ class IDLGTVnTraining(BaselineTraining):
         scores = Dict()
 
         # init metrics of round 01
-        for stat in [Stat.MEDIAN, Stat.AVG]:
+        for stats in [Stats.MEDIAN, Stats.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                scores[stat][metric]["round=01"] = List()
+                scores[stats][metric]["round=01"] = List()
 
         # load baseline metrics on testset
         baseline_scores = g.load_json(
@@ -347,9 +347,11 @@ class IDLGTVnTraining(BaselineTraining):
                 )
 
         # also copy baseline median and avg gtvn scores
-        for stat in [Stat.MEDIAN, Stat.AVG]:
+        for stats in [Stats.MEDIAN, Stats.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                scores[stat][metric]["round=00"] = baseline_scores[stat]["gtvn"][metric]
+                scores[stats][metric]["round=00"] = baseline_scores[stats]["gtvn"][
+                    metric
+                ]
 
         return scores
 
@@ -408,10 +410,10 @@ class IDLGTVnTraining(BaselineTraining):
             ]
             # add cur patient metric into a list for avg and median calculation
             # initialize a list
-            if scores[Stat.AVG][metric] == {}:
-                scores[Stat.AVG][metric] = List()
+            if scores[Stats.AVG][metric] == {}:
+                scores[Stats.AVG][metric] = List()
             # add current patient metric into the list
-            scores[Stat.AVG][metric].append(patient_outputs["gtvn"][metric])
+            scores[Stats.AVG][metric].append(patient_outputs["gtvn"][metric])
 
     def _inference_calculate_avg_median_save_json(
         self,
@@ -425,18 +427,18 @@ class IDLGTVnTraining(BaselineTraining):
 
             # for validation set, no baseline metric, no need to add key "round=01"
             if dataset_part == DatasetPart.VALID:
-                scores[Stat.MEDIAN][metric] = g.calculate_median(
-                    scores[Stat.AVG][metric]
+                scores[Stats.MEDIAN][metric] = g.calculate_median(
+                    scores[Stats.AVG][metric]
                 )
-                scores[Stat.AVG][metric] = g.calculate_avg(scores[Stat.AVG][metric])
+                scores[Stats.AVG][metric] = g.calculate_avg(scores[Stats.AVG][metric])
 
             # for test set, add key "round=01" to compare with baseline metric
             elif dataset_part == DatasetPart.TEST:
-                scores[Stat.MEDIAN][metric]["round=01"] = g.calculate_median(
-                    scores[Stat.AVG][metric]["round=01"]
+                scores[Stats.MEDIAN][metric]["round=01"] = g.calculate_median(
+                    scores[Stats.AVG][metric]["round=01"]
                 )
-                scores[Stat.AVG][metric]["round=01"] = g.calculate_avg(
-                    scores[Stat.AVG][metric]["round=01"]
+                scores[Stats.AVG][metric]["round=01"] = g.calculate_avg(
+                    scores[Stats.AVG][metric]["round=01"]
                 )
 
         # save scores in json
@@ -462,8 +464,8 @@ class IDLGTVnTraining(BaselineTraining):
         epoch: str,
     ):
 
-        for stat in [Stat.MEDIAN, Stat.AVG]:
-            fold_scores[epoch][stat] = epoch_scores[stat]
+        for stats in [Stats.MEDIAN, Stats.AVG]:
+            fold_scores[epoch][stats] = epoch_scores[stats]
 
     def _remove_non_optimal_epochs_find_best_epoch(
         self, scores: Dict, gtv_list: list = ["gtvn"]
@@ -502,9 +504,9 @@ class IDLGTVnTraining(BaselineTraining):
             # record current score
             scores["patient={}".format(patient)][metric]["round=01"] = score
             # record scores for avg and median score calculation
-            if scores[Stat.AVG][metric]["round=01"] == {}:
-                scores[Stat.AVG][metric]["round=01"] = List()
-            scores[Stat.AVG][metric]["round=01"].append(score)
+            if scores[Stats.AVG][metric]["round=01"] == {}:
+                scores[Stats.AVG][metric]["round=01"] = List()
+            scores[Stats.AVG][metric]["round=01"].append(score)
 
     def _inference_single_patient_load_dataset(
         self,
@@ -606,16 +608,16 @@ class IDLGTVnTraining(BaselineTraining):
                     "inference_{}_valid.json".format(dataset_ver),
                 )
             )
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                scores[fold][stat] = epoch_scores[stat]
+            for stats in [Stats.MEDIAN, Stats.AVG]:
+                scores[fold][stats] = epoch_scores[stats]
 
-        for stat in [Stat.MEDIAN, Stat.AVG]:
+        for stats in [Stats.MEDIAN, Stats.AVG]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                 # create a tmp list to sort
                 list_to_sort = List()
                 # add elements into the list
                 for epoch in scores.keys():
-                    list_to_sort.append(scores[epoch][stat][metric])
+                    list_to_sort.append(scores[epoch][stats][metric])
                 # sort the list
                 if metric == Metric.DSC:
                     list_to_sort.sort(reverse=False)
@@ -623,17 +625,17 @@ class IDLGTVnTraining(BaselineTraining):
                     list_to_sort.sort(reverse=True)
                 # update value based on the idx in the list
                 for epoch in scores.keys():
-                    new_value = list_to_sort.index(scores[epoch][stat][metric])
+                    new_value = list_to_sort.index(scores[epoch][stats][metric])
                     # if metric == Metric.DSC:
                     #     new_value *= 2
-                    scores[epoch][stat][metric] = new_value
+                    scores[epoch][stats][metric] = new_value
 
         evaluation = Dict()
         for epoch in scores:
             evaluation[epoch] = 0
-            for stat in [Stat.AVG, Stat.MEDIAN]:
+            for stats in [Stats.AVG, Stats.MEDIAN]:
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    evaluation[epoch] += scores[epoch][stat][metric]
+                    evaluation[epoch] += scores[epoch][stats][metric]
 
         best_fold = evaluation.key_with_max_value()
         best_epoch_dir = g.get_sub_dirs(

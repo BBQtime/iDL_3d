@@ -24,7 +24,7 @@ import SimpleITK as sitk
 import torch
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetVer, ErrMsg, MdaObs
+from global_utils.str_lib import DatasetVer, ErrMsg, MdaObs, Stats
 from numpy import ndarray
 from torch import Tensor
 from tqdm import tqdm
@@ -107,7 +107,7 @@ def is_number(i) -> bool:
 
 
 # origin data will not be replaced in this function
-def __is_valid_for_avg_median_calculation(origin_data: Union[list, dict, tuple]):
+def __is_valid_for_stats_calculation(origin_data: Union[list, dict, tuple]):
     if isinstance(origin_data, dict):
         data_list = Dict(origin_data).to_list()
     elif isinstance(origin_data, tuple):
@@ -119,24 +119,38 @@ def __is_valid_for_avg_median_calculation(origin_data: Union[list, dict, tuple])
     return data_list
 
 
-def calculate_median(origin_data: Union[list, dict, tuple]) -> float:
-    data_list = __is_valid_for_avg_median_calculation(origin_data)
+def __calculate_stats(origin_data: Union[list, dict, tuple], stats: str) -> float:
+    data_list = __is_valid_for_stats_calculation(origin_data)
     # remove non-number in the list
     data_list = [i for i in data_list if is_number(i)]
     if len(data_list) == 0:
         return None
-    else:
-        return statistics.median(data_list)
-
-
-def calculate_avg(origin_data: Union[list, dict, tuple]) -> float:
-    data_list = __is_valid_for_avg_median_calculation(origin_data)
-    # remove non-number in the list
-    data_list = [i for i in data_list if is_number(i)]
-    if len(data_list) == 0:
-        return None
-    else:
+    elif stats == Stats.AVG:
         return statistics.mean(data_list)
+    elif stats == Stats.MEDIAN:
+        return statistics.median(data_list)
+    elif stats == Stats.MIN:
+        return min(data_list)
+    elif stats == Stats.MAX:
+        return max(data_list)
+    else:
+        error_exit("Invalid stats value!")
+
+
+def calculate_median(data: Union[list, dict, tuple]) -> float:
+    return __calculate_stats(data, stats=Stats.MEDIAN)
+
+
+def calculate_avg(data: Union[list, dict, tuple]) -> float:
+    return __calculate_stats(data, stats=Stats.AVG)
+
+
+def calculate_min(data: Union[list, dict, tuple]) -> float:
+    return __calculate_stats(data, stats=Stats.MIN)
+
+
+def calculate_max(data: Union[list, dict, tuple]) -> float:
+    return __calculate_stats(data, stats=Stats.MAX)
 
 
 def binarize_img(

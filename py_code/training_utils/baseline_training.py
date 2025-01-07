@@ -9,7 +9,7 @@ import torch
 from dataset_utils.baseline_dataset import BaselineDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stats
 from loss_utils.unified_focal_loss import UnifiedFocalLoss
 
 # Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
@@ -781,10 +781,10 @@ class BaselineTraining(TrainingCore):
                 ][metric]
                 # add cur patient metric into a list for avg and median calculation
                 # initialize a list
-                if scores[Stat.AVG][gtv][metric] == {}:
-                    scores[Stat.AVG][gtv][metric] = List()
+                if scores[Stats.AVG][gtv][metric] == {}:
+                    scores[Stats.AVG][gtv][metric] = List()
                 # add current patient metric into the list
-                scores[Stat.AVG][gtv][metric].append(patient_outputs[gtv][metric])
+                scores[Stats.AVG][gtv][metric].append(patient_outputs[gtv][metric])
 
     def _inference_calculate_avg_median_save_json(
         self,
@@ -796,11 +796,11 @@ class BaselineTraining(TrainingCore):
     ):
         for gtv in ["gtvs", "gtvt", "gtvn"]:
             for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                scores[Stat.MEDIAN][gtv][metric] = g.calculate_median(
-                    scores[Stat.AVG][gtv][metric]
+                scores[Stats.MEDIAN][gtv][metric] = g.calculate_median(
+                    scores[Stats.AVG][gtv][metric]
                 )
-                scores[Stat.AVG][gtv][metric] = g.calculate_avg(
-                    scores[Stat.AVG][gtv][metric]
+                scores[Stats.AVG][gtv][metric] = g.calculate_avg(
+                    scores[Stats.AVG][gtv][metric]
                 )
 
         # save scores in json
@@ -991,9 +991,9 @@ class BaselineTraining(TrainingCore):
                 scores["patient={}".format(patient)][gtv][metric] = score
 
                 # add cur patient metric into a list for avg and median calculation
-                if scores[Stat.AVG][gtv][metric] == {}:
-                    scores[Stat.AVG][gtv][metric] = List()
-                scores[Stat.AVG][gtv][metric].append(score)
+                if scores[Stats.AVG][gtv][metric] == {}:
+                    scores[Stats.AVG][gtv][metric] = List()
+                scores[Stats.AVG][gtv][metric].append(score)
 
     def _remove_non_optimal_epochs(self, train_id: str):
         print("")
@@ -1048,14 +1048,14 @@ class BaselineTraining(TrainingCore):
         epoch_scores: Dict,
         epoch: str,
     ):
-        for stat in [Stat.MEDIAN, Stat.AVG]:
-            fold_scores[epoch][stat] = epoch_scores[stat]
+        for stats in [Stats.MEDIAN, Stats.AVG]:
+            fold_scores[epoch][stats] = epoch_scores[stats]
 
     # a sub function of _remove_non_optimal_epochs()
     def _remove_non_optimal_epochs_find_best_epoch(
         self, scores: Dict, gtv_list: list = ["gtvs", "gtvt", "gtvn"]
     ):
-        for stat in [Stat.MEDIAN, Stat.AVG]:
+        for stats in [Stats.MEDIAN, Stats.AVG]:
             for gtv in gtv_list:
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     # create a tmp list to sort
@@ -1064,9 +1064,9 @@ class BaselineTraining(TrainingCore):
                     # add elements into the list
                     for epoch in scores.keys():
                         if len(gtv_list) > 1:
-                            cur_score = scores[epoch][stat][gtv][metric]
+                            cur_score = scores[epoch][stats][gtv][metric]
                         else:
-                            cur_score = scores[epoch][stat][metric]
+                            cur_score = scores[epoch][stats][metric]
                         list_to_sort.append(cur_score)
 
                     # sort the list
@@ -1078,29 +1078,29 @@ class BaselineTraining(TrainingCore):
                     # update value based on the idx in the list
                     for epoch in scores.keys():
                         if len(gtv_list) > 1:
-                            cur_score = scores[epoch][stat][gtv][metric]
+                            cur_score = scores[epoch][stats][gtv][metric]
                         else:
-                            cur_score = scores[epoch][stat][metric]
+                            cur_score = scores[epoch][stats][metric]
 
                         new_value = list_to_sort.index(cur_score)
                         if metric == Metric.DSC:
                             new_value *= 2
 
                         if len(gtv_list) > 1:
-                            scores[epoch][stat][gtv][metric] = new_value
+                            scores[epoch][stats][gtv][metric] = new_value
                         else:
-                            scores[epoch][stat][metric] = new_value
+                            scores[epoch][stats][metric] = new_value
 
         evaluation = Dict()
         for epoch in scores:
             evaluation[epoch] = 0
-            for stat in [Stat.AVG, Stat.MEDIAN]:
+            for stats in [Stats.AVG, Stats.MEDIAN]:
                 for gtv in gtv_list:
                     for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                         if len(gtv_list) > 1:
-                            evaluation[epoch] += scores[epoch][stat][gtv][metric]
+                            evaluation[epoch] += scores[epoch][stats][gtv][metric]
                         else:
-                            evaluation[epoch] += scores[epoch][stat][metric]
+                            evaluation[epoch] += scores[epoch][stats][metric]
 
         return evaluation.key_with_max_value()
 

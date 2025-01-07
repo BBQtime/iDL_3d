@@ -88,6 +88,8 @@ class Plane:
     SAGITTAL = "sagittal"
 
 
-class Stat:
+class Stats:
     MEDIAN = "median"
     AVG = "avg"
+    MAX = "max"
+    MIN = "min"

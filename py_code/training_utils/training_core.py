@@ -10,7 +10,7 @@ import torch
 from dataset_utils.baseline_dataset import BaselineDataSet
 from global_utils.custom_dict import Dict
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stat
+from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stats
 from metric_utils.metric_func import MetricFunction
 from numpy import ndarray
 from torch import optim
@@ -661,17 +661,17 @@ class TrainingCore:
                     "inference_{}_valid.json".format(dataset_ver),
                 )
             )
-            for stat in [Stat.MEDIAN, Stat.AVG]:
-                scores[fold][stat] = epoch_scores[stat]
+            for stats in [Stats.MEDIAN, Stats.AVG]:
+                scores[fold][stats] = epoch_scores[stats]
 
-        for stat in [Stat.MEDIAN, Stat.AVG]:
+        for stats in [Stats.MEDIAN, Stats.AVG]:
             for gtv in ["gtvs", "gtvt", "gtvn"]:
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
                     # create a tmp list to sort
                     list_to_sort = List()
                     # add elements into the list
                     for epoch in scores.keys():
-                        list_to_sort.append(scores[epoch][stat][gtv][metric])
+                        list_to_sort.append(scores[epoch][stats][gtv][metric])
                     # sort the list
                     if metric == Metric.DSC:
                         list_to_sort.sort(reverse=False)
@@ -679,18 +679,20 @@ class TrainingCore:
                         list_to_sort.sort(reverse=True)
                     # update value based on the idx in the list
                     for epoch in scores.keys():
-                        new_value = list_to_sort.index(scores[epoch][stat][gtv][metric])
+                        new_value = list_to_sort.index(
+                            scores[epoch][stats][gtv][metric]
+                        )
                         # if metric == Metric.DSC:
                         #     new_value *= 2
-                        scores[epoch][stat][gtv][metric] = new_value
+                        scores[epoch][stats][gtv][metric] = new_value
 
         evaluation = Dict()
         for epoch in scores:
             evaluation[epoch] = 0
-            for stat in [Stat.AVG, Stat.MEDIAN]:
+            for stats in [Stats.AVG, Stats.MEDIAN]:
                 for gtv in ["gtvs", "gtvt", "gtvn"]:
                     for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                        evaluation[epoch] += scores[epoch][stat][gtv][metric]
+                        evaluation[epoch] += scores[epoch][stats][gtv][metric]
 
         best_fold = evaluation.key_with_max_value()
         best_epoch_dir = g.get_sub_dirs(
