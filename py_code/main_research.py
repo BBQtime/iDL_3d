@@ -43,8 +43,17 @@ if __name__ == "__main__":
     # ]
     # idl_vs_correction.create_metrics_tables(obs_study_id_list)
 
-    idl_vs_correction.plot_metrics([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
-    idl_vs_correction.plot_metrics([JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID])
+    # idl_vs_correction.plot_metrics_no_apl(
+    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
+    # )
+    # idl_vs_correction.plot_metrics_no_apl(
+    #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID]
+    # )
+
+    idl_vs_correction.plot_metrics_apl(
+        obs_study_gtvt_id_list=[JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID],
+        obs_study_gtvn_id_list=[JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID],
+    )
 
     # for obs_study_id in [
     #     JESPER_GTVT_ID,

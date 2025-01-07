@@ -285,7 +285,7 @@ def create_metrics_tables(obs_study_id_list: list):
             writer.writerows(table_data[gtv])
 
 
-def plot_metrics(obs_study_id_list: list):
+def plot_metrics_no_apl(obs_study_id_list: list):
     gtv = None
     for obs_study_id in obs_study_id_list:
         if obs_study_id.startswith("idl.gtvn_"):
@@ -314,15 +314,14 @@ def plot_metrics(obs_study_id_list: list):
         x_label.remove(x_label[del_idx])
         patients_list.remove("536")
 
-    # Set up a 2x3 grid of subplots
-    fig, axes = plt.subplots(3, 2, figsize=(20, 17))
+    # Set up a 2x2 grid of subplots
+    fig, axes = plt.subplots(2, 2, figsize=(20, 13))
 
     axes = axes.flatten()
 
     i = 0
     for metric in tqdm(
         [
-            Metric.APL_PCT,
             Metric.SDSC,
             Metric.DSC,
             Metric.MSD,
@@ -389,59 +388,26 @@ def plot_metrics(obs_study_id_list: list):
 
         # Configure title and labels
         ax.set_title(explain_metric(metric))
-        # ax.set_ylabel(
-        #     ylabel=explain_metric(metric),
-        #     # rotation=0,
-        #     # position=(0, 1),
-        #     # va="bottom",
-        #     # labelpad=-9,
-        # )
-        ax.set_xlabel(
-            xlabel="Patient",
-            # position=(1, 0),
-            # labelpad=-11,
-        )
+        ax.set_xlabel(xlabel="Patient")
 
         # Define y-axis range to accommodate label placement above 1.0
         # Define y-axis ticks to display key points including 1.0
         if metric in [Metric.DSC, Metric.SDSC]:
             ax.set_ylim(0.5, 1.05)
 
-        elif metric == Metric.APL_PCT:
-            ax.set_ylim(0, 1.1)
-            ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
-
         # Set x-axis ticks to be centered under each group of bars
         ax.set_xticks(indices + bar_width)
         ax.set_xticklabels(x_label)
 
-        # # Add a legend to describe the observers
-        # if metric == Metric.APL_PCT:
-        #     legend = ax.legend(loc="upper left")
-        # elif metric == Metric.SDSC:
-        #     legend = ax.legend(loc="lower left")
-        # elif metric == Metric.DSC:
-        #     legend = ax.legend(loc="lower left")
-        # elif metric == Metric.MSD:
-        #     legend = ax.legend(loc="upper left")
-        # elif metric == Metric.HD95:
-        #     legend = ax.legend(loc="upper left")
-
-        # legend.get_frame().set_alpha(1.0)
-
         # next sub plot
         i += 1
-
-    # turn off axis of the last figure
-    # axes[-1].axis("off")
-    fig.delaxes(axes[-1])
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles,
         labels,
-        loc="lower right",
-        bbox_to_anchor=(0.98, 0.03),
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.98),
     )
 
     # title
@@ -453,18 +419,150 @@ def plot_metrics(obs_study_id_list: list):
         """"Initial" vs "Corrected" Segmentation - {}""".format(title_gtv),
         # y=0.95,  # Adjust y for vertical positioning
     )
-    # # Adjust top to create more space
-    # plt.subplots_adjust(top=0.85)
 
-    # # Adjust layout to prevent overlap and save the entire figure as a PDF
-    # plt.tight_layout(rect=[0, 0, 0.00, 0.95])  # Adjust rect to fit the suptitle
+    # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
+
+    # Adjust top to create more space
+    # Adjust spacing between rows
+    # (after tight_layout())
+    plt.subplots_adjust(top=0.85, hspace=0.25)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:
         fig_path = os.path.join(
             g.TRAIN_RESULTS_DIR,
             "baseline_obs.study",
-            f"3d_idl_vs_correct_{gtv}.{file_ext}",
+            f"3d_idl_vs_correct_no.apl_{gtv}.{file_ext}",
+        )
+        plt.savefig(fig_path, format=file_ext)
+
+
+def plot_metrics_apl(
+    obs_study_gtvt_id_list: list,
+    obs_study_gtvn_id_list: list,
+):
+    # Set up a 2x2 grid of subplots
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
+
+    axes = axes.flatten()
+
+    i = 0
+    for gtv in ["gtvt", "gtvn"]:
+        patients_list = get_obs_study_patients_list()
+        observers_list = ["Jesper", "Kenneth", "Hanna"]
+
+        # init label of x axis
+        x_label = []
+        for patient_num in range(1, len(patients_list) + 1):
+            x_label.append(str(patient_num))
+
+        if gtv == "gtvn":
+            # patient 536 doesnt have gtvn
+            del_idx = patients_list.index("536")
+            x_label.remove(x_label[del_idx])
+            patients_list.remove("536")
+
+        fig_data = Dict()
+        for observer in observers_list:
+            fig_data[observer] = List()
+
+        # loop through observer study train id
+        for obs_study_id in (
+            obs_study_gtvt_id_list if gtv == "gtvt" else obs_study_gtvn_id_list
+        ):
+            metrics_dict = g.load_json(
+                os.path.join(
+                    g.TRAIN_RESULTS_DIR,
+                    "baseline_obs.study",
+                    obs_study_id,
+                    "3d_idl_vs_correct.json",
+                )
+            )
+
+            # get observer name from train id
+            for observer in observers_list:
+                if observer in obs_study_id:
+                    break
+
+            # add patients' metrics
+            for patient in patients_list:
+                if metrics_dict["patient={}".format(patient)][Metric.APL_PCT] == {}:
+                    fig_data[observer].append(0)
+                else:
+                    fig_data[observer].append(
+                        metrics_dict["patient={}".format(patient)][Metric.APL_PCT]
+                    )
+
+        ax = axes[i]
+
+        # Define bar width for clarity in grouped bars
+        bar_width = 0.25
+
+        # Calculate indices for x-axis where groups of bars will be located
+        indices = np.arange(len(patients_list))
+
+        # Plot bars for each observer
+        for observer in observers_list:
+            idx = fig_data.key_index(observer)
+            color = COLOR_LIST[idx % len(COLOR_LIST)]
+            ax.bar(
+                x=indices + idx * bar_width,  # list
+                height=fig_data[observer],  # list
+                width=bar_width,
+                label="Observer {}".format(observers_list.index(observer) + 1),
+                color=color,
+            )
+
+            # draw average line
+            ax.axhline(
+                g.calculate_avg(fig_data[observer]),
+                color=color,
+                linestyle="--",
+                linewidth=2,
+            )
+
+        # Configure title and labels
+        ax.set_title("GTVt" if gtv == "gtvt" else "GTVn")
+        ax.set_xlabel(xlabel="Patient")
+
+        # Define y-axis range
+        ax.set_ylim(0.0, 0.6)
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+
+        # Set x-axis ticks to be centered under each group of bars
+        ax.set_xticks(indices + bar_width)
+        ax.set_xticklabels(x_label)
+
+        # next sub plot
+        i += 1
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.98),
+    )
+
+    # title
+    fig.suptitle(
+        f""""Initial" vs "Corrected" Segmentation - {explain_metric(Metric.APL_PCT)}"""
+    )
+
+    # Adjust layout to prevent overlap and save the entire figure as a PDF
+    plt.tight_layout()
+
+    # Adjust top to create more space
+    # Adjust spacing between rows
+    # (after tight_layout())
+    plt.subplots_adjust(top=0.8, wspace=0.13)
+
+    # Save the plot as PDF and PNG files in the specified directory
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            f"3d_idl_vs_correct_apl.{file_ext}",
         )
         plt.savefig(fig_path, format=file_ext)
