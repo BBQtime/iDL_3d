@@ -16,7 +16,7 @@ if __name__ == "__main__":
     g.clear_linux_trash()
     g.clear_debug_data()
 
-    # gtvt_input_slices.plot_bias_gtvt_center()
+    gtvt_input_slices.plot_bias_gtvt_center()
 
     # calculate_idl_gtvs_metric(
     #     idl_gtvt_id="idl.gtvt_au.ext_center",
@@ -50,10 +50,10 @@ if __name__ == "__main__":
     #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID]
     # )
 
-    idl_vs_correction.plot_metrics_apl(
-        obs_study_gtvt_id_list=[JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID],
-        obs_study_gtvn_id_list=[JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID],
-    )
+    # idl_vs_correction.plot_metrics_apl(
+    #     obs_study_gtvt_id_list=[JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID],
+    #     obs_study_gtvn_id_list=[JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID],
+    # )
 
     # for obs_study_id in [
     #     JESPER_GTVT_ID,

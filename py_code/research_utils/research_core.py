@@ -65,7 +65,7 @@ def explain_metric(metric: str):
     elif metric == Metric.APL_VOXEL:
         return "Added Path Length (Voxels)"
     elif metric == Metric.SDSC:
-        return "Surface DSC (1mm)"
+        return "Surface DSC"
 
 
 def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
