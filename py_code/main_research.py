@@ -1,3 +1,5 @@
+import os
+
 import global_utils.global_core as g
 from global_utils.custom_list import List
 from research_utils import gtvt_input_slices, idl_time, idl_vs_correction, iov
@@ -15,8 +17,6 @@ if __name__ == "__main__":
     g.clear_gpu_cache()
     g.clear_linux_trash()
     g.clear_debug_data()
-
-    gtvt_input_slices.plot_bias_gtvt_center()
 
     # calculate_idl_gtvs_metric(
     #     idl_gtvt_id="idl.gtvt_au.ext_center",
@@ -66,6 +66,8 @@ if __name__ == "__main__":
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
 
+    # gtvt_input_slices.plot_bias_gtvt_center()
+
     # for gtv_list in [
     #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID, "label"],
@@ -77,6 +79,11 @@ if __name__ == "__main__":
     # iov.create_median_table()
 
     # iov.plot_iov()
+
+    for baseline_id in ["baseline_mda.transfer"]:
+        for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
+            idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
+            iov.plot_mda_label_vs_idl_iov(idl_dir)
 
     # idl_time.plot_time_per_patient([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
