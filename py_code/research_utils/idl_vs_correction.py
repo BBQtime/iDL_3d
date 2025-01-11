@@ -285,122 +285,110 @@ def create_metrics_tables(obs_study_id_list: list):
             writer.writerows(table_data[gtv])
 
 
-def plot_metrics_no_apl(obs_study_id_list: list):
-    gtv = None
-    for obs_study_id in obs_study_id_list:
-        if obs_study_id.startswith("idl.gtvn_"):
-            cur_gtv = "gtvn"
-        elif obs_study_id.startswith("idl.gtvt_"):
-            cur_gtv = "gtvt"
-        else:
-            g.error_exit("obs study train id error")
-
-        if gtv is None:
-            gtv = cur_gtv
-        elif gtv != cur_gtv:
-            g.error_exit("All items in obs_study_id_list should be same gtv type")
-
-    patients_list = get_obs_study_patients_list()
-    observers_list = ["Jesper", "Kenneth", "Hanna"]
-
-    # init label of x axis
-    x_label = []
-    for i in range(1, len(patients_list) + 1):
-        x_label.append(str(i))
-
-    if gtv == "gtvn":
-        # patient 536 doesnt have gtvn
-        del_idx = patients_list.index("536")
-        x_label.remove(x_label[del_idx])
-        patients_list.remove("536")
+def plot_metrics_no_apl(obs_study_gtvt_id_list: list, obs_study_gtvn_id_list: list):
 
     # Set up a 2x2 grid of subplots
-    fig, axes = plt.subplots(2, 2, figsize=(20, 13))
+    fig, axes = plt.subplots(3, 2, figsize=(20, 20))
 
     axes = axes.flatten()
 
-    i = 0
+    sub_idx = 0  # index of subplot
     for metric in tqdm(
         [
             Metric.SDSC,
             Metric.DSC,
-            Metric.MSD,
             Metric.HD95,
         ]
     ):
+        for obs_study_id_list in [obs_study_gtvt_id_list, obs_study_gtvn_id_list]:
 
-        fig_data = Dict()
-        for observer in observers_list:
-            fig_data[observer] = List()
+            patients_list = get_obs_study_patients_list()
+            observers_list = ["Jesper", "Kenneth", "Hanna"]
 
-        # loop through observer study train id
-        for obs_study_id in obs_study_id_list:
-            metrics_dict = g.load_json(
-                os.path.join(
-                    g.TRAIN_RESULTS_DIR,
-                    "baseline_obs.study",
-                    obs_study_id,
-                    "3d_idl_vs_correct.json",
-                )
-            )
+            # init label of x axis
+            x_label = []
+            for i in range(1, len(patients_list) + 1):
+                x_label.append(str(i))
 
-            # get observer name from train id
+            if obs_study_id_list == obs_study_gtvn_id_list:
+                # patient 536 does not have gtvn
+                del_idx = patients_list.index("536")
+                x_label.remove(x_label[del_idx])
+                patients_list.remove("536")
+
+            fig_data = Dict()
             for observer in observers_list:
-                if observer in obs_study_id:
-                    break
+                fig_data[observer] = List()
 
-            # add patients' metrics
-            for patient in patients_list:
-                if metrics_dict["patient={}".format(patient)][metric] == {}:
-                    fig_data[observer].append(0)
-                else:
-                    fig_data[observer].append(
-                        metrics_dict["patient={}".format(patient)][metric]
+            # loop through observer study train id
+            for obs_study_id in obs_study_id_list:
+                metrics_dict = g.load_json(
+                    os.path.join(
+                        g.TRAIN_RESULTS_DIR,
+                        "baseline_obs.study",
+                        obs_study_id,
+                        "3d_idl_vs_correct.json",
                     )
+                )
 
-        ax = axes[i]
+                # get observer name from train id
+                for observer in observers_list:
+                    if observer in obs_study_id:
+                        break
 
-        # Define bar width for clarity in grouped bars
-        bar_width = 0.25
+                # add patients' metrics
+                for patient in patients_list:
+                    if metrics_dict["patient={}".format(patient)][metric] == {}:
+                        fig_data[observer].append(0)
+                    else:
+                        fig_data[observer].append(
+                            metrics_dict["patient={}".format(patient)][metric]
+                        )
 
-        # Calculate indices for x-axis where groups of bars will be located
-        indices = np.arange(len(patients_list))
+            ax = axes[sub_idx]
 
-        # Plot bars for each observer
-        for observer in observers_list:
-            idx = fig_data.key_index(observer)
-            color = COLOR_LIST[idx % len(COLOR_LIST)]
-            ax.bar(
-                x=indices + idx * bar_width,  # list
-                height=fig_data[observer],  # list
-                width=bar_width,
-                label="Observer {}".format(observers_list.index(observer) + 1),
-                color=color,
-            )
+            # Define bar width for clarity in grouped bars
+            bar_width = 0.25
 
-            # draw average line
-            ax.axhline(
-                g.calculate_avg(fig_data[observer]),
-                color=color,
-                linestyle="--",
-                linewidth=2,
-            )
+            # Calculate indices for x-axis where groups of bars will be located
+            indices = np.arange(len(patients_list))
 
-        # Configure title and labels
-        ax.set_title(explain_metric(metric))
-        ax.set_xlabel(xlabel="Patient")
+            # Plot bars for each observer
+            for observer in observers_list:
+                idx = fig_data.key_index(observer)
+                color = COLOR_LIST[idx % len(COLOR_LIST)]
+                ax.bar(
+                    x=indices + idx * bar_width,  # list
+                    height=fig_data[observer],  # list
+                    width=bar_width,
+                    label="Observer {}".format(observers_list.index(observer) + 1),
+                    color=color,
+                )
 
-        # Define y-axis range to accommodate label placement above 1.0
-        # Define y-axis ticks to display key points including 1.0
-        if metric in [Metric.DSC, Metric.SDSC]:
-            ax.set_ylim(0.5, 1.05)
+                # draw average line
+                ax.axhline(
+                    g.calculate_avg(fig_data[observer]),
+                    color=color,
+                    linestyle="--",
+                    linewidth=2,
+                )
 
-        # Set x-axis ticks to be centered under each group of bars
-        ax.set_xticks(indices + bar_width)
-        ax.set_xticklabels(x_label)
+            # Configure title and labels
+            gtv = "GTVt" if obs_study_id_list == obs_study_gtvt_id_list else "GTVn"
+            ax.set_title(f"{explain_metric(metric)} - {gtv}")
+            ax.set_xlabel(xlabel="Patient")
 
-        # next sub plot
-        i += 1
+            # Define y-axis range to accommodate label placement above 1.0
+            # Define y-axis ticks to display key points including 1.0
+            if metric in [Metric.DSC, Metric.SDSC]:
+                ax.set_ylim(0.5, 1.05)
+
+            # Set x-axis ticks to be centered under each group of bars
+            ax.set_xticks(indices + bar_width)
+            ax.set_xticklabels(x_label)
+
+            # next sub plot
+            sub_idx += 1
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -410,15 +398,12 @@ def plot_metrics_no_apl(obs_study_id_list: list):
         bbox_to_anchor=(0.98, 0.98),
     )
 
-    # title
-    if gtv == "gtvt":
-        title_gtv = "GTVt"
-    elif gtv == "gtvn":
-        title_gtv = "GTVn"
-    fig.suptitle(
-        """"Initial" vs "Corrected" Segmentation - {}""".format(title_gtv),
-        # y=0.95,  # Adjust y for vertical positioning
-    )
+    # # title
+    # if gtv == "gtvt":
+    #     title_gtv = "GTVt"
+    # elif gtv == "gtvn":
+    #     title_gtv = "GTVn"
+    fig.suptitle(""""Initial" vs "Corrected" Segmentation""")
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
@@ -426,14 +411,14 @@ def plot_metrics_no_apl(obs_study_id_list: list):
     # Adjust top to create more space
     # Adjust spacing between rows
     # (after tight_layout())
-    plt.subplots_adjust(top=0.85, hspace=0.25)
+    plt.subplots_adjust(top=0.9, hspace=0.25)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:
         fig_path = os.path.join(
             g.TRAIN_RESULTS_DIR,
             "baseline_obs.study",
-            f"3d_idl_vs_correct_no.apl_{gtv}.{file_ext}",
+            f"3d_idl_vs_correct_no.apl.{file_ext}",
         )
         plt.savefig(fig_path, format=file_ext)
 

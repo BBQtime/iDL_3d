@@ -43,12 +43,10 @@ if __name__ == "__main__":
     # ]
     # idl_vs_correction.create_metrics_tables(obs_study_id_list)
 
-    # idl_vs_correction.plot_metrics_no_apl(
-    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
-    # )
-    # idl_vs_correction.plot_metrics_no_apl(
-    #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID]
-    # )
+    idl_vs_correction.plot_metrics_no_apl(
+        obs_study_gtvt_id_list=[JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID],
+        obs_study_gtvn_id_list=[JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID],
+    )
 
     # idl_vs_correction.plot_metrics_apl(
     #     obs_study_gtvt_id_list=[JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID],
@@ -80,10 +78,10 @@ if __name__ == "__main__":
 
     # iov.plot_iov()
 
-    for baseline_id in ["baseline_mda.transfer"]:
-        for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
-            idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
-            iov.plot_mda_label_vs_idl_iov(idl_dir)
+    # for baseline_id in ["baseline_mda.transfer"]:
+    #     for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
+    #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
+    #         iov.plot_mda_label_vs_idl_iov(idl_dir)
 
     # idl_time.plot_time_per_patient([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
