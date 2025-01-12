@@ -2630,8 +2630,14 @@ class ObsStudyWindow(ReplayWindow):
         self.reset_cur_slice_id()
 
         # start total timer
-        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
-        self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].start()
+        if (
+            self.obs_study_gtvt_step == ObsStudyGTVtStep.APPROVED
+            and self.obs_study_gtvn_step == ObsStudyGTVnStep.APPROVED
+        ):
+            pass
+        else:
+            self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].end()
+            self.__timer[ObsStudyTimer.PATIENT_TOTAL_TIME].start()
 
         # last step: goto current obs study steps
         if self.obs_study_gtvt_step == ObsStudyGTVtStep.CLICK_CENTER:
