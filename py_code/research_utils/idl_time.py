@@ -3,7 +3,7 @@ import os
 import global_utils.global_core as g
 import matplotlib
 from global_utils.custom_list import List
-from global_utils.str_lib import DatasetPart, DatasetVer
+from global_utils.str_lib import DatasetPart, DatasetVer, Stats
 from ui_utils.obs_study_timer import ObsStudyTimer
 
 # Prevent matplotlib.pyplot from using a GUI (like X11) for rendering.
@@ -14,6 +14,14 @@ import numpy as np
 from global_utils.custom_dict import Dict
 from research_utils.research_core import COLOR_LIST, get_obs_study_patients_list
 from tqdm import tqdm
+
+
+def __seconds_to_hms(seconds: int):
+    seconds = round(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+    return f"{hours}:{minutes:02}:{seconds:02}"
 
 
 def __seconds_to_minutes_decimal(seconds):
@@ -47,6 +55,52 @@ def __explain_idl_step(idl_step: str):
         return "AI Generate GTVt"
     else:
         return None
+
+
+def save_json_time_per_patient(obs_study_gtvt_id_list: list):
+    patients_list = get_obs_study_patients_list()
+
+    save_data = Dict()
+
+    # loop through observer study train id
+    for obs_study_gtvt_id in tqdm(obs_study_gtvt_id_list):
+        if not obs_study_gtvt_id.startswith("idl.gtvt_"):
+            g.error_exit("Must be an 'idl.gtvt' id!")
+        time_dict = g.load_json(
+            os.path.join(
+                g.TRAIN_RESULTS_DIR,
+                "baseline_obs.study",
+                obs_study_gtvt_id,
+                "time_used.json",
+            )
+        )
+
+        if "Jesper" in obs_study_gtvt_id:
+            observer = "Observer 1"
+        elif "Kenneth" in obs_study_gtvt_id:
+            observer = "Observer 2"
+        elif "Hanna" in obs_study_gtvt_id:
+            observer = "Observer 3"
+
+        observer_time = []
+        for patient in patients_list:
+            patient_time = time_dict["patient={}".format(patient)]["total.time"]
+            save_data[observer]["patient={}".format(patient)] = patient_time
+            patient_time = __time_str_to_seconds(patient_time)
+            observer_time.append(patient_time)
+
+        save_data[observer][Stats.AVG] = g.calculate_avg(observer_time)
+        save_data[observer][Stats.MEDIAN] = g.calculate_median(observer_time)
+        save_data[observer][Stats.MIN] = g.calculate_min(observer_time)
+        save_data[observer][Stats.MAX] = g.calculate_max(observer_time)
+
+        for stats in [Stats.AVG, Stats.MEDIAN, Stats.MIN, Stats.MAX]:
+            save_data[observer][stats] = __seconds_to_hms(save_data[observer][stats])
+
+    save_path = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_patient.json"
+    )
+    g.save_json(data=save_data, path=save_path)
 
 
 def plot_time_per_patient(obs_study_gtvt_id_list: list):
@@ -147,6 +201,61 @@ def plot_time_per_patient(obs_study_gtvt_id_list: list):
             g.TRAIN_RESULTS_DIR, "baseline_obs.study", f"time_per_patient.{file_ext}"
         )
         plt.savefig(fig_path, format=file_ext)
+
+
+def save_json_time_per_step(obs_study_gtvt_id_list: list):
+    idl_step_list = [
+        ObsStudyTimer.CLICK_GTVT_CENTER,
+        ObsStudyTimer.DELINEATE_GTVT,
+        ObsStudyTimer.WAIT_GTVT_PRED,
+        ObsStudyTimer.CLICK_GTVN_CENTERS,
+        ObsStudyTimer.WAIT_GTVN_PRED,
+        ObsStudyTimer.CORRECT_GTVT,
+        ObsStudyTimer.CORRECT_GTVN,
+        # ObsStudyTimer.PATIENT_TOTAL_TIME,
+    ]
+
+    save_data = Dict()
+
+    # loop through observer study train id
+    for obs_study_gtvt_id in tqdm(obs_study_gtvt_id_list):
+        if not obs_study_gtvt_id.startswith("idl.gtvt_"):
+            g.error_exit("Must be an 'idl.gtvt' id!")
+
+        if "Jesper" in obs_study_gtvt_id:
+            observer = "Observer 1"
+        elif "Kenneth" in obs_study_gtvt_id:
+            observer = "Observer 2"
+        elif "Hanna" in obs_study_gtvt_id:
+            observer = "Observer 3"
+
+        # load json
+        json_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_obs.study",
+            obs_study_gtvt_id,
+            "time_used.json",
+        )
+        time_dict = g.load_json(json_path)
+
+        # calculate avrage time used of each step
+        for patient in time_dict.keys():
+            for idl_step in idl_step_list:
+                seconds = __time_str_to_seconds(time_dict[patient][idl_step])
+                if isinstance(save_data[observer][idl_step], dict):
+                    save_data[observer][idl_step] = []
+                else:
+                    save_data[observer][idl_step].append(seconds)
+
+        for idl_step in idl_step_list:
+            save_data[observer][idl_step] = round(
+                g.calculate_avg(save_data[observer][idl_step])
+            )
+
+    save_path = os.path.join(
+        g.TRAIN_RESULTS_DIR, "baseline_obs.study", "time_per_step.json"
+    )
+    g.save_json(data=save_data, path=save_path)
 
 
 def plot_time_per_step(obs_study_gtvt_id_list: list):
