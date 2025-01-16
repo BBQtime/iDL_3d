@@ -1,4 +1,5 @@
 import csv
+import math
 import os
 from pathlib import Path
 
@@ -297,7 +298,7 @@ def create_median_table():
         writer.writerows(table_data)
 
 
-def plot_iov():
+def plot_heatmap():
     observer_list = List(["Jesper", "Kenneth", "Hanna", "Label"])
     label_symbol = ["1", "2", "3", "Label"]
     label_text = ["Observer 1", "Observer 2", "Observer 3", "Clinical Label"]
@@ -588,7 +589,8 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
     # Create plot
     fig, axs = plt.subplots(1, 3, figsize=(20, 7))
     metric_list = [Metric.DSC, Metric.MSD, Metric.HD95]
-    for metric_type in metric_list:
+
+    for metric_type in tqdm(metric_list):
         x_data = []
         y_data = []
         for patient in patient_observer_map:
@@ -598,24 +600,44 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         idx = metric_list.index(metric_type)
         axs[idx].scatter(x_data, y_data, label=explain_metric(metric_type))
 
-        # Perform linear regression
-        slope, intercept = np.polyfit(x_data, y_data, 1)
-        regression_line = slope * np.array(x_data) + intercept
+        # # Perform linear regression
+        # slope, intercept = np.polyfit(x_data, y_data, 1)
+        # regression_line = slope * np.array(x_data) + intercept
 
-        # Sort x_data and regression_line for proper plotting
-        sorted_indices = np.argsort(x_data)
-        sorted_x = np.array(x_data)[sorted_indices]
-        sorted_y = np.array(regression_line)[sorted_indices]
+        # # Sort x_data and regression_line for proper plotting
+        # sorted_indices = np.argsort(x_data)
+        # sorted_x = np.array(x_data)[sorted_indices]
+        # sorted_y = np.array(regression_line)[sorted_indices]
 
-        # Plot the regression line
-        axs[idx].plot(
-            sorted_x, sorted_y, color="green", linestyle="--", label="Linear Fit"
-        )
+        # # Plot the regression line
+        # axs[idx].plot(
+        #     sorted_x, sorted_y, color="green", linestyle="--", label="Linear Fit"
+        # )
 
         axs[idx].set_title(explain_metric(metric_type))
         axs[idx].set_xlabel("IOV of Labels")
         axs[idx].set_ylabel("IOV of iDL predictions")
-        axs[idx].legend()
+        # axs[idx].legend()
+
+        # Joint range calculation for both axes
+        all_data = x_data + y_data
+        min_val = min(all_data)
+        max_val = max(all_data)
+        margin = (max_val - min_val) * 0.05
+
+        # Set the same range for x and y axes
+        axis_min = min_val - margin
+        axis_max = max_val + margin
+        axs[idx].set_xlim(axis_min, axis_max)
+        axs[idx].set_ylim(axis_min, axis_max)
+
+        # Ensure the same ticks for both axes with 1 decimal place
+        ticks = np.round(
+            np.linspace(min_val, max_val, num=6),
+            1 if metric_type in [Metric.MSD, Metric.HD95] else 2,
+        )
+        axs[idx].set_xticks(ticks)
+        axs[idx].set_yticks(ticks)
 
     fig.suptitle(
         f"Comparison Between IOV of Labels and IOV of iDL Predictions - {gtv[:3].upper() + gtv[3]}"
