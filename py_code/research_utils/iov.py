@@ -425,46 +425,37 @@ def __calculate_mda_label_iov(patient_observer_map: Dict, gtv: str) -> Dict:
     for patient in tqdm(patient_observer_map):
 
         # add patient_observer mapping of current patient into the list
-        cur_patient_labels = List()
-        for observer in patient_observer_map[patient]:
+        cur_patient_labels = Dict()
+        for obs in patient_observer_map[patient]:
             cur_observer_label = g.load_gtv_labels(
-                dataset_ver=DatasetVer.MDA, patient=f"{patient}_{observer}"
+                dataset_ver=DatasetVer.MDA, patient=f"{patient}_{obs}"
             )[gtv]
-            cur_patient_labels.append(cur_observer_label)
+            cur_patient_labels[obs] = cur_observer_label
 
-        # init avg iov as list
-        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            label_iov[patient][metric_type] = []
+        for obs_1, obs_2 in cur_patient_labels.keys().get_combinations(2):
+            label_1 = cur_patient_labels[obs_1]
+            label_2 = cur_patient_labels[obs_2]
 
-        for label_1, label_2 in cur_patient_labels.get_combinations(2):
-            # dsc
-            dsc = dice(
+            obs_pair = f"{obs_1}.vs.{obs_2}"
+
+            label_iov[patient][obs_pair][Metric.DSC] = dice(
                 test=label_1,
                 reference=label_2,
                 nan_for_nonexisting=False,
             )
-            label_iov[patient][Metric.DSC].append(dsc)
-            # msd
-            msd = avg_surface_distance_symmetric(
-                test=label_1,
-                reference=label_2,
-                none_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
-            )
-            label_iov[patient][Metric.MSD].append(msd)
-            # hd95
-            hd95 = hausdorff_distance_95(
-                test=label_1,
-                reference=label_2,
-                none_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
-            )
-            label_iov[patient][Metric.HD95].append(hd95)
 
-        # calculate avg
-        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            label_iov[patient][metric_type] = g.calculate_avg(
-                label_iov[patient][metric_type]
+            label_iov[patient][obs_pair][Metric.MSD] = avg_surface_distance_symmetric(
+                test=label_1,
+                reference=label_2,
+                none_for_nonexisting=True,
+                voxel_spacing=g.NII_SPACING,
+            )
+
+            label_iov[patient][obs_pair][Metric.HD95] = hausdorff_distance_95(
+                test=label_1,
+                reference=label_2,
+                none_for_nonexisting=True,
+                voxel_spacing=g.NII_SPACING,
             )
 
     # save label iov into json
@@ -482,56 +473,46 @@ def __calculate_mda_idl_iov(patient_observer_map: Dict, idl_dir: str, gtv: str) 
     for patient in tqdm(patient_observer_map):
 
         # add patient_observer mapping of current patient into the list
-        cur_patient_preds = List()
-        for observer in patient_observer_map[patient]:
+        cur_patient_preds = Dict()
+        for obs in patient_observer_map[patient]:
             pred_path = os.path.join(
                 idl_dir,
                 "patients",
-                f"patient={patient}_{observer}",
+                f"patient={patient}_{obs}",
                 "round=01",
                 f"{gtv}_pred.nii.gz",
             )
             # load non-existing label
             if not os.path.exists(pred_path):
-                # labels["gtvt"] = np.zeros_like(labels["gtvn"])
                 g.error_exit(f"{pred_path} doesn't exist")
             else:
                 cur_observer_pred = g.load_nii(pred_path, binary=True)
-                cur_patient_preds.append(cur_observer_pred)
+                cur_patient_preds[obs] = cur_observer_pred
 
-        # init avg iov as list
-        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            idl_iov[patient][metric_type] = []
+        for obs_1, obs_2 in cur_patient_preds.keys().get_combinations(2):
+            pred_1 = cur_patient_preds[obs_1]
+            pred_2 = cur_patient_preds[obs_2]
 
-        for pred_1, pred_2 in cur_patient_preds.get_combinations(2):
-            # dsc
-            dsc = dice(
+            obs_pair = f"{obs_1}.vs.{obs_2}"
+
+            idl_iov[patient][obs_pair][Metric.DSC] = dice(
                 test=pred_1,
                 reference=pred_2,
                 nan_for_nonexisting=False,
             )
-            idl_iov[patient][Metric.DSC].append(dsc)
-            # msd
-            msd = avg_surface_distance_symmetric(
-                test=pred_1,
-                reference=pred_2,
-                none_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
-            )
-            idl_iov[patient][Metric.MSD].append(msd)
-            # hd95
-            hd95 = hausdorff_distance_95(
-                test=pred_1,
-                reference=pred_2,
-                none_for_nonexisting=True,
-                voxel_spacing=g.NII_SPACING,
-            )
-            idl_iov[patient][Metric.HD95].append(hd95)
 
-        # calculate avg
-        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
-            idl_iov[patient][metric_type] = g.calculate_avg(
-                idl_iov[patient][metric_type]
+            idl_iov[patient][obs_pair][Metric.MSD] = avg_surface_distance_symmetric(
+                test=pred_1,
+                reference=pred_2,
+                none_for_nonexisting=True,
+                voxel_spacing=g.NII_SPACING,
+            )
+
+            idl_iov[patient][obs_pair][Metric.HD95] = hausdorff_distance_95(
+                test=pred_1,
+                reference=pred_2,
+                none_for_nonexisting=True,
+                voxel_spacing=g.NII_SPACING,
             )
 
     # save label iov into json
@@ -593,31 +574,32 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
     for metric_type in tqdm(metric_list):
         x_data = []
         y_data = []
-        for patient in patient_observer_map:
-            x_data.append(label_iov[patient][metric_type])
-            y_data.append(idl_iov[patient][metric_type])
+
+        patient_list = label_iov.keys()
+        if patient_list != idl_iov.keys():
+            g.error_exit("Mismatch keys between label_iov and idl_iov!")
+
+        for patient in patient_list:
+
+            # Convert keys() of the sub-dict (which is a dict, not a Dict) into List
+            # as the sub-dict does not inherit from the custom Dict class.
+            obs_pair_list = label_iov[patient].keys()
+            if obs_pair_list != idl_iov[patient].keys():
+                g.error_exit("Mismatch keys between label_iov and idl_iov!")
+
+            for obs_pair in obs_pair_list:
+                x = label_iov[patient][obs_pair][metric_type]
+                y = idl_iov[patient][obs_pair][metric_type]
+                if g.is_number(x) and g.is_number(y):
+                    x_data.append(x)
+                    y_data.append(y)
 
         idx = metric_list.index(metric_type)
         axs[idx].scatter(x_data, y_data, label=explain_metric(metric_type))
 
-        # # Perform linear regression
-        # slope, intercept = np.polyfit(x_data, y_data, 1)
-        # regression_line = slope * np.array(x_data) + intercept
-
-        # # Sort x_data and regression_line for proper plotting
-        # sorted_indices = np.argsort(x_data)
-        # sorted_x = np.array(x_data)[sorted_indices]
-        # sorted_y = np.array(regression_line)[sorted_indices]
-
-        # # Plot the regression line
-        # axs[idx].plot(
-        #     sorted_x, sorted_y, color="green", linestyle="--", label="Linear Fit"
-        # )
-
         axs[idx].set_title(explain_metric(metric_type))
         axs[idx].set_xlabel("IOV of Labels")
         axs[idx].set_ylabel("IOV of iDL predictions")
-        # axs[idx].legend()
 
         # Joint range calculation for both axes
         all_data = x_data + y_data

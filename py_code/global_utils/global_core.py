@@ -592,15 +592,21 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def sort_json_dict(data: dict) -> Dict:
-    # Convert the dictionary to a JSON string with sorted keys
-    sorted_json_str = json.dumps(data, ensure_ascii=False, sort_keys=True)
-
-    # Load it back into a dictionary
-    sorted_dict = json.loads(sorted_json_str)
-
-    # Convert it to your custom Dict type if needed
-    return Dict(sorted_dict)
+# Recursively sort dictionaries by their keys, convert them to the custom Dict class,
+# and convert lists to the custom List class, ensuring all nested structures are processed.
+def __sort_and_convert_dict(data):
+    if isinstance(data, dict):
+        # Sort the dictionary by keys and process its values recursively
+        processed_dict = Dict()
+        for key in sorted(data.keys()):
+            processed_dict[key] = __sort_and_convert_dict(data[key])
+        return processed_dict
+    elif isinstance(data, list):
+        # Process each item in the list and convert the list to the custom List class
+        return List(__sort_and_convert_dict(item) for item in data)
+    else:
+        # If the value is neither a dict nor a list, return it as is
+        return data
 
 
 def save_json(data: dict, path: str):
@@ -648,12 +654,9 @@ def load_setting_global_json(
             f"Failed to load valid JSON data from {path} after {retries} retries."
         )
 
-    # Convert the loaded data to a custom Dict object
-    data = Dict(data)
-
-    # Call "save_json" to sort keys and potentially fix formatting issues
-    data = sort_json_dict(data)
-    # save_json(data=data, path=path)
+    # Process the JSON structure
+    # (sort and convert dict/list to Dict/List)
+    data = __sort_and_convert_dict(data)
 
     # Return the settings data as a Dict object
     return data
@@ -663,9 +666,11 @@ def load_setting_global_json(
 def load_json(path: str, overwrite_sorted: bool = False) -> Dict:
     with open(path, mode="r") as json_file:
         data = json.load(json_file)
-    data = Dict(data)
-    # sort by keys
-    data = sort_json_dict(data)
+
+    # Process the JSON structure
+    # (sort and convert dict/list to Dict/List)
+    data = __sort_and_convert_dict(data)
+
     # overwrite json with sorted keys
     if overwrite_sorted:
         save_json(data=data, path=path)
