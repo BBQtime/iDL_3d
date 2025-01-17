@@ -57,9 +57,9 @@ def explain_metric(metric: str):
     if metric == Metric.DSC:
         return "DSC"
     elif metric == Metric.MSD:
-        return "Mean Surface Distance (1mm)"
+        return "Mean Surface Distance (mm)"
     elif metric == Metric.HD95:
-        return "Hausdorff Distance 95 (1mm)"
+        return "Hausdorff Distance 95% (mm)"
     elif metric == Metric.APL_PCT:
         return "Added Path Length (Normalized)"
     elif metric == Metric.APL_VOXEL:

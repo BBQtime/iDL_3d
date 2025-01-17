@@ -359,8 +359,8 @@ def plot_bias_gtvt_center():
 
     # Loop through bias results dirs and load metrics of each patient
     for bias_result_dir in bias_results_dirs:
-        if "gravity.center.bias.range=0" in bias_result_dir:
-            continue
+        # if "gravity.center.bias.range=0" in bias_result_dir:
+        #     continue
 
         bias_range = g.load_json(os.path.join(bias_result_dir, "hyper.json"))[
             "gravity.center.bias.range"
@@ -381,12 +381,12 @@ def plot_bias_gtvt_center():
                 if cur_value is not None:  # Ensure the value is not None
                     data[bias_range][metric_type].append(cur_value)
 
-    # CoG baseline values
-    cog_baseline = {
-        Metric.DSC: 0.867687026176512,
-        Metric.MSD: 1.2264917672792,
-        Metric.HD95: 3.60555127546398,
-    }
+    # # CoG baseline values
+    # cog_baseline = {
+    #     Metric.DSC: 0.867687026176512,
+    #     Metric.MSD: 1.2264917672792,
+    #     Metric.HD95: 3.60555127546398,
+    # }
 
     # Plotting
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
@@ -410,17 +410,17 @@ def plot_bias_gtvt_center():
                 medianprops=dict(color="white", linewidth=2),
             )
 
-        # Add baseline as dashed line
-        ax.axhline(
-            y=cog_baseline[metric_type],
-            color="black",
-            linestyle="--",
-            linewidth=2,
-            label="CoG Baseline",
-        )
+        # # Add baseline as dashed line
+        # ax.axhline(
+        #     y=cog_baseline[metric_type],
+        #     color="black",
+        #     linestyle="--",
+        #     linewidth=2,
+        #     label="CoG Baseline",
+        # )
 
         # Formatting
-        ax.set_title(metric_type.upper())
+        ax.set_title(explain_metric(metric_type))
         ax.set_xlabel("Bias Range (within ±voxels)")
         ax.set_ylabel("Metric Value")
         ax.set_xticks(ticks=range(len(x_axis_labels)), labels=x_axis_labels)

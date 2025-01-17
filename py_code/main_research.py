@@ -64,7 +64,7 @@ if __name__ == "__main__":
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
 
-    # gtvt_input_slices.plot_bias_gtvt_center()
+    gtvt_input_slices.plot_bias_gtvt_center()
 
     # for gtv_list in [
     #     [JESPER_GTVN_ID, KENNETH_GTVN_ID, HANNA_GTVN_ID, "label"],
@@ -78,10 +78,10 @@ if __name__ == "__main__":
 
     # iov.plot_heatmap()
 
-    for baseline_id in ["baseline_mda.transfer"]:
-        for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
-            idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
-            iov.plot_mda_label_vs_idl_iov(idl_dir)
+    # for baseline_id in ["baseline_mda.transfer"]:
+    #     for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
+    #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
+    #         iov.plot_mda_label_vs_idl_iov(idl_dir)
 
     # idl_time.save_json_time_per_patient(
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
