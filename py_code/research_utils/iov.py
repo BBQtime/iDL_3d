@@ -262,7 +262,7 @@ def create_median_table():
         "Obs. 2 vs label": "iov_Kenneth_vs_Label.json",
         "Obs. 3 vs label": "iov_Hanna_vs_Label.json",
     }
-    table_data = [["Observers", "DSC", "MSD (mm)", "HD95 (mm)"]]
+    table_data = [["Observers", "DSC", "MSD [mm]", "HD95 [mm]"]]
 
     for gtv in ["GTVt", "GTVn"]:
         table_data.append([gtv, "", "", ""])
@@ -595,11 +595,17 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
                     y_data.append(y)
 
         idx = metric_list.index(metric_type)
-        axs[idx].scatter(x_data, y_data, label=explain_metric(metric_type))
+        axs[idx].scatter(x_data, y_data)  # , label=explain_metric(metric_type))
 
         axs[idx].set_title(explain_metric(metric_type))
-        axs[idx].set_xlabel("IOV of Labels")
-        axs[idx].set_ylabel("IOV of iDL predictions")
+        # x_label = f"Paired {metric_type.upper()} Between Observers" + (
+        #     "" if metric_type == Metric.DSC else " [mm]"
+        # )
+        axs[idx].set_xlabel("Paired IOV")
+        # y_label = f"Post-iDL Paired {metric_type.upper()} Between Observers" + (
+        #     "" if metric_type == Metric.DSC else " [mm]"
+        # )
+        axs[idx].set_ylabel("Paired IOV Post-iDL")
 
         # Joint range calculation for both axes
         all_data = x_data + y_data
@@ -621,8 +627,18 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         axs[idx].set_xticks(ticks)
         axs[idx].set_yticks(ticks)
 
+        # Add diagonal dashed line
+        axs[idx].plot(
+            [axis_min, axis_max],
+            [axis_min, axis_max],
+            linestyle="--",
+            color="lime",
+            alpha=0.7,
+            label="Diagonal",
+        )
+
     fig.suptitle(
-        f"Comparison Between IOV of Labels and IOV of iDL Predictions - {gtv[:3].upper() + gtv[3]}"
+        f"Impact of iDL on IOV across evaluation metrics - {gtv[:3].upper() + gtv[3]}"
     )
     plt.tight_layout()
 

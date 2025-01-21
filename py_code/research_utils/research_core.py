@@ -57,15 +57,15 @@ def explain_metric(metric: str):
     if metric == Metric.DSC:
         return "DSC"
     elif metric == Metric.MSD:
-        return "Mean Surface Distance (mm)"
+        return "Mean Surface Distance [mm]"
     elif metric == Metric.HD95:
-        return "Hausdorff Distance 95% (mm)"
+        return "Hausdorff Distance 95% [mm]"
     elif metric == Metric.APL_PCT:
         return "Added Path Length (Normalized)"
     elif metric == Metric.APL_VOXEL:
         return "Added Path Length (Voxels)"
     elif metric == Metric.SDSC:
-        return "Surface DSC (1mm)"
+        return "Surface DSC [1mm]"
 
 
 def calculate_idl_gtvs_metric(idl_gtvt_id: str, idl_gtvn_id: str):
