@@ -2,7 +2,13 @@ import os
 
 import global_utils.global_core as g
 from global_utils.custom_list import List
-from research_utils import gtvt_input_slices, idl_time, idl_vs_correction, iov
+from research_utils import (
+    cross_dataset,
+    gtvt_input_slices,
+    idl_time,
+    idl_vs_correction,
+    iov,
+)
 from research_utils.research_core import (
     HANNA_GTVN_ID,
     HANNA_GTVT_ID,
@@ -78,10 +84,10 @@ if __name__ == "__main__":
 
     # iov.plot_heatmap()
 
-    for baseline_id in ["baseline_mda.transfer"]:
-        for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
-            idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
-            iov.plot_mda_label_vs_idl_iov(idl_dir)
+    # for baseline_id in ["baseline_mda.transfer"]:
+    #     for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
+    #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
+    #         iov.plot_mda_label_vs_idl_iov(idl_dir)
 
     # idl_time.save_json_time_per_patient(
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
@@ -90,5 +96,8 @@ if __name__ == "__main__":
 
     # idl_time.save_json_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
     # idl_time.plot_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
+
+    # for csv_name in ["cross_dataset_metrics_gtvt.csv"]:
+    #     cross_dataset.plot_metrics(os.path.join(g.TRAIN_RESULTS_DIR, csv_name))
 
     print("Done!")

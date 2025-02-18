@@ -177,7 +177,7 @@ def plot_time_per_patient(obs_study_gtvt_id_list: list):
     # Configure title and labels
     ax.set_xlabel("Patients")
     ax.set_ylabel("Minutes")
-    ax.set_title("Median Time Used per Patient")
+    ax.set_title("Time Used per Patient")
 
     # Set x-axis ticks to be centered under each group of bars
     ax.set_xticks(indices + bar_width)

@@ -609,28 +609,39 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
 
         # Joint range calculation for both axes
         all_data = x_data + y_data
-        min_val = min(all_data)
+        # min_val = min(all_data)
         max_val = max(all_data)
-        margin = (max_val - min_val) * 0.05
+        # margin = (max_val - min_val) * 0.05
 
         # Set the same range for x and y axes
-        axis_min = min_val - margin
-        axis_max = max_val + margin
-        axs[idx].set_xlim(axis_min, axis_max)
-        axs[idx].set_ylim(axis_min, axis_max)
+        if metric_type == Metric.DSC:
+            axis_max = 1
+            # Ticks as 0.x (2 decimal places)
+            ticks = np.round(np.linspace(0, axis_max, num=6), 1)
 
-        # Ensure the same ticks for both axes with 1 decimal place
-        ticks = np.round(
-            np.linspace(min_val, max_val, num=6),
-            1 if metric_type in [Metric.MSD, Metric.HD95] else 2,
-        )
+        elif metric_type == Metric.MSD:
+            axis_max = math.floor(max_val)
+            while axis_max % 2.5 != 0:
+                axis_max += 0.5
+            ticks = np.round(np.linspace(0, axis_max, num=6), 1)
+
+        elif metric_type == Metric.HD95:
+            axis_max = math.floor(max_val)
+            while axis_max % 5 != 0:
+                axis_max += 1
+            ticks = np.linspace(0, axis_max, num=6, dtype=int)
+
+        axs[idx].set_xlim(0, axis_max)
+        axs[idx].set_ylim(0, axis_max)
+
+        # Apply tick settings
         axs[idx].set_xticks(ticks)
         axs[idx].set_yticks(ticks)
 
         # Add diagonal dashed line
         axs[idx].plot(
-            [axis_min, axis_max],
-            [axis_min, axis_max],
+            [0, axis_max],
+            [0, axis_max],
             linestyle="--",
             color="lime",
             alpha=0.7,
