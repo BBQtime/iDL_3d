@@ -2,141 +2,304 @@ import os
 from pathlib import Path
 
 import global_utils.global_core as g
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from global_utils.custom_dict import Dict
+from global_utils.str_lib import Metric
+from research_utils.research_core import COLOR_LIST, explain_metric
 
 
-# Function to plot bar charts and switch AU-CT/MR and NKI bars in the first group
-def plot_metrics(csv_path):
-    """
-    Plot bar charts for given metrics, switching AU-CT/MR and NKI bars only in the first group.
+def plot_boxplots(gtv: str):
+    if gtv not in ["gtvt", "gtvn"]:
+        g.error_exit("Invalid gtv value!")
 
-    Parameters:
-        csv_path (str): Path to the CSV file containing the dataset.
-    """
+    origin_data = Dict()
 
-    # csv_name = os.path.splitext(os.path.basename(csv_path))[0]
+    if gtv == "gtvt":
+        # baseline group
+        au_baseline_4m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "baseline",
+            "inference_au.ext_test.json",
+        )
+        au_baseline_3m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "baseline",
+            "inference_au.ext_test.json",
+        )
+        nki_baseline = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "baseline",
+            "inference_nki_test.json",
+        )
+        mda_baseline = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "baseline",
+            "inference_mda_test.json",
+        )
 
-    # # Load the data
-    # data = pd.read_csv(csv_path)
+        # idl group
+        au_idl_4m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "idl.gtvt_au.ext",
+            "inference_au.ext_test.json",
+        )
+        au_idl_3m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "idl.gtvt_au.ext_no.pt",
+            "inference_au.ext_test.json",
+        )
+        nki_idl = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "idl.gtvt_nki",
+            "inference_nki_test.json",
+        )
+        mda_idl = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "idl.gtvt_mda_no.pt",
+            "inference_mda_test.json",
+        )
 
-    # # Extract unique groups and datasets
-    # unique_groups = data["Group"].dropna().unique()
-    # unique_datasets = data["Dataset"].dropna().unique()
+        # from scratch group
+        nki_scratch = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_nki.new",
+            "idl.gtvt_nki.new",
+            "inference_nki_test.json",
+        )
+        mda_scratch = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_mda.new",
+            "idl.gtvt_mda.new",
+            "inference_mda_test.json",
+        )
 
-    # # Define distinct colors for datasets
-    # distinct_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-    # updated_colors = {
-    #     dataset: (f"{color}80", color)  # Light for Baseline, dark for iDL
-    #     for dataset, color in zip(unique_datasets, distinct_colors)
-    # }
+        # transfer learning group
+        nki_transfer = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_nki.transfer",
+            "idl.gtvt_nki.transfer",
+            "inference_nki_test.json",
+        )
+        mda_transfer = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_mda.transfer",
+            "idl.gtvt_mda.transfer",
+            "inference_mda_test.json",
+        )
 
-    # # Metrics to plot
-    # metrics = ["DSC", "MSD(mm)", "HD95(mm)"]
+    elif gtv == "gtvn":
+        # idl group
+        au_idl_4m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "idl.gtvn_au_multi.clicks",
+            "inference_au.ext_test.json",
+        )
+        au_idl_3m = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "idl.gtvn_au_no.pt_multi.clicks",
+            "inference_au.ext_test.json",
+        )
+        nki_idl = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au",
+            "idl.gtvn_au_multi.clicks",
+            "inference_nki_test.json",
+        )
+        mda_idl = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_au_no.pt",
+            "idl.gtvn_au_no.pt_multi.clicks",
+            "inference_mda_test.json",
+        )
 
-    # # Define the spacing between groups
-    # group_spacing = 1.0  # Space between groups
+        # from scratch group
+        nki_scratch = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_nki.new",
+            "idl.gtvn_nki.new_multi.clicks",
+            "inference_nki_test.json",
+        )
+        mda_scratch = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_mda.new",
+            "idl.gtvn_mda.new_multi.clicks",
+            "inference_mda_test.json",
+        )
 
-    # fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
+        # transfer learning group
+        nki_transfer = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_nki.transfer",
+            "idl.gtvn_nki.transfer_multi.clicks",
+            "inference_nki_test.json",
+        )
+        mda_transfer = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            "baseline_mda.transfer",
+            "idl.gtvn_mda.transfer_multi.clicks",
+            "inference_mda_test.json",
+        )
 
-    # for ax, metric in zip(axes, metrics):
-    #     # Filter the data for the current metric
-    #     metric_data = data[data["Metric"] == metric]
+    result_id_list = [
+        au_idl_4m,
+        au_idl_3m,
+        nki_idl,
+        mda_idl,
+        nki_scratch,
+        mda_scratch,
+        nki_transfer,
+        mda_transfer,
+    ]
 
-    #     # Calculate positions for groups with spacing between them
-    #     x = np.arange(len(unique_groups)) * group_spacing  # Group positions
-    #     bar_width = 0.2  # Width of each bar
-    #     total_bars = (
-    #         len(unique_datasets) * 2
-    #     )  # Each dataset has two bars (Baseline, iDL)
-    #     group_width = total_bars * bar_width  # Total width of bars in a group
+    if gtv == "gtvt":
+        result_id_list = [
+            au_baseline_4m,
+            au_baseline_3m,
+            nki_baseline,
+            mda_baseline,
+        ] + result_id_list
 
-    #     added_legends = set()  # Track added legends to avoid duplication
+    categories = ["iDL", "Scratch", "Transfer"]
+    if gtv == "gtvt":
+        categories = ["Baseline"] + categories
 
-    #     for group_idx, group in enumerate(unique_groups):
-    #         # Position for the current group
-    #         group_position = group_idx * group_spacing
+    for result_id in result_id_list:
+        origin_data[result_id] = g.load_json(result_id)
 
-    #         # Define the dataset order for the first group (switch AU-CT/MR and NKI)
-    #         if group_idx == 0:
-    #             reordered_datasets = [
-    #                 (
-    #                     dataset
-    #                     if dataset not in ["AU-CT/MR", "NKI"]
-    #                     else "NKI" if dataset == "AU-CT/MR" else "AU-CT/MR"
-    #                 )
-    #                 for dataset in unique_datasets
-    #             ]
-    #         else:
-    #             reordered_datasets = unique_datasets
+    labels = ["AU PET/CT/MR", "AU CT/MR", "NKI", "MDA"]
 
-    #         # Plot bars for each dataset in the current group
-    #         for i, dataset in enumerate(reordered_datasets):
-    #             dataset_data = metric_data[
-    #                 (metric_data["Dataset"] == dataset)
-    #                 & (metric_data["Group"] == group)
-    #             ]
+    x = np.array([0, 1.5, 2.5, 3.5]) if gtv == "gtvt" else np.array([1, 2, 3])
+    bar_width = 0.3 if gtv == "gtvt" else 0.25
 
-    #             if dataset_data.empty:
-    #                 continue  # Skip if no data exists for this dataset and group
+    fig, axes = plt.subplots(1, 3, figsize=(20, 8))
+    fig.suptitle(f"{gtv[:-1].upper() + gtv[-1]} Metrics across datasets")
 
-    #             # Values for baseline and iDL
-    #             baseline_vals = dataset_data["Baseline"].astype(float).values
-    #             idl_vals = dataset_data["iDL"].astype(float).values
+    metric_type_list = [Metric.DSC, Metric.MSD, Metric.HD95]
 
-    #             # Bar positions within the group (adjacent bars for Baseline and iDL)
-    #             baseline_positions = (
-    #                 group_position - (group_width / 2) + i * 2 * bar_width
-    #             )
-    #             idl_positions = baseline_positions + bar_width
+    for ax, metric_type in zip(axes, metric_type_list):
 
-    #             # Plot bars and add legend if not already added
-    #             if (dataset, "Baseline") not in added_legends:
-    #                 ax.bar(
-    #                     baseline_positions,
-    #                     baseline_vals,
-    #                     bar_width,
-    #                     label=f"{dataset} Baseline",
-    #                     color=updated_colors.get(dataset, ("#D3D3D3", "#A9A9A9"))[0],
-    #                 )
-    #                 added_legends.add((dataset, "Baseline"))
-    #             else:
-    #                 ax.bar(
-    #                     baseline_positions,
-    #                     baseline_vals,
-    #                     bar_width,
-    #                     color=updated_colors.get(dataset, ("#D3D3D3", "#A9A9A9"))[0],
-    #                 )
+        plot_data = Dict()
 
-    #             if (dataset, "iDL") not in added_legends:
-    #                 ax.bar(
-    #                     idl_positions,
-    #                     idl_vals,
-    #                     bar_width,
-    #                     label=f"{dataset} iDL",
-    #                     color=updated_colors.get(dataset, ("#D3D3D3", "#A9A9A9"))[1],
-    #                 )
-    #                 added_legends.add((dataset, "iDL"))
-    #             else:
-    #                 ax.bar(
-    #                     idl_positions,
-    #                     idl_vals,
-    #                     bar_width,
-    #                     color=updated_colors.get(dataset, ("#D3D3D3", "#A9A9A9"))[1],
-    #                 )
+        # baseline ids
+        if gtv == "gtvt":
+            for baseline_id in [
+                au_baseline_4m,
+                au_baseline_3m,
+                nki_baseline,
+                mda_baseline,
+            ]:
+                plot_data[baseline_id] = []
+                for patient in origin_data[baseline_id]:
+                    if "patient=" not in patient:
+                        continue
+                    cur_data = origin_data[baseline_id][patient][gtv][metric_type]
+                    if g.is_number(cur_data):
+                        plot_data[baseline_id].append(cur_data)
+                    # else:
+                    #     print("not number")
 
-    #     # Formatting
-    #     ax.set_title(metric)
-    #     ax.set_ylabel("Value")
-    #     ax.legend()
+        # idl ids
+        for idl_id in [
+            au_idl_4m,
+            au_idl_3m,
+            nki_idl,
+            mda_idl,
+            nki_scratch,
+            mda_scratch,
+            nki_transfer,
+            mda_transfer,
+        ]:
+            plot_data[idl_id] = []
+            for patient in origin_data[idl_id]:
+                if "patient=" not in patient:
+                    continue
+                cur_data = origin_data[idl_id][patient][metric_type]["round=01"]
+                if g.is_number(cur_data):
+                    plot_data[idl_id].append(cur_data)
+                # else:
+                #     print("not number")
 
-    # # Layout adjustment
-    # fig.tight_layout()
-    # # Save the plot as PDF and PNG files in the specified directory
-    # for file_ext in ["pdf", "png"]:
-    #     fig_path = os.path.join(
-    #         g.TRAIN_RESULTS_DIR,
-    #         f"{csv_name}.{file_ext}",
-    #     )
-    #     plt.savefig(fig_path, format=file_ext)
+        grouped_data = [
+            # idl group
+            [
+                plot_data[au_idl_4m],
+                plot_data[au_idl_3m],
+                plot_data[nki_idl],
+                plot_data[mda_idl],
+            ],
+            # scratch group
+            [[], [], plot_data[nki_scratch], plot_data[mda_scratch]],
+            # transfer group
+            [[], [], plot_data[nki_transfer], plot_data[mda_transfer]],
+        ]
+        if gtv == "gtvt":
+            # add baseline group
+            grouped_data = [
+                [
+                    plot_data[au_baseline_4m],
+                    plot_data[au_baseline_3m],
+                    plot_data[nki_baseline],
+                    plot_data[mda_baseline],
+                ]
+            ] + grouped_data
+
+        for i, label in enumerate(labels):
+            data_for_plot = [group[i] for group in grouped_data]
+            pos = x + (i - 1.5) * bar_width
+            valid_data = [d for d in data_for_plot if d]
+            valid_pos = [p for d, p in zip(data_for_plot, pos) if d]
+
+            ax.boxplot(
+                valid_data,
+                positions=valid_pos,
+                widths=bar_width,
+                patch_artist=True,
+                boxprops=dict(facecolor=COLOR_LIST[i], color=COLOR_LIST[i]),
+                whiskerprops=dict(color=COLOR_LIST[i]),
+                capprops=dict(color=COLOR_LIST[i]),
+                medianprops=dict(color="white", linewidth=2),
+            )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(categories, rotation=20)
+        ax.set_title(explain_metric(metric_type))
+
+    # Create legend handles manually
+    legend_handles = [
+        mpatches.Patch(color=COLOR_LIST[i], label=label)
+        for i, label in enumerate(labels)
+    ]
+    fig.legend(
+        legend_handles,
+        labels,
+        loc="upper right",
+        bbox_to_anchor=(0.99, 0.99),
+    )
+
+    plt.tight_layout()
+
+    # Adjust top to create more space
+    # Adjust spacing between rows
+    # (after tight_layout())
+    plt.subplots_adjust(top=0.72, hspace=0.5)
+
+    # Save the plot as PDF and PNG files in the specified directory
+    for file_ext in ["pdf", "png"]:
+        fig_path = os.path.join(
+            g.TRAIN_RESULTS_DIR,
+            f"cross_dataset_metrics_{gtv}.{file_ext}",
+        )
+        plt.savefig(fig_path, format=file_ext)

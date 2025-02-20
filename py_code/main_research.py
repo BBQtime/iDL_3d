@@ -97,7 +97,7 @@ if __name__ == "__main__":
     # idl_time.save_json_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
     # idl_time.plot_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
-    # for csv_name in ["cross_dataset_metrics_gtvt.csv"]:
-    #     cross_dataset.plot_metrics(os.path.join(g.TRAIN_RESULTS_DIR, csv_name))
+    cross_dataset.plot_boxplots("gtvt")
+    cross_dataset.plot_boxplots("gtvn")
 
     print("Done!")
