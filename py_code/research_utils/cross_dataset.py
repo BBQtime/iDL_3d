@@ -179,7 +179,7 @@ def plot_boxplots(gtv: str):
     for result_id in result_id_list:
         origin_data[result_id] = g.load_json(result_id)
 
-    labels = ["AU PET/CT/MR", "AU CT/MR", "NKI", "MDA"]
+    labels = ["AUH PET/CT/MR", "AUH CT/MR", "NKI", "MDA"]
 
     x = np.array([0, 1.5, 2.5, 3.5]) if gtv == "gtvt" else np.array([1, 2, 3])
     bar_width = 0.3 if gtv == "gtvt" else 0.25
