@@ -84,11 +84,6 @@ if __name__ == "__main__":
 
     # iov.plot_heatmap()
 
-    # for baseline_id in ["baseline_mda.transfer"]:
-    #     for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
-    #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
-    #         iov.plot_mda_label_vs_idl_iov(idl_dir)
-
     # idl_time.save_json_time_per_patient(
     #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
     # )
@@ -97,7 +92,14 @@ if __name__ == "__main__":
     # idl_time.save_json_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
     # idl_time.plot_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
-    cross_dataset.plot_boxplots("gtvt")
-    cross_dataset.plot_boxplots("gtvn")
+    # Paper 3 cross dataset figure
+    # cross_dataset.plot_boxplots("gtvt")
+    # cross_dataset.plot_boxplots("gtvn")
+
+    # Paper 3 IOV figure
+    # for baseline_id in ["baseline_mda.transfer"]:
+    #     for idl_id in ["idl.gtvt_mda.transfer", "idl.gtvn_mda.transfer_multi.clicks"]:
+    #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
+    #         iov.plot_mda_label_vs_idl_iov(idl_dir)
 
     print("Done!")

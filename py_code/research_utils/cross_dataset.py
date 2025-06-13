@@ -20,10 +20,7 @@ def plot_boxplots(gtv: str):
     if gtv == "gtvt":
         # baseline group
         au_baseline_4m = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            "baseline_au",
-            "baseline",
-            "inference_au.ext_test.json",
+            g.TRAIN_RESULTS_DIR, "baseline_au", "baseline", "inference_au.ext_test.json"
         )
         au_baseline_3m = os.path.join(
             g.TRAIN_RESULTS_DIR,
@@ -32,10 +29,7 @@ def plot_boxplots(gtv: str):
             "inference_au.ext_test.json",
         )
         nki_baseline = os.path.join(
-            g.TRAIN_RESULTS_DIR,
-            "baseline_au",
-            "baseline",
-            "inference_nki_test.json",
+            g.TRAIN_RESULTS_DIR, "baseline_au", "baseline", "inference_nki_test.json"
         )
         mda_baseline = os.path.join(
             g.TRAIN_RESULTS_DIR,
@@ -172,7 +166,7 @@ def plot_boxplots(gtv: str):
             mda_baseline,
         ] + result_id_list
 
-    categories = ["iDL", "Scratch", "Transfer"]
+    categories = ["Direct\nApplication", "Training\nfrom Scratch", "Transfer\nLearning"]
     if gtv == "gtvt":
         categories = ["Baseline"] + categories
 
@@ -180,20 +174,26 @@ def plot_boxplots(gtv: str):
         origin_data[result_id] = g.load_json(result_id)
 
     labels = ["AUH PET/CT/MR", "AUH CT/MR", "NKI", "MDA"]
-
-    x = np.array([0, 1.5, 2.5, 3.5]) if gtv == "gtvt" else np.array([1, 2, 3])
+    x = np.array([0, 1.5, 2.8, 4.0]) if gtv == "gtvt" else np.array([1, 2.0, 2.7])
     bar_width = 0.3 if gtv == "gtvt" else 0.25
 
-    fig, axes = plt.subplots(1, 3, figsize=(20, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
     fig.suptitle(f"{gtv[:-1].upper() + gtv[-1]} Metrics across datasets")
 
     metric_type_list = [Metric.DSC, Metric.MSD, Metric.HD95]
+    metric_pos = {
+        Metric.DSC: (0, 0),
+        Metric.MSD: (0, 1),
+        Metric.HD95: (1, 0),
+    }
 
-    for ax, metric_type in zip(axes, metric_type_list):
+    for metric_type in metric_type_list:
+        row, col = metric_pos[metric_type]
+        ax = axes[row][col]
 
         plot_data = Dict()
 
-        # baseline ids
+        # baseline group
         if gtv == "gtvt":
             for baseline_id in [
                 au_baseline_4m,
@@ -208,10 +208,7 @@ def plot_boxplots(gtv: str):
                     cur_data = origin_data[baseline_id][patient][gtv][metric_type]
                     if g.is_number(cur_data):
                         plot_data[baseline_id].append(cur_data)
-                    # else:
-                    #     print("not number")
 
-        # idl ids
         for idl_id in [
             au_idl_4m,
             au_idl_3m,
@@ -229,24 +226,18 @@ def plot_boxplots(gtv: str):
                 cur_data = origin_data[idl_id][patient][metric_type]["round=01"]
                 if g.is_number(cur_data):
                     plot_data[idl_id].append(cur_data)
-                # else:
-                #     print("not number")
 
         grouped_data = [
-            # idl group
             [
                 plot_data[au_idl_4m],
                 plot_data[au_idl_3m],
                 plot_data[nki_idl],
                 plot_data[mda_idl],
             ],
-            # scratch group
             [[], [], plot_data[nki_scratch], plot_data[mda_scratch]],
-            # transfer group
             [[], [], plot_data[nki_transfer], plot_data[mda_transfer]],
         ]
         if gtv == "gtvt":
-            # add baseline group
             grouped_data = [
                 [
                     plot_data[au_baseline_4m],
@@ -257,10 +248,29 @@ def plot_boxplots(gtv: str):
             ] + grouped_data
 
         for i, label in enumerate(labels):
-            data_for_plot = [group[i] for group in grouped_data]
-            pos = x + (i - 1.5) * bar_width
-            valid_data = [d for d in data_for_plot if d]
-            valid_pos = [p for d, p in zip(data_for_plot, pos) if d]
+            # data_for_plot = [group[i] for group in grouped_data]
+            valid_data = []
+            valid_pos = []
+            for group_index, group in enumerate(grouped_data):
+                group_data = group[i]
+                if not group_data:
+                    continue
+                if gtv == "gtvt" and (group_index == 0 or group_index == 1):
+                    # Baseline group with 4 bars: align as before
+                    offset = i - 1.5
+                elif gtv == "gtvn" and group_index == 0:
+                    offset = i - 1.5
+                else:
+                    # Only 2 bars (NKI:2, MDA:3), we want them at x ± bar_width / 2
+                    if i == 2:
+                        offset = -0.5
+                    elif i == 3:
+                        offset = 0.5
+                    else:
+                        offset = i - 1.5
+                pos = x[group_index] + offset * bar_width
+                valid_data.append(group_data)
+                valid_pos.append(pos)
 
             ax.boxplot(
                 valid_data,
@@ -273,11 +283,31 @@ def plot_boxplots(gtv: str):
                 medianprops=dict(color="white", linewidth=2),
             )
 
+        # if gtv == "gtvt":
+        #     x[2] = x[2] + 0.2
+        #     x[3] = x[3] + 0.2
         ax.set_xticks(x)
-        ax.set_xticklabels(categories, rotation=20)
+        ax.set_xticklabels(categories)  # , rotation=20)
+
+        if gtv == "gtvt":
+            if metric_type == Metric.DSC:
+                ax.set_ylim(0, 1)
+            elif metric_type == Metric.MSD:
+                ax.set_ylim(0, 30)
+            elif metric_type == Metric.HD95:
+                ax.set_ylim(0, 80)
+        elif gtv == "gtvn":
+            if metric_type == Metric.DSC:
+                ax.set_ylim(0, 1)
+            elif metric_type == Metric.MSD:
+                ax.set_ylim(0, 2.5)
+            elif metric_type == Metric.HD95:
+                ax.set_ylim(0, 8)
+
         ax.set_title(explain_metric(metric_type))
 
-    # Create legend handles manually
+    axes[1][1].axis("off")
+
     legend_handles = [
         mpatches.Patch(color=COLOR_LIST[i], label=label)
         for i, label in enumerate(labels)
@@ -285,8 +315,8 @@ def plot_boxplots(gtv: str):
     fig.legend(
         legend_handles,
         labels,
-        loc="upper right",
-        bbox_to_anchor=(0.99, 0.99),
+        loc="lower right",
+        bbox_to_anchor=(0.98, 0.03),
     )
 
     plt.tight_layout()
@@ -294,7 +324,7 @@ def plot_boxplots(gtv: str):
     # Adjust top to create more space
     # Adjust spacing between rows
     # (after tight_layout())
-    plt.subplots_adjust(top=0.72, hspace=0.5)
+    plt.subplots_adjust(top=0.9, wspace=0.15, hspace=0.3)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:

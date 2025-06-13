@@ -357,11 +357,7 @@ def plot_bias_gtvt_center():
 
     x_axis_labels = []
 
-    # Loop through bias results dirs and load metrics of each patient
     for bias_result_dir in bias_results_dirs:
-        # if "gravity.center.bias.range=0" in bias_result_dir:
-        #     continue
-
         bias_range = g.load_json(os.path.join(bias_result_dir, "hyper.json"))[
             "gravity.center.bias.range"
         ]
@@ -378,28 +374,31 @@ def plot_bias_gtvt_center():
                 if patient in [Stats.AVG, Stats.MEDIAN]:
                     continue
                 cur_value = metric_dict[patient][metric_type]["round=01"]
-                if cur_value is not None:  # Ensure the value is not None
+                if cur_value is not None:
                     data[bias_range][metric_type].append(cur_value)
 
-    # # CoG baseline values
-    # cog_baseline = {
-    #     Metric.DSC: 0.867687026176512,
-    #     Metric.MSD: 1.2264917672792,
-    #     Metric.HD95: 3.60555127546398,
-    # }
+    fig, axes = plt.subplots(
+        2,
+        2,
+        figsize=(12, 10),
+        sharey=False,
+        # gridspec_kw={"hspace": 0.4},
+    )
+    fig.suptitle("iDL with Biased CoG(Center of Gravity) for GTVt")
 
-    # Plotting
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=False)
-    fig.suptitle("iDL with Biased CoG(Center of Gravity) for GTVt", fontsize=16)
     colors = plt.cm.tab10(np.linspace(0, 1, len(x_axis_labels)))
+    metric_pos = {
+        Metric.DSC: (0, 0),
+        Metric.MSD: (0, 1),
+        Metric.HD95: (1, 0),
+    }
 
-    for i, metric_type in enumerate(metrics):
-        ax = axes[i]
+    for metric_type in metrics:
+        row, col = metric_pos[metric_type]
+        ax = axes[row][col]
 
-        # Collect data for the current metric
         metric_data = [data[bias_range][metric_type] for bias_range in x_axis_labels]
 
-        # Boxplot for each experiment with individual colors
         for idx, experiment_data in enumerate(metric_data):
             ax.boxplot(
                 [experiment_data],
@@ -410,26 +409,15 @@ def plot_bias_gtvt_center():
                 medianprops=dict(color="white", linewidth=2),
             )
 
-        # # Add baseline as dashed line
-        # ax.axhline(
-        #     y=cog_baseline[metric_type],
-        #     color="black",
-        #     linestyle="--",
-        #     linewidth=2,
-        #     label="CoG Baseline",
-        # )
-
-        # Formatting
         ax.set_title(explain_metric(metric_type))
         ax.set_xlabel("Bias Range (within ±voxels)")
-        ax.set_ylabel("Metric Value")
         ax.set_xticks(ticks=range(len(x_axis_labels)), labels=x_axis_labels)
 
-        if i == 0:  # Add legend to the first subplot
-            ax.legend()
+    axes[1][1].axis("off")
 
-    # Adjust layout
-    plt.tight_layout(rect=[0, 0.03, 1, 1])
+    plt.tight_layout()
+
+    plt.subplots_adjust(top=0.9, wspace=0.1, hspace=0.35)
 
     for file_ext in ["pdf", "png"]:
         fig_path = os.path.join(

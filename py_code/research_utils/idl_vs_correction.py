@@ -395,7 +395,7 @@ def plot_metrics_no_apl(obs_study_gtvt_id_list: list, obs_study_gtvn_id_list: li
         handles,
         labels,
         loc="upper right",
-        bbox_to_anchor=(0.98, 0.98),
+        bbox_to_anchor=(0.99, 0.99),
     )
 
     # # title
@@ -411,7 +411,7 @@ def plot_metrics_no_apl(obs_study_gtvt_id_list: list, obs_study_gtvn_id_list: li
     # Adjust top to create more space
     # Adjust spacing between rows
     # (after tight_layout())
-    plt.subplots_adjust(top=0.9, hspace=0.25)
+    plt.subplots_adjust(top=0.9, wspace=0.1, hspace=0.25)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:
@@ -527,7 +527,7 @@ def plot_metrics_apl(
         handles,
         labels,
         loc="upper right",
-        bbox_to_anchor=(0.98, 0.98),
+        bbox_to_anchor=(0.99, 0.99),
     )
 
     # title
@@ -541,7 +541,7 @@ def plot_metrics_apl(
     # Adjust top to create more space
     # Adjust spacing between rows
     # (after tight_layout())
-    plt.subplots_adjust(top=0.8, wspace=0.13)
+    plt.subplots_adjust(top=0.81, wspace=0.13)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:

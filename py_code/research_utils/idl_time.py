@@ -400,6 +400,8 @@ def plot_time_per_step(obs_study_gtvt_id_list: list):
 
     # Adjust layout to prevent overlap and save the entire figure as a PDF
     plt.tight_layout()
+    plt.subplots_adjust(top=0.9, wspace=0.35, hspace=0.25)
+
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:
         fig_path = os.path.join(
