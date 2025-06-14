@@ -26,13 +26,17 @@ HANNA_GTVN_ID = "idl.gtvn_2024.10.17.10.22.39_Hanna"
 
 
 COLOR_LIST = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
+    "#1f77b4",  # (Blue)
+    "#ff7f0e",  # (Orange)
+    "#2ca02c",  # (Green)
     "#FFD700",  # Gold
     "#808080",  # Gray
     "#00BFFF",  # Deep Sky Blue
     "#6A5ACD",  # Light Slate Blue
+    "#d62728",  # (Red)
+    "#bcbd22",  # (Olive)
+    "#17becf",  # (Cyan)
+    "#4b0082",  # Indigo
 ]
 
 
@@ -57,13 +61,13 @@ def explain_metric(metric: str):
     if metric == Metric.DSC:
         return "DSC"
     elif metric == Metric.MSD:
-        return "Mean Surface Distance [mm]"
+        return "MSD [mm]"
     elif metric == Metric.HD95:
-        return "Hausdorff Distance 95% [mm]"
+        return "HD95 [mm]"
     elif metric == Metric.APL_PCT:
-        return "Added Path Length (Normalized)"
+        return "APL (%)"
     elif metric == Metric.APL_VOXEL:
-        return "Added Path Length (Voxels)"
+        return "APL (Voxels)"
     elif metric == Metric.SDSC:
         return "Surface DSC [1mm]"
 

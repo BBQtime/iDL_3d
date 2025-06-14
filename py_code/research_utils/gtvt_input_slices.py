@@ -365,7 +365,7 @@ def plot_bias_gtvt_center():
 
         metric_json_path = os.path.join(bias_result_dir, "inference_au.ext_test.json")
         metric_dict = g.load_json(metric_json_path)
-        for metric_type in [Metric.DSC, Metric.MSD, Metric.HD95]:
+        for metric_type in metrics:
             if bias_range not in data:
                 data[bias_range] = {}
             if metric_type not in data[bias_range]:
@@ -380,17 +380,22 @@ def plot_bias_gtvt_center():
     fig, axes = plt.subplots(
         2,
         2,
-        figsize=(12, 10),
-        sharey=False,
-        # gridspec_kw={"hspace": 0.4},
+        figsize=(18, 12),
+        sharey=False
     )
-    fig.suptitle("iDL with Biased CoG(Center of Gravity) for GTVt")
+    fig.suptitle("iDL with Biased CoG for GTVt")
 
-    colors = plt.cm.tab10(np.linspace(0, 1, len(x_axis_labels)))
+    # colors = plt.cm.tab10(np.linspace(0, 1, len(x_axis_labels)))
+    colors = COLOR_LIST
     metric_pos = {
         Metric.DSC: (0, 0),
         Metric.MSD: (0, 1),
         Metric.HD95: (1, 0),
+    }
+    y_axis_ranges = {
+        Metric.DSC: (0, 1),
+        Metric.MSD: (0, 8),
+        Metric.HD95: (0, 60),
     }
 
     for metric_type in metrics:
@@ -410,14 +415,14 @@ def plot_bias_gtvt_center():
             )
 
         ax.set_title(explain_metric(metric_type))
-        ax.set_xlabel("Bias Range (within ±voxels)")
+        ax.set_xlabel("Bias range (within ±voxels)")
         ax.set_xticks(ticks=range(len(x_axis_labels)), labels=x_axis_labels)
+        ax.set_ylim(y_axis_ranges[metric_type])
 
     axes[1][1].axis("off")
 
     plt.tight_layout()
-
-    plt.subplots_adjust(top=0.9, wspace=0.1, hspace=0.35)
+    plt.subplots_adjust(top=0.91, wspace=0.1, hspace=0.30)
 
     for file_ext in ["pdf", "png"]:
         fig_path = os.path.join(

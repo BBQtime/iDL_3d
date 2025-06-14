@@ -174,8 +174,8 @@ def plot_boxplots(gtv: str):
         origin_data[result_id] = g.load_json(result_id)
 
     labels = ["AUH PET/CT/MR", "AUH CT/MR", "NKI", "MDA"]
-    x = np.array([0, 1.5, 2.8, 4.0]) if gtv == "gtvt" else np.array([1, 2.0, 2.7])
-    bar_width = 0.3 if gtv == "gtvt" else 0.25
+    x = np.array([0, 1.5, 2.8, 4.0]) if gtv == "gtvt" else np.array([0.8, 1.8, 2.5])
+    bar_width = 0.3 if gtv == "gtvt" else 0.20
 
     fig, axes = plt.subplots(2, 2, figsize=(18, 12))
     fig.suptitle(f"{gtv[:-1].upper() + gtv[-1]} Metrics across datasets")
@@ -277,9 +277,13 @@ def plot_boxplots(gtv: str):
                 positions=valid_pos,
                 widths=bar_width,
                 patch_artist=True,
-                boxprops=dict(facecolor=COLOR_LIST[i], color=COLOR_LIST[i]),
-                whiskerprops=dict(color=COLOR_LIST[i]),
-                capprops=dict(color=COLOR_LIST[i]),
+                boxprops=dict(
+                    facecolor=COLOR_LIST[i],
+                    edgecolor="black",
+                    linewidth=1.2
+                ),
+                whiskerprops=dict(color="black", linewidth=1),
+                capprops=dict(color="black", linewidth=1),
                 medianprops=dict(color="white", linewidth=2),
             )
 
@@ -324,7 +328,7 @@ def plot_boxplots(gtv: str):
     # Adjust top to create more space
     # Adjust spacing between rows
     # (after tight_layout())
-    plt.subplots_adjust(top=0.9, wspace=0.15, hspace=0.3)
+    plt.subplots_adjust(top=0.91, wspace=0.1, hspace=0.3)
 
     # Save the plot as PDF and PNG files in the specified directory
     for file_ext in ["pdf", "png"]:

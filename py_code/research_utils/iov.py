@@ -300,11 +300,11 @@ def create_median_table():
 
 def plot_heatmap():
     observer_list = List(["Jesper", "Kenneth", "Hanna", "Label"])
-    label_symbol = ["1", "2", "3", "Label"]
-    label_text = ["Observer 1", "Observer 2", "Observer 3", "Clinical Label"]
-    legend_text = "\n".join(
-        [f"{label_symbol[i]} = {label_text[i]}" for i in range(len(label_text))]
-    )
+    label_symbol = ["Obs 1", "Obs 2", "Obs 3", "Label"]
+    # label_text = ["Observer 1", "Observer 2", "Observer 3", "Clinical label"]
+    # legend_text = "\n".join(
+    #     [f"{label_symbol[i]} = {label_text[i]}" for i in range(len(label_text))]
+    # )
 
     obs_study_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study")
     for gtv in ["gtvt", "gtvn"]:
@@ -317,23 +317,21 @@ def plot_heatmap():
             # "idl",
             "correct",
         ]:
-            if result_type == "idl":
-                title_img_name = """"Initial" Segmentations"""
-            elif result_type == "correct":
-                title_img_name = """"Corrected" Segmentations"""
+            # if result_type == "idl":
+            #     title_img_name = """"Initial" Segmentations"""
+            # elif result_type == "correct":
+            #     title_img_name = """"Corrected" Segmentations"""
 
             # Setting up the figure and axes for a 2x3 grid
-            fig, axes = plt.subplots(2, 3, figsize=(20, 13))
+            fig, axes = plt.subplots(1, 3, figsize=(20, 6))
             fig.suptitle(
-                "IOV between {} - {}".format(title_img_name, title_gtv),
+                f"Pairwise IOV between observers and clinical label - {title_gtv}"
             )
             # Flattening the axes array for easier iteration
             axes = axes.flatten()
 
             i = 0
             for metric in [
-                Metric.APL_PCT,
-                Metric.SDSC,
                 Metric.DSC,
                 Metric.MSD,
                 Metric.HD95,
@@ -357,20 +355,19 @@ def plot_heatmap():
                     iov_matrix[y][x] = data
 
                 # Creating the heatmap with a white-to-blue color gradient
-                if metric in [Metric.SDSC, Metric.DSC, Metric.APL_PCT]:
+                if metric == Metric.DSC:
+                    vmin = 0.7
                     vmax = 1.0
-                    vmin = 0.0
-                # elif metric ==:
-                #     vmax=0.0
-                #     vmin=0.0
+                    cmap = "Blues_r"
                 else:
-                    vmax = vmin = None
+                    vmin = vmax = None
+                    cmap = "Blues"
 
                 sns.heatmap(
                     iov_matrix,
                     ax=axes[i],
                     annot=True,
-                    cmap="Blues",
+                    cmap=cmap,
                     square=True,
                     cbar=True,
                     vmin=vmin,
@@ -385,32 +382,33 @@ def plot_heatmap():
                 )
                 axes[i].set_yticklabels(
                     label_symbol,
-                    # rotation=0,
+                    rotation=0,
                 )
 
                 i += 1
 
             # turn off axis of the last figure
             # axes[-1].axis("off")
-            fig.delaxes(axes[-1])
+            # fig.delaxes(axes[-1])
 
             # add legend
-            plt.figtext(
-                0.96,
-                0.05,
-                legend_text,
-                ha="right",
-                va="bottom",
-                fontsize=FONT_SIZE,
-                bbox={
-                    "facecolor": "white",
-                    "alpha": 1.0,
-                    "pad": 5,
-                    "edgecolor": "gray",
-                },
-            )
+            # plt.figtext(
+            #     0.96,
+            #     0.05,
+            #     legend_text,
+            #     ha="right",
+            #     va="bottom",
+            #     fontsize=FONT_SIZE,
+            #     bbox={
+            #         "facecolor": "white",
+            #         "alpha": 1.0,
+            #         "pad": 5,
+            #         "edgecolor": "gray",
+            #     },
+            # )
 
             plt.tight_layout()
+            plt.subplots_adjust(top=0.87, wspace=0.25)
 
             for file_ext in ["pdf", "png"]:
                 fig_path = os.path.join(
@@ -568,7 +566,7 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         idl_iov = g.load_json(idl_iov_json_path)
 
     # Create plot
-    fig, axs = plt.subplots(1, 3, figsize=(20, 7))
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6.4))
     metric_list = [Metric.DSC, Metric.MSD, Metric.HD95]
 
     for metric_type in tqdm(metric_list):
@@ -601,11 +599,11 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         # x_label = f"Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_xlabel("Paired IOV")
+        axs[idx].set_xlabel("Paired IOV – clinical labels")
         # y_label = f"Post-iDL Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_ylabel("Paired IOV Post-iDL")
+        axs[idx].set_ylabel("Paired IOV – post iDL")
 
         # Joint range calculation for both axes
         all_data = x_data + y_data
@@ -649,7 +647,7 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         )
 
     fig.suptitle(
-        f"Impact of iDL on IOV across evaluation metrics - {gtv[:3].upper() + gtv[3]}"
+        f"Effect of iDL on IOV – {gtv[:3].upper() + gtv[3]} (MDA dataset)"
     )
     plt.tight_layout()
 
