@@ -6,6 +6,6 @@
         "./py_code"
     ],
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
+        "editor.defaultFormatter": "eeyore.yapf"
     },
 }

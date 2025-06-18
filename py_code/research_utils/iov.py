@@ -1,6 +1,7 @@
 import csv
 import math
 import os
+import shutil
 from pathlib import Path
 
 import global_utils.global_core as g
@@ -24,6 +25,9 @@ from metric_utils.metric_func import (
 )
 from research_utils.research_core import (
     FONT_SIZE,
+    HANNA_GTVT_ID,
+    JESPER_GTVT_ID,
+    KENNETH_GTVT_ID,
     explain_metric,
     get_obs_study_patients_list,
 )
@@ -52,13 +56,11 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
         obs_study_id["1"] = obs_study_id["1"].capitalize()
         gtv = "gtvt"
 
-    elif obs_study_id["1"].startswith("idl.gtvn_") and obs_study_id["2"].startswith(
-        "idl.gtvn_"
-    ):
+    elif obs_study_id["1"].startswith("idl.gtvn_"
+                                     ) and obs_study_id["2"].startswith("idl.gtvn_"):
         gtv = "gtvn"
-    elif obs_study_id["1"].startswith("idl.gtvt_") and obs_study_id["2"].startswith(
-        "idl.gtvt_"
-    ):
+    elif obs_study_id["1"].startswith("idl.gtvt_"
+                                     ) and obs_study_id["2"].startswith("idl.gtvt_"):
         gtv = "gtvt"
     else:
         g.error_exit("obs study train id error")
@@ -103,7 +105,7 @@ def calculate_iov(obs_study_id_1: str, obs_study_id_2: str):
                         os.path.join(
                             g.DATASET_DIR[DatasetVer.OBS_STUDY],
                             "HNCDL_{}_GTV{}.nii".format(
-                                patient[len("patient=") :], gtv[-1]
+                                patient[len("patient="):], gtv[-1]
                             ),
                         ),
                         binary=True,
@@ -599,11 +601,11 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         # x_label = f"Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_xlabel("Paired IOV – clinical labels")
+        axs[idx].set_xlabel("Pairwise variation – clinical labels")
         # y_label = f"Post-iDL Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_ylabel("Paired IOV – post iDL")
+        axs[idx].set_ylabel("Pairwise variation – iDL predictions")
 
         # Joint range calculation for both axes
         all_data = x_data + y_data
@@ -646,9 +648,7 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
             label="Diagonal",
         )
 
-    fig.suptitle(
-        f"Effect of iDL on IOV – {gtv[:3].upper() + gtv[3]} (MDA dataset)"
-    )
+    fig.suptitle(f"Effect of iDL on IOV – {gtv[:3].upper() + gtv[3]} (MDA dataset)")
     plt.tight_layout()
 
     # Save the figure in multiple formats
@@ -657,3 +657,65 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         plt.savefig(fig_path, format=file_ext)
 
     plt.show()
+
+
+def get_gtvt_final_segmentation(patient="509"):
+    for obs_study_gtvt_id in tqdm([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]):
+        obs_study_dir = os.path.join(
+            g.TRAIN_RESULTS_DIR, "baseline_obs.study", obs_study_gtvt_id
+        )
+        imgs_dir = os.path.join(
+            obs_study_dir, "patients", f"patient={patient}", "round=01"
+        )
+
+        origin_pred_path = os.path.join(imgs_dir, "gtvt_pred.nii.gz")
+        correction_path = os.path.join(imgs_dir, "gtvt_correction.nii.gz")
+        correction_mask_path = os.path.join(imgs_dir, "gtvt_correction_mask.nii.gz")
+
+        origin_pred, spacing, origin = g.load_nii(
+            path=origin_pred_path, binary=True, return_info=True
+        )
+        correction = g.load_nii(path=correction_path, binary=True)
+        correction_mask = g.load_nii(path=correction_mask_path, binary=True)
+
+        final_segmentation = g.combine_pred_correction(
+            origin_pred=origin_pred,
+            correction=correction,
+            correction_mask=correction_mask
+        )
+
+        if "Jesper" in obs_study_gtvt_id:
+            observer = "obs1"
+        elif "Kenneth" in obs_study_gtvt_id:
+            observer = "obs2"
+        elif "Hanna" in obs_study_gtvt_id:
+            observer = "obs3"
+
+        save_dir = os.path.join(g.TRAIN_RESULTS_DIR, "baseline_obs.study", "gtvt_iov")
+        g.create_dir(save_dir)
+
+        # save final segmentation
+        g.save_nii(
+            img=final_segmentation,
+            save_path=os.path.join(save_dir, f"{observer}_final_seg.nii.gz"),
+            spacing=spacing,
+            origin=origin
+        )
+
+        # copy transverse annotation
+        shutil.copyfile(
+            os.path.join(imgs_dir, "gtvt_delineation_transverse.nii.gz"),
+            os.path.join(save_dir, f"{observer}_transverse_annotation.nii.gz"),
+        )
+
+        # copy ct image
+        ct_path = os.path.join(
+            g.DATASET_DIR[DatasetVer.OBS_STUDY], f"HNCDL_{patient}_CT.nii"
+        )
+        ct_img = g.load_nii(path=ct_path)
+        g.save_nii(
+            img=ct_img,
+            save_path=os.path.join(save_dir, f"{observer}_ct.nii.gz"),
+            spacing=spacing,
+            origin=origin
+        )

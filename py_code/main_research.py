@@ -102,4 +102,7 @@ if __name__ == "__main__":
     #         idl_dir = os.path.join(g.TRAIN_RESULTS_DIR, baseline_id, idl_id)
     #         iov.plot_mda_label_vs_idl_iov(idl_dir)
 
+    # for creating observer study GTVt IOV fig
+    # iov.get_gtvt_final_segmentation()
+
     print("Done!")
