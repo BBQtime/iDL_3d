@@ -601,11 +601,11 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
         # x_label = f"Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_xlabel("Pairwise variation – clinical labels")
+        axs[idx].set_xlabel("Paired IOV")
         # y_label = f"Post-iDL Paired {metric_type.upper()} Between Observers" + (
         #     "" if metric_type == Metric.DSC else " [mm]"
         # )
-        axs[idx].set_ylabel("Pairwise variation – iDL predictions")
+        axs[idx].set_ylabel("Paired IOV Post–iDL")
 
         # Joint range calculation for both axes
         all_data = x_data + y_data
@@ -648,7 +648,9 @@ def plot_mda_label_vs_idl_iov(idl_dir: str):
             label="Diagonal",
         )
 
-    fig.suptitle(f"Effect of iDL on IOV – {gtv[:3].upper() + gtv[3]} (MDA dataset)")
+    fig.suptitle(
+        f"Impact of iDL on IOV Across Evaluation Metrics – {gtv[:3].upper() + gtv[3]}"
+    )
     plt.tight_layout()
 
     # Save the figure in multiple formats

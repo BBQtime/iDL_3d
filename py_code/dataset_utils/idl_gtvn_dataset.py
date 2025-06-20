@@ -215,10 +215,16 @@ class IDLGTVnDataSet(DatasetCore):
 
                 if 0:
                     g.save_nii(
+                        self.__origin["clicks"],
+                        os.path.join(g.DEBUG_DIR, "clicks.nii.gz"),
+                    )
+                    g.save_nii(
                         self.__origin["distance.map"],
-                        os.path.join(
-                            g.DEBUG_DIR, "weighted_euclidean_distance_map.nii.gz"
-                        ),
+                        os.path.join(g.DEBUG_DIR, "distance_map.nii.gz"),
+                    )
+                    g.save_nii(
+                        self.__origin[Modal.CT],
+                        os.path.join(g.DEBUG_DIR, "ct.nii.gz"),
                     )
 
         else:
