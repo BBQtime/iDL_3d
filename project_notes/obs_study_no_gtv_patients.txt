@@ -1,0 +1,8 @@
+(1) The GTVt of following patients has been removed (post surgery):
+
+482 (patient #2 in paper)
+499 (patient #5 in paper)
+
+
+(2) The following patient has no GTVn:
+536 (patient #8 in paper)
