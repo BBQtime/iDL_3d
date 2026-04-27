@@ -694,9 +694,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self._side_bar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._side_bar.setWidget(container)
 
-        self.__side_bar_width = 330 if g.is_linux() else 460
+        self.__side_bar_width = 400 if g.is_linux() else 500
         self.setMinimumSize(self.__side_bar_width + 600, 600)
-        self.resize(1920, 850)  # set origin size
+        self.resize(1920, 1080)  # set origin size
         self.showFullScreen()
 
     def _refresh_side_bar(self):

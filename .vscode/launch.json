@@ -8,8 +8,9 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceRoot}",
-                "DISPLAY": ":1"
+                "PYTHONPATH": "${workspaceFolder}",
+                "DISPLAY": ":1",
+                "QT_X11_NO_MITSHM": "1"
             }
         }
     ]
