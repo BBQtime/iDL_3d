@@ -175,21 +175,17 @@ class ReplayWindow(QtWidgets.QMainWindow):
         # load color of coutours
         for gtv in ["gtvt", "gtvn"]:
             for i in ["pred", "label", "correction"]:
-                self.color["{}.{}".format(gtv, i)] = self.color[
-                    ui_settings["contour.color"][gtv][i]
-                ]
+                self.color["{}.{}".format(gtv, i)
+                          ] = self.color[ui_settings["contour.color"][gtv][i]]
 
         # colors for replay mode only
         if not self.is_obs_study_window():
-            self.color["gtvt.click"] = self.color[
-                ui_settings["contour.color"]["gtvt"]["click.replay"]
-            ]
-            self.color["gtvn.clicks"] = self.color[
-                ui_settings["contour.color"]["gtvn"]["clicks.replay"]
-            ]
-            self.color["gtvt.delineation"] = self.color[
-                ui_settings["contour.color"]["gtvt"]["delineation.replay"]
-            ]
+            self.color["gtvt.click"] = self.color[ui_settings["contour.color"]["gtvt"]
+                                                  ["click.replay"]]
+            self.color["gtvn.clicks"] = self.color[ui_settings["contour.color"]["gtvn"]
+                                                   ["clicks.replay"]]
+            self.color["gtvt.delineation"] = self.color[ui_settings["contour.color"]
+                                                        ["gtvt"]["delineation.replay"]]
             self.color["gtvt.pred.final"] = self.color["gtvt.correction"]
             self.color["gtvn.pred.final"] = self.color["gtvn.correction"]
 
@@ -496,13 +492,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self._text_label[i] = QtWidgets.QLabel()
             self._text_label[i].setFixedHeight(self._toggle_btn.height())
         self._text_label[DisplayMode.MODAL_FIXED].setText("Modality Fixed")
-        self._text_label[DisplayMode.MODAL_FIXED].setAlignment(
-            Qt.AlignLeft | Qt.AlignVCenter
-        )
+        self._text_label[DisplayMode.MODAL_FIXED
+                        ].setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._text_label[DisplayMode.PLANE_FIXED].setText("Plane Fixed")
-        self._text_label[DisplayMode.PLANE_FIXED].setAlignment(
-            Qt.AlignRight | Qt.AlignVCenter
-        )
+        self._text_label[DisplayMode.PLANE_FIXED
+                        ].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         # (3) modality fixed mode: radio buttons
         self._radio_group[DisplayMode.MODAL_FIXED] = QtWidgets.QButtonGroup()
@@ -702,8 +696,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         self.__side_bar_width = 330 if g.is_linux() else 460
         self.setMinimumSize(self.__side_bar_width + 600, 600)
-        self.resize(1200, 800)  # set origin size
-        self.showMaximized()
+        self.resize(1920, 850)  # set origin size
+        self.showFullScreen()
 
     def _refresh_side_bar(self):
         left = 0
@@ -806,9 +800,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def __load_baseline_dataset_ver(self):
         baseline_dir = os.path.join(g.TRAIN_RESULTS_DIR, self._baseline_id, "baseline")
         fold_dir = g.get_sub_dirs(baseline_dir, key_word="fold=", full_path=True)[0]
-        self.__baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json"))[
-            "dataset.ver"
-        ]
+        self.__baseline_dataset_ver = g.load_json(os.path.join(fold_dir, "hyper.json")
+                                                 )["dataset.ver"]
 
     def _load_dataset_ver(self):
         # set dataset version based on current patient
@@ -839,7 +832,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             )
             # from "patient=123" to "123"
             for i in range(len(combox_patients)):
-                combox_patients[i] = combox_patients[i][len("patient=") :]
+                combox_patients[i] = combox_patients[i][len("patient="):]
 
             combox_patients = combox_patients.find_overlap(self._patients.to_list())
 
@@ -1111,9 +1104,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     d, h, w = np.where(self.img_3d["gtvt.click"] == 1)
                     d, h, w = int(d), int(h), int(w)
 
-                self.img_3d["gtvt.delineation.{}".format(plane)] = np.zeros_like(
-                    gtvt_delineation_merged
-                )
+                self.img_3d["gtvt.delineation.{}".format(plane)
+                           ] = np.zeros_like(gtvt_delineation_merged)
 
                 # get slice from merged gtvt delineation
                 if plane == Plane.TRANSVERSE:
@@ -1130,8 +1122,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     )
 
                 gtvt_delineation_cur_plane = self.img_3d[
-                    "gtvt.delineation.{}".format(plane)
-                ].copy()
+                    "gtvt.delineation.{}".format(plane)].copy()
                 # flip left/right
                 gtvt_delineation_cur_plane = np.flip(gtvt_delineation_cur_plane, axis=2)
                 # turn upside down
@@ -1159,8 +1150,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self._idl_round[gtv] = "round=00"
             else:
                 slash = "/" if g.is_linux() else "\\"
-                self._idl_id[gtv] = combox_item[: combox_item.index(slash)]
-                self._idl_round[gtv] = combox_item[combox_item.index(slash) + 1 :]
+                self._idl_id[gtv] = combox_item[:combox_item.index(slash)]
+                self._idl_round[gtv] = combox_item[combox_item.index(slash) + 1:]
             # self._reset_zoomin()
 
         # triggered by patient combox update, and find cur patient in idl.gtvn dir
@@ -1292,9 +1283,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             if os.path.exists(gtvn_score_path):
                 gtvn_score = g.load_json(gtvn_score_path)
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    self.__scores[gtv][metric] = gtvn_score[
-                        "patient={}".format(self._cur_patient)
-                    ][gtv][metric]
+                    self.__scores[gtv][metric] = gtvn_score["patient={}".format(
+                        self._cur_patient
+                    )][gtv][metric]
 
         # load idl scores
         else:
@@ -1307,9 +1298,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
             if os.path.exists(gtvn_score_path):
                 gtvn_score = g.load_json(gtvn_score_path)
                 for metric in [Metric.DSC, Metric.MSD, Metric.HD95]:
-                    self.__scores[gtv][metric] = gtvn_score[
-                        "patient={}".format(self._cur_patient)
-                    ][metric][self._idl_round[gtv]]
+                    self.__scores[gtv][metric] = gtvn_score["patient={}".format(
+                        self._cur_patient
+                    )][metric][self._idl_round[gtv]]
 
         if refresh_imgs:
             # refresh from scratch as 3d images are updated
@@ -1512,8 +1503,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 segment = self.img_3d[seg_name][:, self.cur_slice_id[Plane.CORONAL], :]
             elif plane == Plane.TRANSVERSE:
                 segment = self.img_3d[seg_name][
-                    self.cur_slice_id[Plane.TRANSVERSE], :, :
-                ]
+                    self.cur_slice_id[Plane.TRANSVERSE], :, :]
             segment = segment.astype(np.uint8)
 
             # skip if current segmentation is empty
@@ -1640,9 +1630,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             center_x_pct = 0.5
         else:
             start_x = max(0, min(zoomed_w - frame_w, center_x_abs - frame_w // 2))
-            final_rgb = self._contoured_rgb[frame_name][
-                :, start_x : start_x + frame_w, :
-            ]
+            final_rgb = self._contoured_rgb[frame_name][:, start_x:start_x + frame_w, :]
             # update center pct
             center_x_abs = max(frame_w // 2, center_x_abs)
             center_x_abs = min(zoomed_w - frame_w // 2, center_x_abs)
@@ -1663,7 +1651,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             center_y_pct = 0.5
         else:
             start_y = max(0, min(zoomed_h - frame_h, center_y_abs - frame_h // 2))
-            final_rgb = final_rgb[start_y : start_y + frame_h, :, :]
+            final_rgb = final_rgb[start_y:start_y + frame_h, :, :]
             # update center pct
             center_y_abs = max(frame_h // 2, center_y_abs)
             center_y_abs = min(zoomed_h - frame_h // 2, center_y_abs)
@@ -1812,26 +1800,26 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
         # Ensure the correct plane of the GTVt delineation 3D image is loaded
         if plane == Plane.TRANSVERSE:
-            gtvt_delineation_h = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.CORONAL)
-            ]
-            gtvt_delineation_v = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.SAGITTAL)
-            ]
+            gtvt_delineation_h = self.img_3d["gtvt.delineation.{}".format(
+                Plane.CORONAL
+            )]
+            gtvt_delineation_v = self.img_3d["gtvt.delineation.{}".format(
+                Plane.SAGITTAL
+            )]
         elif plane == Plane.CORONAL:
-            gtvt_delineation_h = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.TRANSVERSE)
-            ]
-            gtvt_delineation_v = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.SAGITTAL)
-            ]
+            gtvt_delineation_h = self.img_3d["gtvt.delineation.{}".format(
+                Plane.TRANSVERSE
+            )]
+            gtvt_delineation_v = self.img_3d["gtvt.delineation.{}".format(
+                Plane.SAGITTAL
+            )]
         elif plane == Plane.SAGITTAL:
-            gtvt_delineation_h = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.TRANSVERSE)
-            ]
-            gtvt_delineation_v = self.img_3d[
-                "gtvt.delineation.{}".format(Plane.CORONAL)
-            ]
+            gtvt_delineation_h = self.img_3d["gtvt.delineation.{}".format(
+                Plane.TRANSVERSE
+            )]
+            gtvt_delineation_v = self.img_3d["gtvt.delineation.{}".format(
+                Plane.CORONAL
+            )]
 
         # never use: "if None in [gtvt_delineation_h, gtvt_delineation_v]:"
         # as "[gtvt_delineation_h, gtvt_delineation_v]" is treated as an numpy array
@@ -1897,22 +1885,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
         center_x_pct, center_y_pct = img_frame.img_center_pct
         zoomed_h, zoomed_w = self.get_zoomed_rgb_shape(frame_name)
 
-        h_start_x, h_end_x, v_start_x, v_end_x = [
-            (
-                round(img_frame.width() // 2 - (center_x_pct - i) * zoomed_w)
-                if i is not None
-                else None
-            )
-            for i in (h_start_x, h_end_x, v_start_x, v_end_x)
-        ]
-        h_start_y, h_end_y, v_start_y, v_end_y = [
-            (
-                round(img_frame.height() // 2 - (center_y_pct - i) * zoomed_h)
-                if i is not None
-                else None
-            )
-            for i in (h_start_y, h_end_y, v_start_y, v_end_y)
-        ]
+        h_start_x, h_end_x, v_start_x, v_end_x = [(
+            round(img_frame.width() // 2 -
+                  (center_x_pct - i) * zoomed_w) if i is not None else None
+        ) for i in (h_start_x, h_end_x, v_start_x, v_end_x)]
+        h_start_y, h_end_y, v_start_y, v_end_y = [(
+            round(img_frame.height() // 2 -
+                  (center_y_pct - i) * zoomed_h) if i is not None else None
+        ) for i in (h_start_y, h_end_y, v_start_y, v_end_y)]
 
         # define painter outside of for loop
         painter = QPainter(qimg)
@@ -1929,25 +1909,21 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 line_pos_list.append(
                     (h_start_x, h_start_y, h_start_x + line_len, h_start_y)
                 )
-            line_pos_list.append(
-                (
-                    h_start_x,
-                    h_start_y - round(line_len / 2),
-                    h_start_x,
-                    h_start_y + round(line_len / 2),
-                )
-            )
+            line_pos_list.append((
+                h_start_x,
+                h_start_y - round(line_len / 2),
+                h_start_x,
+                h_start_y + round(line_len / 2),
+            ))
             # t shape - end point
             if t_shape:
                 line_pos_list.append((h_end_x, h_end_y, h_end_x - line_len, h_end_y))
-            line_pos_list.append(
-                (
-                    h_end_x,
-                    h_end_y - round(line_len / 2),
-                    h_end_x,
-                    h_end_y + round(line_len / 2),
-                )
-            )
+            line_pos_list.append((
+                h_end_x,
+                h_end_y - round(line_len / 2),
+                h_end_x,
+                h_end_y + round(line_len / 2),
+            ))
 
         if None not in (v_start_x, v_start_y, v_end_x, v_end_y):
             # t shape - start point
@@ -1955,25 +1931,21 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 line_pos_list.append(
                     (v_start_x, v_start_y, v_start_x, v_start_y + line_len)
                 )
-            line_pos_list.append(
-                (
-                    v_start_x - round(line_len / 2),
-                    v_start_y,
-                    v_start_x + round(line_len / 2),
-                    v_start_y,
-                )
-            )
+            line_pos_list.append((
+                v_start_x - round(line_len / 2),
+                v_start_y,
+                v_start_x + round(line_len / 2),
+                v_start_y,
+            ))
             # t shape - end point
             if t_shape:
                 line_pos_list.append((v_end_x, v_end_y, v_end_x, v_end_y - line_len))
-            line_pos_list.append(
-                (
-                    v_end_x - round(line_len / 2),
-                    v_end_y,
-                    v_end_x + round(line_len / 2),
-                    v_end_y,
-                )
-            )
+            line_pos_list.append((
+                v_end_x - round(line_len / 2),
+                v_end_y,
+                v_end_x + round(line_len / 2),
+                v_end_y,
+            ))
 
         for line_pos in line_pos_list:
             # draw black border of the line
