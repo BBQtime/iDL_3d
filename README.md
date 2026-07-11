@@ -120,12 +120,38 @@ No clinical dataset is currently included in this repository. The MDA multi-anno
 
 ## Citation
 
-Please use [`CITATION.cff`](CITATION.cff) and cite the two papers in this order:
+Please use [`CITATION.cff`](CITATION.cff) or copy the BibTeX entries below in this order.
 
-1. **Current cross-centre manuscript:** Zixiang Wei, Jasper Nijkamp, Jesper Grau Eriksen, Zeno A. R. Gouw, Cem Dede, Kareem A. Wahid, Jan-Jakob Sonke, Clifton D. Fuller, Stine Sofia Korreman, and Jintao Ren. "Cross-centre transferability of interactive deep learning for head-and-neck gross tumour volume segmentation." **Submitted.**
-2. **Original iDL workflow:** Zixiang Wei, Jintao Ren, Jesper Grau Eriksen, Kenneth Jensen, Hanna Rahbek Mortensen, Stine Sofia Korreman, and Jasper Nijkamp. "An interactive deep-learning workflow for head and neck gross tumour volume segmentation." *Physics and Imaging in Radiation Oncology* 35, 100820 (2025). https://doi.org/10.1016/j.phro.2025.100820
+1. **Current cross-centre manuscript (submitted)**
 
-The first citation intentionally contains only the submitted manuscript's authors, title and publication status. Journal, year and DOI fields will be added after acceptance/publication; the published 2025 workflow remains the second citation.
+```bibtex
+@unpublished{wei_crosscentre_idl_submitted,
+  author = {Wei, Zixiang and Nijkamp, Jasper and Eriksen, Jesper Grau and
+            Gouw, Zeno A. R. and Dede, Cem and Wahid, Kareem A. and
+            Sonke, Jan-Jakob and Fuller, Clifton D. and
+            Korreman, Stine Sofia and Ren, Jintao},
+  title  = {Cross-centre transferability of interactive deep learning for
+            head-and-neck gross tumour volume segmentation},
+  note   = {Submitted}
+}
+```
+
+2. **Original iDL workflow**
+
+```bibtex
+@article{wei_interactive_idl_2025,
+  author  = {Wei, Zixiang and Ren, Jintao and Eriksen, Jesper Grau and
+             Jensen, Kenneth and Mortensen, Hanna Rahbek and
+             Korreman, Stine Sofia and Nijkamp, Jasper},
+  title   = {An interactive deep-learning workflow for head and neck gross
+             tumour volume segmentation},
+  journal = {Physics and Imaging in Radiation Oncology},
+  volume  = {35},
+  pages   = {100820},
+  year    = {2025},
+  doi     = {10.1016/j.phro.2025.100820}
+}
+```
 
 ## License
 
