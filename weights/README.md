@@ -4,11 +4,11 @@ Place the approved AUH pretrained models under this directory. Two model types a
 
 ```text
 weights/
-??? auh/
-    ??? gtvt_idl/
-    ?   ??? idl_gtvt_auh.pt
-    ??? gtvn_idl/
-        ??? idl_gtvn_auh.pt
+`-- auh/
+    |-- gtvt_idl/
+    |   `-- idl_gtvt_auh.pt
+    `-- gtvn_idl/
+        `-- idl_gtvn_auh.pt
 ```
 
 Only these two AUH iDL checkpoints are in scope for the public weight release. The filenames above are the recommended release names; the archived training code does not currently hard-code them.

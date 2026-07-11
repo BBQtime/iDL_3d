@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite the associated publication below."
+message: "If you use this software, please cite the submitted manuscript below."
 title: "iDL-3D simulation code for head-and-neck gross tumour volume segmentation"
 type: software
 authors:
@@ -7,26 +7,29 @@ authors:
     given-names: Zixiang
   - family-names: Ren
     given-names: Jintao
-repository-code: "https://github.com/630084142/iDL_3d"
+repository-code: "https://github.com/BBQtime/iDL_3d"
 preferred-citation:
   type: article
-  title: "An interactive deep-learning workflow for head and neck gross tumour volume segmentation"
+  title: "Cross-centre transferability of interactive deep learning for head-and-neck gross tumour volume segmentation"
   authors:
     - family-names: Wei
       given-names: Zixiang
-    - family-names: Ren
-      given-names: Jintao
-    - family-names: Eriksen
-      given-names: Jesper Grau
-    - family-names: Jensen
-      given-names: Kenneth
-    - family-names: Mortensen
-      given-names: Hanna Rahbek
-    - family-names: Korreman
-      given-names: Stine Sofia
     - family-names: Nijkamp
       given-names: Jasper
-  journal: "Physics and Imaging in Radiation Oncology"
-  volume: 35
-  year: 2025
-  doi: "10.1016/j.phro.2025.100820"
+    - family-names: Eriksen
+      given-names: Jesper Grau
+    - family-names: Gouw
+      given-names: "Zeno A. R."
+    - family-names: Dede
+      given-names: Cem
+    - family-names: Wahid
+      given-names: "Kareem A."
+    - family-names: Sonke
+      given-names: Jan-Jakob
+    - family-names: Fuller
+      given-names: "Clifton D."
+    - family-names: Korreman
+      given-names: Stine Sofia
+    - family-names: Ren
+      given-names: Jintao
+  status: submitted

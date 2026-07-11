@@ -1,5 +1,7 @@
 # iDL-3D simulation code
 
+[![Code status: available](https://img.shields.io/badge/code-available-brightgreen)](https://github.com/BBQtime/iDL_3d) [![AUH weights status: planned](https://img.shields.io/badge/AUH_iDL_weights-planned-yellow)](#model-weights) [![MDA data status: TCIA submission planned](https://img.shields.io/badge/MDA_multi--annotator_data-TCIA_submission_planned-orange)](#planned-mda-multi-annotator-dataset-release)
+
 Research code for simulating interactive deep learning (iDL) in three-dimensional head-and-neck gross tumour volume segmentation.
 
 This public release contains the Python training, inference, retrospective interaction-simulation and analysis code. The clinical interaction UI, observer-study interface and related graphical assets are intentionally excluded.
@@ -13,6 +15,16 @@ The associated cross-centre study evaluates direct application of AUH-trained mo
 
 > [!IMPORTANT]
 > This is research software, not a medical device. It is not validated for diagnosis, treatment planning or clinical decision-making.
+
+## Release status
+
+| Component | Status | Public scope |
+| --- | --- | --- |
+| Simulation code | **Available** | Python training, simulation and analysis code; clinical UI excluded |
+| AUH iDL weights | **Planned** | GTVt-iDL and GTVn-iDL checkpoints only |
+| MDA multi-annotator dataset | **TCIA submission planned** | De-identified CT/T1/T2 imaging and multi-observer GTVt/GTVn contours; accession pending |
+
+Status badges and this table will be updated when each release becomes available.
 
 ## What is included
 
@@ -30,13 +42,14 @@ The associated cross-centre study evaluates direct application of AUH-trained mo
 | `hyper/` | Archived experiment hyperparameters |
 | `dataset_split/` | Archived cohort split identifiers |
 | `settings/core.example.json` | Public configuration template |
+| `docs/MDA_DATASET.md` | Planned MDA multi-annotator data release description and status |
 
 ## Quick start
 
 The code was developed with Python 3.8/3.9.
 
 ```bash
-git clone https://github.com/630084142/iDL_3d.git
+git clone https://github.com/BBQtime/iDL_3d.git
 cd iDL_3d
 python -m venv .venv
 ```
@@ -85,17 +98,33 @@ Reserved locations are provided under `weights/auh/gtvt_idl/` and `weights/auh/g
 
 The current archived code selects models from the historical `train_results/` experiment hierarchy. A direct loader will be added after these two checkpoints and their metadata are available.
 
+
+## Planned MDA multi-annotator dataset release
+
+The manuscript describes a planned public release of MDA-derived, de-identified DICOM imaging and contour data through [The Cancer Imaging Archive (TCIA)](https://www.cancerimagingarchive.net/). The cohort contains 65 patients with CT, T1-weighted MRI and T2-weighted MRI. Three to four physicians delineated GTVt and GTVn for each patient, yielding 197 observer entries. PET is not included because PET and MR were acquired in different patient positions and could not be aligned reliably for this study.
+
+| Item | Manuscript description |
+| --- | --- |
+| Patients | 65 |
+| Imaging | CT, T1 and T2; 1 mm isotropic study preprocessing |
+| Annotations | GTVt and GTVn from 3-4 physicians per patient |
+| Observer entries | 197 |
+| Study split | 45 patients / 136 observer entries for 3-fold cross-validation; 20 patients / 61 delineations held out for testing |
+| Distribution | TCIA submission planned; accession link pending |
+
+All observer entries from the same patient were kept in the same partition. The final TCIA package, citation, license and accession link may change during archive curation. This README will link to the collection when TCIA makes it available. See [the dataset release notes](docs/MDA_DATASET.md) for details.
+
 ## Data and privacy
 
-Clinical datasets are not included. Access is governed by the originating institutions and study agreements. Never commit patient images, labels, identifiable metadata, credentials or local model outputs. NIfTI volumes and model checkpoints are ignored by default.
+No clinical dataset is currently included in this repository. The MDA multi-annotator release is planned through TCIA; AUH and NKI imaging and contours are not publicly available because of institutional data-use agreements and patient-privacy restrictions. Never commit patient images, labels, identifiable metadata, credentials or local model outputs directly to this Git repository.
 
 ## Citation
 
-Please use [`CITATION.cff`](CITATION.cff) and cite the original workflow:
+Please use [`CITATION.cff`](CITATION.cff) to cite the submitted manuscript associated with this repository:
 
-> Z. Wei et al., ?An interactive deep-learning workflow for head and neck gross tumour volume segmentation,? *Physics and Imaging in Radiation Oncology*, vol. 35, 100820, 2025. https://doi.org/10.1016/j.phro.2025.100820
+> Zixiang Wei, Jasper Nijkamp, Jesper Grau Eriksen, Zeno A. R. Gouw, Cem Dede, Kareem A. Wahid, Jan-Jakob Sonke, Clifton D. Fuller, Stine Sofia Korreman, and Jintao Ren. "Cross-centre transferability of interactive deep learning for head-and-neck gross tumour volume segmentation." **Submitted.**
 
-The cross-centre transferability manuscript associated with this snapshot is in preparation; add its final bibliographic record after publication.
+The citation metadata intentionally contains only the submitted manuscript's authors, title and publication status. Journal, year and DOI fields will be added after acceptance/publication.
 
 ## License
 
