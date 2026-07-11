@@ -5,7 +5,6 @@ from global_utils.custom_list import List
 from research_utils import (
     cross_dataset,
     gtvt_input_slices,
-    idl_time,
     idl_vs_correction,
     iov,
 )
@@ -83,14 +82,6 @@ if __name__ == "__main__":
     # iov.create_median_table()
 
     # iov.plot_heatmap()
-
-    # idl_time.save_json_time_per_patient(
-    #     [JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID]
-    # )
-    # idl_time.plot_time_per_patient([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
-
-    # idl_time.save_json_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
-    # idl_time.plot_time_per_step([JESPER_GTVT_ID, KENNETH_GTVT_ID, HANNA_GTVT_ID])
 
     # Paper 3 cross dataset figure
     # cross_dataset.plot_boxplots("gtvt")

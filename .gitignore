@@ -10,3 +10,30 @@ py_code/training_utils/__pycache__/
 py_code/ui_utils/__pycache__/
 py_code/research_utils/__pycache__/
 
+*.pyc
+*.pyo
+__pycache__/
+
+# Local environments and tool caches
+.venv/
+.python-libs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration, datasets, manuscripts, and generated artifacts
+settings/core.json
+data/
+datasets/
+paper/
+*.nii
+*.nii.gz
+*.pt
+*.pth
+*.ckpt
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

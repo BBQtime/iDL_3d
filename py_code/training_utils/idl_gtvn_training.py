@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 
 import global_utils.global_core as g
 import numpy as np
@@ -10,7 +11,6 @@ from global_utils.custom_list import List
 from global_utils.str_lib import DatasetPart, DatasetVer, ErrMsg, Metric, Stats
 from loss_utils.idl_gtvn_loss import IDLGTVnLoss
 from numpy import ndarray
-from PyQt5.QtCore import pyqtSignal
 from torch import Tensor
 from training_utils.baseline_training import BaselineTraining
 from training_utils.training_core import ObsStudyProgress
@@ -30,7 +30,7 @@ class GTVnObsStudyProgress(ObsStudyProgress):
 
 
 class IDLGTVnTraining(BaselineTraining):
-    def __init__(self, idl_progress_signal: pyqtSignal = None):
+    def __init__(self, idl_progress_signal: Any = None):
         super().__init__()
         if idl_progress_signal is not None:
             self._obs_study_progress = GTVnObsStudyProgress()

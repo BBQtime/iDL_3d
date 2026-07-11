@@ -5,16 +5,6 @@ from training_utils.baseline_training import BaselineTraining
 from training_utils.idl_gtvn_training import IDLGTVnTraining
 from training_utils.idl_gtvt_training import IDLGTVtTraining
 
-# (1) linux cmd:
-# /home/alan/anaconda3/envs/py38/bin/python /home/alan/alan/iDL_3d/py_code/main_training.py
-
-# (2) windows cmd
-# cmd /C "C:\Users\a.wei\AppData\Local\anaconda3\envs\py39\python.exe E:\Alan\iDL_3d\py_code\main_training.py"
-
-# copy results from linux to windows:
-# scp -r /mnt/faststorage/alan/iDL_3d/train_results/ alan@10.60.8.15:/E:/Alan/iDL_3d/
-
-
 if __name__ == "__main__":
     g.clear_gpu_cache()
     g.clear_linux_trash()

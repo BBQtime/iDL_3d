@@ -893,9 +893,8 @@ def clear_debug_data():
 
 
 def clear_linux_trash():
-    if is_linux():
-        clear_dir("/home/alan/.local/share/Trash/files/")
-        clear_dir("/home/alan/.local/share/Trash/info/")
+    """Retained for API compatibility; the public code must not alter OS trash."""
+    return None
 
 
 def get_cur_time_str(hide_microsecond=True) -> str:

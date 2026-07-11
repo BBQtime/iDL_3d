@@ -1,0 +1,25 @@
+{
+    "cuda.visible.devices": "0",
+    "dataset.dir": {
+        "au": {"linux": "/path/to/AU_dataset", "windows": "D:/path/to/AU_dataset"},
+        "au.ext": {"linux": "/path/to/AU_EXT_dataset", "windows": "D:/path/to/AU_EXT_dataset"},
+        "hecktor": {"linux": "/path/to/HECKTOR_dataset", "windows": "D:/path/to/HECKTOR_dataset"},
+        "mda": {"linux": "/path/to/MDA_dataset", "windows": "D:/path/to/MDA_dataset"},
+        "nki": {"linux": "/path/to/NKI_dataset", "windows": "D:/path/to/NKI_dataset"},
+        "obs.study": {"linux": "/path/to/observer_study_dataset", "windows": "D:/path/to/observer_study_dataset"}
+    },
+    "dataset.folds": {"au": 5, "hecktor": 5, "mda": 3, "nki": 3},
+    "dataset.split.json": {
+        "au": "au.json",
+        "au.ext": "au_ext.json",
+        "hecktor": "hecktor.json",
+        "mda": "mda.json",
+        "nki": "nki.json",
+        "obs.study": "obs_study.json"
+    },
+    "hyper.json": {"baseline": "baseline.json", "idl.gtvn": "idl_gtvn.json", "idl.gtvt": "idl_gtvt.json"},
+    "img.shape": "240,240,240",
+    "nii.spacing": "1.0,1.0,1.0",
+    "num.workers": {"linux": 2, "windows": 3},
+    "train.results.dir": "train_results"
+}

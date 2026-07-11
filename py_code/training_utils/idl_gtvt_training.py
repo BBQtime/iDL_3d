@@ -27,7 +27,6 @@ from global_utils.str_lib import (
 from loss_utils.idl_gtvt_loss import IDLGTVtLoss
 from numpy import ndarray
 
-# from PyQt5.QtCore import pyqtSignal
 from scipy.ndimage import measurements
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
