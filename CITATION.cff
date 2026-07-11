@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the submitted manuscript first and the original iDL workflow second."
-title: "iDL-3D simulation code for head-and-neck gross tumour volume segmentation"
+title: "Interactive Deep Learning for 3D Head-and-Neck GTV Segmentation"
 type: software
 authors:
   - family-names: Wei

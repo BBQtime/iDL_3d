@@ -1,4 +1,4 @@
-# iDL-3D simulation code
+# Interactive Deep Learning for 3D Head-and-Neck GTV Segmentation
 
 [![Code status: available](https://img.shields.io/badge/code-available-brightgreen)](https://github.com/BBQtime/iDL_3d) [![AUH weights status: planned](https://img.shields.io/badge/AUH_iDL_weights-planned-yellow)](#model-weights) [![MDA data status: TCIA submission planned](https://img.shields.io/badge/MDA_multi--annotator_data-TCIA_submission_planned-orange)](#planned-mda-multi-annotator-dataset-release)
 
