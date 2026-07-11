@@ -120,11 +120,12 @@ No clinical dataset is currently included in this repository. The MDA multi-anno
 
 ## Citation
 
-Please use [`CITATION.cff`](CITATION.cff) to cite the submitted manuscript associated with this repository:
+Please use [`CITATION.cff`](CITATION.cff) and cite the two papers in this order:
 
-> Zixiang Wei, Jasper Nijkamp, Jesper Grau Eriksen, Zeno A. R. Gouw, Cem Dede, Kareem A. Wahid, Jan-Jakob Sonke, Clifton D. Fuller, Stine Sofia Korreman, and Jintao Ren. "Cross-centre transferability of interactive deep learning for head-and-neck gross tumour volume segmentation." **Submitted.**
+1. **Current cross-centre manuscript:** Zixiang Wei, Jasper Nijkamp, Jesper Grau Eriksen, Zeno A. R. Gouw, Cem Dede, Kareem A. Wahid, Jan-Jakob Sonke, Clifton D. Fuller, Stine Sofia Korreman, and Jintao Ren. "Cross-centre transferability of interactive deep learning for head-and-neck gross tumour volume segmentation." **Submitted.**
+2. **Original iDL workflow:** Zixiang Wei, Jintao Ren, Jesper Grau Eriksen, Kenneth Jensen, Hanna Rahbek Mortensen, Stine Sofia Korreman, and Jasper Nijkamp. "An interactive deep-learning workflow for head and neck gross tumour volume segmentation." *Physics and Imaging in Radiation Oncology* 35, 100820 (2025). https://doi.org/10.1016/j.phro.2025.100820
 
-The citation metadata intentionally contains only the submitted manuscript's authors, title and publication status. Journal, year and DOI fields will be added after acceptance/publication.
+The first citation intentionally contains only the submitted manuscript's authors, title and publication status. Journal, year and DOI fields will be added after acceptance/publication; the published 2025 workflow remains the second citation.
 
 ## License
 
