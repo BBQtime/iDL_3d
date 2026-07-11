@@ -3,10 +3,10 @@
 [![Code status: available](https://img.shields.io/badge/code-available-brightgreen)](https://github.com/BBQtime/iDL_3d) [![AUH weights status: planned](https://img.shields.io/badge/AUH_iDL_weights-planned-yellow)](#model-weights) [![MDA data status: TCIA submission planned](https://img.shields.io/badge/MDA_multi--annotator_data-TCIA_submission_planned-orange)](#planned-mda-multi-annotator-dataset-release)
 
 <p align="center">
-  <img src="assets/repo-intro-gtvt-idl.png" alt="Representative sagittal and axial GTVt views comparing multi-observer reference annotations with post-iDL predictions" width="100%">
+  <img src="assets/repo-intro-gtvn-idl.png" alt="Representative sagittal and axial GTVn views comparing multi-observer reference labels with post-iDL predictions" width="100%">
 </p>
 
-<p align="center"><sub>Representative sagittal and axial CT views from Figure 5. Colored contours denote anonymized observer-specific reference annotations and corresponding post-iDL predictions.</sub></p>
+<p align="center"><sub>Representative sagittal and axial CT views from the selected-case GTVn figure. Colored contours denote anonymized observer-specific reference labels and corresponding post-iDL predictions.</sub></p>
 
 Research code for simulating interactive deep learning (iDL) in three-dimensional head-and-neck gross tumour volume segmentation.
 
