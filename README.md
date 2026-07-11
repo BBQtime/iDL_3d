@@ -74,6 +74,17 @@ python py_code/main_research.py
 
 No images, clinical labels or model weights are distributed. A run requires locally prepared data plus compatible checkpoints under `train_results/`. See [Reproducibility notes](docs/REPRODUCIBILITY.md) for the paper-to-code map and known limitations.
 
+## Model weights
+
+The complete AUH simulation uses two pretrained model types:
+
+1. an AUH baseline model for the initial GTVt prediction and subsequent three-slice case adaptation;
+2. an AUH click-guided iDL model for GTVn inference.
+
+Reserved locations are provided under `weights/auh/gtvt_baseline/` and `weights/auh/gtvn_idl/`. Actual checkpoint files are ignored by Git. See [weights/README.md](weights/README.md) for filenames, compatibility and integration notes.
+
+The current archived code selects models from the historical `train_results/` experiment hierarchy. A direct loader will be added after the released checkpoints and their metadata are available.
+
 ## Data and privacy
 
 Clinical datasets are not included. Access is governed by the originating institutions and study agreements. Never commit patient images, labels, identifiable metadata, credentials or local model outputs. NIfTI volumes and model checkpoints are ignored by default.
